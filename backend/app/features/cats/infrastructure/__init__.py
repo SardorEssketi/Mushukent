@@ -1,0 +1,1 @@
+"""Cats infrastructure layer."""

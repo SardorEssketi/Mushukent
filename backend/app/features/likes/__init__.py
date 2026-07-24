@@ -1,0 +1,1 @@
+"""Likes feature module skeleton."""
