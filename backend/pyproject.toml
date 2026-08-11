@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mushukent-backend"
+name = "mushukistan-backend"
 version = "0.1.0"
-description = "Mushukent backend skeleton"
+description = "Mushukistan backend skeleton"
 requires-python = ">=3.13"
 dependencies = [
   "fastapi>=0.115.0,<1.0.0",
@@ -14,6 +14,9 @@ dependencies = [
   "alembic>=1.13.0,<2.0.0",
   "psycopg[binary]>=3.2.0,<4.0.0",
   "geoalchemy2>=0.15.0,<1.0.0",
+  "pillow>=12.0.0,<13.0.0",
+  "boto3>=1.43.0,<2.0.0",
+  "python-multipart>=0.0.9,<1.0.0",
   "pydantic>=2.8.0,<3.0.0",
   "pydantic-settings>=2.4.0,<3.0.0",
   "email-validator>=2.0.0,<3.0.0",
@@ -37,6 +40,7 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+exclude = ["alembic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
@@ -48,6 +52,10 @@ warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = ["passlib.*", "jose", "jose.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["boto3", "boto3.*", "botocore", "botocore.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

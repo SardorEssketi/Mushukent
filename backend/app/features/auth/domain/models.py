@@ -12,7 +12,14 @@ class AuthUser:
     password_hash: str | None
     name: str | None = None
     avatar_url: str | None = None
+    phone_number: str | None = None
+    telegram_username: str | None = None
+    preferred_language: str = "en"
+    allow_public_activity_view: bool = True
     bio: str | None = None
+    accepted_terms_version: str | None = None
+    accepted_privacy_version: str | None = None
+    accepted_legal_at: datetime | None = None
     email_verified: bool = False
     is_active: bool = True
     is_moderator: bool = False

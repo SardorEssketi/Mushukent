@@ -68,7 +68,13 @@ def upgrade() -> None:
 
     op.create_table(
         "users",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("email", sa.Text(), nullable=False),
         sa.Column("email_verified", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("password_hash", sa.Text(), nullable=True),
@@ -77,7 +83,12 @@ def upgrade() -> None:
         sa.Column("bio", sa.Text(), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("is_moderator", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-        sa.Column("registered_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "registered_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
         sa.UniqueConstraint("email", name=op.f("uq_users_email")),
@@ -86,47 +97,126 @@ def upgrade() -> None:
 
     op.create_table(
         "cats",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("name", sa.Text(), nullable=True),
         sa.Column("status", cat_status, nullable=False, server_default=sa.text("'unknown'")),
         sa.Column("approximate_age_smallyears", sa.SmallInteger(), nullable=True),
-        sa.Column("created_by", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "created_by",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("cover_photo_url", sa.Text(), nullable=True),
-        sa.Column("canonical_location", Geometry(geometry_type="POINT", srid=4326, spatial_index=False), nullable=True),
+        sa.Column(
+            "canonical_location",
+            Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
+            nullable=True,
+        ),
         sa.Column("total_observations", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("total_contributors", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("total_likes", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("merged_into", UUID(as_uuid=True), sa.ForeignKey("cats.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "merged_into",
+            UUID(as_uuid=True),
+            sa.ForeignKey("cats.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.CheckConstraint("approximate_age_smallyears IS NULL OR approximate_age_smallyears BETWEEN 0 AND 60", name=op.f("ck_cats_approximate_age_smallyears_range")),
-        sa.CheckConstraint("merged_into IS NULL OR merged_into <> id", name=op.f("ck_cats_merged_into_not_self")),
-        sa.CheckConstraint("total_observations >= 0", name=op.f("ck_cats_total_observations_non_negative")),
-        sa.CheckConstraint("total_contributors >= 0", name=op.f("ck_cats_total_contributors_non_negative")),
+        sa.CheckConstraint(
+            "approximate_age_smallyears IS NULL OR approximate_age_smallyears BETWEEN 0 AND 60",
+            name=op.f("ck_cats_approximate_age_smallyears_range"),
+        ),
+        sa.CheckConstraint(
+            "merged_into IS NULL OR merged_into <> id", name=op.f("ck_cats_merged_into_not_self")
+        ),
+        sa.CheckConstraint(
+            "total_observations >= 0", name=op.f("ck_cats_total_observations_non_negative")
+        ),
+        sa.CheckConstraint(
+            "total_contributors >= 0", name=op.f("ck_cats_total_contributors_non_negative")
+        ),
         sa.CheckConstraint("total_likes >= 0", name=op.f("ck_cats_total_likes_non_negative")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_cats")),
     )
-    op.create_index("cats_canonical_location_gist", "cats", ["canonical_location"], unique=False, postgresql_using="gist")
+    op.create_index(
+        "cats_canonical_location_gist",
+        "cats",
+        ["canonical_location"],
+        unique=False,
+        postgresql_using="gist",
+    )
     op.create_index("idx_cats_created_at", "cats", ["created_at"], unique=False)
 
     op.create_table(
         "posts",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("cat_id", UUID(as_uuid=True), sa.ForeignKey("cats.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "cat_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("cats.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "user_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("photo_url", sa.Text(), nullable=False),
         sa.Column("thumb_url", sa.Text(), nullable=True),
-        sa.Column("location", Geometry(geometry_type="POINT", srid=4326, spatial_index=False), nullable=False),
-        sa.Column("latitude", DOUBLE_PRECISION(), sa.Computed("ST_Y(location::geometry)", persisted=True)),
-        sa.Column("longitude", DOUBLE_PRECISION(), sa.Computed("ST_X(location::geometry)", persisted=True)),
+        sa.Column(
+            "location",
+            Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
+            nullable=False,
+        ),
+        sa.Column(
+            "latitude", DOUBLE_PRECISION(), sa.Computed("ST_Y(location::geometry)", persisted=True)
+        ),
+        sa.Column(
+            "longitude", DOUBLE_PRECISION(), sa.Computed("ST_X(location::geometry)", persisted=True)
+        ),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("status", cat_status, nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("is_public", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("like_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
@@ -135,20 +225,54 @@ def upgrade() -> None:
         sa.CheckConstraint("comment_count >= 0", name=op.f("ck_posts_comment_count_non_negative")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_posts")),
     )
-    op.create_index("posts_location_gist", "posts", ["location"], unique=False, postgresql_using="gist")
+    op.create_index(
+        "posts_location_gist", "posts", ["location"], unique=False, postgresql_using="gist"
+    )
     op.create_index("idx_posts_created_at", "posts", ["created_at"], unique=False)
-    op.create_index("idx_posts_active_created_at", "posts", ["created_at"], unique=False, postgresql_where=sa.text("deleted_at IS NULL"))
+    op.create_index(
+        "idx_posts_active_created_at",
+        "posts",
+        ["created_at"],
+        unique=False,
+        postgresql_where=sa.text("deleted_at IS NULL"),
+    )
     op.create_index("idx_posts_user_id", "posts", ["user_id"], unique=False)
     op.create_index("idx_posts_cat_id", "posts", ["cat_id"], unique=False)
 
     op.create_table(
         "comments",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("post_id", UUID(as_uuid=True), sa.ForeignKey("posts.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "post_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("posts.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "user_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_comments")),
     )
@@ -157,10 +281,31 @@ def upgrade() -> None:
 
     op.create_table(
         "likes",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("post_id", UUID(as_uuid=True), sa.ForeignKey("posts.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "post_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("posts.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "user_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_likes")),
         sa.UniqueConstraint("post_id", "user_id", name=op.f("uq_likes_post_id_user_id")),
     )
@@ -169,16 +314,37 @@ def upgrade() -> None:
 
     op.create_table(
         "reports",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
-        sa.Column("reporter_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
+        sa.Column(
+            "reporter_id",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("target_type", report_target_type, nullable=False),
         sa.Column("target_id", UUID(as_uuid=True), nullable=False),
         sa.Column("reason", sa.Text(), nullable=True),
         sa.Column("metadata", JSONB(), nullable=True),
         sa.Column("status", report_status, nullable=False, server_default=sa.text("'open'")),
-        sa.Column("handled_by", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "handled_by",
+            UUID(as_uuid=True),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
         sa.Column("handled_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_reports")),
     )
     op.create_index("idx_reports_status", "reports", ["status"], unique=False)
@@ -186,14 +352,30 @@ def upgrade() -> None:
 
     op.create_table(
         "leaderboard_cache",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            UUID(as_uuid=True),
+            primary_key=True,
+            nullable=False,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("leaderboard_type", leaderboard_type, nullable=False),
         sa.Column("period", sa.Text(), nullable=False),
         sa.Column("data", JSONB(), nullable=False),
-        sa.Column("computed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "computed_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_leaderboard_cache")),
     )
-    op.create_index("idx_leaderboard_type_period", "leaderboard_cache", ["leaderboard_type", "period"], unique=False)
+    op.create_index(
+        "idx_leaderboard_type_period",
+        "leaderboard_cache",
+        ["leaderboard_type", "period"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:

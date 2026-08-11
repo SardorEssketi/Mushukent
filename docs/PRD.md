@@ -1,7 +1,7 @@
 Product Requirements Document (PRD)
 Project
 
-Mushukent
+Mushukistan
 
 Version: 1.0
 
@@ -12,11 +12,11 @@ Author: Sardor Muxtorov
 1. Overview
 Product Description
 
-Mushukent is a location-based social networking application that enables users to discover, photograph, document, and help street cats in Tashkent.
+Mushukistan is a location-based social networking application that enables users to discover, photograph, document, and help street cats in Tashkent.
 
-Every observation is associated with geographic coordinates, allowing the application to build a live, interactive map of the city's street cats.
+Every observation is associated with geographic coordinates, allowing the application to build a live, interactive OpenStreetMap of the city's street cats.
 
-Unlike traditional social media platforms, Mushukent focuses on documenting real animals rather than individual posts. Each cat can have a complete observation history contributed by multiple users over time.
+Unlike traditional social media platforms, Mushukistan focuses on documenting real animals rather than individual posts. Each cat can have a complete observation history contributed by multiple users over time.
 
 2. Problem Statement
 
@@ -72,7 +72,7 @@ Age:
 
 7. Product Value
 
-Mushukent provides users with the ability to:
+Mushukistan provides users with the ability to:
 
 discover nearby street cats;
 document cat sightings;
@@ -108,17 +108,25 @@ Users shall be able to:
 
 register using email;
 sign in using Google;
-manage their profile.
+manage their profile;
+choose a preferred app language after email verification and sign-in.
+
+Supported MVP languages:
+
+English
+Uzbek
+Russian
 Map
 
-The application shall display an interactive map containing all published cats.
+The application shall display an interactive OpenStreetMap with cat markers for all published cats.
 
 Users shall be able to:
 
 zoom;
 move across the map;
 select markers;
-open cat pages.
+open cat pages;
+view nearby cat-support places, including pet shops, veterinary clinics and animal shelters.
 
 Available filters:
 
@@ -126,6 +134,11 @@ Nearby Cats
 Recently Seen
 Needs Help
 Recently Added
+Pet Shops
+Veterinary Clinics
+Animal Shelters
+
+Place markers shall show available public contact details, including phone number, website and opening hours when present in the free source data or manually verified by moderators.
 Add Cat
 
 Users shall be able to create a new observation by providing:
@@ -150,6 +163,43 @@ Users shall see nearby observations sorted by:
 
 Distance
 Publication date
+
+Lost Pets
+
+Users shall be able to view lost pet posts in the main feed with a distinct Lost Pet tag.
+
+Users shall be able to create a lost pet post from the Add flow by providing:
+
+one or more cat photos;
+the pet's name;
+last-seen GPS/map coordinates;
+additional information;
+the owner's phone number from their profile.
+
+Users without a profile phone number may view lost pet posts, but must add a phone number before creating one.
+
+Profile phone numbers used for lost pet contact shall use the Uzbekistan format `+998 XX XXX XXXX`. Invalid or non-Uzbek phone numbers shall be rejected with a clear validation message.
+
+Lost pet posts shall include a Contact Owner action that initiates a phone call to the stored owner phone number.
+
+Adoption Posts
+
+Users shall be able to view adoption posts in the main feed with a distinct Adoption tag.
+
+Users shall be able to create an adoption post from the Add flow when they want to give a pet to a good home by providing:
+
+one or more cat photos;
+the pet's name;
+additional information;
+the owner's phone number from their profile.
+
+Adoption posts shall not require GPS/map coordinates and shall not appear as map markers.
+
+Users without a profile phone number may view adoption posts, but must add a phone number before creating one.
+
+Profile phone numbers used for adoption contact shall use the Uzbekistan format `+998 XX XXX XXXX`. Invalid or non-Uzbek phone numbers shall be rejected with a clear validation message.
+
+Adoption posts shall include a Contact Owner action that initiates a phone call to the stored owner phone number.
 Cat Page
 
 Each cat page shall display:
@@ -191,10 +241,17 @@ User Profile
 Profiles shall display:
 
 avatar;
-registration date;
 number of observations;
 total likes received;
 comments count.
+
+Registration date shall be shown in Profile settings under About account, not as a main profile stat.
+
+Users shall be able to change their preferred app language later from Settings.
+
+Users shall be able to delete their own account from Settings under About account.
+
+MVP account deletion shall anonymize the account, deactivate login, end the current session, delete likes, and hide/anonymize user-owned posts, comments, and lost-pet posts according to the account lifecycle policy.
 Leaderboards
 
 The application shall include:
@@ -205,9 +262,21 @@ Most Active Users
 
 Top Animal Helpers
 
+MVP leaderboard definitions:
+
+- Most Popular Users: count of visible public posts.
+- Most Active Users: count of visible public posts.
+- Top Animal Helpers: count of visible public posts associated with cats whose status is `needs_help` or `injured`.
+
+Supported periods: `day`, `week`, `month`, `all`.
+
+Tie-breaking is deterministic: score descending, then user ID ascending.
+
 Moderation
 
 Users shall be able to report inappropriate content.
+
+Duplicate open reports from the same reporter for the same target are idempotent and return the existing open report.
 
 Moderators shall be able to:
 

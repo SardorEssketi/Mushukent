@@ -1,4 +1,4 @@
-# Mushukent Development Rules
+# Mushukistan Development Rules
 
 - Documentation is the single source of truth.
 - Always read /docs before making changes.

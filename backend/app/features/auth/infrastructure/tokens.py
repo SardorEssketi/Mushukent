@@ -41,8 +41,6 @@ class JoseAccessTokenService(AccessTokenService):
             "exp": int(expires_at.timestamp()),
             "token_type": "access",
         }
-        if principal.email is not None:
-            payload["email"] = principal.email
 
         return jwt.encode(
             payload,
@@ -102,9 +100,87 @@ class JoseAccessTokenService(AccessTokenService):
         return AuthenticatedPrincipal(
             user_id=user_id,
             role=Role(role_value),
-            email=claims.get("email"),
             is_active=True,
         )
+
+
+@dataclass(slots=True)
+class EmailVerificationClaims:
+    user_id: UUID
+    email: str
+
+
+class JoseEmailVerificationTokenService:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def issue_token(self, *, user_id: UUID, email: str) -> str:
+        now = datetime.now(UTC)
+        expires_at = now + timedelta(hours=self.settings.email_verification_token_exp_hours)
+        payload = {
+            "sub": str(user_id),
+            "email": email,
+            "iss": self.settings.jwt_issuer,
+            "aud": self.settings.jwt_audience,
+            "iat": int(now.timestamp()),
+            "nbf": int(now.timestamp()),
+            "exp": int(expires_at.timestamp()),
+            "token_type": "email_verification",
+        }
+        return jwt.encode(
+            payload,
+            self.settings.jwt_secret_key,
+            algorithm=self.settings.jwt_algorithm,
+        )
+
+    def decode_token(self, token: str) -> EmailVerificationClaims:
+        try:
+            claims = jwt.decode(
+                token,
+                self.settings.jwt_secret_key,
+                algorithms=[self.settings.jwt_algorithm],
+                audience=self.settings.jwt_audience,
+                issuer=self.settings.jwt_issuer,
+                options={
+                    "verify_aud": True,
+                    "verify_exp": True,
+                    "verify_nbf": True,
+                    "verify_iat": False,
+                    "leeway": self.settings.jwt_clock_skew_seconds,
+                },
+            )
+        except JWTError as exc:
+            raise api_error(
+                401,
+                "INVALID_VERIFICATION_TOKEN",
+                "Invalid or expired verification token.",
+            ) from exc
+
+        if claims.get("token_type") != "email_verification":
+            raise api_error(
+                401,
+                "INVALID_VERIFICATION_TOKEN",
+                "Invalid or expired verification token.",
+            )
+
+        subject = claims.get("sub")
+        email = claims.get("email")
+        try:
+            user_id = UUID(str(subject))
+        except (TypeError, ValueError) as exc:
+            raise api_error(
+                401,
+                "INVALID_VERIFICATION_TOKEN",
+                "Invalid or expired verification token.",
+            ) from exc
+        if not isinstance(email, str) or not email:
+            raise api_error(
+                401,
+                "INVALID_VERIFICATION_TOKEN",
+                "Invalid or expired verification token.",
+            )
+
+        return EmailVerificationClaims(user_id=user_id, email=email)
 
 
 class GoogleOAuthIdTokenVerifier:

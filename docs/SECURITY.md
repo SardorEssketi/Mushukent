@@ -1,13 +1,13 @@
 SECURITY.md
 
-Mushukent Security Architecture (MVP)
+Mushukistan Security Architecture (MVP)
 
 Version: 1.0 (MVP)
 Scope: Android app + FastAPI backend + PostgreSQL/PostGIS + Cloudflare R2
 
 1. Purpose
 ----------
-This document defines security principles and controls for Mushukent MVP. It is implementation guidance for secure-by-default behavior while keeping MVP delivery practical.
+This document defines security principles and controls for Mushukistan MVP. It is implementation guidance for secure-by-default behavior while keeping MVP delivery practical.
 
 2. Security Principles
 ----------------------
@@ -62,8 +62,10 @@ This document defines security principles and controls for Mushukent MVP. It is 
 ----------------
 MVP baseline limits:
 - Anonymous endpoints: 30 req/min per IP.
+- Public read endpoints used for Feed, Map, places, lost pets and leaderboards: 180 req/min per IP or authenticated token.
 - Authenticated endpoints: 60 req/min per user.
 - Auth endpoints and upload endpoints: 10 req/min per IP/user.
+- CORS preflight requests are not counted against user-facing request buckets.
 
 Behavior:
 - Exceeding limits returns 429 `RATE_LIMIT_EXCEEDED`.
@@ -72,6 +74,8 @@ Behavior:
 Notes:
 - Implementation can use in-process limiter for MVP.
 - External distributed limiter (Redis) is out of MVP scope.
+- Current MVP implementation uses an in-process fixed-window limiter. This is sufficient for a single backend process and should be replaced with a shared Redis-backed limiter before horizontal scaling.
+- The limiter is split into rate-limit policy and storage. `RATE_LIMIT_BACKEND=memory` is active now; `RATE_LIMIT_BACKEND=redis` and `RATE_LIMIT_REDIS_URL` are reserved for a future Redis-backed store so route behavior and response envelopes do not need to change.
 
 6. File Upload Security
 -----------------------
@@ -99,6 +103,7 @@ Notes:
 - Database credentials
 - Google OAuth client configuration
 - Cloudflare R2 access key and secret key
+- Resend API key for transactional email delivery
 
 7.2 Rules
 - Secrets must come from environment variables.

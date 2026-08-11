@@ -1,11 +1,11 @@
 ARCHITECTURE.md
-Mushukent Architecture
+Mushukistan Architecture
 
 Version 1.0
 
 1. Overview
 
-Mushukent is a location-based social network that allows users to photograph, discover and help street cats in Tashkent.
+Mushukistan is a location-based social network that allows users to photograph, discover and help street cats in Tashkent.
 
 The system consists of several independent components communicating through REST APIs.
 
@@ -49,6 +49,19 @@ Upload Images
 The Flutter application never communicates directly with the database.
 
 All requests go through the Backend.
+
+Map Architecture
+
+The frontend renders maps with flutter_map and OpenStreetMap tiles.
+
+The backend performs all spatial queries using PostgreSQL + PostGIS.
+
+The backend stores only coordinates and never depends on a specific map provider.
+There is no separate backend integration with OpenStreetMap or any other map renderer.
+
+Map rendering is completely separated from the domain and API layers.
+
+Future migration to Yandex Maps, Google Maps, MapLibre, or any other provider must require frontend changes only.
 
 FastAPI Backend
 

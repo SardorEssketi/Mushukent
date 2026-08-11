@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 *.so
+*.egg-info/
 .venv/
 .pytest_cache/
 .mypy_cache/
@@ -27,4 +28,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local screenshots / manual browser captures
+_chrome-*.png
 

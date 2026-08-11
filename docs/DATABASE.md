@@ -2,7 +2,7 @@ DATABASE.md
 
 Purpose
 -------
-This document defines the canonical database design for Mushukent MVP. It is the source of truth for schema, types, indexes and migration notes used by the backend (FastAPI + SQLAlchemy + Alembic) and follows the Clean Architecture principle: domain entities are represented in the database but business rules remain in application/domain code.
+This document defines the canonical database design for Mushukistan MVP. It is the source of truth for schema, types, indexes and migration notes used by the backend (FastAPI + SQLAlchemy + Alembic) and follows the Clean Architecture principle: domain entities are represented in the database but business rules remain in application/domain code.
 
 MVP constraints and decisions
 ----------------------------
@@ -28,7 +28,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 Naming conventions
 ------------------
-- Tables: plural, snake_case (users, cats, posts, comments, likes, reports, leaderboard_cache).
+- Tables: plural, snake_case (users, cats, posts, comments, likes, reports, leaderboard_cache, places, lost_pets, lost_pet_photos, adoption_posts, adoption_post_photos, user_blocks).
 - Columns: snake_case.
 - Primary keys: id (UUID) using gen_random_uuid() as default value.
 - Timestamps: created_at (TIMESTAMP WITH TIME ZONE), updated_at, deleted_at (nullable).
@@ -39,8 +39,17 @@ High-level ER summary
 - users 1 --- * posts
 - cats 1 --- * posts
 - posts 1 --- * comments
+- posts 1 --- * post_photos
 - posts * --- * likes (through likes table)
 - users * --- * reports (reporter -> report target)
+- places are independent map points used for pet shops, veterinary clinics and shelters
+- lost_pets 1 --- * lost_pet_photos
+- lost_pets 1 --- * comments
+- adoption_posts 1 --- * adoption_post_photos
+- adoption_posts 1 --- * comments
+- users 1 --- * lost_pets
+- users 1 --- * adoption_posts
+- users * --- * users through user_blocks
 
 Table definitions (recommended DDL)
 ----------------------------------
@@ -52,7 +61,14 @@ CREATE TABLE users (
     password_hash TEXT NULL, -- nullable for OAuth-only accounts
     name TEXT,
     avatar_url TEXT,
+    phone_number TEXT NULL, -- Uzbekistan format: +998 XX XXX XXXX
+    telegram_username TEXT NULL, -- 5-32 letters/numbers/underscores
+    preferred_language TEXT NOT NULL DEFAULT 'en',
+    allow_public_activity_view BOOLEAN NOT NULL DEFAULT TRUE,
     bio TEXT,
+    accepted_terms_version TEXT NULL,
+    accepted_privacy_version TEXT NULL,
+    accepted_legal_at TIMESTAMPTZ NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_moderator BOOLEAN NOT NULL DEFAULT FALSE,
     registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -113,10 +129,22 @@ CREATE INDEX idx_posts_created_at ON posts (created_at DESC);
 CREATE INDEX idx_posts_user_id ON posts (user_id);
 CREATE INDEX idx_posts_cat_id ON posts (cat_id);
 
+CREATE TABLE post_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    photo_url TEXT NOT NULL,
+    thumb_url TEXT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_post_photos_post_id_position ON post_photos (post_id, position);
+
 -- Comments
 CREATE TABLE comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+    post_id UUID NULL REFERENCES posts(id) ON DELETE CASCADE,
+    lost_pet_id UUID NULL REFERENCES lost_pets(id) ON DELETE CASCADE,
+    adoption_post_id UUID NULL REFERENCES adoption_posts(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -124,6 +152,8 @@ CREATE TABLE comments (
     deleted_at TIMESTAMPTZ NULL
 );
 CREATE INDEX idx_comments_post_id ON comments (post_id);
+CREATE INDEX idx_comments_lost_pet_id ON comments (lost_pet_id);
+CREATE INDEX idx_comments_adoption_post_id ON comments (adoption_post_id);
 CREATE INDEX idx_comments_user_id ON comments (user_id);
 
 -- Likes: ensure unique (user + post) to prevent duplicate likes
@@ -136,6 +166,17 @@ CREATE TABLE likes (
 );
 CREATE INDEX idx_likes_post_id ON likes (post_id);
 CREATE INDEX idx_likes_user_id ON likes (user_id);
+
+CREATE TABLE user_blocks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (blocker_id, blocked_id),
+    CHECK (blocker_id <> blocked_id)
+);
+CREATE INDEX idx_user_blocks_blocker_id ON user_blocks (blocker_id);
+CREATE INDEX idx_user_blocks_blocked_id ON user_blocks (blocked_id);
 
 -- Reports (content moderation)
 CREATE TYPE report_target_type AS ENUM ('post','comment','user','cat');
@@ -168,6 +209,94 @@ CREATE TABLE leaderboard_cache (
     computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_leaderboard_type_period ON leaderboard_cache (leaderboard_type, period);
+
+-- Places (free OSM/manual cat-support POIs)
+CREATE TYPE place_category AS ENUM ('pet_shop','veterinary','shelter');
+CREATE TYPE place_source AS ENUM ('osm','manual');
+
+CREATE TABLE places (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    category place_category NOT NULL,
+    location GEOMETRY(POINT, 4326) NOT NULL,
+    latitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_Y(location::geometry)) STORED,
+    longitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_X(location::geometry)) STORED,
+    address TEXT NULL,
+    phone TEXT NULL,
+    website TEXT NULL,
+    opening_hours TEXT NULL,
+    source place_source NOT NULL DEFAULT 'manual',
+    source_id TEXT NULL,
+    verified_at TIMESTAMPTZ NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX places_location_gist ON places USING GIST (location);
+CREATE INDEX idx_places_category ON places (category);
+CREATE INDEX idx_places_source ON places (source, source_id);
+
+-- Lost pet posts
+CREATE TABLE lost_pets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    pet_name TEXT NOT NULL,
+    owner_phone_number TEXT NOT NULL, -- copied from users.phone_number in Uzbekistan format: +998 XX XXX XXXX
+    owner_telegram_username TEXT NULL, -- copied from users.telegram_username when provided
+    owner_phone_publication_consent BOOLEAN NOT NULL DEFAULT FALSE,
+    last_seen_location GEOMETRY(POINT, 4326) NOT NULL,
+    last_seen_latitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_Y(last_seen_location::geometry)) STORED,
+    last_seen_longitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_X(last_seen_location::geometry)) STORED,
+    additional_info TEXT NULL,
+    is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
+    is_public BOOLEAN NOT NULL DEFAULT TRUE,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ NULL
+);
+CREATE INDEX lost_pets_last_seen_location_gist ON lost_pets USING GIST (last_seen_location);
+CREATE INDEX idx_lost_pets_created_at ON lost_pets (created_at DESC);
+CREATE INDEX idx_lost_pets_user_id ON lost_pets (user_id);
+
+CREATE TABLE lost_pet_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lost_pet_id UUID NOT NULL REFERENCES lost_pets(id) ON DELETE CASCADE,
+    photo_url TEXT NOT NULL,
+    thumb_url TEXT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_lost_pet_photos_lost_pet_id_position ON lost_pet_photos (lost_pet_id, position);
+
+-- Adoption posts
+CREATE TABLE adoption_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    pet_name TEXT NOT NULL,
+    owner_phone_number TEXT NOT NULL, -- copied from users.phone_number in Uzbekistan format: +998 XX XXX XXXX
+    owner_telegram_username TEXT NULL,
+    owner_phone_publication_consent BOOLEAN NOT NULL DEFAULT FALSE,
+    additional_info TEXT NULL,
+    is_public BOOLEAN NOT NULL DEFAULT TRUE,
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deleted_at TIMESTAMPTZ NULL
+);
+CREATE INDEX idx_adoption_posts_created_at ON adoption_posts (created_at DESC);
+CREATE INDEX idx_adoption_posts_active_created_at ON adoption_posts (created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX idx_adoption_posts_user_id ON adoption_posts (user_id);
+
+CREATE TABLE adoption_post_photos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    adoption_post_id UUID NOT NULL REFERENCES adoption_posts(id) ON DELETE CASCADE,
+    photo_url TEXT NOT NULL,
+    thumb_url TEXT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_adoption_post_photos_post_id_position ON adoption_post_photos (adoption_post_id, position);
 
 
 Important constraints, indexes and rationale
@@ -221,9 +350,9 @@ Sample docker-compose service for Postgres (dev)
 postgres:
   image: postgis/postgis:15-3.4
   environment:
-    POSTGRES_DB: mushukent
-    POSTGRES_USER: mushukent
-    POSTGRES_PASSWORD: mushukent
+    POSTGRES_DB: mushukistan
+    POSTGRES_USER: mushukistan
+    POSTGRES_PASSWORD: mushukistan
   volumes:
     - ./data/postgres:/var/lib/postgresql/data
   ports:
@@ -257,26 +386,32 @@ ORDER BY p.created_at DESC
 LIMIT :limit OFFSET :offset;
 -- Prefer cursor pagination: WHERE (created_at, id) < (:last_created_at, :last_id)
 
+4) Nearby cat-support places:
+SELECT id, name, category, phone, website, opening_hours, ST_AsGeoJSON(location) as location_geojson
+FROM places
+WHERE is_active = TRUE
+  AND category = ANY(:categories)
+  AND ST_DWithin(location::geography, ST_SetSRID(ST_Point(:lon,:lat),4326)::geography, :radius_meters)
+ORDER BY ST_Distance(location::geography, ST_SetSRID(ST_Point(:lon,:lat),4326)::geography)
+LIMIT :limit;
+
 Security & privacy considerations (DB-related)
 ----------------------------------------------
 - Passwords: store only hashed password (bcrypt/argon2) in password_hash; never store plaintext. Email used for login must be unique and verified.
 - Sensitive PII: limit what is stored — do not store device identifiers in plain DB without hashing. Be careful with location retention policies for privacy-sensitive content.
-- Data deletion: when a user requests account deletion, we recommend:
-  - anonymize content where possible (set user_id to NULL and keep content for continuity), or
-  - soft-delete user and their content depending on policy.
+- Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, clears report actor links where possible, and attempts best-effort media cleanup.
 - Audit logs: keep moderator actions and important security events in write-once logs or a separate audit table. Don't store secrets in DB.
 
 Data retention policy (recommended for MVP)
 ------------------------------------------
-- Soft-deleted posts/comments/cats: keep for 90 days by default, then may be permanently deleted after legal review or if storage cleanup is needed.
+- Soft-deleted posts/comments/cats/lost pets/adoption posts: keep for 90 days by default, then run `backend/scripts/cleanup_retention.py` from a scheduled production job after legal review.
 - Backups: keep 30 days of daily backups and 12 monthly snapshots (adjust later as needed).
 
 Open questions / decisions to confirm (these will affect final schema)
 --------------------------------------------------------------------
 1. Should we require unique human-friendly numeric IDs in addition to UUIDs for public references (e.g., cat numeric id visible in URLs)? If yes, we should add a serial 'seq' column.
 2. Exact set of cat statuses: the docs list several; confirm the final enumeration and whether it changes often.
-3. Do we want to store multiple photos per post? PRD implies one photo per observation; if we later allow multiple photos, schema must change (images table).
-4. Do we need an explicit audit table for moderator actions now, or can app logs suffice for MVP?
+3. Do we need an explicit audit table for moderator actions now, or can app logs suffice for MVP?
 
 Next steps (after approval)
 --------------------------

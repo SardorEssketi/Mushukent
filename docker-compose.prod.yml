@@ -1,0 +1,11 @@
+services:
+  backend:
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      ENABLE_API_DOCS: "false"
+
+  nginx:
+    volumes:
+      - ./infrastructure/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend/build/web:/usr/share/nginx/html:ro

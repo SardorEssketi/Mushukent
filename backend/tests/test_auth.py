@@ -25,11 +25,11 @@ from app.main import app
 
 def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key")
-    monkeypatch.setenv("JWT_ISSUER", "mushukent-api")
-    monkeypatch.setenv("JWT_AUDIENCE", "mushukent-mobile")
+    monkeypatch.setenv("JWT_ISSUER", "mushukistan-api")
+    monkeypatch.setenv("JWT_AUDIENCE", "mushukistan-mobile")
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "google-client-id")
     monkeypatch.setenv(
-        "DATABASE_URL", "postgresql+psycopg://mushukent:change_me@localhost:5432/mushukent"
+        "DATABASE_URL", "postgresql+psycopg://mushukistan:change_me@localhost:5432/mushukistan"
     )
     return Settings()
 
@@ -92,7 +92,6 @@ def test_access_token_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
     principal = AuthenticatedPrincipal(
         user_id=UUID("11111111-1111-4111-8111-111111111111"),
         role=Role.USER,
-        email="user@example.com",
     )
 
     token = service.issue_access_token(principal)
@@ -100,7 +99,6 @@ def test_access_token_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert decoded.user_id == principal.user_id
     assert decoded.role == Role.USER
-    assert decoded.email == principal.email
 
 
 def test_access_token_rejects_invalid_issuer_audience_or_type(
@@ -168,17 +166,30 @@ def test_register_login_logout_flow(client: TestClient, auth_runtime) -> None:
 
     register_response = client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": password, "name": "Register User"},
+        json={
+            "email": email,
+            "password": password,
+            "name": "Register User",
+            "accept_terms": True,
+            "accept_privacy": True,
+        },
     )
     assert register_response.status_code == 201
     register_payload = register_response.json()
     assert register_payload["success"] is True
     assert register_payload["data"]["email"] == email
-    assert "refresh_token" not in register_payload["data"]
+    assert register_payload["data"]["verification_required"] is True
+    assert register_payload["data"]["dev_verification_token"]
 
     duplicate_response = client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": password, "name": "Register User"},
+        json={
+            "email": email,
+            "password": password,
+            "name": "Register User",
+            "accept_terms": True,
+            "accept_privacy": True,
+        },
     )
     assert duplicate_response.status_code == 409
     assert duplicate_response.json()["error"]["code"] == "EMAIL_ALREADY_EXISTS"
@@ -186,6 +197,20 @@ def test_register_login_logout_flow(client: TestClient, auth_runtime) -> None:
     with auth_service.db_session_manager.session_scope() as session:
         count = session.scalar(select(schema.User).where(schema.User.email == email))
         assert count is not None
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert login_response.status_code == 401
+    assert login_response.json()["error"]["code"] == "EMAIL_NOT_VERIFIED"
+
+    verify_response = client.post(
+        "/api/v1/auth/verify-email",
+        json={"token": register_payload["data"]["dev_verification_token"]},
+    )
+    assert verify_response.status_code == 200
+    assert verify_response.json()["data"]["verified"] is True
 
     login_response = client.post(
         "/api/v1/auth/login",
@@ -214,7 +239,14 @@ def test_register_login_logout_flow(client: TestClient, auth_runtime) -> None:
 
 def test_google_login_creates_or_updates_user(client: TestClient, auth_runtime) -> None:
     _, auth_service = auth_runtime
-    response = client.post("/api/v1/auth/google", json={"id_token": "google-id-token"})
+    response = client.post(
+        "/api/v1/auth/google",
+        json={
+            "id_token": "google-id-token",
+            "accept_terms": True,
+            "accept_privacy": True,
+        },
+    )
 
     assert response.status_code == 200
     payload = response.json()
@@ -231,6 +263,33 @@ def test_google_login_creates_or_updates_user(client: TestClient, auth_runtime) 
         assert user is not None
         assert user.email_verified is True
         assert user.password_hash is None
+
+
+def test_resend_verification_returns_dev_token_for_unverified_user(
+    client: TestClient, auth_runtime
+) -> None:
+    _, auth_service = auth_runtime
+    email = "resend@example.com"
+    password = "StrongPass123"
+
+    auth_service.register(
+        email=email,
+        password=password,
+        name="Resend User",
+        accept_terms=True,
+        accept_privacy=True,
+    )
+
+    response = client.post(
+        "/api/v1/auth/resend-verification",
+        json={"email": email},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["email"] == email
+    assert payload["data"]["dev_verification_token"]
 
 
 def test_login_rejects_inactive_user(client: TestClient, auth_runtime) -> None:
@@ -262,10 +321,22 @@ def test_auth_service_rolls_back_on_duplicate_registration(auth_runtime) -> None
     email = "rollback@example.com"
     password = "StrongPass123"
 
-    auth_service.register(email=email, password=password, name="Rollback User")
+    auth_service.register(
+        email=email,
+        password=password,
+        name="Rollback User",
+        accept_terms=True,
+        accept_privacy=True,
+    )
 
     with pytest.raises(HTTPException) as excinfo:
-        auth_service.register(email=email, password=password, name="Rollback User")
+        auth_service.register(
+            email=email,
+            password=password,
+            name="Rollback User",
+            accept_terms=True,
+            accept_privacy=True,
+        )
 
     assert excinfo.value.status_code == 409
 

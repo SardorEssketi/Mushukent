@@ -16,7 +16,6 @@ class Role(StrEnum):
 class AuthenticatedPrincipal:
     user_id: UUID
     role: Role = Role.USER
-    email: str | None = None
     is_active: bool = True
 
 
@@ -55,7 +54,13 @@ class GoogleIdTokenVerifier(Protocol):
 class AuthenticationService(Protocol):
     """Authentication contract for the application layer."""
 
-    def register(self, email: str, password: str, name: str | None = None): ...
+    def register(
+        self,
+        email: str,
+        password: str,
+        name: str | None = None,
+        preferred_language: str = "en",
+    ): ...
 
     def authenticate_with_password(self, email: str, password: str): ...
 

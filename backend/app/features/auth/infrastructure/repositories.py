@@ -30,15 +30,23 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         email: str,
         password_hash: str | None,
         name: str | None = None,
+        preferred_language: str = "en",
         email_verified: bool = False,
         is_moderator: bool = False,
+        accepted_terms_version: str | None = None,
+        accepted_privacy_version: str | None = None,
+        accepted_legal_at: datetime | None = None,
     ) -> AuthUser:
         model = schema.User(
             email=email,
             password_hash=password_hash,
             name=name,
+            preferred_language=preferred_language,
             email_verified=email_verified,
             is_moderator=is_moderator,
+            accepted_terms_version=accepted_terms_version,
+            accepted_privacy_version=accepted_privacy_version,
+            accepted_legal_at=accepted_legal_at,
         )
         self.session.add(model)
         self.session.flush()
@@ -53,7 +61,14 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         model.password_hash = user.password_hash
         model.name = user.name
         model.avatar_url = user.avatar_url
+        model.phone_number = user.phone_number
+        model.telegram_username = user.telegram_username
+        model.preferred_language = user.preferred_language
+        model.allow_public_activity_view = user.allow_public_activity_view
         model.bio = user.bio
+        model.accepted_terms_version = user.accepted_terms_version
+        model.accepted_privacy_version = user.accepted_privacy_version
+        model.accepted_legal_at = user.accepted_legal_at
         model.email_verified = user.email_verified
         model.is_active = user.is_active
         model.is_moderator = user.is_moderator
@@ -71,6 +86,15 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         self.session.refresh(model)
         return self._to_domain(model)
 
+    def mark_email_verified(self, user_id: UUID) -> AuthUser | None:
+        model = self.session.get(schema.User, user_id)
+        if model is None:
+            return None
+        model.email_verified = True
+        self.session.flush()
+        self.session.refresh(model)
+        return self._to_domain(model)
+
     @staticmethod
     def _to_domain(model: schema.User) -> AuthUser:
         return AuthUser(
@@ -79,7 +103,14 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
             password_hash=model.password_hash,
             name=model.name,
             avatar_url=model.avatar_url,
+            phone_number=model.phone_number,
+            telegram_username=model.telegram_username,
+            preferred_language=model.preferred_language,
+            allow_public_activity_view=model.allow_public_activity_view,
             bio=model.bio,
+            accepted_terms_version=model.accepted_terms_version,
+            accepted_privacy_version=model.accepted_privacy_version,
+            accepted_legal_at=model.accepted_legal_at,
             email_verified=model.email_verified,
             is_active=model.is_active,
             is_moderator=model.is_moderator,

@@ -25,6 +25,8 @@ from app.infrastructure.db.base import Base
 from app.infrastructure.db.enums import (
     CatStatus,
     LeaderboardType,
+    PlaceCategory,
+    PlaceSource,
     ReportStatus,
     ReportTargetType,
 )
@@ -67,6 +69,19 @@ leaderboard_type_enum = ENUM(
     name="leaderboard_type",
 )
 
+place_category_enum = ENUM(
+    PlaceCategory.PET_SHOP.value,
+    PlaceCategory.VETERINARY.value,
+    PlaceCategory.SHELTER.value,
+    name="place_category",
+)
+
+place_source_enum = ENUM(
+    PlaceSource.OSM.value,
+    PlaceSource.MANUAL.value,
+    name="place_source",
+)
+
 
 class User(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "users"
@@ -81,7 +96,26 @@ class User(UUIDPrimaryKeyMixin, Base):
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone_number: Mapped[str | None] = mapped_column(Text, nullable=True)
+    telegram_username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_language: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="en",
+        server_default=text("'en'"),
+    )
+    allow_public_activity_view: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    accepted_terms_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    accepted_privacy_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    accepted_legal_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -119,8 +153,22 @@ class User(UUIDPrimaryKeyMixin, Base):
         foreign_keys="Report.handled_by",
         passive_deletes=True,
     )
+    lost_pets: Mapped[list["LostPet"]] = relationship(
+        back_populates="author",
+        passive_deletes=True,
+    )
+    adoption_posts: Mapped[list["AdoptionPost"]] = relationship(
+        back_populates="author",
+        passive_deletes=True,
+    )
 
-    __table_args__ = (Index("idx_users_registered_at", "registered_at"),)
+    __table_args__ = (
+        CheckConstraint(
+            "preferred_language IN ('en', 'uz', 'ru')",
+            name="preferred_language_supported",
+        ),
+        Index("idx_users_registered_at", "registered_at"),
+    )
 
 
 class Cat(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
@@ -213,7 +261,7 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     thumb_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[object] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
-        nullable=False,
+        nullable=True,
     )
     latitude: Mapped[float | None] = mapped_column(
         DOUBLE_PRECISION,
@@ -246,6 +294,12 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     cat: Mapped["Cat"] = relationship(back_populates="posts")
     author: Mapped["User | None"] = relationship(back_populates="posts")
+    photos: Mapped[list["PostPhoto"]] = relationship(
+        back_populates="post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="PostPhoto.position",
+    )
     comments: Mapped[list["Comment"]] = relationship(back_populates="post", passive_deletes=True)
     likes: Mapped[list["Like"]] = relationship(back_populates="post", passive_deletes=True)
 
@@ -264,13 +318,48 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
 
-class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
-    __tablename__ = "comments"
+class PostPhoto(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "post_photos"
 
     post_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("posts.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    photo_url: Mapped[str] = mapped_column(Text, nullable=False)
+    thumb_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    position: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    post: Mapped["Post"] = relationship(back_populates="photos")
+
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="post_photo_position_non_negative"),
+        Index("idx_post_photos_post_id_position", "post_id", "position"),
+    )
+
+
+class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
+    __tablename__ = "comments"
+
+    post_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    lost_pet_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("lost_pets.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    adoption_post_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("adoption_posts.id", ondelete="CASCADE"),
+        nullable=True,
     )
     user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -280,10 +369,20 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     post: Mapped["Post"] = relationship(back_populates="comments")
+    lost_pet: Mapped["LostPet | None"] = relationship(back_populates="comments")
+    adoption_post: Mapped["AdoptionPost | None"] = relationship(back_populates="comments")
     author: Mapped["User | None"] = relationship(back_populates="comments")
 
     __table_args__ = (
+        CheckConstraint(
+            "((post_id IS NOT NULL)::int + "
+            "(lost_pet_id IS NOT NULL)::int + "
+            "(adoption_post_id IS NOT NULL)::int) = 1",
+            name="comments_exactly_one_target",
+        ),
         Index("idx_comments_post_id", "post_id"),
+        Index("idx_comments_lost_pet_id", "lost_pet_id"),
+        Index("idx_comments_adoption_post_id", "adoption_post_id"),
         Index("idx_comments_user_id", "user_id"),
     )
 
@@ -309,6 +408,28 @@ class Like(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         UniqueConstraint("post_id", "user_id", name="uq_likes_post_id_user_id"),
         Index("idx_likes_post_id", "post_id"),
         Index("idx_likes_user_id", "user_id"),
+    )
+
+
+class UserBlock(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "user_blocks"
+
+    blocker_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    blocked_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("blocker_id", "blocked_id", name="uq_user_blocks_blocker_blocked"),
+        CheckConstraint("blocker_id <> blocked_id", name="user_blocks_not_self"),
+        Index("idx_user_blocks_blocker_id", "blocker_id"),
+        Index("idx_user_blocks_blocked_id", "blocked_id"),
     )
 
 
@@ -368,3 +489,228 @@ class LeaderboardCache(UUIDPrimaryKeyMixin, Base):
     )
 
     __table_args__ = (Index("idx_leaderboard_type_period", "leaderboard_type", "period"),)
+
+
+class Place(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "places"
+
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[PlaceCategory] = mapped_column(place_category_enum, nullable=False)
+    location: Mapped[object] = mapped_column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
+        nullable=False,
+    )
+    latitude: Mapped[float | None] = mapped_column(
+        DOUBLE_PRECISION,
+        Computed("ST_Y(location::geometry)", persisted=True),
+    )
+    longitude: Mapped[float | None] = mapped_column(
+        DOUBLE_PRECISION,
+        Computed("ST_X(location::geometry)", persisted=True),
+    )
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    website: Mapped[str | None] = mapped_column(Text, nullable=True)
+    opening_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[PlaceSource] = mapped_column(
+        place_source_enum,
+        nullable=False,
+        server_default=text("'manual'"),
+    )
+    source_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+
+    __table_args__ = (
+        Index("places_location_gist", "location", postgresql_using="gist"),
+        Index("idx_places_category", "category"),
+        Index("idx_places_source", "source", "source_id"),
+    )
+
+
+class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
+    __tablename__ = "lost_pets"
+
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    pet_name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_phone_number: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_telegram_username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_phone_publication_consent: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    last_seen_location: Mapped[object] = mapped_column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
+        nullable=False,
+    )
+    last_seen_latitude: Mapped[float | None] = mapped_column(
+        DOUBLE_PRECISION,
+        Computed("ST_Y(last_seen_location::geometry)", persisted=True),
+    )
+    last_seen_longitude: Mapped[float | None] = mapped_column(
+        DOUBLE_PRECISION,
+        Computed("ST_X(last_seen_location::geometry)", persisted=True),
+    )
+    additional_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_resolved: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    comment_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    author: Mapped["User | None"] = relationship(back_populates="lost_pets")
+    photos: Mapped[list["LostPetPhoto"]] = relationship(
+        back_populates="lost_pet",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="LostPetPhoto.position",
+    )
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="lost_pet",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("comment_count >= 0", name="lost_pets_comment_count_non_negative"),
+        Index("lost_pets_last_seen_location_gist", "last_seen_location", postgresql_using="gist"),
+        Index("idx_lost_pets_created_at", "created_at"),
+        Index(
+            "idx_lost_pets_active_created_at",
+            "created_at",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index("idx_lost_pets_user_id", "user_id"),
+    )
+
+
+class LostPetPhoto(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "lost_pet_photos"
+
+    lost_pet_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("lost_pets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    photo_url: Mapped[str] = mapped_column(Text, nullable=False)
+    thumb_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    position: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    lost_pet: Mapped["LostPet"] = relationship(back_populates="photos")
+
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="lost_pet_photo_position_non_negative"),
+        Index("idx_lost_pet_photos_lost_pet_id_position", "lost_pet_id", "position"),
+    )
+
+
+class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
+    __tablename__ = "adoption_posts"
+
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    pet_name: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_phone_number: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_telegram_username: Mapped[str | None] = mapped_column(Text, nullable=True)
+    owner_phone_publication_consent: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    additional_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    comment_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    author: Mapped["User | None"] = relationship(back_populates="adoption_posts")
+    photos: Mapped[list["AdoptionPostPhoto"]] = relationship(
+        back_populates="adoption_post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AdoptionPostPhoto.position",
+    )
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="adoption_post",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint("comment_count >= 0", name="adoption_posts_comment_count_non_negative"),
+        Index("idx_adoption_posts_created_at", "created_at"),
+        Index(
+            "idx_adoption_posts_active_created_at",
+            "created_at",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index("idx_adoption_posts_user_id", "user_id"),
+    )
+
+
+class AdoptionPostPhoto(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "adoption_post_photos"
+
+    adoption_post_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("adoption_posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    photo_url: Mapped[str] = mapped_column(Text, nullable=False)
+    thumb_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    position: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+
+    adoption_post: Mapped["AdoptionPost"] = relationship(back_populates="photos")
+
+    __table_args__ = (
+        CheckConstraint("position >= 0", name="adoption_post_photo_position_non_negative"),
+        Index(
+            "idx_adoption_post_photos_post_id_position",
+            "adoption_post_id",
+            "position",
+        ),
+    )

@@ -1,4 +1,4 @@
-# Mushukent Monorepo Skeleton
+# Mushukistan Monorepo Skeleton
 
 This repository now contains a production-ready project skeleton for MVP implementation.
 

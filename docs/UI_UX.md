@@ -1,6 +1,6 @@
 UI_UX.md
 
-Mushukent MVP UI/UX Specification
+Mushukistan MVP UI/UX Specification
 
 Version: 1.0 (MVP)
 Primary platform: Android (Flutter)
@@ -11,7 +11,7 @@ This document describes every MVP screen in detail, including navigation flows, 
 
 2. Design Principles
 --------------------
-- Map-first navigation and discovery.
+- Feed-first navigation and discovery, with map as a location view.
 - Minimal interactions to complete key tasks.
 - Clear distinction: cats are core entities, posts are observations.
 - Fast perceived performance on mid-range Android devices.
@@ -21,8 +21,8 @@ This document describes every MVP screen in detail, including navigation flows, 
 -----------------------
 3.1 Primary Navigation
 Bottom navigation with 5 tabs:
-1. Map
-2. Feed
+1. Feed
+2. Map
 3. Add
 4. Leaderboard
 5. Profile
@@ -44,16 +44,18 @@ Bottom navigation with 5 tabs:
 4.1 First Launch Flow
 - App opens -> Auth Gate
 - If no valid token -> Auth screen
-- If valid token -> Map tab
+- If valid token -> Feed tab
 
 4.2 Authenticated Main Flow
-- Default landing tab: Map
+- Default landing tab: Feed
 - User can switch tabs anytime.
-- Deep links to cat or post open details screen and preserve back stack.
+- Deep links to posts open details screens and preserve back stack.
 
 4.3 Add Observation Flow
 - User taps Add tab or map quick action
-- Capture/select image -> location confirmation -> match/select cat -> submit -> success -> open created post or cat page
+- Choose from gallery -> feed-only observation details -> submit -> success.
+- Take photo -> capture current location -> match/select cat -> submit -> success.
+- Lost Pet -> require profile phone number -> choose one to five photos -> enter pet name -> point last-seen location on map or use current location -> submit -> feed.
 
 4.4 Moderation Flow (for moderators)
 - Profile -> Moderator tools -> Reports list -> report detail -> action (resolve/dismiss/remove content)
@@ -88,10 +90,12 @@ Bottom navigation with 5 tabs:
   - password required.
 - Error states:
   - invalid credentials,
+  - email not verified,
   - network timeout,
   - server unavailable.
 - Edge cases:
   - repeated failed attempts -> show cooldown messaging from rate-limit response.
+  - unverified password account -> route to Verify Email screen with resend action.
 
 5.3 Register Screen
 - Purpose: create account.
@@ -99,73 +103,124 @@ Bottom navigation with 5 tabs:
   - name (optional)
   - email
   - password
+  - "Continue with Google" button
   - register button
   - link to Login
+- Interactions:
+  - tapping Register after valid fields submits registration using the current app language.
 - Validation:
   - email valid,
   - password min 8,
   - name max 100.
 - Success:
-  - auto-login and route to Map or show success then Login (choose one consistently; MVP recommendation: auto-login).
+  - show Verify Email screen; password users cannot log in until confirmation is complete.
 - Edge cases:
   - duplicate email,
   - weak password,
   - network failure.
 
-5.4 Map Screen (Primary MVP Screen)
-- Purpose: discover cats geographically.
+5.4 Verify Email Screen
+- Purpose: complete email confirmation before allowing password login.
+- Layout:
+  - confirmation title
+  - explanatory copy using the pending email address
+  - resend verification action
+  - in development only, a quick verify action when a development token is available
+  - link back to Login
+- Interactions:
+  - resend verification email
+  - submit local development verification token
+- Edge cases:
+  - expired token -> show failure and allow resend
+  - already verified account -> route to Login with success message
+
+5.4.1 Authenticated Welcome Onboarding
+- Purpose: greet newly authenticated users after email verification and sign-in.
+- Trigger:
+  - first authenticated app session for a user after they enter the main platform.
+- Layout:
+  - language selection dialog with English, Uzbek, and Russian options
+  - welcome/support dialog from the developer
+- Interactions:
+  - selecting a language updates the app locale and persists the preferred language to the authenticated user profile.
+  - dismissing the welcome/support dialog completes onboarding for that user on the device.
+
+5.5 Map Screen (Primary MVP Screen)
+- Purpose: discover recently observed cats geographically.
 - Layout:
   - full-screen map canvas,
-  - top search/filter bar,
+  - compact filter button opening marker filters for Cats, Vets, Shops and Shelters,
   - optional recenter location button,
   - marker clusters or markers,
   - bottom sheet preview on marker tap.
+- Visibility:
+  - cats appear on the map only when their latest public observation is within the last 10 days.
+- older cats remain available through Feed posts.
 - Filters:
   - Nearby Cats
   - Recently Seen
   - Needs Help
   - Recently Added
+  - Pet Shops
+  - Veterinary Clinics
+  - Animal Shelters
 - Interactions:
   - pan/zoom map,
-  - tap marker -> cat preview card,
-  - swipe preview -> open full Cat Page,
+  - tap marker -> no detail page in MVP,
+  - tap vet/shop/shelter marker -> place preview with phone, website and opening hours when available,
+  - tap filter button -> choose visible marker types -> apply filters,
   - filter selection updates marker set.
 - Edge cases:
   - location permission denied -> show explanatory prompt and fallback to city-level default view.
   - no cats in visible area -> empty map helper message.
   - map tiles load failure -> retry banner.
 
-5.5 Cat Preview Bottom Sheet
-- Purpose: quick context before opening full cat page.
-- Layout:
-  - cover thumbnail
-  - cat name/status
-  - last seen timestamp
-  - quick actions: Open, Add Observation
-- Interaction:
-  - tap Open -> Cat Detail screen
-  - tap Add Observation -> prefilled Add flow with cat selected
-- Edge cases:
-  - cat deleted between fetch and tap -> show not found toast and refresh map.
+5.6 Cat Profiles
+- Cat profile pages are not part of the MVP.
+- Cat records are still used internally to group observations, display cat names in posts, and support map markers.
 
-5.6 Add Observation Entry Screen
+5.7 Add Observation Entry Screen
 - Purpose: start observation creation process.
 - Layout:
-  - options: Take Photo / Choose from Gallery
-  - brief guidance text
+  - Choose from gallery: creates a feed-only observation without location.
+  - Take photo: captures current location automatically.
+  - Lost Pet: creates a lost pet post shown in the feed.
 - Interactions:
   - permission prompts for camera/gallery.
+  - tapping Lost Pet checks whether the current user has a phone number; if not, show a prompt to edit profile first.
 - Edge cases:
   - permission denied -> show system settings guidance.
   - user cancels image picker -> return to previous screen.
 
-5.7 Add Observation Details Screen
+5.7.1 Lost Pet Create Screen
+- Purpose: publish a lost pet post from the Add flow.
+- Layout:
+  - one to five selected cat photos
+  - pet name field
+  - last-seen location selected by pointing on a map
+  - additional information text field
+  - owner phone preview from profile
+  - submit button
+- Interactions:
+  - add/remove photos
+  - tap the map or use the current-location shortcut to set last-seen location
+  - submit -> lost pet appears in Feed with Lost Pet tag
+- Validation:
+  - profile phone number required before opening create flow
+  - phone number must use Uzbekistan format: +998 XX XXX XXXX
+  - pet name required, max 100 chars
+  - at least one photo required
+  - maximum five photos
+  - last-seen map point required
+  - additional information max 2000 chars
+
+5.8 Add Observation Details Screen
 - Purpose: complete metadata before submission.
 - Layout:
-  - image preview
+  - one to five image previews
   - description input
-  - status selector (Healthy/Injured/Needs Help/Adopted/Unknown/Feed)
-  - location preview map + "Use Current Location" + manual pin adjust
+  - status selector for camera observations only (Healthy/Needs Help/Unknown)
+  - camera observations include captured location automatically.
   - cat matching section:
     - nearby suggestions list,
     - action buttons: "This is existing cat" / "This is new cat"
@@ -178,137 +233,178 @@ Bottom navigation with 5 tabs:
   - location required,
   - status enum valid.
 - Edge cases:
-  - GPS unavailable -> allow manual pin drop.
+  - GPS unavailable for camera flow -> show error and retry.
   - no nearby suggestions -> emphasize "new cat" path.
-  - upload failure -> keep draft data in memory and allow retry.
+  - gallery observations do not create map markers.
+  - gallery observations do not show a status selector.
+  - upload failure -> keep entered data in memory and allow retry.
 
-5.8 Observation Publish Success Screen/State
+5.9 Observation Publish Success Screen/State
 - Purpose: confirm successful post creation.
 - Layout:
   - success message,
   - preview thumbnail,
-  - buttons: View Post, View Cat, Back to Map.
+  - buttons: View feed, Add another.
 - Edge cases:
   - follow-up fetch failure when opening details -> show retry.
 
-5.9 Feed Screen
+5.10 Feed Screen
 - Purpose: browse observations in list format.
 - Layout:
-  - top filter chips: Nearby, Recent, Popular
+  - top filter chips: Recent, Popular, Needs help, Lost pets
+  - when Popular is selected, show period selector: Today, Month, All time
   - vertically scrolling post cards
+  - on wide web screens, keep the feed column constrained and use shorter media previews so cards remain compact.
 - Post card contents:
   - thumbnail image,
+  - Lost Pet tag for lost pet posts,
   - author,
   - cat summary,
   - timestamp,
   - distance (if nearby),
-  - like/comment counts,
+  - like count next to the like icon, comment count next to the comment icon and publish date as `Published: <date>`,
+  - all visible tags appear next to the cat/pet name; `Unknown` is not displayed as a tag,
   - quick like action.
 - Interactions:
   - tap card -> Post Detail
+  - tap Lost Pet card -> Lost Pet Detail
+  - tap Contact Owner on Lost Pet card -> initiate phone call
+  - tap author name/avatar -> User Profile
   - pull to refresh,
   - infinite scroll pagination.
+  - filter selection is visible in the feed header, not hidden in an overflow menu.
+  - Today means the last 24 hours.
 - Edge cases:
   - empty feed -> helper CTA to add first observation.
   - duplicate pagination response -> deduplicate by post id.
 
-5.10 Post Detail Screen
+5.11 Post Detail Screen
 - Purpose: full observation detail and discussion.
 - Layout:
-  - large image
+  - large image/gallery
   - author info
-  - cat reference (tap to cat page)
+  - cat name
   - description
   - location mini-map
   - likes/comments section
   - comment input field (if logged in)
 - Interactions:
+  - tap author -> User Profile
   - like/unlike,
-  - open comments list,
   - report content,
   - owner options menu: delete post.
 - Edge cases:
   - post removed by moderator -> show unavailable message and navigate back.
 
-5.11 Comments Sheet/Screen
-- Purpose: display and add comments for a post.
+5.12 Comments Section
+- Purpose: display and add comments inside the post detail screen.
 - Layout:
   - comment list
   - input box + send button
 - Interactions:
+  - tap comment author -> User Profile
   - submit comment,
   - delete own comment via long-press/menu.
 - Validation:
   - max 1000 chars.
 - Edge cases:
   - rapid submit taps -> disable send until request finishes.
-  - deleted post while viewing comments -> close with message.
+  - deleted post while viewing comments -> show unavailable message.
 
-5.12 Cat Detail Screen (Cat Page)
-- Purpose: represent cat as primary entity with history.
-- Layout:
-  - cover photo
-  - cat name/status badges
-  - stats row: first seen, last seen, observations, contributors, likes
-  - observation timeline list (newest first default)
-  - actions: Add Observation, Report
-- Interactions:
-  - tap history item -> Post Detail
-  - filter/sort history (latest/oldest)
-- Edge cases:
-  - no history should not happen for valid cat; if empty due to moderation, show special notice.
+5.12.1 Lost Pet Comments Section
+- Purpose: display and add comments inside the lost-pet detail screen.
+- Layout and behavior:
+  - same comment list and input behavior as observation posts.
+  - comments are visible only inside the Lost Pet detail screen.
 
-5.13 Leaderboard Screen
+5.14 Leaderboard Screen
 - Purpose: community ranking and engagement motivation.
 - Layout:
   - tabs/segmented control: Most Active, Most Popular, Top Helpers
   - period switch: week/month/all
-  - ranked list items with avatar, name, score
+  - ranked user list items with avatar, name, observation count, and score
 - Interactions:
   - tap user -> User Profile
 - Edge cases:
   - no data yet -> friendly empty state.
   - ties -> stable ordering by earliest registration or user id.
 
-5.14 User Profile Screen (Self)
+5.15 User Profile Screen (Self)
 - Purpose: manage personal profile and view contribution stats.
 - Layout:
   - avatar, display name, bio
+  - owner-only phone number
   - stats: observations, likes received, comments count
   - list: My Observations
-  - actions: Edit Profile, Logout
+  - actions: Adoption help, Edit Profile, Settings, Logout
   - if moderator: Moderator Tools entry
 - Interactions:
+  - tap Adoption help -> opens informational guidance about adopting a cat in Uzbekistan, including veterinary checks, identification/passport, ownership transfer, apartment/common-area rules, and official source links
   - edit profile fields,
+  - tap Observations to view the user's observation posts,
+  - tap Comments to view the user's comments,
   - open own posts list,
   - logout confirmation.
 - Edge cases:
   - avatar load failure -> fallback placeholder.
 
-5.15 User Public Profile Screen
+5.16 User Public Profile Screen
 - Purpose: view another contributor.
 - Layout:
   - avatar, name, public stats
   - posts list
 - Interactions:
   - open their posts
+  - open their comments when public activity is enabled
 - Privacy:
   - no private email shown.
 
-5.16 Edit Profile Screen
-- Purpose: update display name, bio, avatar.
+5.17 Edit Profile Screen
+- Purpose: update display name, phone number, bio, avatar.
 - Layout:
+  - avatar preview and "Change profile picture" button
+  - camera option for new profile picture
   - editable fields
-  - avatar picker/upload
   - save button
 - Validation:
   - name max 100,
+  - phone number optional, owner-only for MVP and must use Uzbekistan format: +998 XX XXX XXXX,
   - bio max 1000,
   - avatar type/size constraints from media policy.
 - Edge cases:
   - save conflict/network failure -> keep unsaved changes and retry option.
 
-5.17 Report Content Screen
+5.17.1 Settings Screen
+- Purpose: manage application preferences.
+- Layout:
+  - theme selector
+  - language selector: English, Uzbek, Russian
+  - privacy toggle: allow other people to view my observations and comments
+  - About account entry
+  - Save changes button
+- Interaction:
+  - theme and language changes remain pending until the user taps Save changes.
+  - saving updates the app locale immediately and persists the language preference and activity privacy preference to the authenticated user's profile.
+  - successful save returns the user to Profile.
+
+5.17.2 About Account Screen
+- Purpose: show account metadata that is not part of the main profile summary.
+- Layout:
+  - registration date
+  - account email
+  - account phone number
+  - linked Privacy Policy and Terms of Service summaries
+  - clickable account deletion explanation
+- Interaction:
+  - tapping Privacy Policy opens the in-app Privacy Policy screen.
+  - tapping Terms of Service opens the in-app Terms of Service screen.
+  - tapping Account deletion opens a confirmation dialog.
+  - the confirmation dialog disables the final delete action for 5 seconds.
+  - confirming deletion deactivates the account through the backend and signs the user out.
+- Navigation:
+  - Profile -> Settings -> About account.
+
+5.18 Report Content Screen
 - Purpose: submit moderation report.
 - Layout:
   - target summary card
@@ -320,7 +416,7 @@ Bottom navigation with 5 tabs:
 - Edge cases:
   - already reported recently -> show duplicate warning.
 
-5.18 Moderator Reports List Screen (Moderator Only)
+5.19 Moderator Reports List Screen (Moderator Only)
 - Purpose: triage open/processed reports.
 - Layout:
   - filters: open/resolved/dismissed
@@ -331,7 +427,7 @@ Bottom navigation with 5 tabs:
 - Edge cases:
   - target already deleted -> mark with badge.
 
-5.19 Moderator Report Detail Screen (Moderator Only)
+5.20 Moderator Report Detail Screen (Moderator Only)
 - Purpose: inspect and resolve a report.
 - Layout:
   - full report metadata
@@ -356,6 +452,7 @@ Bottom navigation with 5 tabs:
 7.1 Authentication
 - Expired token -> force logout and redirect to Login with message.
 - Invalid token -> clear token and re-authenticate.
+- Unverified password account -> route to Verify Email screen and provide resend action.
 
 7.2 Location
 - Permission denied -> explain feature impact and show fallback mode.
@@ -394,15 +491,13 @@ Required screens:
 - Auth Gate
 - Login
 - Register
+- Verify Email
 - Map
-- Cat Preview Sheet
 - Add Observation Entry
 - Add Observation Details
 - Publish Success State
 - Feed
 - Post Detail
-- Comments
-- Cat Detail
 - Leaderboard
 - Profile (self)
 - Public User Profile

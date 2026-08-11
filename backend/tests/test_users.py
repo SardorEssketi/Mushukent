@@ -23,11 +23,11 @@ from app.main import app
 
 def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key")
-    monkeypatch.setenv("JWT_ISSUER", "mushukent-api")
-    monkeypatch.setenv("JWT_AUDIENCE", "mushukent-mobile")
+    monkeypatch.setenv("JWT_ISSUER", "mushukistan-api")
+    monkeypatch.setenv("JWT_AUDIENCE", "mushukistan-mobile")
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "google-client-id")
     monkeypatch.setenv(
-        "DATABASE_URL", "postgresql+psycopg://mushukent:change_me@localhost:5432/mushukent"
+        "DATABASE_URL", "postgresql+psycopg://mushukistan:change_me@localhost:5432/mushukistan"
     )
     return Settings()
 
@@ -84,7 +84,7 @@ def _create_user_with_token(
         session.add(user)
         session.flush()
         token = token_service.issue_access_token(
-            AuthenticatedPrincipal(user_id=user.id, role=Role.USER, email=user.email)
+            AuthenticatedPrincipal(user_id=user.id, role=Role.USER)
         )
         return user, token
 
@@ -164,6 +164,7 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
         json={
             "name": "Updated Name",
             "bio": "Updated bio",
+            "phone_number": "+998 90 123 45 67",
             "avatar_url": "https://example.com/new-avatar.jpg",
         },
     )
@@ -172,6 +173,7 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
     assert payload["email"] == "update-profile@example.com"
     assert payload["name"] == "Updated Name"
     assert payload["bio"] == "Updated bio"
+    assert payload["phone_number"] == "+998 90 123 45 67"
     assert payload["avatar_url"] == "https://example.com/new-avatar.jpg"
 
     with users_runtime.db_session_manager.session_scope() as session:
@@ -180,8 +182,43 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
         assert updated.email == "update-profile@example.com"
         assert updated.name == "Updated Name"
         assert updated.bio == "Updated bio"
+        assert updated.phone_number == "+998 90 123 45 67"
         assert updated.avatar_url == "https://example.com/new-avatar.jpg"
         assert updated.is_active is True
+
+
+def test_delete_me_deactivates_account_and_rejects_token(
+    client: TestClient,
+    users_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="delete-me@example.com",
+    )
+
+    response = client.delete(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 204
+    assert not response.content
+
+    with users_runtime.db_session_manager.session_scope() as session:
+        deleted = session.scalar(select(schema.User).where(schema.User.id == user.id))
+        assert deleted is not None
+        assert deleted.is_active is False
+
+    me_response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert me_response.status_code == 403
+    assert me_response.json()["error"]["code"] == "ACCOUNT_DISABLED"
+
+    public_response = client.get(f"/api/v1/users/{user.id}")
+    assert public_response.status_code == 404
+    assert public_response.json()["error"]["code"] == "USER_NOT_FOUND"
 
 
 def test_rejection_of_immutable_or_forbidden_fields(client: TestClient, users_runtime) -> None:
@@ -221,6 +258,13 @@ def test_validation_failures(client: TestClient, users_runtime) -> None:
     )
     assert invalid_url.status_code == 422
 
+    invalid_phone = client.patch(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"phone_number": "bad-phone-ext"},
+    )
+    assert invalid_phone.status_code == 422
+
     empty_update = client.patch(
         "/api/v1/users/me",
         headers={"Authorization": f"Bearer {token}"},
@@ -245,6 +289,7 @@ def test_public_profile_visibility_and_private_field_exclusion(
     assert payload["id"] == str(user.id)
     assert payload["name"] == "Profile User"
     assert "email" not in payload
+    assert "phone_number" not in payload
     assert "bio" not in payload
     assert "is_active" not in payload
     assert "is_moderator" not in payload

@@ -1,6 +1,6 @@
 IMAGE_STORAGE.md
 
-Mushukent Image Storage Architecture (MVP)
+Mushukistan Image Storage Architecture (MVP)
 
 Version: 1.0 (MVP)
 Scope: image handling for cat observations and profile avatars
@@ -34,7 +34,7 @@ This document defines the canonical image upload and storage design for MVP. It 
 3. Cloudflare R2 Bucket Structure
 ---------------------------------
 Single bucket recommended for MVP:
-- `mushukent-media`
+- `mushukistan-media`
 
 Folder layout:
 - `posts/original/{yyyy}/{mm}/{dd}/...`

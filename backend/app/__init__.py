@@ -1,1 +1,1 @@
-"""Mushukent backend package."""
+"""Mushukistan backend package."""

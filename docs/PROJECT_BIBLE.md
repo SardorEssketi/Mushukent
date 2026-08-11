@@ -1,12 +1,12 @@
-Mushukent Project Bible
+Mushukistan Project Bible
 1. Project Overview
 Project Name
 
-Mushukent
+Mushukistan
 
 Mission
 
-Mushukent is a location-based social network that allows people to discover, photograph and help street cats in Tashkent.
+Mushukistan is a location-based social network that allows people to discover, photograph and help street cats in Tashkent.
 
 The application combines geolocation, community-generated content and interactive mapping to build the largest database of street cats in Uzbekistan.
 
@@ -14,7 +14,7 @@ The primary object of the application is the cat, not the post.
 
 2. Vision
 
-The long-term vision of Mushukent is to become the largest digital ecosystem dedicated to street cats in Uzbekistan.
+The long-term vision of Mushukistan is to become the largest digital ecosystem dedicated to street cats in Uzbekistan.
 
 The application should:
 
@@ -50,6 +50,8 @@ Temporary shortcuts that compromise architecture are not acceptable.
 Mobile
 
 Flutter
+flutter_map
+OpenStreetMap
 
 Backend
 
@@ -58,8 +60,7 @@ FastAPI (Python)
 Database
 
 PostgreSQL
-
-PostGIS
+PostgreSQL + PostGIS
 
 Object Storage
 
@@ -118,7 +119,7 @@ Components should be loosely coupled.
 Every feature should be independently maintainable.
 7. Product Philosophy
 
-Mushukent is not Instagram for cats.
+Mushukistan is not Instagram for cats.
 
 The application is built around real cats, not around user posts.
 
@@ -164,6 +165,8 @@ description
 One Post always belongs to one Cat.
 
 Never merge these concepts.
+
+The backend must remain provider-agnostic for maps and spatial visualization.
 
 9. MVP Scope
 

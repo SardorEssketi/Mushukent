@@ -1,6 +1,6 @@
 AUTH.md
 
-Mushukent Authentication and Authorization (MVP)
+Mushukistan Authentication and Authorization (MVP)
 
 Version: 1.0 (MVP)
 Scope: Android app + FastAPI backend only
@@ -20,26 +20,34 @@ MVP constraints:
 - Client submits email, password, optional display name.
 - Backend validates payload and password policy.
 - Backend creates user record with hashed password.
-- Backend returns success response with user profile.
-- For MVP, account can be active immediately (email verification optional and non-blocking).
+- Backend returns a verification-required response containing the email address and, in development only, a verification token for local testing.
+- Account remains inactive for password login until email verification is completed.
 
 2.2 Email/Password Login
 - Client submits email and password.
 - Backend looks up user by normalized email.
 - Backend verifies password hash.
+- Backend rejects unverified users with `EMAIL_NOT_VERIFIED`.
 - Backend issues JWT access token.
 - Client stores token securely and attaches it to protected requests.
 
-2.3 Google OAuth Login
+2.3 Email Verification
+- Client submits verification token received through email delivery.
+- Backend validates token signature, issuer, audience, expiration, and token type.
+- Backend marks the matching user as `email_verified = true`.
+- Development flow may expose the verification token in API responses and logs; production must deliver the token by email provider only.
+
+2.4 Google OAuth Login
 - Client obtains Google `id_token` using official Google Sign-In SDK.
 - Client sends `id_token` to backend.
 - Backend validates token signature, issuer (`iss`), audience (`aud`), and expiration (`exp`).
 - Backend finds user by email:
   - if exists, log user in;
   - if not exists, create user with `password_hash = NULL`.
+- Google-authenticated users are treated as verified immediately.
 - Backend issues JWT access token.
 
-2.4 Logout
+2.5 Logout
 - MVP logout is client-side token deletion.
 - Backend `POST /auth/logout` may return 204 for consistency.
 - Server-side token revocation/blacklist is out of MVP scope.
@@ -61,7 +69,7 @@ MVP constraints:
 - `iat`: issued-at timestamp
 - `nbf`: not-before timestamp
 - `iss`: token issuer (backend service name)
-- `aud`: token audience (`mushukent-mobile`)
+- `aud`: token audience (`mushukistan-mobile`)
 - `role`: `user` or `moderator`
 
 3.4 Validation Rules
@@ -154,6 +162,8 @@ Rationale:
 8.2 Active State
 - `is_active = true` means login allowed.
 - `is_active = false` means authentication denied with 403 `ACCOUNT_DISABLED`.
+- `email_verified = false` means password login is denied with 401 `EMAIL_NOT_VERIFIED`.
+- Google-created users are created or updated with `email_verified = true`.
 
 8.3 Profile Updates
 - User can update display name, bio, avatar URL.
@@ -178,6 +188,8 @@ Rationale:
 This document aligns to these endpoint families in `API.md`:
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
+- `POST /api/v1/auth/resend-verification`
+- `POST /api/v1/auth/verify-email`
 - `POST /api/v1/auth/google`
 - `POST /api/v1/auth/logout`
 
@@ -188,6 +200,7 @@ This document aligns to these endpoint families in `API.md`:
 - MFA
 - Token revocation blacklist
 - Single sign-on beyond Google
+- Production email delivery provider implementation details
 
 12. Future Evolution (Post-MVP)
 -------------------------------

@@ -18,10 +18,16 @@ class AuthUserRepository(Protocol):
         email: str,
         password_hash: str | None,
         name: str | None = None,
+        preferred_language: str = "en",
         email_verified: bool = False,
         is_moderator: bool = False,
+        accepted_terms_version: str | None = None,
+        accepted_privacy_version: str | None = None,
+        accepted_legal_at: datetime | None = None,
     ) -> AuthUser: ...
 
     def save(self, user: AuthUser) -> AuthUser: ...
 
     def update_last_login_at(self, user_id: UUID, last_login_at: datetime) -> AuthUser | None: ...
+
+    def mark_email_verified(self, user_id: UUID) -> AuthUser | None: ...

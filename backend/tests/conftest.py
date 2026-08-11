@@ -67,7 +67,12 @@ def integration_engine(integration_database_url: str) -> Iterator[Engine]:
 
 
 @pytest.fixture(autouse=True)
-def clean_integration_database(integration_engine: Engine) -> Iterator[None]:
+def clean_integration_database(request: pytest.FixtureRequest) -> Iterator[None]:
+    if not _integration_enabled():
+        yield
+        return
+
+    integration_engine = request.getfixturevalue("integration_engine")
     table_names = [
         table.name
         for table in schema.Base.metadata.sorted_tables

@@ -11,7 +11,7 @@ def health_check() -> dict[str, object]:
         "success": True,
         "data": {
             "status": "ok",
-            "service": "mushukent-backend",
+            "service": "mushukistan-backend",
             "timestamp": datetime.now(UTC).isoformat(),
         },
     }
