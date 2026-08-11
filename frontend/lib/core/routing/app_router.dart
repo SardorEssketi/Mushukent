@@ -43,7 +43,6 @@ final _profileNavigatorKey = GlobalKey<NavigatorState>();
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/auth-gate',
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
       final location = state.uri.path;
