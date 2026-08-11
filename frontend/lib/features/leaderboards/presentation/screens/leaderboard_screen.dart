@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 
 final leaderboardTypeProvider = StateProvider<String>((ref) => 'most_active');
 final leaderboardPeriodProvider = StateProvider<String>((ref) => 'week');
@@ -32,13 +34,27 @@ class LeaderboardScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text(
-                strings.leaderboard,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+            AppContentWidth(
+              maxWidth: AppWidths.readable,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Community',
+                      style: Theme.of(context).textTheme.headlineSmall,
                     ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Recognition for people helping cats through observations, comments, and support.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
               ),
             ),
             _LeaderboardControls(
@@ -61,17 +77,20 @@ class LeaderboardScreen extends ConsumerWidget {
                     return _EmptyLeaderboard(
                         message: strings.noLeaderboardData);
                   }
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: entries.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      return _LeaderboardTile(
-                        entry: entry,
-                        strings: strings,
-                      );
-                    },
+                  return AppContentWidth(
+                    maxWidth: AppWidths.readable,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        return _LeaderboardTile(
+                          entry: entry,
+                          strings: strings,
+                        );
+                      },
+                    ),
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -106,52 +125,55 @@ class _LeaderboardControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SegmentedButton<String>(
-              showSelectedIcon: false,
-              selected: {type},
-              onSelectionChanged: (values) => onTypeChanged(values.first),
-              segments: [
-                ButtonSegment(
-                  value: 'most_active',
-                  icon: const Icon(Icons.directions_walk),
-                  label: Text(strings.mostActive),
-                ),
-                ButtonSegment(
-                  value: 'most_popular',
-                  icon: const Icon(Icons.favorite_border),
-                  label: Text(strings.mostPopular),
-                ),
-                ButtonSegment(
-                  value: 'top_helpers',
-                  icon: const Icon(Icons.volunteer_activism_outlined),
-                  label: Text(strings.topHelpers),
-                ),
-              ],
+    return AppContentWidth(
+      maxWidth: AppWidths.readable,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                selected: {type},
+                onSelectionChanged: (values) => onTypeChanged(values.first),
+                segments: [
+                  ButtonSegment(
+                    value: 'most_active',
+                    icon: const Icon(Icons.directions_walk),
+                    label: Text(strings.mostActive),
+                  ),
+                  ButtonSegment(
+                    value: 'most_popular',
+                    icon: const Icon(Icons.favorite_border),
+                    label: Text(strings.mostPopular),
+                  ),
+                  ButtonSegment(
+                    value: 'top_helpers',
+                    icon: const Icon(Icons.volunteer_activism_outlined),
+                    label: Text(strings.topHelpers),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SegmentedButton<String>(
-              showSelectedIcon: false,
-              selected: {period},
-              onSelectionChanged: (values) => onPeriodChanged(values.first),
-              segments: [
-                ButtonSegment(value: 'day', label: Text(strings.day)),
-                ButtonSegment(value: 'week', label: Text(strings.week)),
-                ButtonSegment(value: 'month', label: Text(strings.month)),
-                ButtonSegment(value: 'all', label: Text(strings.allTime)),
-              ],
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<String>(
+                showSelectedIcon: false,
+                selected: {period},
+                onSelectionChanged: (values) => onPeriodChanged(values.first),
+                segments: [
+                  ButtonSegment(value: 'day', label: Text(strings.day)),
+                  ButtonSegment(value: 'week', label: Text(strings.week)),
+                  ButtonSegment(value: 'month', label: Text(strings.month)),
+                  ButtonSegment(value: 'all', label: Text(strings.allTime)),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -168,100 +190,91 @@ class _LeaderboardTile extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final userName = entry.user.name ?? strings.unnamedUser;
-    return Material(
-      color: colors.surface,
-      borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => context.push('/users/${entry.user.id}'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              _RankBadge(rank: entry.rank),
-              const SizedBox(width: 12),
-              CircleAvatar(
-                radius: 22,
-                backgroundImage: entry.user.avatarUrl == null
-                    ? null
-                    : NetworkImage(entry.user.avatarUrl!),
-                backgroundColor: colors.secondaryContainer,
-                foregroundColor: colors.onSecondaryContainer,
-                child: entry.user.avatarUrl == null
-                    ? Text(_initials(userName))
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return AppCard(
+      onTap: () => context.push('/users/${entry.user.id}'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          _RankBadge(rank: entry.rank),
+          const SizedBox(width: 12),
+          CircleAvatar(
+            radius: 22,
+            backgroundImage: entry.user.avatarUrl == null
+                ? null
+                : NetworkImage(entry.user.avatarUrl!),
+            backgroundColor: colors.secondaryContainer,
+            foregroundColor: colors.onSecondaryContainer,
+            child:
+                entry.user.avatarUrl == null ? Text(_initials(userName)) : null,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  userName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
                   children: [
-                    Text(
-                      userName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Icon(
+                      Icons.photo_camera_outlined,
+                      size: 16,
+                      color: colors.onSurfaceVariant,
                     ),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.photo_camera_outlined,
-                          size: 16,
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '${entry.user.observationCount} ${strings.observations}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
                           color: colors.onSurfaceVariant,
                         ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '${entry.user.observationCount} ${strings.observations}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 12),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: colors.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 8,
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        '${entry.score}',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colors.onPrimaryContainer,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        strings.score,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colors.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: 12),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '${entry.score}',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colors.onPrimaryContainer,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    strings.score,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colors.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -288,7 +301,7 @@ class _RankBadge extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadii.md),
       ),
       child: Text(
         '#$rank',

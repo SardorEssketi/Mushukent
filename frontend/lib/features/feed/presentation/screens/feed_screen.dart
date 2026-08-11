@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 
@@ -55,78 +57,339 @@ class FeedScreen extends ConsumerWidget {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          _FeedFilterBar(
-            selectedMode: feedMode,
-            strings: strings,
-            onSelected: (value) {
-              ref.read(feedModeProvider.notifier).state = value;
-              ref.invalidate(feedPostsProvider);
-            },
-          ),
-          if (feedMode == 'popular')
-            _PopularPeriodBar(
-              selectedPeriod: popularPeriod,
-              strings: strings,
-              onSelected: (value) {
-                ref.read(feedPopularPeriodProvider.notifier).state = value;
-                ref.invalidate(feedPostsProvider);
-              },
-            ),
-          Expanded(
-            child: postsAsync.when(
-              data: (page) {
-                if (page.items.isEmpty) {
-                  return _EmptyFeed(strings: strings);
-                }
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    final refreshedPosts =
-                        ref.refresh(feedPostsProvider.future);
-                    await refreshedPosts;
-                  },
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 560),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        itemCount: page.items.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final item = page.items[index];
-                          return switch (item) {
-                            LostPetData() => _LostPetCard(
-                                lostPet: item,
-                                strings: strings,
-                              ),
-                            AdoptionPostData() => _AdoptionPostCard(
-                                adoptionPost: item,
-                                strings: strings,
-                              ),
-                            PostSummary() => FeedPostCard(
-                                post: item,
-                                onTap: () => context.push('/posts/${item.id}'),
-                              ),
-                          };
-                        },
-                      ),
-                    ),
-                  ),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (error, stackTrace) => _ErrorPanel(
-                message: error.toString(),
-                retryLabel: strings.retry,
-                onRetry: () => ref.invalidate(feedPostsProvider),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          final refreshedPosts = ref.refresh(feedPostsProvider.future);
+          await refreshedPosts;
+        },
+        child: AppContentWidth(
+          maxWidth: AppWidths.wide,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              _HomeHeader(
+                onLostPetsTap: () {
+                  ref.read(feedModeProvider.notifier).state = 'lost_pets';
+                  ref.invalidate(feedPostsProvider);
+                },
+                onAdoptionTap: () {
+                  ref.read(feedModeProvider.notifier).state = 'adoption';
+                  ref.invalidate(feedPostsProvider);
+                },
+                onPlacesTap: () => context.go('/map'),
+                onMapTap: () => context.go('/map'),
               ),
+              const SizedBox(height: AppSpacing.lg),
+              _SectionHeader(
+                title: _sectionTitle(feedMode),
+                subtitle: _sectionSubtitle(feedMode),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _FeedFilterBar(
+                selectedMode: feedMode,
+                strings: strings,
+                onSelected: (value) {
+                  ref.read(feedModeProvider.notifier).state = value;
+                  ref.invalidate(feedPostsProvider);
+                },
+              ),
+              if (feedMode == 'popular') ...[
+                const SizedBox(height: AppSpacing.sm),
+                _PopularPeriodBar(
+                  selectedPeriod: popularPeriod,
+                  strings: strings,
+                  onSelected: (value) {
+                    ref.read(feedPopularPeriodProvider.notifier).state = value;
+                    ref.invalidate(feedPostsProvider);
+                  },
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              postsAsync.when(
+                data: (page) {
+                  if (page.items.isEmpty) {
+                    return _EmptyFeed(strings: strings);
+                  }
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final useGrid = constraints.maxWidth >= 900;
+                      if (useGrid) {
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: AppSpacing.md,
+                            crossAxisSpacing: AppSpacing.md,
+                            childAspectRatio: 0.78,
+                          ),
+                          itemCount: page.items.length,
+                          itemBuilder: (context, index) => _FeedItemCard(
+                            item: page.items[index],
+                            strings: strings,
+                          ),
+                        );
+                      }
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: page.items.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: AppSpacing.md),
+                        itemBuilder: (context, index) => _FeedItemCard(
+                          item: page.items[index],
+                          strings: strings,
+                        ),
+                      );
+                    },
+                  );
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 64),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, stackTrace) => _ErrorPanel(
+                  message: error.toString(),
+                  retryLabel: strings.retry,
+                  onRetry: () => ref.invalidate(feedPostsProvider),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeHeader extends StatelessWidget {
+  const _HomeHeader({
+    required this.onLostPetsTap,
+    required this.onAdoptionTap,
+    required this.onPlacesTap,
+    required this.onMapTap,
+  });
+
+  final VoidCallback onLostPetsTap;
+  final VoidCallback onAdoptionTap;
+  final VoidCallback onPlacesTap;
+  final VoidCallback onMapTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return AppCard(
+      color: colors.surfaceContainerLow,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppBadge(
+            label: 'The land of cats',
+            icon: Icons.public_outlined,
+            color: colors.primary,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Everything cats in one calm place',
+            style: theme.textTheme.headlineSmall,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Find help, share sightings, search for lost pets, rehome cats, and discover useful places nearby.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+              height: 1.35,
             ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 680;
+              final actions = [
+                _QuickActionCard(
+                  icon: Icons.search_outlined,
+                  title: 'Lost pets',
+                  subtitle: 'Urgent alerts',
+                  color: AppPalette.lost,
+                  onTap: onLostPetsTap,
+                ),
+                _QuickActionCard(
+                  icon: Icons.home_outlined,
+                  title: 'New homes',
+                  subtitle: 'Adoption posts',
+                  color: AppPalette.adoption,
+                  onTap: onAdoptionTap,
+                ),
+                _QuickActionCard(
+                  icon: Icons.local_hospital_outlined,
+                  title: 'Useful places',
+                  subtitle: 'Vets, shops, shelters',
+                  color: colors.secondary,
+                  onTap: onPlacesTap,
+                ),
+                _QuickActionCard(
+                  icon: Icons.map_outlined,
+                  title: 'Nearby map',
+                  subtitle: 'Cats and services',
+                  color: colors.primary,
+                  onTap: onMapTap,
+                ),
+              ];
+              if (wide) {
+                return Row(
+                  children: [
+                    for (final action in actions) ...[
+                      Expanded(child: action),
+                      if (action != actions.last)
+                        const SizedBox(width: AppSpacing.sm),
+                    ],
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: actions[0]),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(child: actions[1]),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      Expanded(child: actions[2]),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(child: actions[3]),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
     );
   }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: theme.textTheme.titleLarge),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FeedItemCard extends StatelessWidget {
+  const _FeedItemCard({required this.item, required this.strings});
+
+  final FeedItem item;
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final feedItem = item;
+    if (feedItem is LostPetData) {
+      return _LostPetCard(lostPet: feedItem, strings: strings);
+    }
+    if (feedItem is AdoptionPostData) {
+      return _AdoptionPostCard(adoptionPost: feedItem, strings: strings);
+    }
+    final post = feedItem as PostSummary;
+    return FeedPostCard(
+      post: post,
+      onTap: () => context.push('/posts/${post.id}'),
+    );
+  }
+}
+
+String _sectionTitle(String mode) {
+  return switch (mode) {
+    'lost_pets' => 'Lost pets',
+    'adoption' => 'Looking for a home',
+    'needs_help' => 'Cats that may need help',
+    'popular' => 'Popular in the community',
+    _ => 'Latest from Mushukistan',
+  };
+}
+
+String _sectionSubtitle(String mode) {
+  return switch (mode) {
+    'lost_pets' =>
+      'Recognizable alerts with owner contact and last-seen areas.',
+    'adoption' => 'Separate rehoming posts for cats who need a good home.',
+    'needs_help' => 'Community observations that may need volunteer attention.',
+    'popular' => 'Posts people are responding to most.',
+    _ => 'Recent sightings, stories, and updates from people helping cats.',
+  };
 }
 
 class _FeedFilterBar extends StatelessWidget {
@@ -242,12 +505,17 @@ class _LostPetCard extends StatelessWidget {
     final authorProfileTap =
         authorId == null ? null : () => context.push('/users/$authorId');
 
-    return Material(
-      color: colorScheme.surface,
-      child: InkWell(
-        onTap: () => context.push('/lost-pets/${lostPet.id}'),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: () => context.push('/lost-pets/${lostPet.id}'),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(color: colorScheme.error, width: 4),
+          ),
+        ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -362,12 +630,17 @@ class _AdoptionPostCard extends StatelessWidget {
     final authorProfileTap =
         authorId == null ? null : () => context.push('/users/$authorId');
 
-    return Material(
-      color: colorScheme.surface,
-      child: InkWell(
-        onTap: () => context.push('/adoption-posts/${adoptionPost.id}'),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: () => context.push('/adoption-posts/${adoptionPost.id}'),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(
+            left: BorderSide(color: AppPalette.adoption, width: 4),
+          ),
+        ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -701,117 +974,115 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     final authorProfileTap =
         authorId == null ? null : () => context.push('/users/$authorId');
 
-    return Material(
-      color: colorScheme.surface,
-      child: InkWell(
-        onTap: widget.onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: authorProfileTap,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: colorScheme.primaryContainer,
-                        backgroundImage: author?.avatarUrl == null
-                            ? null
-                            : NetworkImage(author!.avatarUrl!),
-                        child: author?.avatarUrl == null
-                            ? Text(
-                                _avatarInitial(authorName),
-                                style: TextStyle(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _AuthorLine(
-                            authorName: authorName,
-                            onTap: authorProfileTap,
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: strings.openPost,
-                      onPressed: widget.onTap,
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              _FeedMediaPreview(
-                imageUrl: widget.post.thumbUrl ?? widget.post.photoUrl,
-                imageUrls: widget.post.photoUrls,
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
-                child: Row(
-                  children: [
-                    _IconCountAction(
-                      tooltip: _liked ? strings.unlike : strings.like,
-                      icon: _liked ? Icons.favorite : Icons.favorite_outline,
-                      count: _likeCount,
-                      color: _liked ? colorScheme.error : null,
-                      onPressed: _submittingLike ? null : _toggleLike,
-                    ),
-                    _IconCountAction(
-                      tooltip: strings.comments,
-                      icon: Icons.chat_bubble_outline,
-                      count: widget.post.commentCount,
-                      onPressed: widget.onTap,
-                    ),
-                    const Spacer(),
-                    Text(
-                      'Published: ${_formatDate(widget.post.createdAt)}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _CatNameLine(
-                      label: strings.catNameLabel,
-                      name: catName,
-                      trailing: statusTag == null
+    return AppCard(
+      padding: EdgeInsets.zero,
+      onTap: widget.onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: authorProfileTap,
+                    child: CircleAvatar(
+                      radius: 18,
+                      backgroundColor: colorScheme.primaryContainer,
+                      backgroundImage: author?.avatarUrl == null
                           ? null
-                          : _StatusBadge(label: statusTag),
+                          : NetworkImage(author!.avatarUrl!),
+                      child: author?.avatarUrl == null
+                          ? Text(
+                              _avatarInitial(authorName),
+                              style: TextStyle(
+                                color: colorScheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            )
+                          : null,
                     ),
-                    if (description != null && description.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _LabeledBodyText(
-                        label: strings.descriptionLabel,
-                        text: description,
-                      ),
-                      const SizedBox(height: 6),
-                    ],
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _AuthorLine(
+                          authorName: authorName,
+                          onTap: authorProfileTap,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: strings.openPost,
+                    onPressed: widget.onTap,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            _FeedMediaPreview(
+              imageUrl: widget.post.thumbUrl ?? widget.post.photoUrl,
+              imageUrls: widget.post.photoUrls,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
+              child: Row(
+                children: [
+                  _IconCountAction(
+                    tooltip: _liked ? strings.unlike : strings.like,
+                    icon: _liked ? Icons.favorite : Icons.favorite_outline,
+                    count: _likeCount,
+                    color: _liked ? colorScheme.error : null,
+                    onPressed: _submittingLike ? null : _toggleLike,
+                  ),
+                  _IconCountAction(
+                    tooltip: strings.comments,
+                    icon: Icons.chat_bubble_outline,
+                    count: widget.post.commentCount,
+                    onPressed: widget.onTap,
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Published: ${_formatDate(widget.post.createdAt)}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _CatNameLine(
+                    label: strings.catNameLabel,
+                    name: catName,
+                    trailing: statusTag == null
+                        ? null
+                        : _StatusBadge(label: statusTag),
+                  ),
+                  if (description != null && description.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _LabeledBodyText(
+                      label: strings.descriptionLabel,
+                      text: description,
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1152,11 +1423,11 @@ class _EmptyFeed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(strings.noObservationsYet),
-      ),
+    return AppStatePanel(
+      icon: Icons.dynamic_feed_outlined,
+      title: strings.noObservationsYet,
+      message:
+          'Share an observation, lost-pet alert, or rehoming post to help the community start here.',
     );
   }
 }
@@ -1174,18 +1445,11 @@ class _ErrorPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: Text(retryLabel)),
-          ],
-        ),
-      ),
+    return AppStatePanel(
+      icon: Icons.cloud_off_outlined,
+      title: 'Could not load this section',
+      message: message,
+      action: FilledButton(onPressed: onRetry, child: Text(retryLabel)),
     );
   }
 }

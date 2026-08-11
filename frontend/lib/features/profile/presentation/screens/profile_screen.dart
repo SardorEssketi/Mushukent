@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
 
 final profileMeProvider =
@@ -59,32 +61,27 @@ class ProfileScreen extends ConsumerWidget {
         ],
       ),
       body: profileAsync.when(
-        data: (profile) => Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              children: [
-                _Header(
-                  name:
-                      profile.name ?? currentUser?.name ?? strings.unnamedUser,
-                  email: profile.email,
-                  avatarUrl: profile.avatarUrl ?? currentUser?.avatarUrl,
-                  phoneNumber: profile.phoneNumber,
-                  telegramUsername: profile.telegramUsername,
-                  bio: profile.bio,
-                ),
-                const SizedBox(height: 16),
-                _StatGrid(
-                  profile: profile,
-                  strings: strings,
-                  onObservationsTap: () =>
-                      context.push('/profile/observations'),
-                  onCommentsTap: () => context.push('/profile/comments'),
-                ),
-              ],
-            ),
+        data: (profile) => AppContentWidth(
+          maxWidth: AppWidths.readable,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            children: [
+              _Header(
+                name: profile.name ?? currentUser?.name ?? strings.unnamedUser,
+                email: profile.email,
+                avatarUrl: profile.avatarUrl ?? currentUser?.avatarUrl,
+                phoneNumber: profile.phoneNumber,
+                telegramUsername: profile.telegramUsername,
+                bio: profile.bio,
+              ),
+              const SizedBox(height: 16),
+              _StatGrid(
+                profile: profile,
+                strings: strings,
+                onObservationsTap: () => context.push('/profile/observations'),
+                onCommentsTap: () => context.push('/profile/comments'),
+              ),
+            ],
           ),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -143,8 +140,9 @@ class _Header extends StatelessWidget {
     final telegram = telegramUsername?.trim();
     final profileBio = bio?.trim();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return AppCard(
+      color: Theme.of(context).colorScheme.surfaceContainerLow,
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -337,21 +335,11 @@ class _StatCard extends StatelessWidget {
       ),
     );
 
-    return Material(
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.7),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: onTap == null
-          ? content
-          : InkWell(
-              onTap: onTap,
-              child: content,
-            ),
+    return AppCard(
+      padding: EdgeInsets.zero,
+      color: colorScheme.surface,
+      onTap: onTap,
+      child: content,
     );
   }
 }

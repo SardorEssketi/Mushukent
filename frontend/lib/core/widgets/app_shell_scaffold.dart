@@ -12,7 +12,9 @@ import '../localization/app_strings.dart';
 import '../location/location_service.dart';
 import '../media/image_upload_preprocessor.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
+import '../theme/app_design_tokens.dart';
 import '../validation/phone_numbers.dart';
+import 'app_surface.dart';
 
 class AppShellScaffold extends ConsumerWidget {
   const AppShellScaffold({super.key, required this.navigationShell});
@@ -47,14 +49,23 @@ class AppShellScaffold extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  strings.add,
+                  'Create in Mushukistan',
                   style: Theme.of(sheetContext).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Choose the kind of cat help or update you want to share.',
+                  style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                        color:
+                            Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                      ),
                 ),
                 const SizedBox(height: 12),
                 _AddOptionTile(
                   icon: Icons.photo_library_outlined,
-                  title: strings.chooseFromGallery,
-                  subtitle: strings.gallerySubtitle,
+                  title: 'Add a cat observation',
+                  subtitle:
+                      'Share photos and notes. Add a map location when you use the camera.',
                   onTap: () async {
                     final result = await FilePicker.pickFiles(
                       type: FileType.image,
@@ -85,8 +96,9 @@ class AppShellScaffold extends ConsumerWidget {
                 const SizedBox(height: 8),
                 _AddOptionTile(
                   icon: Icons.photo_camera_outlined,
-                  title: strings.takePhoto,
-                  subtitle: strings.cameraSubtitle,
+                  title: 'Take a located photo',
+                  subtitle:
+                      'Create a public map observation from where you are now.',
                   onTap: () async {
                     final image = await ImagePicker().pickImage(
                       source: ImageSource.camera,
@@ -120,7 +132,8 @@ class AppShellScaffold extends ConsumerWidget {
                 _AddOptionTile(
                   icon: Icons.search_outlined,
                   title: strings.lostPet,
-                  subtitle: strings.lostPetSubtitle,
+                  subtitle:
+                      'Create a distinct alert with owner contact and last-seen location.',
                   onTap: () async {
                     final profile = await ref.read(profileMeProvider.future);
                     final phone = profile.phoneNumber?.trim() ?? '';
@@ -164,8 +177,9 @@ class AppShellScaffold extends ConsumerWidget {
                 const SizedBox(height: 8),
                 _AddOptionTile(
                   icon: Icons.home_outlined,
-                  title: 'Give pet for adoption',
-                  subtitle: 'Pet photo, description, and owner contacts.',
+                  title: 'Find a new home',
+                  subtitle:
+                      'Create a separate rehoming post with contact details.',
                   onTap: () async {
                     final profile = await ref.read(profileMeProvider.future);
                     final phone = profile.phoneNumber?.trim() ?? '';
@@ -226,10 +240,10 @@ class AppShellScaffold extends ConsumerWidget {
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => _selectBranch(context, ref, index),
         destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.dynamic_feed_outlined),
-            selectedIcon: const Icon(Icons.dynamic_feed),
-            label: strings.feed,
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
           ),
           NavigationDestination(
             icon: const Icon(Icons.map_outlined),
@@ -241,10 +255,10 @@ class AppShellScaffold extends ConsumerWidget {
             selectedIcon: const Icon(Icons.add_circle),
             label: strings.add,
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.emoji_events_outlined),
-            selectedIcon: const Icon(Icons.emoji_events),
-            label: strings.leaders,
+          const NavigationDestination(
+            icon: Icon(Icons.forum_outlined),
+            selectedIcon: Icon(Icons.forum),
+            label: 'Community',
           ),
           NavigationDestination(
             icon: const Icon(Icons.person_outline),
@@ -272,13 +286,41 @@ class _AddOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right),
+    final colors = Theme.of(context).colorScheme;
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      color: colors.surfaceContainerLow,
       onTap: onTap,
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: colors.primaryContainer,
+            foregroundColor: colors.onPrimaryContainer,
+            child: Icon(icon),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
     );
   }
 }

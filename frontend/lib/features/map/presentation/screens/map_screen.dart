@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 
 final _tashkentBounds = LatLngBounds(
   const LatLng(41.1800, 69.0500),
@@ -280,38 +282,19 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (!_locationDisclosureAccepted) {
       return Scaffold(
         body: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.my_location_outlined, size: 44),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Use your location',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Mushukistan uses your current location to show nearby cats and places on the map. Your current location is sent to the API for nearby search and is not published unless you create a public post.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _locationDisclosureAccepted = true;
-                        });
-                      },
-                      icon: const Icon(Icons.location_searching),
-                      label: const Text('Use my location'),
-                    ),
-                  ],
-                ),
-              ),
+          child: AppStatePanel(
+            icon: Icons.my_location_outlined,
+            title: 'Use your location',
+            message:
+                'Mushukistan uses your current location to show nearby cats and useful places. It is not published unless you create a public post.',
+            action: FilledButton.icon(
+              onPressed: () {
+                setState(() {
+                  _locationDisclosureAccepted = true;
+                });
+              },
+              icon: const Icon(Icons.location_searching),
+              label: const Text('Use my location'),
             ),
           ),
         ),
@@ -762,15 +745,15 @@ class _CatMarker extends StatelessWidget {
   Color _color(BuildContext context) {
     switch (status) {
       case 'healthy':
-        return Colors.green;
+        return AppPalette.found;
       case 'injured':
-        return Colors.deepOrange;
+        return AppPalette.terracotta;
       case 'needs_help':
         return Theme.of(context).colorScheme.error;
       case 'adopted':
-        return Colors.blueGrey;
+        return AppPalette.adoption;
       case 'feed':
-        return Colors.teal;
+        return AppPalette.sage;
       default:
         return Theme.of(context).colorScheme.secondary;
     }
@@ -781,7 +764,21 @@ class _CatMarker extends StatelessWidget {
     final color = _color(context);
     return GestureDetector(
       onTap: onTap,
-      child: Icon(Icons.pets, color: color, size: 36),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+          boxShadow: const [
+            BoxShadow(
+              blurRadius: 6,
+              color: Color(0x33000000),
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Center(child: Icon(Icons.pets, color: color, size: 24)),
+      ),
     );
   }
 }
@@ -809,11 +806,11 @@ class _PlaceMarker extends StatelessWidget {
   Color _color(BuildContext context) {
     switch (category) {
       case 'veterinary':
-        return Colors.redAccent;
+        return AppPalette.lost;
       case 'shelter':
-        return Colors.indigo;
+        return AppPalette.sageDark;
       default:
-        return Colors.amber.shade800;
+        return AppPalette.adoption;
     }
   }
 
@@ -1036,27 +1033,11 @@ class _ErrorPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              FilledButton(onPressed: onRetry, child: Text(retryLabel)),
-            ],
-          ),
-        ),
-      ),
+    return AppStatePanel(
+      icon: Icons.map_outlined,
+      title: title,
+      message: message,
+      action: FilledButton(onPressed: onRetry, child: Text(retryLabel)),
     );
   }
 }

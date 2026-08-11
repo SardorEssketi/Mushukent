@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/media/image_upload_preprocessor.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 class AdoptionPostCreateScreen extends ConsumerStatefulWidget {
@@ -130,116 +132,139 @@ class _AdoptionPostCreateScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Adoption')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            Text('Photos', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (var index = 0; index < _photos.length; index++)
-                  Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(
-                          _photos[index].bytes,
-                          width: 92,
-                          height: 92,
-                          fit: BoxFit.cover,
+      appBar: AppBar(title: const Text('Find a new home')),
+      body: AppContentWidth(
+        maxWidth: AppWidths.readable,
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            children: [
+              const AppBadge(
+                label: 'Rehoming',
+                icon: Icons.home_outlined,
+                color: AppPalette.adoption,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Create a rehoming post',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Describe the cat and the kind of home they need. This is separate from lost-pet alerts and does not require a map location.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Text('Photos', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (var index = 0; index < _photos.length; index++)
+                    Stack(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.memory(
+                            _photos[index].bytes,
+                            width: 92,
+                            height: 92,
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                      ),
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: IconButton.filledTonal(
-                          onPressed: () {
-                            setState(() {
-                              _photos.removeAt(index);
-                            });
-                          },
-                          icon: const Icon(Icons.close, size: 16),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: IconButton.filledTonal(
+                            onPressed: () {
+                              setState(() {
+                                _photos.removeAt(index);
+                              });
+                            },
+                            icon: const Icon(Icons.close, size: 16),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _isSubmitting || _photos.length >= 5
+                        ? null
+                        : _pickPhotos,
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: Text('Add photos (${_photos.length}/5)'),
                   ),
-                OutlinedButton.icon(
-                  onPressed:
-                      _isSubmitting || _photos.length >= 5 ? null : _pickPhotos,
-                  icon: const Icon(Icons.add_photo_alternate_outlined),
-                  label: Text('Add photos (${_photos.length}/5)'),
+                ],
+              ),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _petNameController,
+                maxLength: 100,
+                decoration: const InputDecoration(
+                  labelText: "Pet's name",
+                  hintText: 'Mittens',
+                ),
+                validator: (value) {
+                  final name = value?.trim() ?? '';
+                  if (name.isEmpty) {
+                    return "Enter the pet's name.";
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _infoController,
+                maxLines: 5,
+                maxLength: 2000,
+                decoration: const InputDecoration(
+                  labelText: 'Additional information',
+                  hintText:
+                      'Age, personality, health notes, and preferred home.',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _phonePublicationConsent,
+                onChanged: _isSubmitting
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _phonePublicationConsent = value ?? false;
+                          _error = null;
+                        });
+                      },
+                title: const Text('Show my phone number publicly'),
+                subtitle: const Text(
+                  'People need your profile phone number to contact you about adoption.',
+                ),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
-            ),
-            const SizedBox(height: 24),
-            TextFormField(
-              controller: _petNameController,
-              maxLength: 100,
-              decoration: const InputDecoration(
-                labelText: "Pet's name",
-                hintText: 'Mittens',
-              ),
-              validator: (value) {
-                final name = value?.trim() ?? '';
-                if (name.isEmpty) {
-                  return "Enter the pet's name.";
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _infoController,
-              maxLines: 5,
-              maxLength: 2000,
-              decoration: const InputDecoration(
-                labelText: 'Additional information',
-                hintText: 'Age, personality, health notes, and preferred home.',
-                alignLabelWithHint: true,
-              ),
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _phonePublicationConsent,
-              onChanged: _isSubmitting
-                  ? null
-                  : (value) {
-                      setState(() {
-                        _phonePublicationConsent = value ?? false;
-                        _error = null;
-                      });
-                    },
-              title: const Text('Show my phone number publicly'),
-              subtitle: const Text(
-                'People need your profile phone number to contact you about adoption.',
-              ),
-              controlAffinity: ListTileControlAffinity.leading,
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _isSubmitting ? null : () => unawaited(_submit()),
+                icon: _isSubmitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.publish_outlined),
+                label: const Text('Publish adoption post'),
               ),
             ],
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: _isSubmitting ? null : () => unawaited(_submit()),
-              icon: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.publish_outlined),
-              label: const Text('Publish adoption post'),
-            ),
-          ],
+          ),
         ),
       ),
     );
