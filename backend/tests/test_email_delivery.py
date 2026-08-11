@@ -8,7 +8,10 @@ from fastapi import HTTPException
 
 from app.core.config import Settings
 from app.features.auth.infrastructure import email as email_module
-from app.features.auth.infrastructure.email import EmailVerificationSender
+from app.features.auth.infrastructure.email import (
+    RESEND_USER_AGENT,
+    EmailVerificationSender,
+)
 
 
 class StubResponse:
@@ -60,6 +63,7 @@ def test_verification_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch
     assert captured["timeout"] == 10
     assert captured["headers"]["Authorization"] == "Bearer re_test_key"
     assert captured["headers"]["Content-type"] == "application/json"
+    assert captured["headers"]["User-agent"] == RESEND_USER_AGENT
     assert captured["payload"] == {
         "from": "noreply@mushukistan.uz",
         "to": ["user@example.com"],

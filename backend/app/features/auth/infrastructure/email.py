@@ -7,6 +7,7 @@ from app.core.config import Settings
 from app.core.security import api_error
 
 RESEND_EMAILS_API_URL = "https://api.resend.com/emails"
+RESEND_USER_AGENT = "mushukistan-backend/1.0"
 
 
 class EmailVerificationSender:
@@ -46,6 +47,7 @@ class EmailVerificationSender:
             headers={
                 "Authorization": f"Bearer {self.settings.resend_api_key}",
                 "Content-Type": "application/json",
+                "User-Agent": RESEND_USER_AGENT,
             },
             method="POST",
         )
