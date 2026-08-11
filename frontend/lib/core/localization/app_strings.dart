@@ -797,7 +797,7 @@ class _EnglishStrings extends AppStrings {
           verifyEmailWithAddress:
               'We need to confirm {email} before you can sign in.',
           devVerificationHelp:
-              'For this development build, the verification link is emitted by the backend. Use the quick verify action below if a development token is available.',
+              'Open the verification link from your email to finish confirming your account.',
           verifyNow: 'Verify now',
           resendVerification: 'Resend verification',
           backToLogin: 'Back to login',

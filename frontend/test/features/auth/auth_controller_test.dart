@@ -179,6 +179,52 @@ void main() {
     expect(controller.state.pendingVerificationEmail, 'user@example.com');
   });
 
+  test('return to login clears pending verification state', () async {
+    final repo = FakeAuthRepository();
+    repo.loginError = const MushukistanApiException(
+      kind: ApiFailureKind.unauthorized,
+      code: 'EMAIL_NOT_VERIFIED',
+      message: 'Please confirm your email before signing in.',
+    );
+    final controller = AuthController(repo, FakeGoogleIdentityTokenProvider());
+
+    await settle();
+
+    await expectLater(
+      controller.login(
+        const AuthCredentials(email: 'user@example.com', password: 'password1'),
+      ),
+      throwsA(isA<MushukistanApiException>()),
+    );
+
+    controller.returnToLogin();
+
+    expect(controller.state.phase, AuthPhase.unauthenticated);
+    expect(controller.state.pendingVerificationEmail, isNull);
+  });
+
+  test('verify email failure returns to unauthenticated with message',
+      () async {
+    final repo = FakeAuthRepository();
+    repo.verifyEmailError = const MushukistanApiException(
+      kind: ApiFailureKind.unauthorized,
+      code: 'INVALID_VERIFICATION_TOKEN',
+      message: 'Verification link is invalid or expired.',
+    );
+    final controller = AuthController(repo, FakeGoogleIdentityTokenProvider());
+
+    await settle();
+
+    await expectLater(
+      controller.verifyEmail('bad-token'),
+      throwsA(isA<MushukistanApiException>()),
+    );
+
+    expect(controller.state.phase, AuthPhase.unauthenticated);
+    expect(
+        controller.state.message, 'Verification link is invalid or expired.');
+  });
+
   test('google login success transitions to authenticated', () async {
     final repo = FakeAuthRepository(
       loginResult: AuthSession.restored(

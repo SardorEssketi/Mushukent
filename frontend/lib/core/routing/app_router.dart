@@ -140,7 +140,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/verify-email',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const VerifyEmailScreen(),
+        builder: (context, state) => VerifyEmailScreen(
+          token: state.uri.queryParameters['token'],
+        ),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {

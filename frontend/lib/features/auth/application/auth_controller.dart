@@ -270,14 +270,23 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> verifyEmail(String token) async {
-    await _repository.verifyEmail(token);
-    state = AuthState.unauthenticated(
-      message: 'Email verified. You can sign in now.',
-    );
+    try {
+      await _repository.verifyEmail(token);
+      state = AuthState.unauthenticated(
+        message: 'Email verified. You can sign in now.',
+      );
+    } on MushukistanApiException catch (error) {
+      state = AuthState.unauthenticated(message: error.userMessage);
+      rethrow;
+    }
   }
 
   Future<void> logout() async {
     await _repository.logout();
+    state = AuthState.unauthenticated();
+  }
+
+  void returnToLogin() {
     state = AuthState.unauthenticated();
   }
 

@@ -189,6 +189,7 @@ class FakeAuthRepository implements AuthRepository {
   Object? loginError;
   Object? registerError;
   Object? resendVerificationError;
+  Object? verifyEmailError;
   Object? restoreError;
   Completer<AuthSession>? loginCompleter;
   Completer<VerificationRequirement>? registerCompleter;
@@ -272,6 +273,9 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> verifyEmail(String token) async {
     lastVerifyEmailToken = token;
+    if (verifyEmailError != null) {
+      throw verifyEmailError!;
+    }
   }
 
   @override

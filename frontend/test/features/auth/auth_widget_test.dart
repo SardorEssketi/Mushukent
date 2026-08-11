@@ -279,6 +279,25 @@ void main() {
     expect(find.text('Verify now'), findsOneWidget);
   });
 
+  testWidgets('email verification link submits token from route',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+    );
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    container.read(appRouterProvider).go('/verify-email?token=email-token');
+    await tester.pumpAndSettle();
+
+    expect(repo.lastVerifyEmailToken, 'email-token');
+    expect(find.text('Email verified. You can sign in now.'), findsOneWidget);
+    expect(find.text('Continue to login'), findsOneWidget);
+  });
+
   testWidgets('authenticated shell renders the current user and logs out',
       (tester) async {
     final repo = FakeAuthRepository(
