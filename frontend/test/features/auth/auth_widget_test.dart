@@ -298,6 +298,28 @@ void main() {
     expect(find.text('Continue to login'), findsOneWidget);
   });
 
+  testWidgets('email verification deep link survives session restore',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+    );
+    repo.restoreCompleter = Completer<SessionRestoreResult>();
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+
+    container.read(appRouterProvider).go('/verify-email?token=email-token');
+    await tester.pump();
+
+    expect(repo.lastVerifyEmailToken, 'email-token');
+
+    repo.restoreCompleter!.complete(const SessionRestoreMissing());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Email verified. You can sign in now.'), findsOneWidget);
+  });
+
   testWidgets('authenticated shell renders the current user and logs out',
       (tester) async {
     final repo = FakeAuthRepository(

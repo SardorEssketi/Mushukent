@@ -67,7 +67,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       switch (authState.phase) {
         case AuthPhase.initial:
         case AuthPhase.restoring:
-          return location == '/auth-gate' ? null : '/auth-gate';
+          return location == '/auth-gate' || location == '/verify-email'
+              ? null
+              : '/auth-gate';
         case AuthPhase.failure:
           if (isProtectedRoute) {
             return '/auth-gate';
