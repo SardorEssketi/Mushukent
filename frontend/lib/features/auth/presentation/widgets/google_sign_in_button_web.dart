@@ -53,7 +53,6 @@ class _GoogleSignInEntryButtonState
       return;
     }
     await GoogleSignIn.instance.initialize(clientId: clientId);
-    GoogleSignIn.instance.attemptLightweightAuthentication();
   }
 
   Future<void> _handleAuthenticationEvent(
