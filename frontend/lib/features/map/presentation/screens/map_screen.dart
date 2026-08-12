@@ -722,10 +722,10 @@ class _FocusedLostPetMarker extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(
-            Icons.search,
+          child: _MarkerText(
+            label: '!',
             color: colorScheme.onError,
-            size: 28,
+            fontSize: 24,
           ),
         ),
       ),
@@ -777,7 +777,13 @@ class _CatMarker extends StatelessWidget {
             ),
           ],
         ),
-        child: Center(child: Icon(Icons.pets, color: color, size: 24)),
+        child: Center(
+          child: _MarkerText(
+            label: 'C',
+            color: color,
+            fontSize: 17,
+          ),
+        ),
       ),
     );
   }
@@ -791,17 +797,6 @@ class _PlaceMarker extends StatelessWidget {
 
   final String category;
   final VoidCallback onTap;
-
-  IconData get _icon {
-    switch (category) {
-      case 'veterinary':
-        return Icons.local_hospital;
-      case 'shelter':
-        return Icons.home_work;
-      default:
-        return Icons.storefront;
-    }
-  }
 
   Color _color(BuildContext context) {
     switch (category) {
@@ -831,9 +826,26 @@ class _PlaceMarker extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(_icon, color: color, size: 22),
+        child: Center(
+          child: _MarkerText(
+            label: _label,
+            color: color,
+            fontSize: 13,
+          ),
+        ),
       ),
     );
+  }
+
+  String get _label {
+    switch (category) {
+      case 'veterinary':
+        return 'Vet';
+      case 'shelter':
+        return 'Shel';
+      default:
+        return 'Shop';
+    }
   }
 }
 
@@ -865,8 +877,41 @@ class _MapLostPetMarker extends StatelessWidget {
                 ),
               ],
             ),
-            child: Icon(Icons.search, color: colorScheme.onError, size: 26),
+            child: _MarkerText(
+              label: '!',
+              color: colorScheme.onError,
+              fontSize: 22,
+            ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkerText extends StatelessWidget {
+  const _MarkerText({
+    required this.label,
+    required this.color,
+    required this.fontSize,
+  });
+
+  final String label;
+  final Color color;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        label,
+        maxLines: 1,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: color,
+          fontSize: fontSize,
+          fontWeight: FontWeight.w800,
+          height: 1,
         ),
       ),
     );

@@ -39,190 +39,205 @@ class AppShellScaffold extends ConsumerWidget {
 
     return showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       showDragHandle: true,
       builder: (sheetContext) {
+        final mediaQuery = MediaQuery.of(sheetContext);
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Create in Mushukistan',
-                  style: Theme.of(sheetContext).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Choose the kind of cat help or update you want to share.',
-                  style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                        color:
-                            Theme.of(sheetContext).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                _AddOptionTile(
-                  icon: Icons.photo_library_outlined,
-                  title: 'Add a cat observation',
-                  subtitle:
-                      'Share photos and notes. Add a map location when you use the camera.',
-                  onTap: () async {
-                    final result = await FilePicker.pickFiles(
-                      type: FileType.image,
-                      withData: true,
-                    );
-                    final file = result?.files.singleOrNull;
-                    final bytes = file?.bytes;
-                    if (file == null || bytes == null) {
-                      return;
-                    }
-                    final prepared = await prepareImageForUpload(
-                      bytes: bytes,
-                      filename: file.name,
-                    );
-
-                    controller.reset();
-                    controller.setPhoto(
-                      bytes: prepared.bytes,
-                      filename: prepared.filename,
-                      contentType: prepared.contentType,
-                    );
-                    if (sheetContext.mounted) {
-                      Navigator.of(sheetContext).pop();
-                      context.go('/add/details');
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-                _AddOptionTile(
-                  icon: Icons.photo_camera_outlined,
-                  title: 'Take a located photo',
-                  subtitle:
-                      'Create a public map observation from where you are now.',
-                  onTap: () async {
-                    final image = await ImagePicker().pickImage(
-                      source: ImageSource.camera,
-                      imageQuality: 90,
-                    );
-                    if (image == null) {
-                      return;
-                    }
-
-                    final prepared = await prepareImageForUpload(
-                      bytes: await image.readAsBytes(),
-                      filename: image.name,
-                    );
-                    controller.reset();
-                    controller.setPhoto(
-                      bytes: prepared.bytes,
-                      filename: prepared.filename,
-                      contentType: prepared.contentType,
-                    );
-                    final location =
-                        await LocationService().resolveCurrentLocation();
-                    controller.setLocation(location);
-                    unawaited(controller.loadNearbyCats());
-                    if (sheetContext.mounted) {
-                      Navigator.of(sheetContext).pop();
-                      context.go('/add/details');
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-                _AddOptionTile(
-                  icon: Icons.search_outlined,
-                  title: strings.lostPet,
-                  subtitle:
-                      'Create a distinct alert with owner contact and last-seen location.',
-                  onTap: () async {
-                    final profile = await ref.read(profileMeProvider.future);
-                    final phone = profile.phoneNumber?.trim() ?? '';
-                    if (!sheetContext.mounted) {
-                      return;
-                    }
-                    Navigator.of(sheetContext).pop();
-                    if (phone.isEmpty || !isValidUzbekPhoneNumber(phone)) {
-                      if (!context.mounted) {
-                        return;
-                      }
-                      final editProfile = await showDialog<bool>(
-                        context: context,
-                        builder: (dialogContext) => AlertDialog(
-                          title: Text(strings.phoneNumberRequired),
-                          content: Text(strings.phoneNumberRequiredForLostPet),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(false),
-                              child: Text(strings.cancel),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: mediaQuery.size.height * 0.88,
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                0,
+                20,
+                20 + mediaQuery.viewInsets.bottom,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Create in Mushukistan',
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Choose the kind of cat help or update you want to share.',
+                    style:
+                        Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(sheetContext)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
-                            FilledButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(true),
-                              child: Text(strings.editProfile),
-                            ),
-                          ],
-                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  _AddOptionTile(
+                    icon: Icons.photo_library_outlined,
+                    title: 'Add a cat observation',
+                    subtitle:
+                        'Share photos and notes. Add a map location when you use the camera.',
+                    onTap: () async {
+                      final result = await FilePicker.pickFiles(
+                        type: FileType.image,
+                        withData: true,
                       );
-                      if (editProfile == true && context.mounted) {
-                        context.go('/profile/edit');
-                      }
-                      return;
-                    }
-                    if (context.mounted) {
-                      context.go('/add/lost-pet');
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-                _AddOptionTile(
-                  icon: Icons.home_outlined,
-                  title: 'Find a new home',
-                  subtitle:
-                      'Create a separate rehoming post with contact details.',
-                  onTap: () async {
-                    final profile = await ref.read(profileMeProvider.future);
-                    final phone = profile.phoneNumber?.trim() ?? '';
-                    if (!sheetContext.mounted) {
-                      return;
-                    }
-                    Navigator.of(sheetContext).pop();
-                    if (phone.isEmpty || !isValidUzbekPhoneNumber(phone)) {
-                      if (!context.mounted) {
+                      final file = result?.files.singleOrNull;
+                      final bytes = file?.bytes;
+                      if (file == null || bytes == null) {
                         return;
                       }
-                      final editProfile = await showDialog<bool>(
-                        context: context,
-                        builder: (dialogContext) => AlertDialog(
-                          title: Text(strings.phoneNumberRequired),
-                          content: const Text(
-                            'Add a phone number before creating an adoption post so people can reach you.',
+                      final prepared = await prepareImageForUpload(
+                        bytes: bytes,
+                        filename: file.name,
+                      );
+
+                      controller.reset();
+                      controller.setPhoto(
+                        bytes: prepared.bytes,
+                        filename: prepared.filename,
+                        contentType: prepared.contentType,
+                      );
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                        context.go('/add/details');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _AddOptionTile(
+                    icon: Icons.photo_camera_outlined,
+                    title: 'Take a located photo',
+                    subtitle:
+                        'Create a public map observation from where you are now.',
+                    onTap: () async {
+                      final image = await ImagePicker().pickImage(
+                        source: ImageSource.camera,
+                        imageQuality: 90,
+                      );
+                      if (image == null) {
+                        return;
+                      }
+
+                      final prepared = await prepareImageForUpload(
+                        bytes: await image.readAsBytes(),
+                        filename: image.name,
+                      );
+                      controller.reset();
+                      controller.setPhoto(
+                        bytes: prepared.bytes,
+                        filename: prepared.filename,
+                        contentType: prepared.contentType,
+                      );
+                      final location =
+                          await LocationService().resolveCurrentLocation();
+                      controller.setLocation(location);
+                      unawaited(controller.loadNearbyCats());
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                        context.go('/add/details');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _AddOptionTile(
+                    icon: Icons.search_outlined,
+                    title: strings.lostPet,
+                    subtitle:
+                        'Create a distinct alert with owner contact and last-seen location.',
+                    onTap: () async {
+                      final profile = await ref.read(profileMeProvider.future);
+                      final phone = profile.phoneNumber?.trim() ?? '';
+                      if (!sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      if (phone.isEmpty || !isValidUzbekPhoneNumber(phone)) {
+                        if (!context.mounted) {
+                          return;
+                        }
+                        final editProfile = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: Text(strings.phoneNumberRequired),
+                            content:
+                                Text(strings.phoneNumberRequiredForLostPet),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(false),
+                                child: Text(strings.cancel),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(true),
+                                child: Text(strings.editProfile),
+                              ),
+                            ],
                           ),
-                          actions: [
-                            TextButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(false),
-                              child: Text(strings.cancel),
-                            ),
-                            FilledButton(
-                              onPressed: () =>
-                                  Navigator.of(dialogContext).pop(true),
-                              child: Text(strings.editProfile),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (editProfile == true && context.mounted) {
-                        context.go('/profile/edit');
+                        );
+                        if (editProfile == true && context.mounted) {
+                          context.go('/profile/edit');
+                        }
+                        return;
                       }
-                      return;
-                    }
-                    if (context.mounted) {
-                      context.go('/add/adoption');
-                    }
-                  },
-                ),
-              ],
+                      if (context.mounted) {
+                        context.go('/add/lost-pet');
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _AddOptionTile(
+                    icon: Icons.home_outlined,
+                    title: 'Find a new home',
+                    subtitle:
+                        'Create a separate rehoming post with contact details.',
+                    onTap: () async {
+                      final profile = await ref.read(profileMeProvider.future);
+                      final phone = profile.phoneNumber?.trim() ?? '';
+                      if (!sheetContext.mounted) {
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop();
+                      if (phone.isEmpty || !isValidUzbekPhoneNumber(phone)) {
+                        if (!context.mounted) {
+                          return;
+                        }
+                        final editProfile = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: Text(strings.phoneNumberRequired),
+                            content: const Text(
+                              'Add a phone number before creating an adoption post so people can reach you.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(false),
+                                child: Text(strings.cancel),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(true),
+                                child: Text(strings.editProfile),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (editProfile == true && context.mounted) {
+                          context.go('/profile/edit');
+                        }
+                        return;
+                      }
+                      if (context.mounted) {
+                        context.go('/add/adoption');
+                      }
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         );
