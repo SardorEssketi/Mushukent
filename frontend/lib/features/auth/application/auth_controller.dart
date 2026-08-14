@@ -30,6 +30,8 @@ class AuthState {
     this.retryable = false,
     this.pendingVerificationEmail,
     this.devVerificationToken,
+    this.pendingGoogleIdToken,
+    this.googleLegalAcceptanceRequired = false,
   });
 
   final AuthPhase phase;
@@ -39,11 +41,14 @@ class AuthState {
   final bool retryable;
   final String? pendingVerificationEmail;
   final String? devVerificationToken;
+  final String? pendingGoogleIdToken;
+  final bool googleLegalAcceptanceRequired;
 
   bool get isAuthenticated => phase == AuthPhase.authenticated;
   bool get isBusy =>
       phase == AuthPhase.restoring || phase == AuthPhase.authenticating;
   bool get hasError => message != null && message!.trim().isNotEmpty;
+  bool get requiresGoogleLegalAcceptance => googleLegalAcceptanceRequired;
 
   factory AuthState.initial() => const AuthState._(phase: AuthPhase.initial);
 
@@ -58,6 +63,19 @@ class AuthState {
       phase: AuthPhase.unauthenticated,
       message: message,
       fieldErrors: fieldErrors,
+    );
+  }
+
+  factory AuthState.googleLegalAcceptanceRequired({
+    String? idToken,
+    required String message,
+  }) {
+    return AuthState._(
+      phase: AuthPhase.unauthenticated,
+      message: message,
+      pendingGoogleIdToken:
+          idToken?.trim().isNotEmpty == true ? idToken!.trim() : null,
+      googleLegalAcceptanceRequired: true,
     );
   }
 
@@ -206,8 +224,9 @@ class AuthController extends StateNotifier<AuthState> {
     bool acceptPrivacy = false,
   }) async {
     state = AuthState.authenticating();
+    var idToken = '';
     try {
-      final idToken = await _googleIdentityTokens.authenticate();
+      idToken = await _googleIdentityTokens.authenticate();
       await loginWithGoogleIdToken(
         idToken,
         acceptTerms: acceptTerms,
@@ -217,7 +236,7 @@ class AuthController extends StateNotifier<AuthState> {
       state = AuthState.unauthenticated(message: error.message);
       rethrow;
     } on MushukistanApiException catch (error) {
-      state = AuthState.unauthenticated(message: error.userMessage);
+      state = _googleFailureState(error, pendingIdToken: idToken);
       rethrow;
     }
   }
@@ -236,7 +255,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
       state = AuthState.authenticated(session.user);
     } on MushukistanApiException catch (error) {
-      state = AuthState.unauthenticated(message: error.userMessage);
+      state = _googleFailureState(error, pendingIdToken: idToken);
       rethrow;
     }
   }
@@ -311,5 +330,23 @@ class AuthController extends StateNotifier<AuthState> {
       }
     }
     return result;
+  }
+
+  AuthState _googleFailureState(
+    MushukistanApiException error, {
+    required String pendingIdToken,
+  }) {
+    if (error.code == 'LEGAL_ACCEPTANCE_REQUIRED' &&
+        pendingIdToken.trim().isNotEmpty) {
+      return AuthState.googleLegalAcceptanceRequired(
+        idToken: pendingIdToken,
+        message: error.userMessage,
+      );
+    }
+    if (error.code == 'LEGAL_ACCEPTANCE_REQUIRED') {
+      return AuthState.googleLegalAcceptanceRequired(
+          message: error.userMessage);
+    }
+    return AuthState.unauthenticated(message: error.userMessage);
   }
 }

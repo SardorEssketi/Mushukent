@@ -67,8 +67,8 @@ void main() {
       expect(call.authenticated, isFalse);
       expect(call.body, <String, Object?>{
         'id_token': 'google-id-token',
-        'accept_terms': false,
-        'accept_privacy': false,
+        'accept_terms': true,
+        'accept_privacy': true,
       });
       return <String, Object?>{
         'access_token': 'token-123',
@@ -82,7 +82,11 @@ void main() {
       apiClient: apiClient,
       tokenStore: tokenStore,
     );
-    final session = await repository.loginWithGoogleIdToken('google-id-token');
+    final session = await repository.loginWithGoogleIdToken(
+      'google-id-token',
+      acceptTerms: true,
+      acceptPrivacy: true,
+    );
 
     expect(session.user.email, 'google-user@example.com');
     expect(await tokenStore.read(), 'token-123');
@@ -186,6 +190,7 @@ void main() {
     );
     final result = await repository.register(
       const RegisterCredentials(
+        name: 'Test User',
         email: 'user@example.com',
         password: 'password1',
         preferredLanguage: 'en',

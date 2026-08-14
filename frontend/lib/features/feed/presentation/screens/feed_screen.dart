@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
@@ -13,6 +14,28 @@ import '../../../profile/presentation/screens/profile_screen.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
 final feedPopularPeriodProvider = StateProvider<String>((ref) => 'day');
+final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
+  (ref) => const {},
+);
+const _homeHeaderDismissedKey = 'mushukistan_home_header_dismissed';
+
+final homeHeaderVisibleProvider = FutureProvider<bool>((ref) async {
+  const storage = FlutterSecureStorage();
+  final dismissed = await storage.read(key: _homeHeaderDismissedKey);
+  return dismissed != 'true';
+});
+
+void setPostLikeOverride(
+  WidgetRef ref,
+  String postId, {
+  required bool liked,
+  required int likeCount,
+}) {
+  ref.read(postLikeOverridesProvider.notifier).state = {
+    ...ref.read(postLikeOverridesProvider),
+    postId: LikeData(liked: liked, likeCount: likeCount),
+  };
+}
 
 final feedPostsProvider =
     FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
@@ -40,6 +63,7 @@ class FeedScreen extends ConsumerWidget {
     final feedMode = ref.watch(feedModeProvider);
     final popularPeriod = ref.watch(feedPopularPeriodProvider);
     final postsAsync = ref.watch(feedPostsProvider);
+    final showHomeHeader = ref.watch(homeHeaderVisibleProvider).value ?? true;
     final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
@@ -67,19 +91,29 @@ class FeedScreen extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
-              _HomeHeader(
-                onLostPetsTap: () {
-                  ref.read(feedModeProvider.notifier).state = 'lost_pets';
-                  ref.invalidate(feedPostsProvider);
-                },
-                onAdoptionTap: () {
-                  ref.read(feedModeProvider.notifier).state = 'adoption';
-                  ref.invalidate(feedPostsProvider);
-                },
-                onPlacesTap: () => context.go('/map'),
-                onMapTap: () => context.go('/map'),
-              ),
-              const SizedBox(height: AppSpacing.lg),
+              if (showHomeHeader) ...[
+                _HomeHeader(
+                  onDismiss: () async {
+                    const storage = FlutterSecureStorage();
+                    await storage.write(
+                      key: _homeHeaderDismissedKey,
+                      value: 'true',
+                    );
+                    ref.invalidate(homeHeaderVisibleProvider);
+                  },
+                  onLostPetsTap: () {
+                    ref.read(feedModeProvider.notifier).state = 'lost_pets';
+                    ref.invalidate(feedPostsProvider);
+                  },
+                  onAdoptionTap: () {
+                    ref.read(feedModeProvider.notifier).state = 'adoption';
+                    ref.invalidate(feedPostsProvider);
+                  },
+                  onPlacesTap: () => context.go('/map'),
+                  onMapTap: () => context.go('/map'),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
               _SectionHeader(
                 title: _sectionTitle(feedMode),
                 subtitle: _sectionSubtitle(feedMode),
@@ -165,12 +199,14 @@ class FeedScreen extends ConsumerWidget {
 
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader({
+    required this.onDismiss,
     required this.onLostPetsTap,
     required this.onAdoptionTap,
     required this.onPlacesTap,
     required this.onMapTap,
   });
 
+  final VoidCallback onDismiss;
   final VoidCallback onLostPetsTap;
   final VoidCallback onAdoptionTap;
   final VoidCallback onPlacesTap;
@@ -186,10 +222,20 @@ class _HomeHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppBadge(
-            label: 'The land of cats',
-            icon: Icons.public_outlined,
-            color: colors.primary,
+          Row(
+            children: [
+              AppBadge(
+                label: 'The land of cats',
+                icon: Icons.public_outlined,
+                color: colors.primary,
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Hide',
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
@@ -408,42 +454,76 @@ class _FeedFilterBar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: colorScheme.surface,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _FilterChoiceChip(
               value: 'recent',
-              icon: const Icon(Icons.schedule_outlined),
-              label: Text(strings.recent),
+              selectedValue: selectedMode,
+              icon: Icons.schedule_outlined,
+              label: strings.recent,
+              onSelected: onSelected,
             ),
-            ButtonSegment(
+            _FilterChoiceChip(
               value: 'popular',
-              icon: const Icon(Icons.favorite_outline),
-              label: Text(strings.popular),
+              selectedValue: selectedMode,
+              icon: Icons.favorite_outline,
+              label: strings.popular,
+              onSelected: onSelected,
             ),
-            ButtonSegment(
+            _FilterChoiceChip(
               value: 'needs_help',
-              icon: const Icon(Icons.volunteer_activism_outlined),
-              label: Text(strings.needsHelp),
+              selectedValue: selectedMode,
+              icon: Icons.volunteer_activism_outlined,
+              label: strings.needsHelp,
+              onSelected: onSelected,
             ),
-            ButtonSegment(
+            _FilterChoiceChip(
               value: 'lost_pets',
-              icon: const Icon(Icons.search_outlined),
-              label: Text(strings.lostPets),
+              selectedValue: selectedMode,
+              icon: Icons.search_outlined,
+              label: strings.lostPets,
+              onSelected: onSelected,
             ),
-            const ButtonSegment(
+            _FilterChoiceChip(
               value: 'adoption',
-              icon: Icon(Icons.home_outlined),
-              label: Text('Adoption'),
+              selectedValue: selectedMode,
+              icon: Icons.home_outlined,
+              label: 'Adoption',
+              onSelected: onSelected,
             ),
           ],
-          selected: {selectedMode},
-          onSelectionChanged: (selection) => onSelected(selection.first),
         ),
       ),
+    );
+  }
+}
+
+class _FilterChoiceChip extends StatelessWidget {
+  const _FilterChoiceChip({
+    required this.value,
+    required this.selectedValue,
+    required this.icon,
+    required this.label,
+    required this.onSelected,
+  });
+
+  final String value;
+  final String selectedValue;
+  final IconData icon;
+  final String label;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      avatar: Icon(icon, size: 18),
+      label: Text(label),
+      selected: selectedValue == value,
+      onSelected: (_) => onSelected(value),
     );
   }
 }
@@ -464,18 +544,34 @@ class _PopularPeriodBar extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: colorScheme.surface,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-        child: SegmentedButton<String>(
-          showSelectedIcon: false,
-          segments: [
-            ButtonSegment(value: 'day', label: Text(strings.today)),
-            ButtonSegment(value: 'month', label: Text(strings.month)),
-            ButtonSegment(value: 'all', label: Text(strings.allTime)),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _FilterChoiceChip(
+              value: 'day',
+              selectedValue: selectedPeriod,
+              icon: Icons.today_outlined,
+              label: strings.today,
+              onSelected: onSelected,
+            ),
+            _FilterChoiceChip(
+              value: 'month',
+              selectedValue: selectedPeriod,
+              icon: Icons.calendar_month_outlined,
+              label: strings.month,
+              onSelected: onSelected,
+            ),
+            _FilterChoiceChip(
+              value: 'all',
+              selectedValue: selectedPeriod,
+              icon: Icons.all_inclusive,
+              label: strings.allTime,
+              onSelected: onSelected,
+            ),
           ],
-          selected: {selectedPeriod},
-          onSelectionChanged: (selection) => onSelected(selection.first),
         ),
       ),
     );
@@ -906,25 +1002,47 @@ class FeedPostCard extends ConsumerStatefulWidget {
 
 class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   late int _likeCount = widget.post.likeCount;
-  bool _liked = false;
+  late bool _liked = widget.post.isLikedByMe;
   bool _submittingLike = false;
+
+  @override
+  void didUpdateWidget(covariant FeedPostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.id != widget.post.id ||
+        oldWidget.post.likeCount != widget.post.likeCount ||
+        oldWidget.post.isLikedByMe != widget.post.isLikedByMe) {
+      _likeCount = widget.post.likeCount;
+      _liked = widget.post.isLikedByMe;
+    }
+  }
 
   Future<void> _toggleLike() async {
     if (_submittingLike) {
       return;
     }
 
+    final currentOverride = ref.read(postLikeOverridesProvider)[widget.post.id];
+    final currentlyLiked = currentOverride?.liked ?? _liked;
+    final currentLikeCount = currentOverride?.likeCount ?? _likeCount;
+
     setState(() {
       _submittingLike = true;
     });
 
     try {
-      if (_liked) {
+      if (currentlyLiked) {
         await ref.read(mushukistanApiProvider).unlikePost(widget.post.id);
+        final nextCount = (currentLikeCount - 1).clamp(0, 1 << 30);
         setState(() {
           _liked = false;
-          _likeCount = (_likeCount - 1).clamp(0, 1 << 30);
+          _likeCount = nextCount;
         });
+        setPostLikeOverride(
+          ref,
+          widget.post.id,
+          liked: false,
+          likeCount: nextCount,
+        );
       } else {
         final result =
             await ref.read(mushukistanApiProvider).likePost(widget.post.id);
@@ -932,17 +1050,30 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
           _liked = result.liked;
           _likeCount = result.likeCount;
         });
+        setPostLikeOverride(
+          ref,
+          widget.post.id,
+          liked: result.liked,
+          likeCount: result.likeCount,
+        );
       }
 
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
       ref.invalidate(leaderboardProvider);
     } on MushukistanApiException catch (error) {
-      if (!_liked && error.code == 'ALREADY_LIKED') {
+      if (!currentlyLiked && error.code == 'ALREADY_LIKED') {
+        final nextCount = currentLikeCount + 1;
         setState(() {
           _liked = true;
-          _likeCount += 1;
+          _likeCount = nextCount;
         });
+        setPostLikeOverride(
+          ref,
+          widget.post.id,
+          liked: true,
+          likeCount: nextCount,
+        );
       } else {
         if (!mounted) {
           return;
@@ -964,6 +1095,9 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final strings = ref.watch(appStringsProvider);
+    final likeOverride = ref.watch(postLikeOverridesProvider)[widget.post.id];
+    final isLiked = likeOverride?.liked ?? _liked;
+    final likeCount = likeOverride?.likeCount ?? _likeCount;
     final author = widget.post.author;
     final authorId = author?.id;
     final authorName = author?.name ?? strings.anonymous;
@@ -1036,10 +1170,10 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               child: Row(
                 children: [
                   _IconCountAction(
-                    tooltip: _liked ? strings.unlike : strings.like,
-                    icon: _liked ? Icons.favorite : Icons.favorite_outline,
-                    count: _likeCount,
-                    color: _liked ? colorScheme.error : null,
+                    tooltip: isLiked ? strings.unlike : strings.like,
+                    icon: isLiked ? Icons.favorite : Icons.favorite_outline,
+                    count: likeCount,
+                    color: isLiked ? colorScheme.error : null,
                     onPressed: _submittingLike ? null : _toggleLike,
                   ),
                   _IconCountAction(

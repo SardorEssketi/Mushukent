@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +8,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/language_controller.dart';
 import '../../application/auth_controller.dart';
 import '../../domain/auth_models.dart';
-import '../widgets/google_sign_in_entry_button.dart';
+import '../widgets/legal_consent_text.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -54,9 +53,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       await controller.register(
         RegisterCredentials(
-          name: _nameController.text.trim().isEmpty
-              ? null
-              : _nameController.text.trim(),
+          name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           password: _passwordController.text,
           preferredLanguage: registrationLanguage.code,
@@ -154,7 +151,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 _acceptTerms = value ?? false;
                               });
                             },
-                      title: _LegalConsentText(
+                      title: LegalConsentText(
                         leadingText: strings.acceptLegalLeading,
                         linkText: strings.termsOfService,
                         trailingText: strings.acceptLegalTrailing,
@@ -173,7 +170,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                                 _acceptPrivacy = value ?? false;
                               });
                             },
-                      title: _LegalConsentText(
+                      title: LegalConsentText(
                         leadingText: strings.acceptLegalLeading,
                         linkText: strings.privacyPolicy,
                         trailingText: strings.acceptLegalTrailing,
@@ -206,31 +203,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           : Text(strings.register),
                     ),
                     const SizedBox(height: 12),
-                    if (kIsWeb)
-                      GoogleSignInEntryButton(
-                        enabled: !isLoading,
-                        acceptTerms: _acceptTerms,
-                        acceptPrivacy: _acceptPrivacy,
-                      )
-                    else
-                      OutlinedButton(
-                        onPressed: isLoading
-                            ? null
-                            : () async {
-                                try {
-                                  await ref
-                                      .read(authControllerProvider.notifier)
-                                      .loginWithGoogle(
-                                        acceptTerms: _acceptTerms,
-                                        acceptPrivacy: _acceptPrivacy,
-                                      );
-                                } on Object {
-                                  // Surface handled by auth state.
-                                }
-                              },
-                        child: Text(strings.continueWithGoogle),
-                      ),
-                    const SizedBox(height: 12),
                     TextButton(
                       onPressed: isLoading
                           ? null
@@ -250,7 +222,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   String? _validateName(String? value, AppStrings strings) {
-    if (value != null && value.trim().length > 100) {
+    final name = value?.trim() ?? '';
+    if (name.isEmpty) {
+      return strings.nameRequired;
+    }
+    if (name.length > 100) {
       return strings.nameTooLong;
     }
     return null;
@@ -276,58 +252,5 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return strings.passwordMin8;
     }
     return null;
-  }
-}
-
-class _LegalConsentText extends StatelessWidget {
-  const _LegalConsentText({
-    required this.leadingText,
-    required this.linkText,
-    required this.trailingText,
-    required this.route,
-    required this.enabled,
-  });
-
-  final String leadingText;
-  final String linkText;
-  final String trailingText;
-  final String route;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final baseStyle = Theme.of(context).textTheme.bodyLarge;
-    final linkStyle = baseStyle?.copyWith(
-      color: enabled
-          ? colorScheme.primary
-          : colorScheme.onSurface.withValues(alpha: 0.38),
-      decoration: TextDecoration.underline,
-      decorationColor: enabled
-          ? colorScheme.primary
-          : colorScheme.onSurface.withValues(alpha: 0.38),
-    );
-
-    return Text.rich(
-      TextSpan(
-        style: baseStyle,
-        children: [
-          TextSpan(text: leadingText),
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: InkWell(
-              onTap: enabled ? () => context.push(route) : null,
-              borderRadius: BorderRadius.circular(4),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Text(linkText, style: linkStyle),
-              ),
-            ),
-          ),
-          TextSpan(text: trailingText),
-        ],
-      ),
-    );
   }
 }

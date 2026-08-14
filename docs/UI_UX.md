@@ -53,8 +53,10 @@ Bottom navigation with 5 tabs:
 
 4.3 Add Observation Flow
 - User taps Add tab or map quick action
-- Choose from gallery -> feed-only observation details -> submit -> success.
-- Take photo -> capture current location -> match/select cat -> submit -> success.
+- Cat Observation -> choose camera or gallery photos -> choose location behavior:
+  - Use current location -> match/select cat -> submit -> success.
+  - Mark on map -> user sees current location, can recenter on user, taps map to place observation marker -> match/select cat -> submit -> success.
+  - Continue without location -> feed-only observation details -> submit -> success.
 - Lost Pet -> require profile phone number -> choose one to five photos -> enter pet name -> point last-seen location on map or use current location -> submit -> feed.
 
 4.4 Moderation Flow (for moderators)
@@ -100,18 +102,20 @@ Bottom navigation with 5 tabs:
 5.3 Register Screen
 - Purpose: create account.
 - Layout:
-  - name (optional)
+  - name
   - email
   - password
-  - "Continue with Google" button
+  - Terms of Service acceptance
+  - Privacy Policy acceptance
   - register button
   - link to Login
 - Interactions:
   - tapping Register after valid fields submits registration using the current app language.
+  - Google account creation starts from the Login screen's Google flow, which collects any required legal consent separately from the email registration form.
 - Validation:
   - email valid,
   - password min 8,
-  - name max 100.
+  - name required, max 100.
 - Success:
   - show Verify Email screen; password users cannot log in until confirmation is complete.
 - Edge cases:
@@ -129,6 +133,7 @@ Bottom navigation with 5 tabs:
   - link back to Login
 - Interactions:
   - resend verification email
+  - resend action starts a 60-second cooldown before it can be pressed again.
   - submit local development verification token
 - Edge cases:
   - expired token -> show failure and allow resend
@@ -182,15 +187,15 @@ Bottom navigation with 5 tabs:
 5.7 Add Observation Entry Screen
 - Purpose: start observation creation process.
 - Layout:
-  - Choose from gallery: creates a feed-only observation without location.
-  - Take photo: captures current location automatically.
-  - Lost Pet: creates a lost pet post shown in the feed.
+- Cat observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
+- Lost Pet: creates a lost pet post shown in the feed.
 - Interactions:
-  - permission prompts for camera/gallery.
-  - tapping Lost Pet checks whether the current user has a phone number; if not, show a prompt to edit profile first.
+- permission prompts for camera/gallery.
+- map location picker shows user's current location, a recenter-on-user button, and a tappable observation marker.
+- tapping Lost Pet checks whether the current user has a phone number; if not, show a prompt to edit profile first.
 - Edge cases:
-  - permission denied -> show system settings guidance.
-  - user cancels image picker -> return to previous screen.
+- permission denied -> show system settings guidance.
+- user cancels image picker -> return to previous screen.
 
 5.7.1 Lost Pet Create Screen
 - Purpose: publish a lost pet post from the Add flow.
@@ -207,7 +212,7 @@ Bottom navigation with 5 tabs:
   - submit -> lost pet appears in Feed with Lost Pet tag
 - Validation:
   - profile phone number required before opening create flow
-  - phone number must use Uzbekistan format: +998 XX XXX XXXX
+  - phone number must use Uzbekistan format shown with placeholder digits: +998 xx xxx xx xx
   - pet name required, max 100 chars
   - at least one photo required
   - maximum five photos
@@ -217,11 +222,11 @@ Bottom navigation with 5 tabs:
 5.8 Add Observation Details Screen
 - Purpose: complete metadata before submission.
 - Layout:
-  - one to five image previews
-  - description input
-  - status selector for camera observations only (Healthy/Needs Help/Unknown)
-  - camera observations include captured location automatically.
-  - cat matching section:
+- one to five image previews
+- description input
+- status selector for located observations only (Healthy/Needs Help/Unknown)
+- located observations include an explicitly confirmed current location or manually selected map point.
+- cat matching section:
     - nearby suggestions list,
     - action buttons: "This is existing cat" / "This is new cat"
   - submit button
@@ -233,11 +238,11 @@ Bottom navigation with 5 tabs:
   - location required,
   - status enum valid.
 - Edge cases:
-  - GPS unavailable for camera flow -> show error and retry.
-  - no nearby suggestions -> emphasize "new cat" path.
-  - gallery observations do not create map markers.
-  - gallery observations do not show a status selector.
-  - upload failure -> keep entered data in memory and allow retry.
+- GPS unavailable for current-location flow -> show error and retry or allow manual map placement / skip location.
+- no nearby suggestions -> emphasize "new cat" path.
+- observations without explicit location do not create map markers.
+- observations without explicit location do not show a status selector.
+- upload failure -> keep entered data in memory and allow retry.
 
 5.9 Observation Publish Success Screen/State
 - Purpose: confirm successful post creation.
@@ -368,7 +373,7 @@ Bottom navigation with 5 tabs:
   - save button
 - Validation:
   - name max 100,
-  - phone number optional, owner-only for MVP and must use Uzbekistan format: +998 XX XXX XXXX,
+  - phone number optional, owner-only for MVP and must use Uzbekistan format shown with placeholder digits: +998 xx xxx xx xx,
   - bio max 1000,
   - avatar type/size constraints from media policy.
 - Edge cases:

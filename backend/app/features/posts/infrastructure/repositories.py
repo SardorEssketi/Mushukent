@@ -528,10 +528,7 @@ class SqlAlchemyPostRepository(PostRepository):
         return base64.urlsafe_b64encode(raw).decode("utf-8")
 
     def _row_to_detail(self, row: Any) -> PostDetailRecord:
-        return PostDetailRecord(
-            **self._row_to_dict(row),
-            is_liked_by_me=bool(row["is_liked_by_me"]),
-        )
+        return PostDetailRecord(**self._row_to_dict(row))
 
     def _row_to_record(self, row: Any) -> PostRecord:
         return PostRecord(**self._row_to_dict(row))
@@ -564,6 +561,7 @@ class SqlAlchemyPostRepository(PostRepository):
             "created_at": mapping["created_at"],
             "updated_at": mapping["updated_at"],
             "deleted_at": mapping["deleted_at"],
+            "is_liked_by_me": bool(mapping["is_liked_by_me"]),
             "author": (
                 PostAuthorSummary(
                     id=author_id,

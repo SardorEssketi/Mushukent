@@ -45,6 +45,7 @@ class AddObservationState {
   AddObservationState copyWith({
     List<ObservationPhotoUpload>? photos,
     GeoPoint? location,
+    bool clearLocation = false,
     String? description,
     String? selectedCatId,
     bool clearSelectedCatId = false,
@@ -59,7 +60,7 @@ class AddObservationState {
   }) {
     return AddObservationState(
       photos: photos ?? this.photos,
-      location: location ?? this.location,
+      location: clearLocation ? null : location ?? this.location,
       description: description ?? this.description,
       selectedCatId:
           clearSelectedCatId ? null : selectedCatId ?? this.selectedCatId,
@@ -100,6 +101,14 @@ class AddObservationController extends StateNotifier<AddObservationState> {
 
   void setLocation(GeoPoint location) {
     state = state.copyWith(location: location, errorMessage: null);
+  }
+
+  void clearLocation() {
+    state = state.copyWith(
+      clearLocation: true,
+      nearbyCats: const AsyncValue.data(null),
+      errorMessage: null,
+    );
   }
 
   void setDescription(String description) {

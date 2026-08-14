@@ -94,7 +94,7 @@ Feature: Authentication
 - Validation rules (AuthRegister):
   - email: required, RFC-5322 compatible, max 254 chars
   - password: required, min 8 chars, max 128 chars
-  - name: optional, max 100 chars
+  - name: required, non-blank, max 100 chars
   - preferred_language: optional, one of en|uz|ru, defaults to en
   - accept_terms: required true
   - accept_privacy: required true
@@ -159,6 +159,7 @@ Feature: Authentication
   - 400 INVALID_PAYLOAD
   - 404 USER_NOT_FOUND is not required for MVP; unknown/ineligible accounts may return the same success shape with a null development token or a no-op implementation
 - Notes: Production sends a real email through the configured Resend Email API settings.
+  - Clients shall disable the resend action for 60 seconds after each resend request to prevent duplicate email bursts.
 
 4) POST /api/v1/auth/verify-email
 - Purpose: Confirm a password account's email address.
@@ -186,8 +187,10 @@ Feature: Authentication
 - Response: same as login
 - Errors: 401 INVALID_GOOGLE_TOKEN
 - Notes:
-  - Validate aud/iss and expiry with Google on server.
+  - Validate iss, expiry, and `aud` against one configured Google OAuth client ID on server.
   - If the Google email does not match an existing account, the backend creates the account only when Terms and Privacy acceptance are true.
+  - Existing accounts with current legal acceptance may authenticate without resubmitting acceptance flags.
+  - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
   - Google-authenticated accounts are considered verified immediately.
 
 6) POST /api/v1/auth/logout
@@ -420,7 +423,8 @@ Feature: Posts (Observations)
       "location": {"latitude":41.3, "longitude":69.2},
       "created_at":"2026-07-23T...",
       "like_count":0,
-      "comment_count":0
+      "comment_count":0,
+      "is_liked_by_me": false
     }
   }
 - Errors:
@@ -501,6 +505,7 @@ Feature: Feed
   - popular: like_count desc, then created_at desc
   - nearby: distance asc then created_at desc
 - Response: GenericListResponse[FeedListItem]
+- Observation items include `is_liked_by_me`, which is `true` only when the request includes a valid authenticated user token and that user has liked the post.
 - Example response:
   {
     "success": true,

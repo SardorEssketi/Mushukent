@@ -7,6 +7,7 @@ import '../../features/adoption_posts/presentation/screens/adoption_post_create_
 import '../../features/adoption_posts/presentation/screens/adoption_post_detail_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_details_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_entry_screen.dart';
+import '../../features/add_observation/presentation/screens/add_observation_location_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
 import '../../features/add_observation/presentation/screens/publish_success_screen.dart';
 import '../../features/auth/presentation/screens/auth_gate_screen.dart';
@@ -195,6 +196,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'details',
                     builder: (context, state) =>
                         const AddObservationDetailsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'location',
+                    builder: (context, state) =>
+                        const AddObservationLocationScreen(),
                   ),
                   GoRoute(
                     path: 'lost-pet',

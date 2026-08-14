@@ -23,6 +23,7 @@ class MushukistanApi {
     double? lat,
     double? lon,
     int? radiusMeters,
+    String? bbox,
     int limit = 20,
     String? cursor,
   }) {
@@ -34,6 +35,7 @@ class MushukistanApi {
         if (lat != null) 'lat': lat,
         if (lon != null) 'lon': lon,
         if (radiusMeters != null) 'radius_meters': radiusMeters,
+        if (bbox != null) 'bbox': bbox,
         'limit': limit,
         if (cursor != null) 'cursor': cursor,
       },
@@ -49,6 +51,7 @@ class MushukistanApi {
     double? lat,
     double? lon,
     int? radiusMeters,
+    String? bbox,
     int limit = 100,
   }) {
     return _client.get<ApiPage<PlaceSummary>>(
@@ -59,6 +62,7 @@ class MushukistanApi {
         if (lat != null) 'lat': lat,
         if (lon != null) 'lon': lon,
         if (radiusMeters != null) 'radius_meters': radiusMeters,
+        if (bbox != null) 'bbox': bbox,
         'limit': limit,
       },
       decoder: (json) => ApiPage.fromJson(
@@ -79,7 +83,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'feed',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'filter': filter,
         if (popularPeriod != null) 'popular_period': popularPeriod,
@@ -99,7 +102,6 @@ class MushukistanApi {
   Future<PostDetail> getPost(String postId) {
     return _client.get<PostDetail>(
       'posts/$postId',
-      authenticated: false,
       decoder: (json) => PostDetail.fromJson(json),
     );
   }
@@ -192,7 +194,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<PostSummary>>(
       'cats/$catId/posts',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'sort': sort,
@@ -832,6 +833,7 @@ class PostSummary extends FeedItem {
     required this.createdAt,
     required this.likeCount,
     required this.commentCount,
+    required this.isLikedByMe,
     this.author,
     this.thumbUrl,
     this.description,
@@ -854,6 +856,7 @@ class PostSummary extends FeedItem {
   final DateTime createdAt;
   final int likeCount;
   final int commentCount;
+  final bool isLikedByMe;
 
   factory PostSummary.fromJson(Object? json) {
     final map = _readMap(json);
@@ -876,6 +879,7 @@ class PostSummary extends FeedItem {
       createdAt: _readDateTime(map['created_at']),
       likeCount: _readInt(map['like_count']),
       commentCount: _readInt(map['comment_count']),
+      isLikedByMe: _readBool(map['is_liked_by_me']),
     );
   }
 }
@@ -890,14 +894,12 @@ class PostDetail extends PostSummary {
     required super.createdAt,
     required super.likeCount,
     required super.commentCount,
-    required this.isLikedByMe,
+    required super.isLikedByMe,
     super.author,
     super.thumbUrl,
     super.description,
     super.status,
   });
-
-  final bool isLikedByMe;
 
   factory PostDetail.fromJson(Object? json) {
     final map = _readMap(json);
@@ -915,7 +917,7 @@ class PostDetail extends PostSummary {
       createdAt: summary.createdAt,
       likeCount: summary.likeCount,
       commentCount: summary.commentCount,
-      isLikedByMe: _readBool(map['is_liked_by_me']),
+      isLikedByMe: summary.isLikedByMe,
     );
   }
 }
@@ -1147,16 +1149,19 @@ class CommentUserData {
   const CommentUserData({
     this.id,
     this.name,
+    this.avatarUrl,
   });
 
   final String? id;
   final String? name;
+  final String? avatarUrl;
 
   factory CommentUserData.fromJson(Object? json) {
     final map = _readMap(json);
     return CommentUserData(
       id: _readStringOrNull(map['id']),
       name: _readStringOrNull(map['name']),
+      avatarUrl: _readStringOrNull(map['avatar_url']),
     );
   }
 }

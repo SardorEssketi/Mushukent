@@ -40,10 +40,11 @@ MVP constraints:
 2.4 Google OAuth Login
 - Client obtains Google `id_token` using official Google Sign-In SDK.
 - Client sends `id_token` to backend.
-- Backend validates token signature, issuer (`iss`), audience (`aud`), and expiration (`exp`).
+- Backend validates token signature, issuer (`iss`), configured audience (`aud`), and expiration (`exp`).
 - Backend finds user by email:
-  - if exists, log user in;
-  - if not exists, create user with `password_hash = NULL`.
+  - if exists and current legal acceptance is already recorded, log user in;
+  - if exists but current legal acceptance is missing, require explicit Terms and Privacy acceptance before completing login;
+  - if not exists, create user with `password_hash = NULL` only when explicit Terms and Privacy acceptance is provided.
 - Google-authenticated users are treated as verified immediately.
 - Backend issues JWT access token.
 
@@ -95,22 +96,27 @@ Rationale:
 - User taps "Continue with Google".
 - Android app obtains Google ID token.
 - App sends `id_token` to `POST /api/v1/auth/google`.
+- If the backend returns `LEGAL_ACCEPTANCE_REQUIRED`, the app shows explicit Terms of Service and Privacy Policy consent controls and resubmits the same Google ID token with `accept_terms=true` and `accept_privacy=true`.
+- The app must not silently accept legal documents or require the user to choose their Google account twice.
 
 5.2 Backend Steps
 - Verify token with Google public keys.
 - Validate:
   - `iss` is Google issuer,
-  - `aud` matches configured client ID,
+  - `aud` matches one configured Google OAuth client ID,
   - token not expired,
   - email exists in token payload.
 - Upsert user:
-  - set `email_verified = true` (for Google-authenticated emails),
+  - for new users, require `accept_terms=true` and `accept_privacy=true`;
+  - record current Terms and Privacy versions and a backend-owned acceptance timestamp when legal acceptance is provided;
+  - set `email_verified = true` (for Google-authenticated emails);
   - update `last_login_at`.
 - Issue local JWT access token.
 
 5.3 Error Handling
 - Invalid token -> 401 `INVALID_GOOGLE_TOKEN`.
 - Missing email claim -> 400 `GOOGLE_EMAIL_MISSING`.
+- Missing required legal acceptance -> 422 `LEGAL_ACCEPTANCE_REQUIRED`.
 - Disabled user -> 403 `ACCOUNT_DISABLED`.
 
 6. User Roles and Permissions

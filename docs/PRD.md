@@ -111,6 +111,10 @@ sign in using Google;
 manage their profile;
 choose a preferred app language after email verification and sign-in.
 
+Email registration shall require a non-empty display name.
+
+Email verification resend controls shall use a visible cooldown before the user can request another verification email.
+
 Supported MVP languages:
 
 English

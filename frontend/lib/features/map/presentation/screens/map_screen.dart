@@ -18,10 +18,19 @@ final _tashkentBounds = LatLngBounds(
   const LatLng(41.4300, 69.4200),
 );
 
+const _tashkentBbox = '69.0500,41.1800,69.4200,41.4300';
+
 final mapCatsProvider =
     FutureProvider.autoDispose<ApiPage<CatSummary>>((ref) async {
   final api = ref.watch(mushukistanApiProvider);
   final location = await ref.watch(currentLocationProvider.future);
+  if (!_isInsideTashkent(location)) {
+    return api.listCats(
+      filter: 'recently_added',
+      bbox: _tashkentBbox,
+      limit: 100,
+    );
+  }
   return api.listCats(
     filter: 'nearby',
     lat: location.latitude,
@@ -67,6 +76,13 @@ final mapPlacesProvider =
 
   final api = ref.watch(mushukistanApiProvider);
   final location = await ref.watch(currentLocationProvider.future);
+  if (!_isInsideTashkent(location)) {
+    return api.listPlaces(
+      categories: categories,
+      bbox: _tashkentBbox,
+      limit: 200,
+    );
+  }
   return api.listPlaces(
     categories: categories,
     lat: location.latitude,
@@ -85,6 +101,12 @@ final mapLostPetsProvider =
 
   final api = ref.watch(mushukistanApiProvider);
   final location = await ref.watch(currentLocationProvider.future);
+  if (!_isInsideTashkent(location)) {
+    return api.listLostPets(
+      limit: 100,
+      validForMap: true,
+    );
+  }
   return api.listLostPets(
     lat: location.latitude,
     lon: location.longitude,
@@ -170,54 +192,59 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      strings.filters,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 8),
-                    for (final layer in _MapLayer.values)
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        secondary: Icon(layer.icon),
-                        title: Text(_layerLabel(layer, strings)),
-                        value: draftLayers.contains(layer),
-                        onChanged: (isSelected) {
-                          setSheetState(() {
-                            if (isSelected ?? false) {
-                              draftLayers.add(layer);
-                            } else {
-                              draftLayers.remove(layer);
-                            }
-                          });
-                        },
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.82,
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        strings.filters,
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(sheetContext).pop(),
-                            child: Text(strings.cancel),
-                          ),
+                      const SizedBox(height: 8),
+                      for (final layer in _MapLayer.values)
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          secondary: Icon(layer.icon),
+                          title: Text(_layerLabel(layer, strings)),
+                          value: draftLayers.contains(layer),
+                          onChanged: (isSelected) {
+                            setSheetState(() {
+                              if (isSelected ?? false) {
+                                draftLayers.add(layer);
+                              } else {
+                                draftLayers.remove(layer);
+                              }
+                            });
+                          },
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            onPressed: () => Navigator.of(sheetContext).pop(
-                              draftLayers,
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(sheetContext).pop(),
+                              child: Text(strings.cancel),
                             ),
-                            child: Text(strings.applyFilters),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () => Navigator.of(sheetContext).pop(
+                                draftLayers,
+                              ),
+                              child: Text(strings.applyFilters),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -675,6 +702,13 @@ LatLng _clampToTashkent(LatLng point) {
   return LatLng(latitude, longitude);
 }
 
+bool _isInsideTashkent(GeoPoint point) {
+  return point.latitude >= _tashkentBounds.south &&
+      point.latitude <= _tashkentBounds.north &&
+      point.longitude >= _tashkentBounds.west &&
+      point.longitude <= _tashkentBounds.east;
+}
+
 class _CurrentLocationMarker extends StatelessWidget {
   const _CurrentLocationMarker();
 
@@ -722,10 +756,10 @@ class _FocusedLostPetMarker extends StatelessWidget {
               ),
             ],
           ),
-          child: _MarkerText(
-            label: '!',
+          child: _MarkerIcon(
+            icon: Icons.priority_high,
             color: colorScheme.onError,
-            fontSize: 24,
+            size: 28,
           ),
         ),
       ),
@@ -778,10 +812,10 @@ class _CatMarker extends StatelessWidget {
           ],
         ),
         child: Center(
-          child: _MarkerText(
-            label: 'C',
+          child: _MarkerIcon(
+            icon: Icons.pets,
             color: color,
-            fontSize: 17,
+            size: 22,
           ),
         ),
       ),
@@ -827,26 +861,21 @@ class _PlaceMarker extends StatelessWidget {
           ],
         ),
         child: Center(
-          child: _MarkerText(
-            label: _label,
+          child: _MarkerIcon(
+            icon: _icon,
             color: color,
-            fontSize: 13,
+            size: 18,
           ),
         ),
       ),
     );
   }
 
-  String get _label {
-    switch (category) {
-      case 'veterinary':
-        return 'Vet';
-      case 'shelter':
-        return 'Shel';
-      default:
-        return 'Shop';
-    }
-  }
+  IconData get _icon => switch (category) {
+        'veterinary' => Icons.local_hospital,
+        'shelter' => Icons.home_work,
+        _ => Icons.storefront,
+      };
 }
 
 class _MapLostPetMarker extends StatelessWidget {
@@ -877,10 +906,10 @@ class _MapLostPetMarker extends StatelessWidget {
                 ),
               ],
             ),
-            child: _MarkerText(
-              label: '!',
+            child: _MarkerIcon(
+              icon: Icons.priority_high,
               color: colorScheme.onError,
-              fontSize: 22,
+              size: 26,
             ),
           ),
         ),
@@ -889,31 +918,21 @@ class _MapLostPetMarker extends StatelessWidget {
   }
 }
 
-class _MarkerText extends StatelessWidget {
-  const _MarkerText({
-    required this.label,
+class _MarkerIcon extends StatelessWidget {
+  const _MarkerIcon({
+    required this.icon,
     required this.color,
-    required this.fontSize,
+    required this.size,
   });
 
-  final String label;
+  final IconData icon;
   final Color color;
-  final double fontSize;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text(
-        label,
-        maxLines: 1,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: color,
-          fontSize: fontSize,
-          fontWeight: FontWeight.w800,
-          height: 1,
-        ),
-      ),
+      child: Icon(icon, color: color, size: size),
     );
   }
 }

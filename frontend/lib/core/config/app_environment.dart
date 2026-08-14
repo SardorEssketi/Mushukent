@@ -25,9 +25,10 @@ class AppEnvironment {
   final String? googleClientId;
   final String? googleServerClientId;
 
-  bool get isGoogleSignInConfigured =>
-      (googleClientId != null && googleClientId!.isNotEmpty) ||
-      (googleServerClientId != null && googleServerClientId!.isNotEmpty);
+  bool get isGoogleSignInConfigured => kIsWeb
+      ? googleClientId != null && googleClientId!.isNotEmpty
+      : (googleClientId != null && googleClientId!.isNotEmpty) ||
+          (googleServerClientId != null && googleServerClientId!.isNotEmpty);
 
   static AppEnvironment fromBuildEnvironment() {
     final override =

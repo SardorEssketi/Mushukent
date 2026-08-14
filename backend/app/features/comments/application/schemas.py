@@ -24,6 +24,7 @@ class CommentUser(BaseModel):
 
     id: UUID | None = None
     name: str | None = None
+    avatar_url: str | None = None
 
 
 class CommentCreate(BaseModel):

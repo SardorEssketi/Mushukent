@@ -15,11 +15,21 @@ This is the FastAPI backend for the Mushukistan MVP.
 
 ## Run (local)
 ```powershell
-python -m venv .venv
+cd backend
+py -3.13 --version
+py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .[dev]
+python --version
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+$env:APP_ENV="development"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+The backend requires Python 3.13 or newer, matching CI and `pyproject.toml`.
+If an existing local `.venv` reports Python 3.12, treat it as stale and create
+a new virtual environment with Python 3.13. Do not commit virtual environments
+or machine-specific `.env` files.
 
 ## Android Physical Device Development
 - For a physical Android phone, the backend must be reachable from the phone over the local network.
@@ -47,7 +57,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ## Auth Development Notes
 - Password registrations now require email verification before login succeeds.
 - In development (`APP_ENV=development`), the backend emits the verification token in logs and API responses so local flows can be tested without an email provider.
-- Google sign-in requires a valid `GOOGLE_OAUTH_CLIENT_ID` that matches the client configuration used by the Flutter app.
+- Google sign-in requires `GOOGLE_OAUTH_CLIENT_ID` to include every OAuth client
+  ID whose ID tokens the backend should accept. Use a comma-separated list when
+  web and Android builds use different client IDs.
 
 ## OSM Place Import
 - After migrations are applied, seed Tashkent pet shops, veterinary clinics and shelters from the free OpenStreetMap/Overpass source:
@@ -57,6 +69,21 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - The importer reads `DATABASE_URL`, stores available `phone` / `contact:phone` / `mobile` values, and preserves the OSM object ID in `source_id`.
 
 ## Testing
+Use the Python 3.13 backend environment:
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python --version
+$env:APP_ENV="development"
+pytest
+ruff check .
+```
+
+The pytest harness sets `APP_ENV` to `development` during test collection, so
+local tests do not depend on production `.env` values. Setting it explicitly in
+PowerShell keeps the test mode visible in the command history and avoids
+surprises when running individual tests.
+
 - Run live database tests sequentially against a single validation database.
 - Do not run multiple live pytest processes against the same validation database at the same time; the cleanup fixtures can deadlock.
 

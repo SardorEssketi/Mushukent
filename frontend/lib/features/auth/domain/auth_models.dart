@@ -19,13 +19,13 @@ class RegisterCredentials extends AuthCredentials {
   const RegisterCredentials({
     required super.email,
     required super.password,
+    required this.name,
     required this.preferredLanguage,
     required this.acceptTerms,
     required this.acceptPrivacy,
-    this.name,
   });
 
-  final String? name;
+  final String name;
   final String preferredLanguage;
   final bool acceptTerms;
   final bool acceptPrivacy;
@@ -33,7 +33,7 @@ class RegisterCredentials extends AuthCredentials {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
         ...super.toJson(),
-        if (name != null) 'name': name,
+        'name': name,
         'preferred_language': preferredLanguage,
         'accept_terms': acceptTerms,
         'accept_privacy': acceptPrivacy,

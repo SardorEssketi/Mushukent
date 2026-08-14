@@ -50,11 +50,12 @@ class PostRecord:
     deleted_at: datetime | None
     author: PostAuthorSummary | None
     cat: PostCatSummary
+    is_liked_by_me: bool = False
 
 
 @dataclass(slots=True)
 class PostDetailRecord(PostRecord):
-    is_liked_by_me: bool = False
+    pass
 
 
 @dataclass(slots=True)

@@ -52,7 +52,10 @@ class _GoogleSignInEntryButtonState
     if (clientId == null || clientId.isEmpty) {
       return;
     }
-    await GoogleSignIn.instance.initialize(clientId: clientId);
+    await GoogleSignIn.instance.initialize(
+      clientId: clientId,
+      serverClientId: environment.googleServerClientId,
+    );
   }
 
   Future<void> _handleAuthenticationEvent(

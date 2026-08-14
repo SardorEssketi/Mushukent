@@ -1,16 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
-import '../../features/add_observation/application/add_observation_controller.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../localization/app_strings.dart';
-import '../location/location_service.dart';
-import '../media/image_upload_preprocessor.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
 import '../theme/app_design_tokens.dart';
 import '../validation/phone_numbers.dart';
@@ -34,7 +29,6 @@ class AppShellScaffold extends ConsumerWidget {
   }
 
   Future<void> _showAddOptions(BuildContext context, WidgetRef ref) {
-    final controller = ref.read(addObservationControllerProvider.notifier);
     final strings = ref.read(appStringsProvider);
 
     return showModalBottomSheet<void>(
@@ -75,70 +69,13 @@ class AppShellScaffold extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   _AddOptionTile(
-                    icon: Icons.photo_library_outlined,
-                    title: 'Add a cat observation',
+                    icon: Icons.add_a_photo_outlined,
+                    title: 'Cat observation',
                     subtitle:
-                        'Share photos and notes. Add a map location when you use the camera.',
-                    onTap: () async {
-                      final result = await FilePicker.pickFiles(
-                        type: FileType.image,
-                        withData: true,
-                      );
-                      final file = result?.files.singleOrNull;
-                      final bytes = file?.bytes;
-                      if (file == null || bytes == null) {
-                        return;
-                      }
-                      final prepared = await prepareImageForUpload(
-                        bytes: bytes,
-                        filename: file.name,
-                      );
-
-                      controller.reset();
-                      controller.setPhoto(
-                        bytes: prepared.bytes,
-                        filename: prepared.filename,
-                        contentType: prepared.contentType,
-                      );
-                      if (sheetContext.mounted) {
-                        Navigator.of(sheetContext).pop();
-                        context.go('/add/details');
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _AddOptionTile(
-                    icon: Icons.photo_camera_outlined,
-                    title: 'Take a located photo',
-                    subtitle:
-                        'Create a public map observation from where you are now.',
-                    onTap: () async {
-                      final image = await ImagePicker().pickImage(
-                        source: ImageSource.camera,
-                        imageQuality: 90,
-                      );
-                      if (image == null) {
-                        return;
-                      }
-
-                      final prepared = await prepareImageForUpload(
-                        bytes: await image.readAsBytes(),
-                        filename: image.name,
-                      );
-                      controller.reset();
-                      controller.setPhoto(
-                        bytes: prepared.bytes,
-                        filename: prepared.filename,
-                        contentType: prepared.contentType,
-                      );
-                      final location =
-                          await LocationService().resolveCurrentLocation();
-                      controller.setLocation(location);
-                      unawaited(controller.loadNearbyCats());
-                      if (sheetContext.mounted) {
-                        Navigator.of(sheetContext).pop();
-                        context.go('/add/details');
-                      }
+                        'Add cat photos, then choose current location, mark on map, or skip location.',
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      context.go('/add');
                     },
                   ),
                   const SizedBox(height: 8),

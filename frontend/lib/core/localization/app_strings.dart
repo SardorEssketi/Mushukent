@@ -233,6 +233,33 @@ class AppStrings {
     };
   }
 
+  String get nameRequired {
+    return switch (this) {
+      _UzbekStrings() => 'Ism kiritilishi kerak.',
+      _RussianStrings() => 'Укажите имя.',
+      _ => 'Name is required.',
+    };
+  }
+
+  String get googleLegalConsentTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Davom etishdan oldin',
+      _RussianStrings() => 'Перед продолжением',
+      _ => 'Before you continue',
+    };
+  }
+
+  String get googleLegalConsentMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Google hisobingiz bilan Mushukistan hisobini yaratish uchun huquqiy hujjatlarni qabul qiling.',
+      _RussianStrings() =>
+        'Примите юридические документы, чтобы создать аккаунт Mushukistan через Google.',
+      _ =>
+        'Accept the legal documents to create your Mushukistan account with Google.',
+    };
+  }
+
   String get acceptLegalLeading {
     return switch (this) {
       _UzbekStrings() => 'Men ',
@@ -781,7 +808,7 @@ class _EnglishStrings extends AppStrings {
           createAnAccount: 'Create an account',
           createAccount: 'Create account',
           joinMushukistan: 'Join Mushukistan',
-          nameOptional: 'Name (optional)',
+          nameOptional: 'Name',
           register: 'Register',
           alreadyHaveAccount: 'Already have an account?',
           language: 'Language',
@@ -898,7 +925,7 @@ class _UzbekStrings extends AppStrings {
           createAnAccount: 'Hisob yaratish',
           createAccount: 'Hisob yaratish',
           joinMushukistan: 'Mushukistanga qo‘shiling',
-          nameOptional: 'Ism (ixtiyoriy)',
+          nameOptional: 'Ism',
           register: 'Ro‘yxatdan o‘tish',
           alreadyHaveAccount: 'Hisobingiz bormi?',
           language: 'Til',
@@ -1016,7 +1043,7 @@ class _RussianStrings extends AppStrings {
           createAnAccount: 'Создать аккаунт',
           createAccount: 'Создать аккаунт',
           joinMushukistan: 'Присоединиться к Mushukistan',
-          nameOptional: 'Имя (необязательно)',
+          nameOptional: 'Имя',
           register: 'Зарегистрироваться',
           alreadyHaveAccount: 'Уже есть аккаунт?',
           language: 'Язык',

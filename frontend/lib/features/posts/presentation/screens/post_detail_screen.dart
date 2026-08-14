@@ -43,10 +43,17 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     try {
       if (isLiked) {
         await ref.read(mushukistanApiProvider).unlikePost(widget.postId);
+        final nextCount = (currentLikeCount - 1).clamp(0, 1 << 30);
         setState(() {
           _likedOverride = false;
-          _likeCountOverride = (currentLikeCount - 1).clamp(0, 1 << 30);
+          _likeCountOverride = nextCount;
         });
+        setPostLikeOverride(
+          ref,
+          widget.postId,
+          liked: false,
+          likeCount: nextCount,
+        );
       } else {
         final result =
             await ref.read(mushukistanApiProvider).likePost(widget.postId);
@@ -54,6 +61,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           _likedOverride = result.liked;
           _likeCountOverride = result.likeCount;
         });
+        setPostLikeOverride(
+          ref,
+          widget.postId,
+          liked: result.liked,
+          likeCount: result.likeCount,
+        );
       }
 
       ref.invalidate(postDetailProvider(widget.postId));
@@ -62,10 +75,17 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       ref.invalidate(leaderboardProvider);
     } on MushukistanApiException catch (error) {
       if (!isLiked && error.code == 'ALREADY_LIKED') {
+        final nextCount = currentLikeCount + 1;
         setState(() {
           _likedOverride = true;
-          _likeCountOverride = currentLikeCount + 1;
+          _likeCountOverride = nextCount;
         });
+        setPostLikeOverride(
+          ref,
+          widget.postId,
+          liked: true,
+          likeCount: nextCount,
+        );
       } else {
         if (!mounted) {
           return;
@@ -92,8 +112,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       appBar: AppBar(title: const Text('Observation')),
       body: postAsync.when(
         data: (post) {
-          final isLiked = _likedOverride ?? post.isLikedByMe;
-          final likeCount = _likeCountOverride ?? post.likeCount;
+          final likeOverride = ref.watch(postLikeOverridesProvider)[post.id];
+          final isLiked =
+              likeOverride?.liked ?? _likedOverride ?? post.isLikedByMe;
+          final likeCount =
+              likeOverride?.likeCount ?? _likeCountOverride ?? post.likeCount;
           final author = post.author;
           final authorId = author?.id;
           final authorName = author?.name ?? 'Anonymous';

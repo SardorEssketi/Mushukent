@@ -58,10 +58,11 @@ class PostListItem(BaseModel):
     created_at: datetime
     like_count: int = 0
     comment_count: int = 0
+    is_liked_by_me: bool = False
 
 
 class PostResponse(PostListItem):
-    is_liked_by_me: bool = False
+    pass
 
 
 class PostNewCat(BaseModel):

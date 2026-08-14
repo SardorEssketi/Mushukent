@@ -189,6 +189,10 @@ class GoogleOAuthIdTokenVerifier:
         self._jwks_cache: _GoogleJwkSet | None = None
 
     def verify(self, id_token: str) -> GoogleIdTokenClaims:
+        allowed_audiences = self.settings.google_oauth_client_ids
+        if not allowed_audiences:
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+
         header = jwt.get_unverified_header(id_token)
         if header.get("alg") != "RS256":
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
@@ -199,9 +203,8 @@ class GoogleOAuthIdTokenVerifier:
                 id_token,
                 key,
                 algorithms=["RS256"],
-                audience=self.settings.google_oauth_client_id,
                 options={
-                    "verify_aud": True,
+                    "verify_aud": False,
                     "verify_exp": True,
                     "verify_nbf": True,
                     "verify_iat": False,
@@ -215,6 +218,10 @@ class GoogleOAuthIdTokenVerifier:
         if issuer not in GOOGLE_ISSUERS:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
+        audiences = self._token_audiences(payload.get("aud"))
+        if not audiences or not set(audiences).intersection(allowed_audiences):
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+
         exp = payload.get("exp")
         if not isinstance(exp, (int, float)):
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
@@ -222,7 +229,7 @@ class GoogleOAuthIdTokenVerifier:
         return GoogleIdTokenClaims(
             email=payload.get("email"),
             iss=issuer,
-            aud=str(payload.get("aud", "")),
+            aud=audiences[0] if audiences else "",
             exp=datetime.fromtimestamp(float(exp), UTC),
             sub=payload.get("sub"),
             name=payload.get("name"),
@@ -240,6 +247,14 @@ class GoogleOAuthIdTokenVerifier:
                 return jwk.construct(key, algorithm="RS256").to_pem().decode("utf-8")
 
         raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+
+    @staticmethod
+    def _token_audiences(audience: object) -> list[str]:
+        if isinstance(audience, str):
+            return [audience]
+        if isinstance(audience, list) and all(isinstance(item, str) for item in audience):
+            return audience
+        return []
 
     @cached_property
     def _jwks(self) -> _GoogleJwkSet:

@@ -31,6 +31,7 @@ Widget _buildApp(ProviderContainer container) {
 ProviderContainer _containerWithRepo(
   AuthRepository repo, {
   FakeApiClient? apiClient,
+  FakeGoogleIdentityTokenProvider? googleIdentityTokens,
 }) {
   final fakeApiClient = apiClient ?? FakeApiClient();
   fakeApiClient.setHandler('GET', 'feed', (_) {
@@ -101,8 +102,9 @@ ProviderContainer _containerWithRepo(
   return ProviderContainer(
     overrides: [
       authRepositoryProvider.overrideWithValue(repo),
-      googleIdentityTokenProvider
-          .overrideWithValue(FakeGoogleIdentityTokenProvider()),
+      googleIdentityTokenProvider.overrideWithValue(
+        googleIdentityTokens ?? FakeGoogleIdentityTokenProvider(),
+      ),
       apiClientProvider.overrideWithValue(fakeApiClient),
       authenticatedOnboardingStoreProvider.overrideWithValue(
         InMemoryAuthenticatedOnboardingStore(
@@ -233,6 +235,154 @@ void main() {
     expect(find.text('Invalid email or password.'), findsOneWidget);
     expect(container.read(authControllerProvider).phase,
         AuthPhase.unauthenticated);
+  });
+
+  testWidgets('login shows Google sign-in when unauthenticated',
+      (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Google sign-in is unavailable.'), findsNothing);
+  });
+
+  testWidgets('register navigation does not corrupt Google availability',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+      loginResult: AuthSession.restored(
+        accessToken: 'token-123',
+        user: testUser(email: 'google-user@example.com'),
+      ),
+    );
+    final google = FakeGoogleIdentityTokenProvider(idToken: 'google-id-token');
+    final container = _containerWithRepo(
+      repo,
+      googleIdentityTokens: google,
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continue with Google'), findsOneWidget);
+    await tester.tap(find.text('Create an account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Join Mushukistan'), findsOneWidget);
+    expect(find.text('Google sign-in is unavailable.'), findsNothing);
+    expect(find.text('Continue with Google'), findsNothing);
+
+    await tester.tap(find.text('Already have an account?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+
+    expect(
+        container.read(authControllerProvider).phase, AuthPhase.authenticated);
+    expect(repo.registerCalls, 0);
+    expect(repo.lastGoogleIdToken, 'google-id-token');
+    expect(google.calls, 1);
+  });
+
+  testWidgets('existing Google user signs in without email registration',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+      loginResult: AuthSession.restored(
+        accessToken: 'token-123',
+        user: testUser(email: 'existing-google@example.com'),
+      ),
+    );
+    final google = FakeGoogleIdentityTokenProvider(idToken: 'google-id-token');
+    final container = _containerWithRepo(
+      repo,
+      googleIdentityTokens: google,
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+
+    expect(
+        container.read(authControllerProvider).phase, AuthPhase.authenticated);
+    expect(find.text('Join Mushukistan'), findsNothing);
+    expect(repo.registerCalls, 0);
+    expect(repo.lastGoogleAcceptTerms, isFalse);
+    expect(repo.lastGoogleAcceptPrivacy, isFalse);
+  });
+
+  testWidgets('google login asks for legal consent before account creation',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+      loginResult: AuthSession.restored(
+        accessToken: 'token-123',
+        user: testUser(email: 'google-user@example.com'),
+      ),
+    );
+    repo.loginError = const MushukistanApiException(
+      kind: ApiFailureKind.validation,
+      code: 'LEGAL_ACCEPTANCE_REQUIRED',
+      message: 'Terms of Service and Privacy Policy acceptance is required.',
+    );
+    final google = FakeGoogleIdentityTokenProvider(idToken: 'google-id-token');
+    final container = _containerWithRepo(
+      repo,
+      googleIdentityTokens: google,
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Before you continue'), findsOneWidget);
+    expect(find.text('Terms of Service'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    expect(find.text('Google sign-in is unavailable.'), findsNothing);
+    expect(container.read(authControllerProvider).pendingGoogleIdToken,
+        'google-id-token');
+    expect(google.calls, 1);
+
+    repo.loginError = null;
+    final termsCheckbox = find.byType(Checkbox).at(0);
+    final privacyCheckbox = find.byType(Checkbox).at(1);
+    await tester.ensureVisible(termsCheckbox);
+    await tester.tap(termsCheckbox);
+    await tester.ensureVisible(privacyCheckbox);
+    await tester.tap(privacyCheckbox);
+    await tester.pump();
+    final continueButton = find.widgetWithText(FilledButton, 'Continue');
+    await tester.ensureVisible(continueButton);
+    await tester.tap(continueButton);
+    await tester.pumpAndSettle();
+
+    expect(repo.lastGoogleIdToken, 'google-id-token');
+    expect(repo.lastGoogleAcceptTerms, isTrue);
+    expect(repo.lastGoogleAcceptPrivacy, isTrue);
+    expect(google.calls, 1);
+    expect(find.text('Mushukistan'), findsOneWidget);
   });
 
   testWidgets('registration loading and error state are visible',

@@ -449,6 +449,61 @@ def test_authenticated_feed_includes_own_private_post(
     assert str(moderator_private_post) in moderator_ids
 
 
+def test_authenticated_feed_marks_posts_liked_by_current_user(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    author, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-liked-author@example.com",
+    )
+    _viewer, viewer_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-liked-viewer@example.com",
+    )
+    _other, other_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-liked-other@example.com",
+    )
+    cat = _create_cat(feed_runtime.db_session_manager, creator_id=author.id)
+    post_id = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+    )
+
+    like_response = client.post(
+        f"/api/v1/posts/{post_id}/likes",
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert like_response.status_code == 200
+
+    viewer_response = client.get(
+        "/api/v1/feed",
+        params={"filter": "recent"},
+        headers={"Authorization": f"Bearer {viewer_token}"},
+    )
+    assert viewer_response.status_code == 200
+    viewer_item = next(
+        item for item in viewer_response.json()["data"]["items"] if item["id"] == str(post_id)
+    )
+    assert viewer_item["is_liked_by_me"] is True
+
+    other_response = client.get(
+        "/api/v1/feed",
+        params={"filter": "recent"},
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert other_response.status_code == 200
+    other_item = next(
+        item for item in other_response.json()["data"]["items"] if item["id"] == str(post_id)
+    )
+    assert other_item["is_liked_by_me"] is False
+
+
 def test_feed_popular_order_and_cursor_pagination(client: TestClient, feed_runtime) -> None:
     author, token = _create_user_with_token(
         feed_runtime.db_session_manager,

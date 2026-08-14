@@ -58,13 +58,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ref.read(appLanguageProvider.notifier).state = _pendingLanguage;
       ref.invalidate(profileMeProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text(AppStrings.forLanguage(_pendingLanguage).changesSaved),
-          ),
-        );
+        final messenger = ScaffoldMessenger.of(context);
+        final message = AppStrings.forLanguage(_pendingLanguage).changesSaved;
         context.go('/profile');
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (_) {
       ref.read(appThemeModeProvider.notifier).state = previousTheme;

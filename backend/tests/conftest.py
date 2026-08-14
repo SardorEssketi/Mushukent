@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 
+os.environ["APP_ENV"] = "development"
+
 
 def _integration_enabled() -> bool:
     return os.getenv("RUN_DB_INTEGRATION_TESTS") == "1"

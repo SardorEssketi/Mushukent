@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Generic, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.features.auth.domain.models import AuthUser
 
@@ -21,10 +21,18 @@ class ApiSuccess(BaseModel, Generic[T]):
 class AuthRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    name: str | None = Field(default=None, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
     preferred_language: str = Field(default="en", pattern="^(en|uz|ru)$")
     accept_terms: bool = Field(default=False)
     accept_privacy: bool = Field(default=False)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        name = value.strip()
+        if not name:
+            raise ValueError("Name is required.")
+        return name
 
 
 class AuthLoginRequest(BaseModel):

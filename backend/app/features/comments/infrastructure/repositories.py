@@ -257,6 +257,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
                 schema.Comment.deleted_at.label("deleted_at"),
                 schema.User.id.label("user_id"),
                 schema.User.name.label("user_name"),
+                schema.User.avatar_url.label("user_avatar_url"),
             )
             .select_from(schema.Comment)
             .outerjoin(schema.User, schema.Comment.user_id == schema.User.id)
@@ -382,7 +383,11 @@ class SqlAlchemyCommentRepository(CommentRepository):
             updated_at=row["updated_at"],
             deleted_at=row["deleted_at"],
             user=(
-                CommentUserSummary(id=user_id, name=row["user_name"])
+                CommentUserSummary(
+                    id=user_id,
+                    name=row["user_name"],
+                    avatar_url=row["user_avatar_url"],
+                )
                 if user_id is not None
                 else None
             ),

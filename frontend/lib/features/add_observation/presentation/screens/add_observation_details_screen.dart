@@ -46,6 +46,21 @@ class AddObservationDetailsScreen extends ConsumerWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: AppSpacing.md),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => context.go('/add/location'),
+                icon: Icon(
+                  state.hasLocation
+                      ? Icons.edit_location_alt_outlined
+                      : Icons.add_location_alt_outlined,
+                ),
+                label: Text(
+                  state.hasLocation ? 'Change location' : 'Add location',
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
             Text(
               'Match the cat and add details',
               style: Theme.of(context).textTheme.headlineSmall,

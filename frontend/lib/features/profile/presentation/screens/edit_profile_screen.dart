@@ -79,8 +79,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 controller: _phoneController,
                 decoration: const InputDecoration(
                   labelText: 'Phone number',
-                  hintText: '+998 99 142 1314',
-                  helperText: 'Uzbekistan format: +998 XX XXX XXXX',
+                  hintText: '+998 xx xxx xx xx',
+                  helperText: 'Uzbekistan format: +998 xx xxx xx xx',
                 ),
                 keyboardType: TextInputType.phone,
                 maxLength: 32,

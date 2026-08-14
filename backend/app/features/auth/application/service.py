@@ -70,13 +70,14 @@ class AuthService(AuthenticationService):
         self,
         email: str,
         password: str,
-        name: str | None = None,
+        name: str,
         preferred_language: str = "en",
         accept_terms: bool = False,
         accept_privacy: bool = False,
     ) -> RegistrationResult:
         normalized_email = self._normalize_email(email)
         self._validate_password(password)
+        normalized_name = self._validate_name(name)
         self._validate_preferred_language(preferred_language)
         self._validate_legal_acceptance(accept_terms=accept_terms, accept_privacy=accept_privacy)
 
@@ -94,7 +95,7 @@ class AuthService(AuthenticationService):
                 user = repository.create(
                     email=normalized_email,
                     password_hash=self.password_hasher.hash_password(password),
-                    name=name,
+                    name=normalized_name,
                     preferred_language=preferred_language,
                     email_verified=False,
                     is_moderator=False,
@@ -228,6 +229,14 @@ class AuthService(AuthenticationService):
                     accepted_legal_at=datetime.now(UTC),
                 )
             else:
+                if not self._has_current_legal_acceptance(user):
+                    self._validate_legal_acceptance(
+                        accept_terms=accept_terms,
+                        accept_privacy=accept_privacy,
+                    )
+                    user.accepted_terms_version = CURRENT_TERMS_VERSION
+                    user.accepted_privacy_version = CURRENT_PRIVACY_VERSION
+                    user.accepted_legal_at = datetime.now(UTC)
                 user.email_verified = True
                 if claims.name and not user.name:
                     user.name = claims.name
@@ -296,6 +305,25 @@ class AuthService(AuthenticationService):
             )
 
     @staticmethod
+    def _validate_name(name: str) -> str:
+        normalized_name = name.strip()
+        if not normalized_name:
+            raise api_error(
+                422,
+                "VALIDATION_ERROR",
+                "Validation failed.",
+                details={"name": ["required"]},
+            )
+        if len(normalized_name) > 100:
+            raise api_error(
+                422,
+                "VALIDATION_ERROR",
+                "Validation failed.",
+                details={"name": ["max_length_100"]},
+            )
+        return normalized_name
+
+    @staticmethod
     def _validate_legal_acceptance(*, accept_terms: bool, accept_privacy: bool) -> None:
         if not accept_terms or not accept_privacy:
             raise api_error(
@@ -307,6 +335,14 @@ class AuthService(AuthenticationService):
                     "accept_privacy": ["required_true"],
                 },
             )
+
+    @staticmethod
+    def _has_current_legal_acceptance(user: AuthUser) -> bool:
+        return (
+            user.accepted_terms_version == CURRENT_TERMS_VERSION
+            and user.accepted_privacy_version == CURRENT_PRIVACY_VERSION
+            and user.accepted_legal_at is not None
+        )
 
     @staticmethod
     def _principal_from_user(user: AuthUser) -> AuthenticatedPrincipal:

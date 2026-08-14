@@ -267,10 +267,15 @@ class _CommentsContent extends StatelessWidget {
                 (comment) {
                   final userId = comment.user?.id;
                   final userName = comment.user?.name ?? strings.anonymous;
+                  final avatarUrl = comment.user?.avatarUrl;
                   return Card(
                     child: ListTile(
                       leading: CircleAvatar(
-                        child: Text(_avatarInitial(userName)),
+                        backgroundImage:
+                            avatarUrl == null ? null : NetworkImage(avatarUrl),
+                        child: avatarUrl == null
+                            ? Text(_avatarInitial(userName))
+                            : null,
                       ),
                       title: Text(userName),
                       subtitle: Text(comment.content),

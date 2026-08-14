@@ -15,6 +15,7 @@ class CommentOrder(StrEnum):
 class CommentUserSummary:
     id: UUID | None
     name: str | None
+    avatar_url: str | None
 
 
 @dataclass(slots=True)

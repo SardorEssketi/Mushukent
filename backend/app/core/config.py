@@ -55,6 +55,14 @@ class Settings(BaseSettings):
 
     google_oauth_client_id: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_ID")
 
+    @property
+    def google_oauth_client_ids(self) -> list[str]:
+        return [
+            client_id.strip()
+            for client_id in self.google_oauth_client_id.split(",")
+            if client_id.strip()
+        ]
+
     r2_account_id: str = Field(default="", alias="R2_ACCOUNT_ID")
     r2_access_key_id: str = Field(default="", alias="R2_ACCESS_KEY_ID")
     r2_secret_access_key: str = Field(default="", alias="R2_SECRET_ACCESS_KEY")

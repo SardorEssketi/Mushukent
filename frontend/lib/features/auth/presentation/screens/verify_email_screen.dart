@@ -23,8 +23,51 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
   bool _verificationStarted = false;
   bool _verificationComplete = false;
   String? _verificationError;
+  Timer? _resendCooldownTimer;
+  int _resendCooldownSeconds = 0;
 
   bool get _hasToken => widget.token?.trim().isNotEmpty == true;
+
+  @override
+  void dispose() {
+    _resendCooldownTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startResendCooldown() {
+    _resendCooldownTimer?.cancel();
+    setState(() {
+      _resendCooldownSeconds = 60;
+    });
+    _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendCooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() {
+          _resendCooldownSeconds = 0;
+        });
+        return;
+      }
+      setState(() {
+        _resendCooldownSeconds -= 1;
+      });
+    });
+  }
+
+  Future<void> _resendVerification(String email) async {
+    if (_resendCooldownSeconds > 0) {
+      return;
+    }
+    _startResendCooldown();
+    try {
+      await ref.read(authControllerProvider.notifier).resendVerification(email);
+    } on Object {
+      // Surface handled by auth state.
+    }
+  }
 
   @override
   void initState() {
@@ -190,12 +233,17 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                 const SizedBox(height: 12),
               ],
               FilledButton.tonal(
-                onPressed: email == null || email.isEmpty
-                    ? null
-                    : () {
-                        unawaited(controller.resendVerification(email));
-                      },
-                child: Text(strings.resendVerification),
+                onPressed:
+                    email == null || email.isEmpty || _resendCooldownSeconds > 0
+                        ? null
+                        : () {
+                            unawaited(_resendVerification(email));
+                          },
+                child: Text(
+                  _resendCooldownSeconds > 0
+                      ? '${strings.resendVerification} ($_resendCooldownSeconds)'
+                      : strings.resendVerification,
+                ),
               ),
               const SizedBox(height: 12),
               TextButton(
