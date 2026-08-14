@@ -135,8 +135,8 @@ def _create_post(
     is_public: bool = True,
     like_count: int = 0,
     comment_count: int = 0,
-    latitude: float = 41.3,
-    longitude: float = 69.25,
+    latitude: float | None = 41.3,
+    longitude: float | None = 69.25,
     created_at: datetime | None = None,
     deleted_at: datetime | None = None,
 ):
@@ -148,7 +148,11 @@ def _create_post(
             photo_url=photo_url,
             thumb_url="https://example.com/thumb.jpg",
             description=description,
-            location=WKTElement(f"POINT({longitude} {latitude})", srid=4326),
+            location=(
+                WKTElement(f"POINT({longitude} {latitude})", srid=4326)
+                if latitude is not None and longitude is not None
+                else None
+            ),
             status=CatStatus.UNKNOWN,
             is_public=is_public,
             like_count=like_count,
@@ -299,6 +303,33 @@ def test_anonymous_recent_feed_hides_private_deleted_and_unavailable_posts(
     assert str(deleted_post) not in ids
     assert str(hidden_post) not in ids
     assert payload["items"][0]["id"] == str(visible_post)
+
+
+def test_recent_feed_returns_null_location_for_locationless_posts(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    author, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-locationless@example.com",
+    )
+    cat = _create_cat(feed_runtime.db_session_manager, creator_id=author.id)
+    post_id = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        latitude=None,
+        longitude=None,
+    )
+
+    response = client.get("/api/v1/feed", params={"filter": "recent", "limit": 20})
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    item = next(item for item in items if item["id"] == str(post_id))
+    assert "location" in item
+    assert item["location"] is None
 
 
 def test_recent_feed_includes_adoption_posts(client: TestClient, feed_runtime) -> None:

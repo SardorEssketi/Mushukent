@@ -34,7 +34,6 @@ def _validation_details(errors: Sequence[object]) -> list[dict[str, Any]]:
 @router.get(
     "",
     response_model=ApiSuccess[GenericListResponse[FeedListItem]],
-    response_model_exclude_none=True,
 )
 def read_feed(
     filter_by: str = Query(default="recent", alias="filter"),
