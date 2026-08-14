@@ -108,6 +108,8 @@ class SqlAlchemyLikeRepository(LikeRepository):
         post_status = row["post_status"]
         cat_status = row["cat_status"]
         author_id = row["author_id"]
+        latitude = row["latitude"]
+        longitude = row["longitude"]
         return PostDetailRecord(
             id=row["post_id"],
             cat_id=row["post_cat_id"],
@@ -116,9 +118,13 @@ class SqlAlchemyLikeRepository(LikeRepository):
             thumb_url=row["thumb_url"],
             photo_urls=[row["photo_url"]],
             description=row["description"],
-            location=GeoPoint(
-                latitude=float(row["latitude"]),
-                longitude=float(row["longitude"]),
+            location=(
+                GeoPoint(
+                    latitude=float(latitude),
+                    longitude=float(longitude),
+                )
+                if latitude is not None and longitude is not None
+                else None
             ),
             status=CatStatus(post_status) if post_status is not None else None,
             is_public=bool(row["is_public"]),

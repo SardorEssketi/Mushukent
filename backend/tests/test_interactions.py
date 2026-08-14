@@ -145,6 +145,30 @@ def _create_post(
         )
         session.add(post)
         session.flush()
+    return post.id
+
+
+def _create_locationless_post(
+    db_session_manager: DatabaseSessionManager,
+    *,
+    cat_id: UUID,
+    user_id: UUID,
+    photo_url: str = "https://example.com/locationless.jpg",
+) -> UUID:
+    with db_session_manager.session_scope() as session:
+        post = schema.Post(
+            cat_id=cat_id,
+            user_id=user_id,
+            photo_url=photo_url,
+            description="Locationless observation",
+            location=None,
+            status=CatStatus.UNKNOWN,
+            is_public=True,
+            like_count=0,
+            comment_count=0,
+        )
+        session.add(post)
+        session.flush()
         return post.id
 
 
@@ -206,6 +230,31 @@ def test_authenticated_like_and_duplicate_behavior(
         assert post is not None
         assert post.like_count == 1
         assert like_count is not None
+
+
+def test_like_locationless_post(
+    client: TestClient,
+    interactions_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="like-locationless@example.com",
+    )
+    cat = _create_cat(interactions_runtime.db_session_manager, creator_id=user.id)
+    post_id = _create_locationless_post(
+        interactions_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=user.id,
+    )
+
+    response = client.post(
+        f"/api/v1/posts/{post_id}/likes",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {"liked": True, "like_count": 1}
 
 
 def test_unauthenticated_like_rejected(client: TestClient, interactions_runtime) -> None:

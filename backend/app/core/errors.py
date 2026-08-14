@@ -3,6 +3,9 @@ import json
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from structlog import get_logger
+
+logger = get_logger(__name__)
 
 
 def _json_safe(value: object) -> object:
@@ -63,7 +66,13 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(_: Request, __: Exception) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error(
+            "unhandled_exception",
+            method=request.method,
+            path=request.url.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return _build_error_response(
             500,
             "INTERNAL_SERVER_ERROR",
