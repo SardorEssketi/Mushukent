@@ -648,11 +648,17 @@ Feature: Places
           "id": "uuid",
           "name": "Vet Clinic",
           "category": "veterinary",
+          "categories": ["veterinary", "pet_shop"],
           "location": {"latitude": 41.3, "longitude": 69.25},
           "address": "Tashkent",
           "phone": "+998 XX XXX XX XX",
+          "phone_2": null,
+          "instagram": "https://www.instagram.com/example/",
+          "telegram": "https://t.me/example",
           "website": "https://example.com",
           "opening_hours": "Mo-Sa 09:00-18:00",
+          "days_off": "sun",
+          "description": "Public place details when available.",
           "source": "osm",
           "source_id": "node/123",
           "verified_at": null,
@@ -665,12 +671,16 @@ Feature: Places
   }
 - Validation:
   - category must be a supported place category.
+  - `category` is the primary/backward-compatible category. `categories` is the full category list.
   - If radius_meters is provided, lat and lon are required.
   - If bbox is provided, it must be minLon,minLat,maxLon,maxLat.
 - Notes:
   - Free source tags: amenity=veterinary, shop=pet, amenity=animal_shelter, animal_shelter=cat, animal_boarding=cat.
   - Read phone from `phone`, `contact:phone`, `mobile` or `contact:mobile`.
   - Do not call public Overpass from every mobile client. Import/cache places through backend storage and expose them through this endpoint.
+  - Manual Excel/CSV imports use the same `places` table, `place_category_links`, and `manual` source. Optional contact fields are omitted from the response when null.
+  - Supported manual import type aliases: `pet store`/`pet shop` -> `pet_shop`, `veterinary clinic`/`veterinary`/`vet` -> `veterinary`, `animal shelter`/`shelter` -> `shelter`.
+  - Combined manual types use comma-separated aliases, for example `pet store,vet` -> `["veterinary","pet_shop"]`.
 
 Feature: Comments
 -----------------

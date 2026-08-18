@@ -510,8 +510,13 @@ class Place(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     phone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone_2: Mapped[str | None] = mapped_column(Text, nullable=True)
+    instagram: Mapped[str | None] = mapped_column(Text, nullable=True)
+    telegram: Mapped[str | None] = mapped_column(Text, nullable=True)
     website: Mapped[str | None] = mapped_column(Text, nullable=True)
     opening_hours: Mapped[str | None] = mapped_column(Text, nullable=True)
+    days_off: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[PlaceSource] = mapped_column(
         place_source_enum,
         nullable=False,
@@ -526,11 +531,44 @@ class Place(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         server_default=text("true"),
     )
 
+    category_links: Mapped[list["PlaceCategoryLink"]] = relationship(
+        back_populates="place",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     __table_args__ = (
         Index("places_location_gist", "location", postgresql_using="gist"),
         Index("idx_places_category", "category"),
         Index("idx_places_source", "source", "source_id"),
+        Index(
+            "uq_places_source_source_id",
+            "source",
+            "source_id",
+            unique=True,
+            postgresql_where=text("source_id IS NOT NULL"),
+        ),
     )
+
+
+class PlaceCategoryLink(Base):
+    __tablename__ = "place_category_links"
+
+    place_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("places.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+    category: Mapped[PlaceCategory] = mapped_column(
+        place_category_enum,
+        primary_key=True,
+        nullable=False,
+    )
+
+    place: Mapped[Place] = relationship(back_populates="category_links")
+
+    __table_args__ = (Index("idx_place_category_links_category", "category"),)
 
 
 class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):

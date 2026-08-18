@@ -28,7 +28,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 Naming conventions
 ------------------
-- Tables: plural, snake_case (users, cats, posts, comments, likes, reports, leaderboard_cache, places, lost_pets, lost_pet_photos, adoption_posts, adoption_post_photos, user_blocks).
+- Tables: plural, snake_case (users, cats, posts, comments, likes, reports, leaderboard_cache, places, place_category_links, lost_pets, lost_pet_photos, adoption_posts, adoption_post_photos, user_blocks).
 - Columns: snake_case.
 - Primary keys: id (UUID) using gen_random_uuid() as default value.
 - Timestamps: created_at (TIMESTAMP WITH TIME ZONE), updated_at, deleted_at (nullable).
@@ -43,6 +43,7 @@ High-level ER summary
 - posts * --- * likes (through likes table)
 - users * --- * reports (reporter -> report target)
 - places are independent map points used for pet shops, veterinary clinics and shelters
+- place_category_links allows one real place to belong to multiple supported categories
 - lost_pets 1 --- * lost_pet_photos
 - lost_pets 1 --- * comments
 - adoption_posts 1 --- * adoption_post_photos
@@ -217,14 +218,19 @@ CREATE TYPE place_source AS ENUM ('osm','manual');
 CREATE TABLE places (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    category place_category NOT NULL,
+    category place_category NOT NULL, -- primary/backward-compatible category
     location GEOMETRY(POINT, 4326) NOT NULL,
     latitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_Y(location::geometry)) STORED,
     longitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_X(location::geometry)) STORED,
     address TEXT NULL,
     phone TEXT NULL,
+    phone_2 TEXT NULL,
+    instagram TEXT NULL,
+    telegram TEXT NULL,
     website TEXT NULL,
     opening_hours TEXT NULL,
+    days_off TEXT NULL,
+    description TEXT NULL,
     source place_source NOT NULL DEFAULT 'manual',
     source_id TEXT NULL,
     verified_at TIMESTAMPTZ NULL,
@@ -235,6 +241,14 @@ CREATE TABLE places (
 CREATE INDEX places_location_gist ON places USING GIST (location);
 CREATE INDEX idx_places_category ON places (category);
 CREATE INDEX idx_places_source ON places (source, source_id);
+CREATE UNIQUE INDEX uq_places_source_source_id ON places (source, source_id) WHERE source_id IS NOT NULL;
+
+CREATE TABLE place_category_links (
+    place_id UUID NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+    category place_category NOT NULL,
+    PRIMARY KEY (place_id, category)
+);
+CREATE INDEX idx_place_category_links_category ON place_category_links (category);
 
 -- Lost pet posts
 CREATE TABLE lost_pets (

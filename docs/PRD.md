@@ -142,7 +142,8 @@ Pet Shops
 Veterinary Clinics
 Animal Shelters
 
-Place markers shall show available public contact details, including phone number, website and opening hours when present in the free source data or manually verified by moderators.
+Place markers shall show available public contact details, including phone number, second phone number, website, Instagram, Telegram, opening hours, days off and description when present in the free source data or manually verified by moderators.
+One real place may belong to more than one supported place category.
 Add Cat
 
 Users shall be able to create a new observation by providing:

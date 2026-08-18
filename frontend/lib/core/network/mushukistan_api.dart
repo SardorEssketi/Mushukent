@@ -715,12 +715,18 @@ class PlaceSummary {
     required this.id,
     required this.name,
     required this.category,
+    required this.categories,
     required this.location,
     required this.source,
     this.address,
     this.phone,
+    this.phone2,
+    this.instagram,
+    this.telegram,
     this.website,
     this.openingHours,
+    this.daysOff,
+    this.description,
     this.sourceId,
     this.verifiedAt,
     this.distanceMeters,
@@ -729,11 +735,17 @@ class PlaceSummary {
   final String id;
   final String name;
   final String category;
+  final List<String> categories;
   final GeoPoint location;
   final String? address;
   final String? phone;
+  final String? phone2;
+  final String? instagram;
+  final String? telegram;
   final String? website;
   final String? openingHours;
+  final String? daysOff;
+  final String? description;
   final String source;
   final String? sourceId;
   final DateTime? verifiedAt;
@@ -741,15 +753,25 @@ class PlaceSummary {
 
   factory PlaceSummary.fromJson(Object? json) {
     final map = _readMap(json);
+    final primaryCategory = _readString(map['category']);
+    final categories = _readListOrEmpty(map['categories'])
+        .map(_readString)
+        .toList(growable: false);
     return PlaceSummary(
       id: _readString(map['id']),
       name: _readString(map['name']),
-      category: _readString(map['category']),
+      category: primaryCategory,
+      categories: categories.isEmpty ? <String>[primaryCategory] : categories,
       location: GeoPoint.fromJson(map['location']),
       address: _readStringOrNull(map['address']),
       phone: _readStringOrNull(map['phone']),
+      phone2: _readStringOrNull(map['phone_2']),
+      instagram: _readStringOrNull(map['instagram']),
+      telegram: _readStringOrNull(map['telegram']),
       website: _readStringOrNull(map['website']),
       openingHours: _readStringOrNull(map['opening_hours']),
+      daysOff: _readStringOrNull(map['days_off']),
+      description: _readStringOrNull(map['description']),
       source: _readString(map['source']),
       sourceId: _readStringOrNull(map['source_id']),
       verifiedAt: _readDateTimeOrNull(map['verified_at']),

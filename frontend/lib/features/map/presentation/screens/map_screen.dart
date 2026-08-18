@@ -288,6 +288,33 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  Future<void> _openLatestCatPost(CatSummary cat) async {
+    try {
+      final page = await ref.read(mushukistanApiProvider).listCatPosts(
+            cat.id,
+            limit: 1,
+            sort: 'latest',
+          );
+      if (!mounted) {
+        return;
+      }
+      if (page.items.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No public post found for this cat.')),
+        );
+        return;
+      }
+      context.push('/posts/${page.items.first.id}');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open post: $error')),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -384,7 +411,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
                               height: 44,
                               child: _CatMarker(
                                 status: cat.status,
-                                onTap: () {},
+                                onTap: () => unawaited(
+                                  _openLatestCatPost(cat),
+                                ),
                               ),
                             ),
                           ),
@@ -557,6 +586,31 @@ Future<void> _openOsmCopyright() async {
   );
 }
 
+Future<void> _launchPlaceUri(Uri uri) async {
+  await launchUrl(uri, mode: LaunchMode.externalApplication);
+}
+
+Uri _phoneUri(String phone) {
+  final compact = phone.replaceAll(RegExp(r'\s+'), '');
+  return Uri(scheme: 'tel', path: compact);
+}
+
+Uri _webUri(String value) {
+  final parsed = Uri.tryParse(value);
+  if (parsed != null && parsed.hasScheme) {
+    return parsed;
+  }
+  return Uri.parse('https://$value');
+}
+
+Uri _telegramUri(String value) {
+  final trimmed = value.trim();
+  if (trimmed.startsWith('@')) {
+    return Uri.parse('https://t.me/${trimmed.substring(1)}');
+  }
+  return _webUri(trimmed);
+}
+
 String _formatDate(DateTime dateTime) {
   final local = dateTime.toLocal();
   return '${local.year.toString().padLeft(4, '0')}-'
@@ -593,6 +647,17 @@ void _showPlaceSheet(
                   ),
                 ],
               ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final category in place.categories)
+                    _PlaceCategoryChip(
+                      label: _placeCategoryLabel(category, strings),
+                    ),
+                ],
+              ),
               if (place.address != null) ...[
                 const SizedBox(height: 12),
                 _PlaceDetailRow(
@@ -605,6 +670,17 @@ void _showPlaceSheet(
                 _PlaceDetailRow(
                   icon: Icons.phone_outlined,
                   text: place.phone!,
+                  onTap: () =>
+                      unawaited(_launchPlaceUri(_phoneUri(place.phone!))),
+                ),
+              ],
+              if (place.phone2 != null) ...[
+                const SizedBox(height: 8),
+                _PlaceDetailRow(
+                  icon: Icons.phone_outlined,
+                  text: place.phone2!,
+                  onTap: () =>
+                      unawaited(_launchPlaceUri(_phoneUri(place.phone2!))),
                 ),
               ],
               if (place.openingHours != null) ...[
@@ -614,11 +690,48 @@ void _showPlaceSheet(
                   text: place.openingHours!,
                 ),
               ],
+              if (place.daysOff != null) ...[
+                const SizedBox(height: 8),
+                _PlaceDetailRow(
+                  icon: Icons.event_busy_outlined,
+                  text: place.daysOff!,
+                ),
+              ],
               if (place.website != null) ...[
                 const SizedBox(height: 8),
                 _PlaceDetailRow(
                   icon: Icons.language_outlined,
                   text: place.website!,
+                  onTap: () => unawaited(
+                    _launchPlaceUri(_webUri(place.website!)),
+                  ),
+                ),
+              ],
+              if (place.instagram != null) ...[
+                const SizedBox(height: 8),
+                _PlaceDetailRow(
+                  icon: Icons.camera_alt_outlined,
+                  text: place.instagram!,
+                  onTap: () => unawaited(
+                    _launchPlaceUri(_webUri(place.instagram!)),
+                  ),
+                ),
+              ],
+              if (place.telegram != null) ...[
+                const SizedBox(height: 8),
+                _PlaceDetailRow(
+                  icon: Icons.send_outlined,
+                  text: place.telegram!,
+                  onTap: () => unawaited(
+                    _launchPlaceUri(_telegramUri(place.telegram!)),
+                  ),
+                ),
+              ],
+              if (place.description != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  place.description!,
+                  style: theme.textTheme.bodyMedium,
                 ),
               ],
               const SizedBox(height: 12),
@@ -797,26 +910,23 @@ class _CatMarker extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _color(context);
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          shape: BoxShape.circle,
-          border: Border.all(color: color.withValues(alpha: 0.35)),
-          boxShadow: const [
-            BoxShadow(
-              blurRadius: 6,
-              color: Color(0x33000000),
-              offset: Offset(0, 2),
+      child: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(
+              Icons.pets,
+              color: Theme.of(context).colorScheme.surface,
+              size: 31,
+            ),
+            _MarkerIcon(
+              icon: Icons.pets,
+              color: color,
+              size: 26,
             ),
           ],
-        ),
-        child: Center(
-          child: _MarkerIcon(
-            icon: Icons.pets,
-            color: color,
-            size: 22,
-          ),
         ),
       ),
     );
@@ -1001,6 +1111,14 @@ String _layerLabel(_MapLayer layer, AppStrings strings) {
   };
 }
 
+String _placeCategoryLabel(String category, AppStrings strings) {
+  return switch (category) {
+    'veterinary' => strings.vets,
+    'shelter' => strings.shelters,
+    _ => strings.shops,
+  };
+}
+
 class _PlaceBadge extends StatelessWidget {
   const _PlaceBadge({required this.category});
 
@@ -1019,24 +1137,63 @@ class _PlaceBadge extends StatelessWidget {
   }
 }
 
+class _PlaceCategoryChip extends StatelessWidget {
+  const _PlaceCategoryChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colorScheme.onSecondaryContainer,
+              ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PlaceDetailRow extends StatelessWidget {
   const _PlaceDetailRow({
     required this.icon,
     required this.text,
+    this.onTap,
   });
 
   final IconData icon;
   final String text;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final row = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 20),
         const SizedBox(width: 10),
         Expanded(child: Text(text)),
       ],
+    );
+    if (onTap == null) {
+      return row;
+    }
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: row,
+      ),
     );
   }
 }
