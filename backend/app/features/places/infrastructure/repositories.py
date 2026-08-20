@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from geoalchemy2 import Geography
-from sqlalchemy import cast, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import cast, func, or_, select
+from sqlalchemy.orm import Session, selectinload
 
 from app.features.cats.domain.models import GeoPoint
 from app.features.places.domain.models import PlaceCategory, PlaceSource, PlaceSummary
@@ -26,24 +26,26 @@ class SqlAlchemyPlaceRepository(PlaceRepository):
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
     ) -> PlaceListPage:
-        statement = select(
-            schema.Place.id,
-            schema.Place.name,
-            schema.Place.category,
-            func.ST_X(schema.Place.location).label("longitude"),
-            func.ST_Y(schema.Place.location).label("latitude"),
-            schema.Place.address,
-            schema.Place.phone,
-            schema.Place.website,
-            schema.Place.opening_hours,
-            schema.Place.source,
-            schema.Place.source_id,
-            schema.Place.verified_at,
-        ).where(schema.Place.is_active.is_(True))
+        statement = (
+            select(
+                schema.Place,
+                func.ST_X(schema.Place.location).label("longitude"),
+                func.ST_Y(schema.Place.location).label("latitude"),
+            )
+            .options(selectinload(schema.Place.category_links))
+            .where(schema.Place.is_active.is_(True))
+        )
 
         if categories:
             db_categories = [schema.PlaceCategory(category.value) for category in categories]
-            statement = statement.where(schema.Place.category.in_(db_categories))
+            statement = statement.where(
+                or_(
+                    schema.Place.category.in_(db_categories),
+                    schema.Place.category_links.any(
+                        schema.PlaceCategoryLink.category.in_(db_categories)
+                    ),
+                )
+            )
 
         distance_expr = None
         if latitude is not None and longitude is not None and radius_meters is not None:
@@ -82,17 +84,44 @@ class SqlAlchemyPlaceRepository(PlaceRepository):
         )
 
     def _to_summary_row(self, row: Any) -> PlaceSummary:
+        place = row[0]
+        categories = sorted(
+            [PlaceCategory(link.category) for link in place.category_links],
+            key=_category_priority,
+        )
+        if not categories:
+            categories = [PlaceCategory(place.category)]
+        primary_category = _primary_category(categories)
         return PlaceSummary(
-            id=row.id,
-            name=row.name,
-            category=PlaceCategory(row.category),
+            id=place.id,
+            name=place.name,
+            category=primary_category,
+            categories=categories,
             location=GeoPoint(latitude=float(row.latitude), longitude=float(row.longitude)),
-            address=row.address,
-            phone=row.phone,
-            website=row.website,
-            opening_hours=row.opening_hours,
-            source=PlaceSource(row.source),
-            source_id=row.source_id,
-            verified_at=row.verified_at,
+            address=place.address,
+            phone=place.phone,
+            phone_2=place.phone_2,
+            instagram=place.instagram,
+            telegram=place.telegram,
+            website=place.website,
+            opening_hours=place.opening_hours,
+            days_off=place.days_off,
+            description=place.description,
+            source=PlaceSource(place.source),
+            source_id=place.source_id,
+            verified_at=place.verified_at,
             distance_meters=getattr(row, "distance_meters", None),
         )
+
+
+def _primary_category(categories: list[PlaceCategory]) -> PlaceCategory:
+    return sorted(categories, key=_category_priority)[0]
+
+
+def _category_priority(category: PlaceCategory) -> int:
+    priority = {
+        PlaceCategory.VETERINARY: 0,
+        PlaceCategory.SHELTER: 1,
+        PlaceCategory.PET_SHOP: 2,
+    }
+    return priority[category]

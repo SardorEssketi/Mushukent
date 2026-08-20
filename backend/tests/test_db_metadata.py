@@ -26,6 +26,7 @@ def test_metadata_discovers_all_mvp_tables() -> None:
         "user_blocks",
         "leaderboard_cache",
         "places",
+        "place_category_links",
     }
     assert Base.metadata.naming_convention == NAMING_CONVENTION
 

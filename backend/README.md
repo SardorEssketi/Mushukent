@@ -68,6 +68,27 @@ or machine-specific `.env` files.
   ```
 - The importer reads `DATABASE_URL`, stores available `phone` / `contact:phone` / `mobile` values, and preserves the OSM object ID in `source_id`.
 
+## Manual Place Import
+- Prepared Excel/CSV files can be imported through an administrative script. This is not a public API endpoint.
+- Supported columns:
+  `name`, `type`, `latitude`, `longitude`, `address`, `phone`, `phone 2`, `instagram`, `telegram`, `opening_hours`, `days_off`, `website`, `description`.
+- Supported `type` aliases:
+  `pet store` / `pet shop`, `veterinary clinic` / `veterinary` / `vet`, `animal shelter` / `shelter`.
+- Combined types are comma-separated and import as one place with multiple categories, for example `pet store,vet`.
+- Validate the local file without writing to the database:
+  ```powershell
+  python scripts/import_manual_places.py ..\Mushukistan_map.xlsx --dry-run
+  ```
+- Local import after Alembic migrations:
+  ```powershell
+  python scripts/import_manual_places.py ..\Mushukistan_map.xlsx
+  ```
+- Production import command, after explicit approval and with production `DATABASE_URL` already set in the shell:
+  ```powershell
+  python scripts/import_manual_places.py /path/to/Mushukistan_map.xlsx
+  ```
+- Duplicate protection uses a stable key built from normalized name, full category set, latitude and longitude. Re-running the same file skips previously imported rows.
+
 ## Testing
 Use the Python 3.13 backend environment:
 ```powershell

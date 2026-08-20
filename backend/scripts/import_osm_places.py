@@ -134,6 +134,7 @@ def upsert_places(session: Session, places: list[OsmPlace]) -> tuple[int, int]:
         existing.website = place.website
         existing.opening_hours = place.opening_hours
         existing.is_active = True
+        existing.category_links = [schema.PlaceCategoryLink(category=place.category)]
     session.flush()
     return created, updated
 

@@ -195,9 +195,15 @@ def _create_place(
     *,
     name: str,
     category: PlaceCategory,
+    categories: list[PlaceCategory] | None = None,
     latitude: float,
     longitude: float,
     phone: str | None = None,
+    phone_2: str | None = None,
+    instagram: str | None = None,
+    telegram: str | None = None,
+    days_off: str | None = None,
+    description: str | None = None,
     source_id: str | None = None,
 ):
     with db_session_manager.session_scope() as session:
@@ -206,10 +212,20 @@ def _create_place(
             category=category,
             location=WKTElement(f"POINT({longitude} {latitude})", srid=4326),
             phone=phone,
+            phone_2=phone_2,
+            instagram=instagram,
+            telegram=telegram,
+            days_off=days_off,
+            description=description,
             source=PlaceSource.OSM,
             source_id=source_id,
             is_active=True,
         )
+        if categories is not None:
+            place.category_links = [
+                schema.PlaceCategoryLink(category=place_category)
+                for place_category in categories
+            ]
         session.add(place)
         session.flush()
         return place.id
@@ -826,6 +842,11 @@ def test_places_endpoint_filters_categories_and_returns_phone(
         latitude=41.3001,
         longitude=69.2501,
         phone="+998 90 123 45 67",
+        phone_2="+998 90 000 00 00",
+        instagram="https://www.instagram.com/neighborhood.vet/",
+        telegram="https://t.me/neighborhood_vet",
+        days_off="sun",
+        description="Open for routine checkups.",
         source_id="node/100",
     )
     shelter = _create_place(
@@ -858,7 +879,14 @@ def test_places_endpoint_filters_categories_and_returns_phone(
     assert vets_response.status_code == 200
     vets_payload = vets_response.json()["data"]
     assert [item["id"] for item in vets_payload["items"]] == [str(vet)]
+    assert vets_payload["items"][0]["category"] == "veterinary"
+    assert vets_payload["items"][0]["categories"] == ["veterinary"]
     assert vets_payload["items"][0]["phone"] == "+998 90 123 45 67"
+    assert vets_payload["items"][0]["phone_2"] == "+998 90 000 00 00"
+    assert vets_payload["items"][0]["instagram"] == "https://www.instagram.com/neighborhood.vet/"
+    assert vets_payload["items"][0]["telegram"] == "https://t.me/neighborhood_vet"
+    assert vets_payload["items"][0]["days_off"] == "sun"
+    assert vets_payload["items"][0]["description"] == "Open for routine checkups."
     assert vets_payload["items"][0]["distance_meters"] is not None
 
     shelters_response = client.get(
@@ -875,3 +903,77 @@ def test_places_endpoint_filters_categories_and_returns_phone(
     assert str(shelter) in shelter_ids
     assert str(vet) not in shelter_ids
     assert str(shop) not in shelter_ids
+
+
+def test_places_endpoint_returns_multi_category_place_once(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    combo = _create_place(
+        feed_runtime.db_session_manager,
+        name="Pet Store Vet",
+        category=PlaceCategory.VETERINARY,
+        categories=[PlaceCategory.VETERINARY, PlaceCategory.PET_SHOP],
+        latitude=41.3001,
+        longitude=69.2501,
+        source_id="node/200",
+    )
+
+    vets_response = client.get(
+        "/api/v1/places",
+        params={
+            "category": "veterinary",
+            "lat": 41.3,
+            "lon": 69.25,
+            "radius_meters": 500,
+        },
+    )
+    shops_response = client.get(
+        "/api/v1/places",
+        params={
+            "category": "pet_shop",
+            "lat": 41.3,
+            "lon": 69.25,
+            "radius_meters": 500,
+        },
+    )
+
+    assert vets_response.status_code == 200
+    assert shops_response.status_code == 200
+    vet_items = vets_response.json()["data"]["items"]
+    shop_items = shops_response.json()["data"]["items"]
+    assert [item["id"] for item in vet_items] == [str(combo)]
+    assert [item["id"] for item in shop_items] == [str(combo)]
+    assert vet_items[0]["category"] == "veterinary"
+    assert vet_items[0]["categories"] == ["veterinary", "pet_shop"]
+
+
+def test_places_endpoint_falls_back_to_legacy_category_without_links(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    legacy = _create_place(
+        feed_runtime.db_session_manager,
+        name="Legacy Pet Shop",
+        category=PlaceCategory.PET_SHOP,
+        categories=None,
+        latitude=41.3001,
+        longitude=69.2501,
+        source_id="node/201",
+    )
+
+    response = client.get(
+        "/api/v1/places",
+        params={
+            "category": "pet_shop",
+            "lat": 41.3,
+            "lon": 69.25,
+            "radius_meters": 500,
+        },
+    )
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    assert [item["id"] for item in items] == [str(legacy)]
+    assert items[0]["category"] == "pet_shop"
+    assert items[0]["categories"] == ["pet_shop"]

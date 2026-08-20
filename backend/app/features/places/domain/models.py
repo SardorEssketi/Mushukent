@@ -24,11 +24,17 @@ class PlaceSummary:
     id: UUID
     name: str
     category: PlaceCategory
+    categories: list[PlaceCategory]
     location: GeoPoint
     address: str | None = None
     phone: str | None = None
+    phone_2: str | None = None
+    instagram: str | None = None
+    telegram: str | None = None
     website: str | None = None
     opening_hours: str | None = None
+    days_off: str | None = None
+    description: str | None = None
     source: PlaceSource = PlaceSource.MANUAL
     source_id: str | None = None
     verified_at: datetime | None = None
