@@ -801,7 +801,8 @@ Feature: Moderation
     "reason":"Contains graphic content",
     "metadata": {"screenshot_url":"https://..."}
   }
-- Validation: target_type in post|comment|user|cat; target_id UUID; reason optional but recommended
+- Validation: target_type in post|comment|user|cat|lost_pet|adoption_post; target_id UUID; reason optional but recommended
+- User-facing report reasons include `Child safety / exploitation`. The backend stores the selected reason as the existing free-text `reason` value so these reports enter the same moderation pipeline as other reports.
 - Response: ReportResponse (201)
 - Errors: 400, 401, 404 (if target not found)
  - Idempotency: duplicate open reports from the same reporter for the same target return the existing open report

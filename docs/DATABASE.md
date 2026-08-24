@@ -180,7 +180,7 @@ CREATE INDEX idx_user_blocks_blocker_id ON user_blocks (blocker_id);
 CREATE INDEX idx_user_blocks_blocked_id ON user_blocks (blocked_id);
 
 -- Reports (content moderation)
-CREATE TYPE report_target_type AS ENUM ('post','comment','user','cat');
+CREATE TYPE report_target_type AS ENUM ('post','comment','user','cat','lost_pet','adoption_post');
 CREATE TYPE report_status AS ENUM ('open','resolved','dismissed');
 
 CREATE TABLE reports (

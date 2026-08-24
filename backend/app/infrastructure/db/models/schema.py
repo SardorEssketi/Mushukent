@@ -52,6 +52,8 @@ report_target_type_enum = ENUM(
     ReportTargetType.COMMENT.value,
     ReportTargetType.USER.value,
     ReportTargetType.CAT.value,
+    ReportTargetType.LOST_PET.value,
+    ReportTargetType.ADOPTION_POST.value,
     name="report_target_type",
 )
 

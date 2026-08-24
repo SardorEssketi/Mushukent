@@ -279,7 +279,19 @@ class _CommentsContent extends StatelessWidget {
                       ),
                       title: Text(userName),
                       subtitle: Text(comment.content),
-                      trailing: Text(_formatDate(comment.createdAt)),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_formatDate(comment.createdAt)),
+                          IconButton(
+                            tooltip: 'Report',
+                            onPressed: () => context.push(
+                              '/report?type=comment&id=${comment.id}',
+                            ),
+                            icon: const Icon(Icons.flag_outlined),
+                          ),
+                        ],
+                      ),
                       onTap: userId == null
                           ? null
                           : () => context.push('/users/$userId'),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/network/mushukistan_api.dart';
@@ -78,6 +79,17 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 6),
                 Text(info),
               ],
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push(
+                    '/report?type=adoption_post&id=$adoptionPostId',
+                  ),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Report'),
+                ),
+              ),
               const SizedBox(height: 24),
               AdoptionPostCommentsSection(
                 adoptionPostId: adoptionPostId,

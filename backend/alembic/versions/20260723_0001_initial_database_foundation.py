@@ -35,6 +35,8 @@ report_target_type = ENUM(
     "comment",
     "user",
     "cat",
+    "lost_pet",
+    "adoption_post",
     name="report_target_type",
     create_type=False,
 )

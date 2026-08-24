@@ -8,8 +8,10 @@ from structlog import get_logger
 
 from app.core.security import api_error
 from app.features.auth.domain.models import AuthUser
+from app.features.adoption_posts.domain.repositories import AdoptionPostRepository
 from app.features.cats.domain.repositories import CatRepository
 from app.features.comments.domain.repositories import CommentRepository
+from app.features.lost_pets.domain.repositories import LostPetRepository
 from app.features.posts.domain.models import PostDetailRecord
 from app.features.posts.domain.repositories import PostRepository
 from app.features.reports.application.schemas import (
@@ -52,6 +54,14 @@ class CatRepositoryFactory(Protocol):
     def __call__(self, session) -> CatRepository: ...
 
 
+class LostPetRepositoryFactory(Protocol):
+    def __call__(self, session) -> LostPetRepository: ...
+
+
+class AdoptionPostRepositoryFactory(Protocol):
+    def __call__(self, session) -> AdoptionPostRepository: ...
+
+
 class UserProfileRepositoryFactory(Protocol):
     def __call__(self, session) -> UserProfileRepository: ...
 
@@ -65,6 +75,8 @@ class ReportsService:
         post_repository_factory: PostRepositoryFactory,
         comment_repository_factory: CommentRepositoryFactory,
         cat_repository_factory: CatRepositoryFactory,
+        lost_pet_repository_factory: LostPetRepositoryFactory,
+        adoption_post_repository_factory: AdoptionPostRepositoryFactory,
         user_repository_factory: UserProfileRepositoryFactory,
     ) -> None:
         self.db_session_manager = db_session_manager
@@ -72,6 +84,8 @@ class ReportsService:
         self.post_repository_factory = post_repository_factory
         self.comment_repository_factory = comment_repository_factory
         self.cat_repository_factory = cat_repository_factory
+        self.lost_pet_repository_factory = lost_pet_repository_factory
+        self.adoption_post_repository_factory = adoption_post_repository_factory
         self.user_repository_factory = user_repository_factory
 
     def create_report(self, user: AuthUser, payload: ReportCreate) -> ReportResponse:
@@ -236,14 +250,21 @@ class ReportsService:
             current = comment_repository.get_by_id(target_id, include_deleted=True)
             if current is not None and current.deleted_at is None:
                 if comment_repository.mark_deleted(target_id, deleted_at=datetime.now(UTC)):
-                    post_repository = self.post_repository_factory(session)
-                    post = post_repository.get_by_id(
-                        current.post_id,
-                        include_deleted=True,
-                        viewer_user_id=user.id,
-                    )
-                    if post is not None:
-                        comment_repository.decrement_post_comment_count(post.id)
+                    if current.post_id is not None:
+                        post_repository = self.post_repository_factory(session)
+                        post = post_repository.get_by_id(
+                            current.post_id,
+                            include_deleted=True,
+                            viewer_user_id=user.id,
+                        )
+                        if post is not None:
+                            comment_repository.decrement_post_comment_count(post.id)
+                    elif current.lost_pet_id is not None:
+                        comment_repository.decrement_lost_pet_comment_count(current.lost_pet_id)
+                    elif current.adoption_post_id is not None:
+                        comment_repository.decrement_adoption_post_comment_count(
+                            current.adoption_post_id
+                        )
             return
 
         if payload.action == ReportAction.SUSPEND_USER:
@@ -291,6 +312,8 @@ class ReportsService:
         post_repository = self.post_repository_factory(session)
         comment_repository = self.comment_repository_factory(session)
         cat_repository = self.cat_repository_factory(session)
+        lost_pet_repository = self.lost_pet_repository_factory(session)
+        adoption_post_repository = self.adoption_post_repository_factory(session)
         user_repository = self.user_repository_factory(session)
 
         if target_type == ReportTargetType.POST:
@@ -324,26 +347,47 @@ class ReportsService:
                 if allow_missing:
                     return None
                 raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
-            post = post_repository.get_by_id(
-                comment.post_id,
-                include_deleted=True,
-                viewer_user_id=user.id if user is not None else None,
-            )
-            if post is None:
+            if comment.deleted_at is not None and not allow_missing:
+                raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+            if comment.post_id is not None:
+                post = post_repository.get_by_id(
+                    comment.post_id,
+                    include_deleted=True,
+                    viewer_user_id=user.id if user is not None else None,
+                )
+                if post is None:
+                    if allow_missing:
+                        return None
+                    raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+                if not allow_missing and not self._can_view_post(post, user):
+                    raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+                subtitle = f"post:{comment.post_id}"
+                is_public = post.is_public
+            elif comment.lost_pet_id is not None:
+                if not allow_missing and not comment_repository.lost_pet_exists(
+                    comment.lost_pet_id
+                ):
+                    raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+                subtitle = f"lost_pet:{comment.lost_pet_id}"
+                is_public = True
+            elif comment.adoption_post_id is not None:
+                if not allow_missing and not comment_repository.adoption_post_exists(
+                    comment.adoption_post_id
+                ):
+                    raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+                subtitle = f"adoption_post:{comment.adoption_post_id}"
+                is_public = True
+            else:
                 if allow_missing:
                     return None
-                raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
-            if not allow_missing and (
-                comment.deleted_at is not None or not self._can_view_post(post, user)
-            ):
                 raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
             return ReportTargetPreview(
                 id=comment.id,
                 target_type=target_type,
                 title=comment.content[:120],
-                subtitle=f"post:{comment.post_id}",
+                subtitle=subtitle,
                 status=None,
-                is_public=post.is_public,
+                is_public=is_public,
                 is_active=comment.deleted_at is None,
                 deleted_at=comment.deleted_at,
             )
@@ -388,6 +432,46 @@ class ReportsService:
                 is_public=None,
                 is_active=target_cat.is_active,
                 deleted_at=target_cat.deleted_at,
+            )
+
+        if target_type == ReportTargetType.LOST_PET:
+            lost_pet = lost_pet_repository.get_by_id(target_id)
+            if lost_pet is None:
+                if allow_missing:
+                    return None
+                raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
+            return ReportTargetPreview(
+                id=lost_pet.id,
+                target_type=target_type,
+                title=lost_pet.pet_name,
+                subtitle=lost_pet.additional_info[:120] if lost_pet.additional_info else None,
+                status="resolved" if lost_pet.is_resolved else None,
+                is_public=lost_pet.is_public,
+                is_active=lost_pet.deleted_at is None,
+                deleted_at=lost_pet.deleted_at,
+            )
+
+        if target_type == ReportTargetType.ADOPTION_POST:
+            adoption_post = adoption_post_repository.get_by_id(target_id)
+            if adoption_post is None:
+                if allow_missing:
+                    return None
+                raise api_error(
+                    404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found."
+                )
+            return ReportTargetPreview(
+                id=adoption_post.id,
+                target_type=target_type,
+                title=adoption_post.pet_name,
+                subtitle=(
+                    adoption_post.additional_info[:120]
+                    if adoption_post.additional_info
+                    else None
+                ),
+                status=None,
+                is_public=adoption_post.is_public,
+                is_active=adoption_post.deleted_at is None,
+                deleted_at=adoption_post.deleted_at,
             )
 
         if allow_missing:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,6 +14,7 @@ from app.core.container import AppContainer
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 from app.features.cats.domain.models import CatStatus
+from app.features.reports.domain.models import ReportTargetType
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.main import app
@@ -29,6 +30,11 @@ def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
         "postgresql+psycopg://mushukistan:change_me@localhost:5432/mushukistan_validation",
     )
     return Settings()
+
+
+def test_report_target_type_includes_pet_post_targets():
+    assert ReportTargetType.LOST_PET.value == "lost_pet"
+    assert ReportTargetType.ADOPTION_POST.value == "adoption_post"
 
 
 @pytest.fixture()
@@ -82,7 +88,6 @@ def _create_user(
             AuthenticatedPrincipal(
                 user_id=user.id,
                 role=Role.MODERATOR if is_moderator else Role.USER,
-                email=user.email,
             )
         )
         return user, token
@@ -169,6 +174,71 @@ def _create_comment(
         return comment
 
 
+def _create_lost_pet(
+    db_session_manager: DatabaseSessionManager,
+    *,
+    lost_pet_id: UUID,
+    user_id: UUID,
+    pet_name: str = "Missing Mittens",
+    deleted_at: datetime | None = None,
+):
+    with db_session_manager.session_scope() as session:
+        lost_pet = schema.LostPet(
+            id=lost_pet_id,
+            user_id=user_id,
+            pet_name=pet_name,
+            owner_phone_number="+998 99 142 1314",
+            owner_phone_publication_consent=True,
+            last_seen_location=WKTElement("POINT(69.2502 41.3002)", srid=4326),
+            additional_info="Last seen near the market.",
+            is_public=True,
+            deleted_at=deleted_at,
+        )
+        lost_pet.photos = [
+            schema.LostPetPhoto(
+                id=uuid4(),
+                photo_url=f"https://example.invalid/{lost_pet_id}.jpg",
+                thumb_url=None,
+                position=0,
+            )
+        ]
+        session.add(lost_pet)
+        session.flush()
+        return lost_pet
+
+
+def _create_adoption_post(
+    db_session_manager: DatabaseSessionManager,
+    *,
+    adoption_post_id: UUID,
+    user_id: UUID,
+    pet_name: str = "Adopt Mittens",
+    deleted_at: datetime | None = None,
+):
+    with db_session_manager.session_scope() as session:
+        adoption_post = schema.AdoptionPost(
+            id=adoption_post_id,
+            user_id=user_id,
+            pet_name=pet_name,
+            owner_phone_number="+998 99 142 1314",
+            owner_phone_publication_consent=True,
+            additional_info="Friendly cat looking for a home.",
+            is_public=True,
+            deleted_at=deleted_at,
+        )
+        adoption_post.photos = [
+            schema.AdoptionPostPhoto(
+                id=uuid4(),
+                photo_url=f"https://example.invalid/{adoption_post_id}.jpg",
+                thumb_url=None,
+                position=0,
+            )
+        ]
+        session.add(adoption_post)
+        session.flush()
+        return adoption_post
+
+
 def test_create_report_and_reject_spoofed_reporter(
     client: TestClient,
     reports_runtime,
@@ -200,7 +270,7 @@ def test_create_report_and_reject_spoofed_reporter(
             "target_type": "post",
             "target_id": str(post.id),
             "reason": "Contains graphic content",
-            "metadata": {"source": "camera"},
+            "metadata": {"client_context": "camera"},
         },
     )
     assert response.status_code == 201, response.text
@@ -317,6 +387,149 @@ def test_report_validation_errors(client: TestClient, reports_runtime):
         json={"target_type": "post", "target_id": str(post.id), "reason": "   "},
     )
     assert blank_reason.status_code == 422
+
+
+def test_child_safety_report_reason_enters_moderation_queue(
+    client: TestClient,
+    reports_runtime,
+):
+    _moderator, mod_token = _create_user(
+        reports_runtime.db_session_manager,
+        reports_runtime.token_service,
+        user_id=UUID("13131313-1313-4313-8313-131313131313"),
+        email="mod-child-safety@example.com",
+        name="Child Safety Mod",
+        is_moderator=True,
+    )
+    reporter, reporter_token = _create_user(
+        reports_runtime.db_session_manager,
+        reports_runtime.token_service,
+        user_id=UUID("14141414-1414-4414-8414-141414141414"),
+        email="child-safety-reporter@example.com",
+        name="Child Safety Reporter",
+    )
+    cat = _create_cat(
+        reports_runtime.db_session_manager,
+        cat_id=UUID("15151515-1515-4515-8515-151515151515"),
+        creator_id=reporter.id,
+    )
+    post = _create_post(
+        reports_runtime.db_session_manager,
+        post_id=UUID("16161616-1616-4616-8616-161616161616"),
+        cat_id=cat.id,
+        user_id=reporter.id,
+    )
+
+    response = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {reporter_token}"},
+        json={
+            "target_type": "post",
+            "target_id": str(post.id),
+            "reason": "Child safety / exploitation",
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    report_id = response.json()["data"]["id"]
+    assert response.json()["data"]["reason"] == "Child safety / exploitation"
+
+    listing = client.get(
+        "/api/v1/moderation/reports",
+        headers={"Authorization": f"Bearer {mod_token}"},
+        params={"status": "open", "limit": 10},
+    )
+    assert listing.status_code == 200, listing.text
+    reports = listing.json()["data"]["items"]
+    child_safety_report = next(item for item in reports if item["id"] == report_id)
+    assert child_safety_report["reason"] == "Child safety / exploitation"
+    assert child_safety_report["target_type"] == "post"
+
+
+def test_child_safety_reports_for_lost_pet_and_adoption_posts(
+    client: TestClient,
+    reports_runtime,
+):
+    _moderator, mod_token = _create_user(
+        reports_runtime.db_session_manager,
+        reports_runtime.token_service,
+        user_id=UUID("19191919-1919-4919-8919-191919191919"),
+        email="pet-post-mod@example.com",
+        name="Pet Post Mod",
+        is_moderator=True,
+    )
+    reporter, reporter_token = _create_user(
+        reports_runtime.db_session_manager,
+        reports_runtime.token_service,
+        user_id=UUID("20202020-2020-4020-8020-202020202020"),
+        email="pet-post-reporter@example.com",
+        name="Pet Post Reporter",
+    )
+    lost_pet = _create_lost_pet(
+        reports_runtime.db_session_manager,
+        lost_pet_id=UUID("21212121-2121-4121-8121-212121212121"),
+        user_id=reporter.id,
+    )
+    adoption_post = _create_adoption_post(
+        reports_runtime.db_session_manager,
+        adoption_post_id=UUID("22222222-2222-4222-8222-222222222222"),
+        user_id=reporter.id,
+    )
+
+    lost_pet_report = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {reporter_token}"},
+        json={
+            "target_type": "lost_pet",
+            "target_id": str(lost_pet.id),
+            "reason": "Child safety / exploitation",
+        },
+    )
+    adoption_report = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {reporter_token}"},
+        json={
+            "target_type": "adoption_post",
+            "target_id": str(adoption_post.id),
+            "reason": "Child safety / exploitation",
+        },
+    )
+
+    assert lost_pet_report.status_code == 201, lost_pet_report.text
+    assert adoption_report.status_code == 201, adoption_report.text
+    assert lost_pet_report.json()["data"]["target_type"] == "lost_pet"
+    assert adoption_report.json()["data"]["target_type"] == "adoption_post"
+    assert lost_pet_report.json()["data"]["reason"] == "Child safety / exploitation"
+    assert adoption_report.json()["data"]["reason"] == "Child safety / exploitation"
+
+    listing = client.get(
+        "/api/v1/moderation/reports",
+        headers={"Authorization": f"Bearer {mod_token}"},
+        params={"status": "open", "limit": 10},
+    )
+    assert listing.status_code == 200, listing.text
+    reports_by_id = {item["id"]: item for item in listing.json()["data"]["items"]}
+    listed_lost_pet = reports_by_id[lost_pet_report.json()["data"]["id"]]
+    listed_adoption = reports_by_id[adoption_report.json()["data"]["id"]]
+    assert listed_lost_pet["target"]["target_type"] == "lost_pet"
+    assert listed_lost_pet["target"]["title"] == "Missing Mittens"
+    assert listed_adoption["target"]["target_type"] == "adoption_post"
+    assert listed_adoption["target"]["title"] == "Adopt Mittens"
+
+    resolved_lost_pet = client.patch(
+        f"/api/v1/moderation/reports/{lost_pet_report.json()['data']['id']}",
+        headers={"Authorization": f"Bearer {mod_token}"},
+        json={"status": "resolved", "note": "Reviewed child safety report"},
+    )
+    resolved_adoption = client.patch(
+        f"/api/v1/moderation/reports/{adoption_report.json()['data']['id']}",
+        headers={"Authorization": f"Bearer {mod_token}"},
+        json={"status": "dismissed", "note": "Reviewed child safety report"},
+    )
+    assert resolved_lost_pet.status_code == 200, resolved_lost_pet.text
+    assert resolved_adoption.status_code == 200, resolved_adoption.text
+    assert resolved_lost_pet.json()["data"]["status"] == "resolved"
+    assert resolved_adoption.json()["data"]["status"] == "dismissed"
 
 
 def test_moderation_report_listing_resolution_and_delete_post(
