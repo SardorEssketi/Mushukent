@@ -92,6 +92,17 @@ class LostPetDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 6),
                 Text(info),
               ],
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push(
+                    '/report?type=lost_pet&id=$lostPetId',
+                  ),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('Report'),
+                ),
+              ),
               const SizedBox(height: 24),
               LostPetCommentsSection(
                 lostPetId: lostPetId,

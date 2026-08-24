@@ -163,6 +163,8 @@ def get_reports_service(request: Request) -> ReportsService:
         post_repository_factory=SqlAlchemyPostRepository,
         comment_repository_factory=SqlAlchemyCommentRepository,
         cat_repository_factory=SqlAlchemyCatRepository,
+        lost_pet_repository_factory=SqlAlchemyLostPetRepository,
+        adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,
     )
 

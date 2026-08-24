@@ -23,6 +23,7 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
   final _reasonController = TextEditingController();
   final _targetIdController = TextEditingController();
   String _targetType = 'post';
+  String? _selectedReason;
   bool _submitting = false;
   String? _message;
   String? _error;
@@ -45,6 +46,15 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const otherReason = 'Other';
+    const reasonOptions = <String>[
+      'Child safety / exploitation',
+      'Inappropriate content',
+      'Harassment or abuse',
+      'Spam',
+      otherReason,
+    ];
+    final isOtherReason = _selectedReason == otherReason;
     return Scaffold(
       appBar: AppBar(title: const Text('Report content')),
       body: Center(
@@ -62,6 +72,11 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                     DropdownMenuItem(value: 'comment', child: Text('Comment')),
                     DropdownMenuItem(value: 'user', child: Text('User')),
                     DropdownMenuItem(value: 'cat', child: Text('Cat')),
+                    DropdownMenuItem(value: 'lost_pet', child: Text('Lost pet')),
+                    DropdownMenuItem(
+                      value: 'adoption_post',
+                      child: Text('Adoption post'),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -84,12 +99,21 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _reasonController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason',
-                  ),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedReason,
+                  items: [
+                    for (final reason in reasonOptions)
+                      DropdownMenuItem(value: reason, child: Text(reason)),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedReason = value;
+                      if (value != otherReason) {
+                        _reasonController.clear();
+                      }
+                    });
+                  },
+                  decoration: const InputDecoration(labelText: 'Reason'),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please provide a reason.';
@@ -97,6 +121,25 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                     return null;
                   },
                 ),
+                if (isOtherReason) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _reasonController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: 'Details',
+                    ),
+                    validator: (value) {
+                      if (!isOtherReason) {
+                        return null;
+                      }
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please provide a reason.';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
                 if (_message != null) ...[
                   const SizedBox(height: 16),
                   Text(_message!, style: const TextStyle(color: Colors.green)),
@@ -123,10 +166,13 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                             _message = null;
                           });
                           try {
+                            final selectedReason = _selectedReason!.trim();
+                            final details = _reasonController.text.trim();
                             await ref.read(mushukistanApiProvider).createReport(
                                   targetType: _targetType,
                                   targetId: _targetIdController.text.trim(),
-                                  reason: _reasonController.text.trim(),
+                                  reason:
+                                      isOtherReason ? details : selectedReason,
                                 );
                             setState(() {
                               _message = 'Report submitted.';

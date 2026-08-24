@@ -11,6 +11,8 @@ class ReportTargetType(StrEnum):
     COMMENT = "comment"
     USER = "user"
     CAT = "cat"
+    LOST_PET = "lost_pet"
+    ADOPTION_POST = "adoption_post"
 
 
 class ReportStatus(StrEnum):
