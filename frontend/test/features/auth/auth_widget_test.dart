@@ -562,7 +562,9 @@ void main() {
     expect(find.text('Sardor'), findsWidgets);
     expect(find.text('user@example.com'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Logout'));
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
 
     expect(find.text('Log out?'), findsOneWidget);
@@ -572,7 +574,9 @@ void main() {
     expect(find.text('Sardor'), findsWidgets);
     expect(repo.logoutCalled, isFalse);
 
-    await tester.tap(find.byTooltip('Logout'));
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Logout'));

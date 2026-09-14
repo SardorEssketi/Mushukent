@@ -332,6 +332,14 @@ class _LostPetLocationPickerState extends State<_LostPetLocationPicker> {
     });
     try {
       final location = await LocationService().resolveCurrentLocation();
+      if (location == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(widget.strings.couldNotResolveLocation)),
+          );
+        }
+        return;
+      }
       widget.onSelected(location);
       _mapController.move(
         LatLng(location.latitude, location.longitude),

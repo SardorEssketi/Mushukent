@@ -6,7 +6,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../network/mushukistan_api.dart';
 
-final currentLocationProvider = FutureProvider<GeoPoint>((ref) async {
+final currentLocationProvider = FutureProvider<GeoPoint?>((ref) async {
   return LocationService().resolveCurrentLocation();
 });
 
@@ -16,15 +16,15 @@ class LocationService {
     longitude: 69.2401,
   );
 
-  Future<GeoPoint> resolveCurrentLocation() async {
+  Future<GeoPoint?> resolveCurrentLocation() async {
     try {
       if (!kIsWeb && !Platform.isAndroid && !Platform.isIOS) {
-        return fallbackLocation;
+        return null;
       }
 
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        return fallbackLocation;
+        return null;
       }
 
       var permission = await Geolocator.checkPermission();
@@ -34,7 +34,7 @@ class LocationService {
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        return fallbackLocation;
+        return null;
       }
 
       final position = await Geolocator.getCurrentPosition(
@@ -47,7 +47,7 @@ class LocationService {
         longitude: position.longitude,
       );
     } catch (_) {
-      return fallbackLocation;
+      return null;
     }
   }
 }

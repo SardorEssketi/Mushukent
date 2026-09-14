@@ -31,32 +31,43 @@ class ProfileScreen extends ConsumerWidget {
         title: Text(strings.profile),
         actions: [
           IconButton(
-            tooltip: strings.adoptionHelpTooltip,
-            onPressed: () => context.push('/profile/adoption-help'),
-            icon: const Icon(Icons.help_outline),
-          ),
-          IconButton(
             tooltip: strings.editProfile,
             onPressed: () => context.push('/profile/edit'),
             icon: const Icon(Icons.edit_outlined),
           ),
-          IconButton(
+          PopupMenuButton<_ProfileAction>(
             tooltip: strings.settings,
-            onPressed: () => context.push('/profile/settings'),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-          IconButton(
-            tooltip: strings.logout,
-            onPressed: authState.isBusy
-                ? null
-                : () async {
-                    final confirmed = await _confirmLogout(context, strings);
-                    if (!confirmed) {
-                      return;
-                    }
+            onSelected: (action) async {
+              switch (action) {
+                case _ProfileAction.adoptionHelp:
+                  context.push('/profile/adoption-help');
+                case _ProfileAction.settings:
+                  context.push('/profile/settings');
+                case _ProfileAction.logout:
+                  if (authState.isBusy) {
+                    return;
+                  }
+                  final confirmed = await _confirmLogout(context, strings);
+                  if (confirmed) {
                     unawaited(controller.logout());
-                  },
-            icon: const Icon(Icons.logout),
+                  }
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _ProfileAction.adoptionHelp,
+                child: Text(strings.adoptionHelpTooltip),
+              ),
+              PopupMenuItem(
+                value: _ProfileAction.settings,
+                child: Text(strings.settings),
+              ),
+              PopupMenuItem(
+                value: _ProfileAction.logout,
+                enabled: !authState.isBusy,
+                child: Text(strings.logout),
+              ),
+            ],
           ),
         ],
       ),
@@ -64,7 +75,7 @@ class ProfileScreen extends ConsumerWidget {
         data: (profile) => AppContentWidth(
           maxWidth: AppWidths.readable,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
               _Header(
                 name: profile.name ?? currentUser?.name ?? strings.unnamedUser,
@@ -86,7 +97,7 @@ class ProfileScreen extends ConsumerWidget {
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => _ErrorPanel(
-          message: error.toString(),
+          message: strings.couldNotLoadProfile,
           retryLabel: strings.retry,
           onRetry: () => ref.invalidate(profileMeProvider),
         ),
@@ -140,69 +151,50 @@ class _Header extends StatelessWidget {
     final telegram = telegramUsername?.trim();
     final profileBio = bio?.trim();
 
-    return AppCard(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundImage:
-                avatarUrl == null ? null : NetworkImage(avatarUrl!),
-            child: avatarUrl == null ? Text(_initials(name, email)) : null,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  email,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                if (phone != null && phone.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    phone,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                if (telegram != null && telegram.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '@$telegram',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                if (profileBio != null && profileBio.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    profileBio,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 28,
+          backgroundImage: avatarUrl == null ? null : NetworkImage(avatarUrl!),
+          child: avatarUrl == null ? Text(_initials(name, email)) : null,
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                email,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              if (phone != null && phone.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(phone, style: Theme.of(context).textTheme.bodySmall),
               ],
-            ),
+              if (telegram != null && telegram.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text('@$telegram', style: Theme.of(context).textTheme.bodySmall),
+              ],
+              if (profileBio != null && profileBio.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(profileBio, maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -222,127 +214,81 @@ class _StatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth >= 680 ? 3 : 2;
-        return GridView.count(
-          crossAxisCount: crossAxisCount,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: crossAxisCount == 4 ? 1.35 : 1.35,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          children: [
-            _StatCard(
-              icon: Icons.pets_outlined,
-              label: strings.observations,
-              value: profile.observationCount.toString(),
-              color: colorScheme.tertiary,
-              onTap: onObservationsTap,
-            ),
-            _StatCard(
-              icon: Icons.favorite_outline,
-              label: strings.likesReceived,
-              value: profile.totalLikesReceived.toString(),
-              color: colorScheme.error,
-            ),
-            _StatCard(
-              icon: Icons.chat_bubble_outline,
-              label: strings.comments,
-              value: profile.commentCount.toString(),
-              color: colorScheme.secondary,
-              onTap: onCommentsTap,
-            ),
-          ],
-        );
-      },
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            label: strings.observations,
+            value: profile.observationCount.toString(),
+            onTap: onObservationsTap,
+          ),
+        ),
+        const SizedBox(
+          height: 44,
+          child: VerticalDivider(width: AppSpacing.xl),
+        ),
+        Expanded(
+          child: _StatCard(
+            label: strings.likesReceived,
+            value: profile.totalLikesReceived.toString(),
+          ),
+        ),
+        const SizedBox(
+          height: 44,
+          child: VerticalDivider(width: AppSpacing.xl),
+        ),
+        Expanded(
+          child: _StatCard(
+            label: strings.comments,
+            value: profile.commentCount.toString(),
+            onTap: onCommentsTap,
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _StatCard extends StatelessWidget {
   const _StatCard({
-    required this.icon,
     required this.label,
     required this.value,
-    required this.color,
     this.onTap,
   });
 
-  final IconData icon;
   final String label;
   final String value;
-  final Color color;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    final content = Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.13),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 17, color: color),
-              ),
-              if (onTap != null) ...[
-                const Spacer(),
-                Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ],
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-
-    return AppCard(
-      padding: EdgeInsets.zero,
-      color: colorScheme.surface,
+    return InkWell(
       onTap: onTap,
-      child: content,
+      borderRadius: BorderRadius.circular(AppRadii.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value, style: theme.textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
+
+enum _ProfileAction { adoptionHelp, settings, logout }
 
 class _ErrorPanel extends StatelessWidget {
   const _ErrorPanel({

@@ -1379,6 +1379,46 @@ class AppStrings {
     };
   }
 
+  String get reportTargetUnavailable {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyat qilish uchun kontentni tanlang.',
+      _RussianStrings() => 'Выберите контент для жалобы.',
+      _ => 'Choose content to report.',
+    };
+  }
+
+  String get reportTargetSummary {
+    return switch (this) {
+      _UzbekStrings() => 'Tanlangan kontent haqida shikoyat qilyapsiz.',
+      _RussianStrings() => 'Вы жалуетесь на выбранный контент.',
+      _ => 'You are reporting the selected content.',
+    };
+  }
+
+  String get couldNotSubmitReport {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyatni yuborib bo‘lmadi. Qayta urinib ko‘ring.',
+      _RussianStrings() => 'Не удалось отправить жалобу. Повторите попытку.',
+      _ => 'Could not submit the report. Please try again.',
+    };
+  }
+
+  String get couldNotLoadProfile {
+    return switch (this) {
+      _UzbekStrings() => 'Profilni yuklab bo‘lmadi. Qayta urinib ko‘ring.',
+      _RussianStrings() => 'Не удалось загрузить профиль. Повторите попытку.',
+      _ => 'Could not load your profile. Please try again.',
+    };
+  }
+
+  String get locationOutsideMap {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvingiz Toshkent xaritasi hududidan tashqarida.',
+      _RussianStrings() => 'Ваше местоположение находится за пределами карты Ташкента.',
+      _ => 'Your location is outside the Tashkent map area.',
+    };
+  }
+
   String get changeProfilePicture {
     return switch (this) {
       _UzbekStrings() => 'Profil rasmini oʻzgartirish',
@@ -1707,6 +1747,30 @@ class AppStrings {
       _UzbekStrings() => 'Shikoyat tafsiloti',
       _RussianStrings() => 'Детали жалобы',
       _ => 'Report detail',
+    };
+  }
+
+  String get reportUnavailable {
+    return switch (this) {
+      _UzbekStrings() => 'Bu shikoyat endi mavjud emas.',
+      _RussianStrings() => 'Эта жалоба больше недоступна.',
+      _ => 'This report is no longer available.',
+    };
+  }
+
+  String get couldNotLoadReports {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyatlarni yuklab bo‘lmadi.',
+      _RussianStrings() => 'Не удалось загрузить жалобы.',
+      _ => 'Could not load reports.',
+    };
+  }
+
+  String get backToReports {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyatlarga qaytish',
+      _RussianStrings() => 'К жалобам',
+      _ => 'Back to reports',
     };
   }
 

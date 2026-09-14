@@ -11,11 +11,6 @@ import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../application/add_observation_controller.dart';
 
-final _locationPickerCurrentLocationProvider =
-    FutureProvider.autoDispose<GeoPoint>((ref) async {
-  return LocationService().resolveCurrentLocation();
-});
-
 class AddObservationLocationScreen extends ConsumerStatefulWidget {
   const AddObservationLocationScreen({super.key});
 
@@ -35,12 +30,26 @@ class _AddObservationLocationScreenState
     if (_resolvingCurrentLocation) {
       return;
     }
+    if (!await _confirmCurrentLocationUse() || !mounted) {
+      return;
+    }
     setState(() {
       _resolvingCurrentLocation = true;
     });
     try {
-      final location =
-          await ref.read(_locationPickerCurrentLocationProvider.future);
+      final location = await LocationService().resolveCurrentLocation();
+      if (location == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                ref.read(appStringsProvider).couldNotResolveYourLocation,
+              ),
+            ),
+          );
+        }
+        return;
+      }
       ref.read(addObservationControllerProvider.notifier).setLocation(location);
       if (mounted) {
         context.go('/add/details');
@@ -73,13 +82,32 @@ class _AddObservationLocationScreenState
     context.go('/add/details');
   }
 
+  Future<bool> _confirmCurrentLocationUse() async {
+    final strings = ref.read(appStringsProvider);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(strings.useCurrentLocationTitle),
+        content: Text(strings.useCurrentLocationMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(strings.continueAction),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(addObservationControllerProvider);
     final strings = ref.watch(appStringsProvider);
-    final currentLocationAsync =
-        ref.watch(_locationPickerCurrentLocationProvider);
-
     if (!state.hasPhoto) {
       return Scaffold(
         appBar: AppBar(title: Text(strings.observationLocation)),
@@ -142,40 +170,14 @@ class _AddObservationLocationScreenState
             ),
             if (_showMapPicker) ...[
               const SizedBox(height: AppSpacing.xl),
-              currentLocationAsync.when(
-                data: (location) => _LocationPickerMap(
-                  mapController: _mapController,
-                  currentLocation: location,
-                  selectedPoint: _selectedPoint,
-                  centerOnUserTooltip: strings.centerOnUser,
-                  onTap: (point) {
-                    setState(() {
-                      _selectedPoint = point;
-                    });
-                  },
-                  onCenterOnUser: () {
-                    final point = LatLng(location.latitude, location.longitude);
-                    _mapController.move(point, 16);
-                    setState(() {
-                      _selectedPoint ??= point;
-                    });
-                  },
-                ),
-                loading: () => const SizedBox(
-                  height: 320,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (error, stackTrace) => AppStatePanel(
-                  icon: Icons.location_off_outlined,
-                  title: strings.couldNotResolveYourLocation,
-                  message: error.toString(),
-                  action: FilledButton(
-                    onPressed: () => ref.invalidate(
-                      _locationPickerCurrentLocationProvider,
-                    ),
-                    child: Text(strings.retry),
-                  ),
-                ),
+              _LocationPickerMap(
+                mapController: _mapController,
+                selectedPoint: _selectedPoint,
+                onTap: (point) {
+                  setState(() {
+                    _selectedPoint = point;
+                  });
+                },
               ),
               const SizedBox(height: AppSpacing.md),
               FilledButton.icon(
@@ -194,33 +196,17 @@ class _AddObservationLocationScreenState
 class _LocationPickerMap extends StatelessWidget {
   const _LocationPickerMap({
     required this.mapController,
-    required this.currentLocation,
     required this.selectedPoint,
-    required this.centerOnUserTooltip,
     required this.onTap,
-    required this.onCenterOnUser,
   });
 
   final MapController mapController;
-  final GeoPoint currentLocation;
   final LatLng? selectedPoint;
-  final String centerOnUserTooltip;
   final ValueChanged<LatLng> onTap;
-  final VoidCallback onCenterOnUser;
 
   @override
   Widget build(BuildContext context) {
-    final userPoint = LatLng(
-      currentLocation.latitude,
-      currentLocation.longitude,
-    );
     final markers = <Marker>[
-      Marker(
-        point: userPoint,
-        width: 54,
-        height: 54,
-        child: const _VisibleCurrentLocationMarker(),
-      ),
       if (selectedPoint != null)
         Marker(
           point: selectedPoint!,
@@ -243,8 +229,8 @@ class _LocationPickerMap extends StatelessWidget {
             FlutterMap(
               mapController: mapController,
               options: MapOptions(
-                initialCenter: selectedPoint ?? userPoint,
-                initialZoom: 15.5,
+                initialCenter: selectedPoint ?? const LatLng(41.3111, 69.2797),
+                initialZoom: selectedPoint == null ? 13.5 : 15.5,
                 onTap: (_, point) => onTap(point),
               ),
               children: [
@@ -255,53 +241,7 @@ class _LocationPickerMap extends StatelessWidget {
                 MarkerLayer(markers: markers),
               ],
             ),
-            Positioned(
-              right: 12,
-              top: 12,
-              child: FloatingActionButton.small(
-                heroTag: 'add-location-center-on-user',
-                tooltip: centerOnUserTooltip,
-                onPressed: onCenterOnUser,
-                child: const Icon(Icons.my_location),
-              ),
-            ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VisibleCurrentLocationMarker extends StatelessWidget {
-  const _VisibleCurrentLocationMarker();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colors.primary.withValues(alpha: 0.22),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: colors.surface,
-          width: 3,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 10,
-            color: Color(0x55000000),
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Center(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.primary,
-            shape: BoxShape.circle,
-            border: Border.all(color: colors.surface, width: 3),
-          ),
-          child: const SizedBox(width: 18, height: 18),
         ),
       ),
     );

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 
 class ReportContentScreen extends ConsumerStatefulWidget {
   const ReportContentScreen({
@@ -20,34 +24,41 @@ class ReportContentScreen extends ConsumerStatefulWidget {
 }
 
 class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
+  static const _supportedTargetTypes = <String>{
+    'post',
+    'comment',
+    'user',
+    'cat',
+    'lost_pet',
+    'adoption_post',
+  };
+
   final _formKey = GlobalKey<FormState>();
   final _reasonController = TextEditingController();
-  final _targetIdController = TextEditingController();
-  String _targetType = 'post';
   String? _selectedReason;
   bool _submitting = false;
-  String? _message;
+  bool _submitted = false;
   String? _error;
 
-  @override
-  void initState() {
-    super.initState();
-    _targetType = widget.initialTargetType ?? 'post';
-    if (widget.initialTargetId != null) {
-      _targetIdController.text = widget.initialTargetId!;
-    }
+  bool get _hasValidTarget {
+    final targetType = widget.initialTargetType;
+    final targetId = widget.initialTargetId?.trim();
+    return targetType != null &&
+        _supportedTargetTypes.contains(targetType) &&
+        targetId != null &&
+        targetId.isNotEmpty;
   }
 
   @override
   void dispose() {
     _reasonController.dispose();
-    _targetIdController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
+    final targetType = widget.initialTargetType;
     final reasonOptions = <String>[
       strings.childSafetyReportReason,
       strings.inappropriateContentReportReason,
@@ -56,195 +67,174 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
       strings.otherReportReason,
     ];
     final isOtherReason = _selectedReason == strings.otherReportReason;
+
+    if (!_hasValidTarget || targetType == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(strings.reportContent)),
+        body: AppStatePanel(
+          icon: Icons.report_outlined,
+          title: strings.reportContent,
+          message: strings.reportTargetUnavailable,
+          action: FilledButton(
+            onPressed: () => context.go('/feed'),
+            child: Text(strings.feed),
+          ),
+        ),
+      );
+    }
+
+    if (_submitted) {
+      return Scaffold(
+        appBar: AppBar(title: Text(strings.reportContent)),
+        body: AppStatePanel(
+          icon: Icons.check_circle_outline,
+          title: strings.reportSubmitted,
+          action: FilledButton(
+            onPressed: () => context.canPop() ? context.pop() : context.go('/feed'),
+            child: Text(strings.feed),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(strings.reportContent)),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                DropdownButtonFormField<String>(
-                  initialValue: _targetType,
-                  isExpanded: true,
-                  items: [
-                    DropdownMenuItem(
-                      value: 'post',
-                      child: Text(
-                        strings.post,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'comment',
-                      child: Text(
-                        strings.comment,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'user',
-                      child: Text(
-                        strings.user,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'cat',
-                      child: Text(
-                        strings.cat,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'lost_pet',
-                      child: Text(
-                        strings.lostPet,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'adoption_post',
-                      child: Text(
-                        strings.adoption,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _targetType = value;
-                      });
+      body: AppContentWidth(
+        maxWidth: AppWidths.compact,
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(_targetIcon(targetType)),
+                title: Text(_targetLabel(targetType, strings)),
+                subtitle: Text(strings.reportTargetSummary),
+              ),
+              const Divider(),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                strings.reason,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              RadioGroup<String>(
+                groupValue: _selectedReason,
+                onChanged: (value) {
+                  if (_submitting) {
+                    return;
+                  }
+                  setState(() {
+                    _selectedReason = value;
+                    if (value != strings.otherReportReason) {
+                      _reasonController.clear();
                     }
-                  },
-                  decoration: InputDecoration(labelText: strings.targetType),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _targetIdController,
-                  decoration: InputDecoration(labelText: strings.targetIdLabel),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return strings.targetIdRequired;
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedReason,
-                  isExpanded: true,
-                  items: [
+                  });
+                },
+                child: Column(
+                  children: [
                     for (final reason in reasonOptions)
-                      DropdownMenuItem(
+                      RadioListTile<String>(
+                        contentPadding: EdgeInsets.zero,
                         value: reason,
-                        child: Text(
-                          reason,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        title: Text(reason),
                       ),
                   ],
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedReason = value;
-                      if (value != strings.otherReportReason) {
-                        _reasonController.clear();
-                      }
-                    });
-                  },
-                  decoration: InputDecoration(labelText: strings.reason),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return strings.reasonRequired;
-                    }
-                    return null;
-                  },
                 ),
-                if (isOtherReason) ...[
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _reasonController,
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      labelText: strings.reportDetails,
-                    ),
-                    validator: (value) {
-                      if (!isOtherReason) {
-                        return null;
-                      }
-                      if (value == null || value.trim().isEmpty) {
-                        return strings.reasonRequired;
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-                if (_message != null) ...[
-                  const SizedBox(height: 16),
-                  Text(_message!, style: const TextStyle(color: Colors.green)),
-                ],
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Text(
-                    _error!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _submitting
-                      ? null
-                      : () async {
-                          if (!(_formKey.currentState?.validate() ?? false)) {
-                            return;
-                          }
-                          setState(() {
-                            _submitting = true;
-                            _error = null;
-                            _message = null;
-                          });
-                          try {
-                            final selectedReason = _selectedReason!.trim();
-                            final details = _reasonController.text.trim();
-                            await ref.read(mushukistanApiProvider).createReport(
-                                  targetType: _targetType,
-                                  targetId: _targetIdController.text.trim(),
-                                  reason:
-                                      isOtherReason ? details : selectedReason,
-                                );
-                            setState(() {
-                              _message = strings.reportSubmitted;
-                            });
-                          } catch (error) {
-                            setState(() {
-                              _error = error.toString();
-                            });
-                          } finally {
-                            if (mounted) {
-                              setState(() {
-                                _submitting = false;
-                              });
-                            }
-                          }
-                        },
-                  child: _submitting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(strings.submitReport),
+              ),
+              if (isOtherReason) ...[
+                const SizedBox(height: AppSpacing.sm),
+                TextFormField(
+                  controller: _reasonController,
+                  maxLines: 4,
+                  decoration: InputDecoration(labelText: strings.reportDetails),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? strings.reasonRequired
+                      : null,
                 ),
               ],
-            ),
+              if (_error != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.xl),
+              FilledButton(
+                onPressed: _submitting ? null : _submit,
+                child: _submitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(strings.submitReport),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
+
+  Future<void> _submit() async {
+    final strings = ref.read(appStringsProvider);
+    if (_selectedReason == null) {
+      setState(() => _error = strings.reasonRequired);
+      return;
+    }
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final selectedReason = _selectedReason!;
+      await ref.read(mushukistanApiProvider).createReport(
+            targetType: widget.initialTargetType!,
+            targetId: widget.initialTargetId!.trim(),
+            reason: selectedReason == strings.otherReportReason
+                ? _reasonController.text.trim()
+                : selectedReason,
+          );
+      if (mounted) {
+        setState(() => _submitted = true);
+      }
+    } on MushukistanApiException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.userMessage);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = strings.couldNotSubmitReport);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
 }
+
+IconData _targetIcon(String type) => switch (type) {
+      'comment' => Icons.comment_outlined,
+      'user' => Icons.person_outline,
+      'cat' => Icons.pets_outlined,
+      'lost_pet' => Icons.search_outlined,
+      'adoption_post' => Icons.home_outlined,
+      _ => Icons.article_outlined,
+    };
+
+String _targetLabel(String type, AppStrings strings) => switch (type) {
+      'comment' => strings.comment,
+      'user' => strings.user,
+      'cat' => strings.cat,
+      'lost_pet' => strings.lostPet,
+      'adoption_post' => strings.adoption,
+      _ => strings.post,
+    };

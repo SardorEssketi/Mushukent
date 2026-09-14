@@ -51,7 +51,7 @@ class AppCard extends StatelessWidget {
     return Material(
       color: color ?? theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadii.lg),
+        borderRadius: BorderRadius.circular(AppRadii.card),
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias,
@@ -83,7 +83,7 @@ class AppBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
         border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Padding(
@@ -97,7 +97,7 @@ class AppBadge extends StatelessWidget {
               label,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: color,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -129,35 +129,33 @@ class AppStatePanel extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: AppContentWidth(
           maxWidth: 420,
-          child: AppCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 38, color: theme.colorScheme.primary),
-                const SizedBox(height: AppSpacing.md),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 32, color: theme.colorScheme.primary),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (message != null) ...[
+                const SizedBox(height: AppSpacing.sm),
                 Text(
-                  title,
+                  message!,
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                if (message != null) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    message!,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-                if (action != null) ...[
-                  const SizedBox(height: AppSpacing.lg),
-                  action!,
-                ],
               ],
-            ),
+              if (action != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                action!,
+              ],
+            ],
           ),
         ),
       ),

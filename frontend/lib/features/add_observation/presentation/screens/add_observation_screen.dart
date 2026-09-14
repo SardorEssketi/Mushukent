@@ -10,6 +10,7 @@ import '../../../../core/localization/language_controller.dart';
 import '../../../../core/media/image_upload_preprocessor.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../application/add_observation_controller.dart';
 
@@ -137,6 +138,50 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     );
   }
 
+  Future<void> _openContactRequiredFlow({
+    required String path,
+    required String requirementMessage,
+  }) async {
+    final strings = ref.read(appStringsProvider);
+    try {
+      final profile = await ref.read(mushukistanApiProvider).getMe();
+      final phone = profile.phoneNumber?.trim() ?? '';
+      if (!mounted) {
+        return;
+      }
+      if (phone.isNotEmpty && isValidUzbekPhoneNumber(phone)) {
+        context.go(path);
+        return;
+      }
+      final editProfile = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(strings.phoneNumberRequired),
+          content: Text(requirementMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.editProfile),
+            ),
+          ],
+        ),
+      );
+      if (editProfile == true && mounted) {
+        context.go('/profile/edit');
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotLoadProfile)),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(addObservationControllerProvider);
@@ -186,7 +231,12 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               title: strings.lostPetAlert,
               subtitle: strings.lostPetAlertSubtitle,
               color: Theme.of(context).colorScheme.error,
-              onTap: () => context.go('/add/lost-pet'),
+              onTap: () => unawaited(
+                _openContactRequiredFlow(
+                  path: '/add/lost-pet',
+                  requirementMessage: strings.phoneNumberRequiredForLostPet,
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             _AddCategoryCard(
@@ -194,7 +244,12 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               title: strings.findANewHome,
               subtitle: strings.findANewHomeSubtitle,
               color: AppPalette.adoption,
-              onTap: () => context.go('/add/adoption'),
+              onTap: () => unawaited(
+                _openContactRequiredFlow(
+                  path: '/add/adoption',
+                  requirementMessage: strings.phoneNumberRequiredForAdoption,
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             if (_preparingPhotos) ...[
@@ -326,30 +381,6 @@ Future<bool> _confirmDeleteDraft(
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
           child: Text(strings.delete),
-        ),
-      ],
-    ),
-  );
-  return result ?? false;
-}
-
-Future<bool> confirmObservationLocationUse(BuildContext context) async {
-  final strings = AppStrings.forLanguage(AppLanguage.fromCode(
-    Localizations.localeOf(context).languageCode,
-  ));
-  final result = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(strings.useCurrentLocationTitle),
-      content: Text(strings.useCurrentLocationMessage),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: Text(strings.cancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: Text(strings.continueAction),
         ),
       ],
     ),

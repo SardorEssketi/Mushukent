@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/widgets/app_surface.dart';
 import 'moderation_reports_screen.dart';
 
 class ModerationReportDetailScreen extends ConsumerStatefulWidget {
@@ -49,7 +50,27 @@ class _ModerationReportDetailScreenState
     return Scaffold(
       appBar: AppBar(title: Text(strings.reportDetail)),
       body: report == null
-          ? const Center(child: CircularProgressIndicator())
+          ? reportsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (_, __) => AppStatePanel(
+                icon: Icons.error_outline,
+                title: strings.reportDetail,
+                message: strings.couldNotLoadReports,
+                action: FilledButton(
+                  onPressed: () => ref.invalidate(moderationReportsProvider),
+                  child: Text(strings.retry),
+                ),
+              ),
+              data: (_) => AppStatePanel(
+                icon: Icons.report_outlined,
+                title: strings.reportDetail,
+                message: strings.reportUnavailable,
+                action: FilledButton(
+                  onPressed: context.pop,
+                  child: Text(strings.backToReports),
+                ),
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -65,8 +86,6 @@ class _ModerationReportDetailScreenState
                         ),
                         const SizedBox(height: 8),
                         Text(report.reason ?? strings.noReasonProvided),
-                        const SizedBox(height: 12),
-                        Text(strings.targetId(report.targetId)),
                         if (report.target != null) ...[
                           const SizedBox(height: 8),
                           Text(

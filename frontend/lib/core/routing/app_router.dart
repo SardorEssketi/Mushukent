@@ -102,10 +102,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
     },
     errorBuilder: (context, state) {
-      return Scaffold(
-        body: Center(
-          child: Text(state.error?.toString() ?? 'Route not found.'),
-        ),
+      return const Scaffold(
+        body: Center(child: Text('This page is not available.')),
       );
     },
     routes: [

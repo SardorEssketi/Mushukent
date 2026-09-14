@@ -1,181 +1,17 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../localization/app_strings.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
-import '../theme/app_design_tokens.dart';
-import '../validation/phone_numbers.dart';
-import 'app_surface.dart';
 
 class AppShellScaffold extends ConsumerWidget {
   const AppShellScaffold({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
-  void _selectBranch(BuildContext context, WidgetRef ref, int index) {
-    if (index == 2) {
-      _showAddOptions(context, ref);
-      return;
-    }
-
-    navigationShell.goBranch(
-      index,
-      initialLocation: true,
-    );
-  }
-
-  Future<void> _showAddOptions(BuildContext context, WidgetRef ref) {
-    final strings = ref.read(appStringsProvider);
-
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) {
-        final mediaQuery = MediaQuery.of(sheetContext);
-        return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: mediaQuery.size.height * 0.88,
-            ),
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                20 + mediaQuery.viewInsets.bottom,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    strings.createInMushukistan,
-                    style: Theme.of(sheetContext).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    strings.chooseShareType,
-                    style:
-                        Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(sheetContext)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                  ),
-                  const SizedBox(height: 12),
-                  _AddOptionTile(
-                    icon: Icons.add_a_photo_outlined,
-                    title: strings.catObservation,
-                    subtitle: strings.catObservationAddSubtitle,
-                    onTap: () {
-                      Navigator.of(sheetContext).pop();
-                      context.go('/add/entry');
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _AddOptionTile(
-                    icon: Icons.search_outlined,
-                    title: strings.lostPet,
-                    subtitle: strings.lostPetAddSubtitle,
-                    onTap: () async {
-                      final profile = await ref.read(profileMeProvider.future);
-                      final phone = profile.phoneNumber?.trim() ?? '';
-                      if (!sheetContext.mounted) {
-                        return;
-                      }
-                      Navigator.of(sheetContext).pop();
-                      if (phone.isEmpty || !isValidUzbekPhoneNumber(phone)) {
-                        if (!context.mounted) {
-                          return;
-                        }
-                        final editProfile = await showDialog<bool>(
-                          context: context,
-                          builder: (dialogContext) => AlertDialog(
-                            title: Text(strings.phoneNumberRequired),
-                            content:
-                                Text(strings.phoneNumberRequiredForLostPet),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(false),
-                                child: Text(strings.cancel),
-                              ),
-                              FilledButton(
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(true),
-                                child: Text(strings.editProfile),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (editProfile == true && context.mounted) {
-                          context.go('/profile/edit');
-                        }
-                        return;
-                      }
-                      if (context.mounted) {
-                        context.go('/add/lost-pet');
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  _AddOptionTile(
-                    icon: Icons.home_outlined,
-                    title: strings.findANewHome,
-                    subtitle: strings.adoptionAddSubtitle,
-                    onTap: () async {
-                      final profile = await ref.read(profileMeProvider.future);
-                      final phone = profile.phoneNumber?.trim() ?? '';
-                      if (!sheetContext.mounted) {
-                        return;
-                      }
-                      Navigator.of(sheetContext).pop();
-                      if (phone.isEmpty || !isValidUzbekPhoneNumber(phone)) {
-                        if (!context.mounted) {
-                          return;
-                        }
-                        final editProfile = await showDialog<bool>(
-                          context: context,
-                          builder: (dialogContext) => AlertDialog(
-                            title: Text(strings.phoneNumberRequired),
-                            content:
-                                Text(strings.phoneNumberRequiredForAdoption),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(false),
-                                child: Text(strings.cancel),
-                              ),
-                              FilledButton(
-                                onPressed: () =>
-                                    Navigator.of(dialogContext).pop(true),
-                                child: Text(strings.editProfile),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (editProfile == true && context.mounted) {
-                          context.go('/profile/edit');
-                        }
-                        return;
-                      }
-                      if (context.mounted) {
-                        context.go('/add/adoption');
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
+  void _selectBranch(int index) {
+    navigationShell.goBranch(index);
   }
 
   @override
@@ -193,12 +29,12 @@ class AppShellScaffold extends ConsumerWidget {
           );
         }),
         selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: (index) => _selectBranch(context, ref, index),
+        onDestinationSelected: _selectBranch,
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.home_outlined),
             selectedIcon: const Icon(Icons.home),
-            label: strings.home,
+            label: strings.feed,
           ),
           NavigationDestination(
             icon: const Icon(Icons.map_outlined),
@@ -213,67 +49,13 @@ class AppShellScaffold extends ConsumerWidget {
           NavigationDestination(
             icon: const Icon(Icons.forum_outlined),
             selectedIcon: const Icon(Icons.forum),
-            label: strings.community,
+            label: strings.leaderboard,
           ),
           NavigationDestination(
             icon: const Icon(Icons.person_outline),
             selectedIcon: const Icon(Icons.person),
             label: strings.profile,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AddOptionTile extends StatelessWidget {
-  const _AddOptionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      color: colors.surfaceContainerLow,
-      onTap: onTap,
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: colors.primaryContainer,
-            foregroundColor: colors.onPrimaryContainer,
-            child: Icon(icon),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          const Icon(Icons.chevron_right),
         ],
       ),
     );

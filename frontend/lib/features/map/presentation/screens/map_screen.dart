@@ -20,11 +20,15 @@ final _tashkentBounds = LatLngBounds(
 
 const _tashkentBbox = '69.0500,41.1800,69.4200,41.4300';
 
+/// This stays null until the user explicitly asks to use device location.
+/// Tashkent remains a map viewport and query fallback, never a user location.
+final _mapSearchLocationProvider = StateProvider<GeoPoint?>((ref) => null);
+
 final mapCatsProvider =
     FutureProvider.autoDispose<ApiPage<CatSummary>>((ref) async {
   final api = ref.watch(mushukistanApiProvider);
-  final location = await ref.watch(currentLocationProvider.future);
-  if (!_isInsideTashkent(location)) {
+  final location = ref.watch(_mapSearchLocationProvider);
+  if (location == null || !_isInsideTashkent(location)) {
     return api.listCats(
       filter: 'recently_added',
       bbox: _tashkentBbox,
@@ -75,8 +79,8 @@ final mapPlacesProvider =
   }
 
   final api = ref.watch(mushukistanApiProvider);
-  final location = await ref.watch(currentLocationProvider.future);
-  if (!_isInsideTashkent(location)) {
+  final location = ref.watch(_mapSearchLocationProvider);
+  if (location == null || !_isInsideTashkent(location)) {
     return api.listPlaces(
       categories: categories,
       bbox: _tashkentBbox,
@@ -100,8 +104,8 @@ final mapLostPetsProvider =
   }
 
   final api = ref.watch(mushukistanApiProvider);
-  final location = await ref.watch(currentLocationProvider.future);
-  if (!_isInsideTashkent(location)) {
+  final location = ref.watch(_mapSearchLocationProvider);
+  if (location == null || !_isInsideTashkent(location)) {
     return api.listLostPets(
       limit: 100,
       validForMap: true,
@@ -125,61 +129,15 @@ class MapScreen extends ConsumerStatefulWidget {
   ConsumerState<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends ConsumerState<MapScreen>
-    with SingleTickerProviderStateMixin {
+class _MapScreenState extends ConsumerState<MapScreen> {
   final MapController _mapController = MapController();
-  Timer? _footerTimer;
-  bool _showMapFooter = true;
-  bool _locationDisclosureAccepted = false;
   bool _refreshingMap = false;
-  late final AnimationController _centerAnimationController =
-      AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 650),
-  );
 
   void _centerOnUser(GeoPoint location) {
     final targetCenter = _clampToTashkent(
       LatLng(location.latitude, location.longitude),
     );
-    final startCenter = _mapController.camera.center;
-    final startZoom = _mapController.camera.zoom;
-    const targetZoom = 15.5;
-
-    _centerAnimationController.stop();
-    _centerAnimationController.reset();
-    void listener() {
-      final progress =
-          Curves.easeOutCubic.transform(_centerAnimationController.value);
-      final latitude = startCenter.latitude +
-          (targetCenter.latitude - startCenter.latitude) * progress;
-      final longitude = startCenter.longitude +
-          (targetCenter.longitude - startCenter.longitude) * progress;
-      final zoom = startZoom + (targetZoom - startZoom) * progress;
-      _mapController.move(LatLng(latitude, longitude), zoom);
-    }
-
-    _centerAnimationController.addListener(listener);
-    _centerAnimationController.forward().whenCompleteOrCancel(() {
-      _centerAnimationController.removeListener(listener);
-    });
-  }
-
-  void _showFooterTemporarily() {
-    _footerTimer?.cancel();
-    if (mounted) {
-      setState(() {
-        _showMapFooter = true;
-      });
-    }
-    _footerTimer = Timer(const Duration(seconds: 5), () {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _showMapFooter = false;
-      });
-    });
+    _mapController.move(targetCenter, 15.5);
   }
 
   Future<void> _openLayerFilterSheet(AppStrings strings) async {
@@ -256,7 +214,6 @@ class _MapScreenState extends ConsumerState<MapScreen>
     if (!mounted || selectedLayers == null) {
       return;
     }
-    _showFooterTemporarily();
     ref.read(_mapLayersProvider.notifier).state = selectedLayers;
   }
 
@@ -267,10 +224,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     setState(() {
       _refreshingMap = true;
     });
-    _showFooterTemporarily();
     try {
-      final refreshedLocation = ref.refresh(currentLocationProvider.future);
-      await refreshedLocation;
       final refreshedCats = ref.refresh(mapCatsProvider.future);
       final refreshedPlaces = ref.refresh(mapPlacesProvider.future);
       final refreshedLostPets = ref.refresh(mapLostPetsProvider.future);
@@ -285,6 +239,36 @@ class _MapScreenState extends ConsumerState<MapScreen>
           _refreshingMap = false;
         });
       }
+    }
+  }
+
+  Future<void> _requestAndCenterOnUser() async {
+    final location = await LocationService().resolveCurrentLocation();
+    if (!mounted) {
+      return;
+    }
+    if (location == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(ref.read(appStringsProvider).couldNotResolveLocation),
+        ),
+      );
+      return;
+    }
+    ref.read(_mapSearchLocationProvider.notifier).state = location;
+    if (_isInsideTashkent(location)) {
+      _centerOnUser(location);
+    } else {
+      _mapController.move(
+        LatLng(
+          LocationService.fallbackLocation.latitude,
+          LocationService.fallbackLocation.longitude,
+        ),
+        13.6,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ref.read(appStringsProvider).locationOutsideMap)),
+      );
     }
   }
 
@@ -320,14 +304,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   void initState() {
     super.initState();
-    _locationDisclosureAccepted = widget.focusLocation != null;
-    _showFooterTemporarily();
   }
 
   @override
   void dispose() {
-    _footerTimer?.cancel();
-    _centerAnimationController.dispose();
     super.dispose();
   }
 
@@ -335,27 +315,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Widget build(BuildContext context) {
     final selectedLayers = ref.watch(_mapLayersProvider);
     final strings = ref.watch(appStringsProvider);
-    if (!_locationDisclosureAccepted) {
-      return Scaffold(
-        body: SafeArea(
-          child: AppStatePanel(
-            icon: Icons.my_location_outlined,
-            title: strings.useYourLocation,
-            message: strings.locationDisclosureMessage,
-            action: FilledButton.icon(
-              onPressed: () {
-                setState(() {
-                  _locationDisclosureAccepted = true;
-                });
-              },
-              icon: const Icon(Icons.location_searching),
-              label: Text(strings.useMyLocation),
-            ),
-          ),
-        ),
-      );
-    }
-    final locationAsync = ref.watch(currentLocationProvider);
+    final selectedLocation = ref.watch(_mapSearchLocationProvider);
     final showCats = selectedLayers.contains(_MapLayer.cats);
     final catsAsync = showCats
         ? ref.watch(mapCatsProvider)
@@ -364,217 +324,152 @@ class _MapScreenState extends ConsumerState<MapScreen>
           );
     final placesAsync = ref.watch(mapPlacesProvider);
     final lostPetsAsync = ref.watch(mapLostPetsProvider);
+    final catPage = catsAsync.valueOrNull;
+    final placePage = placesAsync.valueOrNull;
+    final lostPets = lostPetsAsync.valueOrNull?.items
+            .whereType<LostPetData>()
+            .toList(growable: false) ??
+        const <LostPetData>[];
+    final focusLocation = widget.focusLocation;
+    final mapLocation = selectedLocation != null && _isInsideTashkent(selectedLocation)
+        ? selectedLocation
+        : null;
+    final center = _clampToTashkent(
+      focusLocation != null
+          ? LatLng(focusLocation.latitude, focusLocation.longitude)
+          : mapLocation != null
+              ? LatLng(mapLocation.latitude, mapLocation.longitude)
+              : LatLng(
+                  LocationService.fallbackLocation.latitude,
+                  LocationService.fallbackLocation.longitude,
+                ),
+    );
+    final markers = <Marker>[
+      if (mapLocation != null)
+        Marker(
+          point: _clampToTashkent(
+            LatLng(mapLocation.latitude, mapLocation.longitude),
+          ),
+          width: 40,
+          height: 40,
+          child: const _CurrentLocationMarker(),
+        ),
+      if (focusLocation != null)
+        Marker(
+          point: center,
+          width: 52,
+          height: 52,
+          child: const _FocusedLostPetMarker(),
+        ),
+      if (showCats && catPage != null)
+        ...catPage.items
+            .where((cat) => cat.canonicalLocation != null)
+            .map(
+              (cat) => Marker(
+                point: LatLng(
+                  cat.canonicalLocation!.latitude,
+                  cat.canonicalLocation!.longitude,
+                ),
+                width: 44,
+                height: 44,
+                child: _CatMarker(
+                  status: cat.status,
+                  onTap: () => unawaited(_openLatestCatPost(cat)),
+                ),
+              ),
+            ),
+      ...lostPets.map(
+        (lostPet) => Marker(
+          point: LatLng(
+            lostPet.lastSeenLocation.latitude,
+            lostPet.lastSeenLocation.longitude,
+          ),
+          width: 48,
+          height: 48,
+          child: _MapLostPetMarker(
+            onTap: () => _showLostPetSheet(context, lostPet, strings),
+          ),
+        ),
+      ),
+      if (placePage != null)
+        ...placePage.items.map(
+          (place) => Marker(
+            point: LatLng(place.location.latitude, place.location.longitude),
+            width: 44,
+            height: 44,
+            child: _PlaceMarker(
+              category: place.category,
+              onTap: () => _showPlaceSheet(context, place, strings),
+            ),
+          ),
+        ),
+    ];
 
     return Scaffold(
-      body: locationAsync.when(
-        data: (location) {
-          final focusLocation = widget.focusLocation;
-          final center = _clampToTashkent(
-            focusLocation == null
-                ? LatLng(location.latitude, location.longitude)
-                : LatLng(focusLocation.latitude, focusLocation.longitude),
-          );
-          final currentLocationPoint = _clampToTashkent(
-            LatLng(location.latitude, location.longitude),
-          );
-          return catsAsync.when(
-            data: (catPage) {
-              return placesAsync.when(
-                data: (placePage) {
-                  final lostPets = lostPetsAsync.valueOrNull?.items
-                          .whereType<LostPetData>()
-                          .toList(growable: false) ??
-                      const <LostPetData>[];
-                  final markers = <Marker>[
-                    Marker(
-                      point: currentLocationPoint,
-                      width: 40,
-                      height: 40,
-                      child: const _CurrentLocationMarker(),
-                    ),
-                    if (focusLocation != null)
-                      Marker(
-                        point: center,
-                        width: 52,
-                        height: 52,
-                        child: const _FocusedLostPetMarker(),
-                      ),
-                    if (showCats)
-                      ...catPage.items
-                          .where((cat) => cat.canonicalLocation != null)
-                          .map(
-                            (cat) => Marker(
-                              point: LatLng(
-                                cat.canonicalLocation!.latitude,
-                                cat.canonicalLocation!.longitude,
-                              ),
-                              width: 44,
-                              height: 44,
-                              child: _CatMarker(
-                                status: cat.status,
-                                onTap: () => unawaited(
-                                  _openLatestCatPost(cat),
-                                ),
-                              ),
-                            ),
-                          ),
-                    ...lostPets.map(
-                      (lostPet) => Marker(
-                        point: LatLng(
-                          lostPet.lastSeenLocation.latitude,
-                          lostPet.lastSeenLocation.longitude,
-                        ),
-                        width: 48,
-                        height: 48,
-                        child: _MapLostPetMarker(
-                          onTap: () =>
-                              _showLostPetSheet(context, lostPet, strings),
-                        ),
-                      ),
-                    ),
-                    ...placePage.items.map(
-                      (place) => Marker(
-                        point: LatLng(
-                          place.location.latitude,
-                          place.location.longitude,
-                        ),
-                        width: 32,
-                        height: 32,
-                        child: _PlaceMarker(
-                          category: place.category,
-                          onTap: () => _showPlaceSheet(
-                            context,
-                            place,
-                            strings,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ];
-
-                  return Stack(
-                    children: [
-                      FlutterMap(
-                        mapController: _mapController,
-                        options: MapOptions(
-                          initialCenter: center,
-                          initialZoom: focusLocation == null ? 13.6 : 16,
-                          cameraConstraint: CameraConstraint.contain(
-                            bounds: _tashkentBounds,
-                          ),
-                          minZoom: 12.5,
-                          maxZoom: 18,
-                          interactionOptions: const InteractionOptions(
-                            flags: InteractiveFlag.all,
-                          ),
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'mushukistan_frontend',
-                          ),
-                          MarkerLayer(markers: markers),
-                          RichAttributionWidget(
-                            attributions: [
-                              TextSourceAttribution(
-                                'OpenStreetMap contributors',
-                                onTap: () => _openOsmCopyright(),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Positioned(
-                        left: 12,
-                        top: 12,
-                        child: SafeArea(
-                          child: _MapControlButton(
-                            heroTag: 'map-refresh',
-                            tooltip: strings.refresh,
-                            icon: _refreshingMap
-                                ? Icons.hourglass_top
-                                : Icons.refresh,
-                            onPressed: _refreshMap,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 12,
-                        top: 12,
-                        child: SafeArea(
-                          child: _LayerFilterButton(
-                            selectedLayers: selectedLayers,
-                            strings: strings,
-                            onPressed: () => _openLayerFilterSheet(strings),
-                          ),
-                        ),
-                      ),
-                      AnimatedPositioned(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
-                        right: 16,
-                        bottom: _showMapFooter ? 104 : 24,
-                        child: FloatingActionButton.small(
-                          heroTag: 'map-center-on-user',
-                          tooltip: strings.centerOnUser,
-                          onPressed: () => _centerOnUser(location),
-                          child: const Icon(Icons.my_location),
-                        ),
-                      ),
-                      Positioned(
-                        left: 16,
-                        right: 16,
-                        bottom: 16,
-                        child: IgnorePointer(
-                          ignoring: !_showMapFooter,
-                          child: AnimatedOpacity(
-                            opacity: _showMapFooter ? 1 : 0,
-                            duration: const Duration(milliseconds: 250),
-                            child: _MapFooter(
-                              catCount: showCats ? catPage.items.length : 0,
-                              lostPetCount: lostPets.length,
-                              placeCount: placePage.items.length,
-                              location: location,
-                              strings: strings,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stackTrace) => _ErrorPanel(
-                  title: strings.couldNotLoadPlaceMarkers,
-                  message: error.toString(),
-                  retryLabel: strings.retry,
-                  onRetry: () => ref.invalidate(mapPlacesProvider),
-                ),
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stackTrace) => _ErrorPanel(
-              title: strings.couldNotLoadCatMarkers,
-              message: error.toString(),
-              retryLabel: strings.retry,
-              onRetry: () => ref.invalidate(mapCatsProvider),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: center,
+              initialZoom: focusLocation == null ? 13.6 : 16,
+              cameraConstraint: CameraConstraint.contain(bounds: _tashkentBounds),
+              minZoom: 12.5,
+              maxZoom: 18,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all,
+              ),
             ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorPanel(
-          title: strings.couldNotResolveLocation,
-          message: error.toString(),
-          retryLabel: strings.retry,
-          onRetry: () {
-            _showFooterTemporarily();
-            ref.invalidate(currentLocationProvider);
-            ref.invalidate(mapCatsProvider);
-            ref.invalidate(mapPlacesProvider);
-            ref.invalidate(mapLostPetsProvider);
-          },
-        ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'mushukistan_frontend',
+              ),
+              MarkerLayer(markers: markers),
+              RichAttributionWidget(
+                attributions: [
+                  TextSourceAttribution(
+                    'OpenStreetMap contributors',
+                    onTap: () => _openOsmCopyright(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            left: 12,
+            top: 12,
+            child: SafeArea(
+              child: _MapControlButton(
+                heroTag: 'map-refresh',
+                tooltip: strings.refresh,
+                icon: _refreshingMap ? Icons.hourglass_top : Icons.refresh,
+                onPressed: _refreshMap,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 12,
+            top: 12,
+            child: SafeArea(
+              child: _LayerFilterButton(
+                selectedLayers: selectedLayers,
+                strings: strings,
+                onPressed: () => _openLayerFilterSheet(strings),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 12,
+            bottom: 24,
+            child: FloatingActionButton.small(
+              heroTag: 'map-center-on-user',
+              tooltip: strings.centerOnUser,
+              onPressed: _requestAndCenterOnUser,
+              child: const Icon(Icons.my_location),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1199,6 +1094,7 @@ class _PlaceDetailRow extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _MapFooter extends StatelessWidget {
   const _MapFooter({
     required this.catCount,
@@ -1240,6 +1136,7 @@ class _MapFooter extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _ErrorPanel extends StatelessWidget {
   const _ErrorPanel({
     required this.title,
