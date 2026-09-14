@@ -21,7 +21,17 @@ from app.features.comments.application.schemas import (
 from app.features.comments.application.service import CommentsService
 from app.features.posts.application.schemas import GenericListResponse, PostListItem, PostListQuery
 from app.features.posts.application.service import PostsService
-from app.features.users.application.schemas import UserProfile, UserPublic, UserUpdate
+from app.features.users.application.schemas import (
+    AccountDeletionConfirmRequest,
+    AccountDeletionConfirmResponse,
+    AccountDeletionConfirmStatus,
+    AccountDeletionRequest,
+    AccountDeletionRequestResponse,
+    AccountDeletionRequestStatus,
+    UserProfile,
+    UserPublic,
+    UserUpdate,
+)
 from app.features.users.application.service import UsersService
 
 router = APIRouter(prefix="/users")
@@ -62,6 +72,30 @@ def delete_me(
 ):
     users_service.delete_me(current_user)
     return None
+
+
+@router.post(
+    "/account-deletion-requests",
+    response_model=AccountDeletionRequestResponse,
+)
+def request_account_deletion(
+    payload: AccountDeletionRequest,
+    users_service: UsersService = Depends(get_users_service),
+) -> AccountDeletionRequestResponse:
+    users_service.request_external_account_deletion(payload.email)
+    return ApiSuccess(data=AccountDeletionRequestStatus())
+
+
+@router.post(
+    "/account-deletion-confirmations",
+    response_model=AccountDeletionConfirmResponse,
+)
+def confirm_account_deletion(
+    payload: AccountDeletionConfirmRequest,
+    users_service: UsersService = Depends(get_users_service),
+) -> AccountDeletionConfirmResponse:
+    users_service.confirm_external_account_deletion(payload.token)
+    return ApiSuccess(data=AccountDeletionConfirmStatus())
 
 
 @router.post(

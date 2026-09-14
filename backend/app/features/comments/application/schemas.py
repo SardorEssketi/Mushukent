@@ -31,6 +31,7 @@ class CommentCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     content: str = Field(min_length=1, max_length=1000)
+    parent_comment_id: UUID | None = None
 
     @model_validator(mode="after")
     def _validate_content(self) -> "CommentCreate":
@@ -46,6 +47,7 @@ class CommentResponse(BaseModel):
     post_id: UUID | None = None
     lost_pet_id: UUID | None = None
     adoption_post_id: UUID | None = None
+    parent_comment_id: UUID | None = None
     user: CommentUser | None = None
     content: str
     created_at: datetime

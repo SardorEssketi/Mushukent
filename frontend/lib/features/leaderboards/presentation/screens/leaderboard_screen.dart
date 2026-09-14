@@ -42,12 +42,12 @@ class LeaderboardScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Community',
+                      strings.community,
                       style: Theme.of(context).textTheme.headlineSmall,
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Recognition for people helping cats through observations, comments, and support.',
+                      strings.communitySubtitle,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
@@ -142,17 +142,17 @@ class _LeaderboardControls extends StatelessWidget {
                   ButtonSegment(
                     value: 'most_active',
                     icon: const Icon(Icons.directions_walk),
-                    label: Text(strings.mostActive),
+                    label: _CompactSegmentLabel(strings.mostActive),
                   ),
                   ButtonSegment(
                     value: 'most_popular',
                     icon: const Icon(Icons.favorite_border),
-                    label: Text(strings.mostPopular),
+                    label: _CompactSegmentLabel(strings.mostPopular),
                   ),
                   ButtonSegment(
                     value: 'top_helpers',
                     icon: const Icon(Icons.volunteer_activism_outlined),
-                    label: Text(strings.topHelpers),
+                    label: _CompactSegmentLabel(strings.topHelpers),
                   ),
                 ],
               ),
@@ -165,15 +165,44 @@ class _LeaderboardControls extends StatelessWidget {
                 selected: {period},
                 onSelectionChanged: (values) => onPeriodChanged(values.first),
                 segments: [
-                  ButtonSegment(value: 'day', label: Text(strings.day)),
-                  ButtonSegment(value: 'week', label: Text(strings.week)),
-                  ButtonSegment(value: 'month', label: Text(strings.month)),
-                  ButtonSegment(value: 'all', label: Text(strings.allTime)),
+                  ButtonSegment(
+                    value: 'day',
+                    label: _CompactSegmentLabel(strings.day),
+                  ),
+                  ButtonSegment(
+                    value: 'week',
+                    label: _CompactSegmentLabel(strings.week),
+                  ),
+                  ButtonSegment(
+                    value: 'month',
+                    label: _CompactSegmentLabel(strings.month),
+                  ),
+                  ButtonSegment(
+                    value: 'all',
+                    label: _CompactSegmentLabel(strings.allTime),
+                  ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CompactSegmentLabel extends StatelessWidget {
+  const _CompactSegmentLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 116),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, maxLines: 1),
       ),
     );
   }

@@ -44,7 +44,7 @@ class LostPetDetailScreen extends ConsumerWidget {
         data: (lostPet) {
           final info = lostPet.additionalInfo?.trim();
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             children: [
               _LostPetPhotoGallery(photoUrls: lostPet.photoUrls),
               const SizedBox(height: 20),
@@ -55,6 +55,8 @@ class LostPetDetailScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               Text(
                 lostPet.petName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context)
                     .textTheme
                     .headlineSmall
@@ -92,6 +94,17 @@ class LostPetDetailScreen extends ConsumerWidget {
                 const SizedBox(height: 6),
                 Text(info),
               ],
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push(
+                    '/report?type=lost_pet&id=$lostPetId',
+                  ),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: Text(strings.report),
+                ),
+              ),
               const SizedBox(height: 24),
               LostPetCommentsSection(
                 lostPetId: lostPetId,
@@ -376,6 +389,8 @@ class _DetailActionTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
@@ -383,7 +398,7 @@ class _DetailActionTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: colorScheme.onSurfaceVariant,

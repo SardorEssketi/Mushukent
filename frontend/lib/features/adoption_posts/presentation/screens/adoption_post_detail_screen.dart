@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/validation/phone_numbers.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
@@ -30,24 +32,27 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final adoptionAsync = ref.watch(adoptionPostDetailProvider(adoptionPostId));
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Adoption')),
+      appBar: AppBar(title: Text(strings.adoption)),
       body: adoptionAsync.when(
         data: (post) {
           final info = post.additionalInfo?.trim();
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             children: [
               _AdoptionPhotoGallery(photoUrls: post.photoUrls),
               const SizedBox(height: 20),
-              const Align(
+              Align(
                 alignment: Alignment.centerLeft,
-                child: _AdoptionBadge(label: 'Adoption'),
+                child: _AdoptionBadge(label: strings.adoption),
               ),
               const SizedBox(height: 12),
               Text(
                 post.petName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context)
                     .textTheme
                     .headlineSmall
@@ -56,7 +61,7 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _DetailActionTile(
                 icon: Icons.phone_outlined,
-                title: 'Owner phone',
+                title: strings.phoneNumber,
                 subtitle: post.ownerPhoneNumber,
                 onTap: () => _contactOwner(post.ownerPhoneNumber),
               ),
@@ -72,12 +77,23 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
               if (info != null && info.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 Text(
-                  'Additional information',
+                  strings.additionalInformation,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 6),
                 Text(info),
               ],
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push(
+                    '/report?type=adoption_post&id=$adoptionPostId',
+                  ),
+                  icon: const Icon(Icons.flag_outlined),
+                  label: Text(strings.report),
+                ),
+              ),
               const SizedBox(height: 24),
               AdoptionPostCommentsSection(
                 adoptionPostId: adoptionPostId,
@@ -313,6 +329,8 @@ class _DetailActionTile extends StatelessWidget {
                   children: [
                     Text(
                       title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                             fontWeight: FontWeight.w800,
                           ),
@@ -320,7 +338,7 @@ class _DetailActionTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: colorScheme.onSurfaceVariant,

@@ -299,8 +299,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
         return;
       }
       if (page.items.isEmpty) {
+        final strings = ref.read(appStringsProvider);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No public post found for this cat.')),
+          SnackBar(content: Text(strings.noPublicPostFoundForCat)),
         );
         return;
       }
@@ -309,8 +310,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
       if (!mounted) {
         return;
       }
+      final strings = ref.read(appStringsProvider);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open post: $error')),
+        SnackBar(content: Text(strings.couldNotOpenPost(error))),
       );
     }
   }
@@ -338,9 +340,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
         body: SafeArea(
           child: AppStatePanel(
             icon: Icons.my_location_outlined,
-            title: 'Use your location',
-            message:
-                'Mushukistan uses your current location to show nearby cats and useful places. It is not published unless you create a public post.',
+            title: strings.useYourLocation,
+            message: strings.locationDisclosureMessage,
             action: FilledButton.icon(
               onPressed: () {
                 setState(() {
@@ -348,7 +349,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 });
               },
               icon: const Icon(Icons.location_searching),
-              label: const Text('Use my location'),
+              label: Text(strings.useMyLocation),
             ),
           ),
         ),

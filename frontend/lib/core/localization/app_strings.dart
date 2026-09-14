@@ -241,6 +241,174 @@ class AppStrings {
     };
   }
 
+  String get home {
+    return switch (this) {
+      _UzbekStrings() => 'Bosh sahifa',
+      _RussianStrings() => 'Главная',
+      _ => 'Home',
+    };
+  }
+
+  String get community {
+    return switch (this) {
+      _UzbekStrings() => 'Hamjamiyat',
+      _RussianStrings() => 'Сообщество',
+      _ => 'Community',
+    };
+  }
+
+  String get communitySubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushuklarga kuzatuvlar, izohlar va yordam orqali hissa qo‘shayotganlar eʼtirofi.',
+      _RussianStrings() =>
+        'Признание людей, которые помогают кошкам наблюдениями, комментариями и поддержкой.',
+      _ =>
+        'Recognition for people helping cats through observations, comments, and support.',
+    };
+  }
+
+  String get createInMushukistan {
+    return switch (this) {
+      _UzbekStrings() => 'Mushukistanda yaratish',
+      _RussianStrings() => 'Создать в Mushukistan',
+      _ => 'Create in Mushukistan',
+    };
+  }
+
+  String get chooseShareType {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Ulashmoqchi bo‘lgan mushuk yordami yoki yangilik turini tanlang.',
+      _RussianStrings() =>
+        'Выберите тип помощи кошке или обновления, которым хотите поделиться.',
+      _ => 'Choose the kind of cat help or update you want to share.',
+    };
+  }
+
+  String get catObservationAddSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushuk rasmlarini qo‘shing, keyin joriy joylashuvni tanlang, xaritada belgilang yoki joylashuvsiz davom eting.',
+      _RussianStrings() =>
+        'Добавьте фото кошки, затем выберите текущее место, отметьте на карте или продолжите без места.',
+      _ =>
+        'Add cat photos, then choose current location, mark on map, or skip location.',
+    };
+  }
+
+  String get lostPetAddSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Egasi bilan aloqa va oxirgi ko‘rilgan joyi bor alohida eʼlon yarating.',
+      _RussianStrings() =>
+        'Создайте отдельное объявление с контактом владельца и местом последнего обнаружения.',
+      _ => 'Create a distinct alert with owner contact and last-seen location.',
+    };
+  }
+
+  String get adoptionAddSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Aloqa maʼlumotlari bilan alohida yangi uy topish postini yarating.',
+      _RussianStrings() =>
+        'Создайте отдельный пост о поиске дома с контактными данными.',
+      _ => 'Create a separate rehoming post with contact details.',
+    };
+  }
+
+  String get phoneNumberRequiredForAdoption {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Yangi uy topish postini yaratishdan oldin telefon raqamingizni qo‘shing, shunda odamlar siz bilan bog‘lana oladi.',
+      _RussianStrings() =>
+        'Добавьте номер телефона перед созданием поста о пристройстве, чтобы люди могли связаться с вами.',
+      _ =>
+        'Add a phone number before creating an adoption post so people can reach you.',
+    };
+  }
+
+  String feedSectionTitle(String mode) {
+    return switch (mode) {
+      'lost_pets' => lostPets,
+      'adoption' => findANewHome,
+      'needs_help' => switch (this) {
+          _UzbekStrings() => 'Yordam kerak mushuklar',
+          _RussianStrings() => 'Кошки, которым нужна помощь',
+          _ => 'Cats that may need help',
+        },
+      'popular' => switch (this) {
+          _UzbekStrings() => 'Hamjamiyatda mashhur',
+          _RussianStrings() => 'Популярное в сообществе',
+          _ => 'Popular in the community',
+        },
+      _ => switch (this) {
+          _UzbekStrings() => 'Mushukistandagi so‘nggi yangiliklar',
+          _RussianStrings() => 'Новое в Mushukistan',
+          _ => 'Latest from Mushukistan',
+        },
+    };
+  }
+
+  String feedSectionSubtitle(String mode) {
+    return switch (mode) {
+      'lost_pets' => switch (this) {
+          _UzbekStrings() =>
+            'Egasi bilan aloqa va oxirgi ko‘rilgan hududi bor tanish eʼlonlar.',
+          _RussianStrings() =>
+            'Узнаваемые объявления с контактом владельца и районом последнего обнаружения.',
+          _ => 'Recognizable alerts with owner contact and last-seen areas.',
+        },
+      'adoption' => switch (this) {
+          _UzbekStrings() =>
+            'Yaxshi uy kerak bo‘lgan mushuklar uchun alohida postlar.',
+          _RussianStrings() =>
+            'Отдельные посты о кошках, которым нужен хороший дом.',
+          _ => 'Separate rehoming posts for cats who need a good home.',
+        },
+      'needs_help' => switch (this) {
+          _UzbekStrings() =>
+            'Ko‘ngillilar eʼtiboriga muhtoj bo‘lishi mumkin bo‘lgan kuzatuvlar.',
+          _RussianStrings() =>
+            'Наблюдения сообщества, которым может понадобиться внимание волонтеров.',
+          _ => 'Community observations that may need volunteer attention.',
+        },
+      'popular' => switch (this) {
+          _UzbekStrings() =>
+            'Odamlar eng ko‘p munosabat bildirayotgan postlar.',
+          _RussianStrings() => 'Посты, на которые люди реагируют чаще всего.',
+          _ => 'Posts people are responding to most.',
+        },
+      _ => switch (this) {
+          _UzbekStrings() =>
+            'Mushuklarga yordam berayotgan odamlardan so‘nggi kuzatuvlar, hikoyalar va yangiliklar.',
+          _RussianStrings() =>
+            'Свежие наблюдения, истории и обновления от людей, помогающих кошкам.',
+          _ =>
+            'Recent sightings, stories, and updates from people helping cats.',
+        },
+    };
+  }
+
+  String get emptyFeedMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Hamjamiyatni boshlashga yordam berish uchun kuzatuv, yo‘qolgan jonivor eʼloni yoki yangi uy topish postini ulashing.',
+      _RussianStrings() =>
+        'Поделитесь наблюдением, объявлением о потерянном питомце или постом о пристройстве, чтобы помочь сообществу начать.',
+      _ =>
+        'Share an observation, lost-pet alert, or rehoming post to help the community start here.',
+    };
+  }
+
+  String get couldNotLoadSection {
+    return switch (this) {
+      _UzbekStrings() => 'Bu bo‘limni yuklab bo‘lmadi',
+      _RussianStrings() => 'Не удалось загрузить этот раздел',
+      _ => 'Could not load this section',
+    };
+  }
+
   String get googleLegalConsentTitle {
     return switch (this) {
       _UzbekStrings() => 'Davom etishdan oldin',
@@ -434,6 +602,1362 @@ class AppStrings {
     };
   }
 
+  String get create {
+    return switch (this) {
+      _UzbekStrings() => 'Yaratish',
+      _RussianStrings() => 'Создать',
+      _ => 'Create',
+    };
+  }
+
+  String get whatAreYouCreating {
+    return switch (this) {
+      _UzbekStrings() => 'Nima yaratmoqchisiz?',
+      _RussianStrings() => 'Что вы создаете?',
+      _ => 'What are you creating?',
+    };
+  }
+
+  String get chooseTypeFirst {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Avval turini tanlang, shunda Mushukistan faqat kerakli maʼlumotlarni soʻraydi.',
+      _RussianStrings() =>
+        'Сначала выберите тип, чтобы Mushukistan запросил только нужные данные.',
+      _ =>
+        'Choose the right type first so Mushukistan can ask only for the details that matter.',
+    };
+  }
+
+  String get catObservation {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuk kuzatuvi',
+      _RussianStrings() => 'Наблюдение за кошкой',
+      _ => 'Cat observation',
+    };
+  }
+
+  String get catObservationSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushuk rasmlarini qoʻshing, kerak boʻlsa joylashuvni belgilang va yordam kerak mushuklarni ko‘rsating.',
+      _RussianStrings() =>
+        'Добавьте фото кошки, при необходимости укажите место и отметьте кошек, которым нужна помощь.',
+      _ =>
+        'Add cat photos, attach a location if useful, and tag cats that need help.',
+    };
+  }
+
+  String get lostPetAlert {
+    return switch (this) {
+      _UzbekStrings() => 'Yoʻqolgan jonivor eʼloni',
+      _RussianStrings() => 'Объявление о потерянном питомце',
+      _ => 'Lost pet alert',
+    };
+  }
+
+  String get lostPetAlertSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Jonivor rasmlari, oxirgi koʻrilgan joy, holat va egasining aloqasi.',
+      _RussianStrings() =>
+        'Фото питомца, последнее место, статус и контакт владельца.',
+      _ => 'Pet photos, last-seen map point, status, and owner contact.',
+    };
+  }
+
+  String get findANewHome {
+    return switch (this) {
+      _UzbekStrings() => 'Yangi uy topish',
+      _RussianStrings() => 'Найти новый дом',
+      _ => 'Find a new home',
+    };
+  }
+
+  String get findANewHomeSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Rasmlar, tavsif va egasining aloqasi bilan alohida uy topish posti. Xarita kerak emas.',
+      _RussianStrings() =>
+        'Отдельный пост о пристройстве с фото, описанием и контактом владельца. Карта не нужна.',
+      _ =>
+        'A separate rehoming post with photos, description, and owner contact. No map required.',
+    };
+  }
+
+  String get preparingPhotoForUpload {
+    return switch (this) {
+      _UzbekStrings() => 'Rasm yuklashga tayyorlanmoqda...',
+      _RussianStrings() => 'Фото готовится к загрузке...',
+      _ => 'Preparing photo for upload...',
+    };
+  }
+
+  String couldNotPreparePhoto(Object error) {
+    return switch (this) {
+      _UzbekStrings() => 'Rasmni tayyorlab boʻlmadi: $error',
+      _RussianStrings() => 'Не удалось подготовить фото: $error',
+      _ => 'Could not prepare photo: $error',
+    };
+  }
+
+  String get continueDraft {
+    return switch (this) {
+      _UzbekStrings() => 'Qoralamani davom ettirish',
+      _RussianStrings() => 'Продолжить черновик',
+      _ => 'Continue draft',
+    };
+  }
+
+  String get deleteDraft {
+    return switch (this) {
+      _UzbekStrings() => 'Qoralamani oʻchirish',
+      _RussianStrings() => 'Удалить черновик',
+      _ => 'Delete draft',
+    };
+  }
+
+  String get draftDeleted {
+    return switch (this) {
+      _UzbekStrings() => 'Qoralama oʻchirildi.',
+      _RussianStrings() => 'Черновик удален.',
+      _ => 'Draft deleted.',
+    };
+  }
+
+  String get addCatPhotos {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuk rasmlarini qoʻshish',
+      _RussianStrings() => 'Добавить фото кошки',
+      _ => 'Add cat photos',
+    };
+  }
+
+  String get selectUpToFivePhotos {
+    return switch (this) {
+      _UzbekStrings() => 'Besh tagacha rasm tanlang.',
+      _RussianStrings() => 'Выберите до пяти фото.',
+      _ => 'Select up to five photos.',
+    };
+  }
+
+  String get takeAPhoto {
+    return switch (this) {
+      _UzbekStrings() => 'Rasmga olish',
+      _RussianStrings() => 'Сделать фото',
+      _ => 'Take a photo',
+    };
+  }
+
+  String get useCameraThenChooseLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Kameradan foydalaning, keyin joylashuvni tanlang.',
+      _RussianStrings() => 'Используйте камеру, затем выберите место.',
+      _ => 'Use the camera, then choose location.',
+    };
+  }
+
+  String get deleteDraftTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Qoralama oʻchirilsinmi?',
+      _RussianStrings() => 'Удалить черновик?',
+      _ => 'Delete draft?',
+    };
+  }
+
+  String get deleteDraftMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Bu qoralamadagi tanlangan rasmlar, joylashuv, tavsif va mushuk tanlovini olib tashlaydi.',
+      _RussianStrings() =>
+        'Это удалит из черновика выбранные фото, место, описание и выбор кошки.',
+      _ =>
+        'This removes the selected photos, location, description, and cat choice from this draft.',
+    };
+  }
+
+  String get delete {
+    return switch (this) {
+      _UzbekStrings() => 'Oʻchirish',
+      _RussianStrings() => 'Удалить',
+      _ => 'Delete',
+    };
+  }
+
+  String get useCurrentLocationTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Joriy joylashuv ishlatilsinmi?',
+      _RussianStrings() => 'Использовать текущее местоположение?',
+      _ => 'Use current location?',
+    };
+  }
+
+  String get useCurrentLocationMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushukistan joriy joylashuvingizni oʻqib, uni ushbu kuzatuvga biriktiradi. Postni joylasangiz, mushuk joylashuvi boshqa foydalanuvchilarga koʻrinishi mumkin.',
+      _RussianStrings() =>
+        'Mushukistan получит ваше текущее местоположение и прикрепит его к этому наблюдению. После публикации место кошки может быть видно другим пользователям.',
+      _ =>
+        'Mushukistan will read your current location and attach it to this observation. If you publish the post, that cat location can be visible to other users.',
+    };
+  }
+
+  String get draftStatus {
+    return switch (this) {
+      _UzbekStrings() => 'Qoralama holati',
+      _RussianStrings() => 'Статус черновика',
+      _ => 'Draft status',
+    };
+  }
+
+  String get photo {
+    return switch (this) {
+      _UzbekStrings() => 'Rasm',
+      _RussianStrings() => 'Фото',
+      _ => 'Photo',
+    };
+  }
+
+  String get selected {
+    return switch (this) {
+      _UzbekStrings() => 'Tanlangan',
+      _RussianStrings() => 'Выбрано',
+      _ => 'Selected',
+    };
+  }
+
+  String get missing {
+    return switch (this) {
+      _UzbekStrings() => 'Yetishmayapti',
+      _RussianStrings() => 'Не указано',
+      _ => 'Missing',
+    };
+  }
+
+  String get location {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuv',
+      _RussianStrings() => 'Местоположение',
+      _ => 'Location',
+    };
+  }
+
+  String get set {
+    return switch (this) {
+      _UzbekStrings() => 'Belgilangan',
+      _RussianStrings() => 'Указано',
+      _ => 'Set',
+    };
+  }
+
+  String get catChoice {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuk tanlovi',
+      _RussianStrings() => 'Выбор кошки',
+      _ => 'Cat choice',
+    };
+  }
+
+  String get newCat {
+    return switch (this) {
+      _UzbekStrings() => 'Yangi mushuk',
+      _RussianStrings() => 'Новая кошка',
+      _ => 'New cat',
+    };
+  }
+
+  String get existingCat {
+    return switch (this) {
+      _UzbekStrings() => 'Mavjud mushuk',
+      _RussianStrings() => 'Существующая кошка',
+      _ => 'Existing cat',
+    };
+  }
+
+  String get visibility {
+    return switch (this) {
+      _UzbekStrings() => 'Koʻrinish',
+      _RussianStrings() => 'Видимость',
+      _ => 'Visibility',
+    };
+  }
+
+  String get public {
+    return switch (this) {
+      _UzbekStrings() => 'Ochiq',
+      _RussianStrings() => 'Публично',
+      _ => 'Public',
+    };
+  }
+
+  String get private {
+    return switch (this) {
+      _UzbekStrings() => 'Yopiq',
+      _RussianStrings() => 'Приватно',
+      _ => 'Private',
+    };
+  }
+
+  String get choosePhotoFirst {
+    return switch (this) {
+      _UzbekStrings() => 'Avval rasm tanlang.',
+      _RussianStrings() => 'Сначала выберите фото.',
+      _ => 'Choose a photo first.',
+    };
+  }
+
+  String get observationLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuv joylashuvi',
+      _RussianStrings() => 'Место наблюдения',
+      _ => 'Observation location',
+    };
+  }
+
+  String get backToAdd {
+    return switch (this) {
+      _UzbekStrings() => 'Qoʻshishga qaytish',
+      _RussianStrings() => 'Назад к добавлению',
+      _ => 'Back to Add',
+    };
+  }
+
+  String get attachLocationQuestion {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuv biriktirilsinmi?',
+      _RussianStrings() => 'Прикрепить место?',
+      _ => 'Attach a location?',
+    };
+  }
+
+  String get attachLocationHelp {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Joylashuv kuzatuvni xaritada koʻrsatadi. Rasm eski boʻlsa yoki joy aniq boʻlmasa, oʻtkazib yuboring.',
+      _RussianStrings() =>
+        'Место делает наблюдение видимым на карте. Пропустите его, если фото старое или место неизвестно.',
+      _ =>
+        'A location makes the observation visible on the map. Skip it if the photo is old or the place is uncertain.',
+    };
+  }
+
+  String get useMyCurrentLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joriy joylashuvimdan foydalanish',
+      _RussianStrings() => 'Использовать мое местоположение',
+      _ => 'Use my current location',
+    };
+  }
+
+  String get markOnMap {
+    return switch (this) {
+      _UzbekStrings() => 'Xaritada belgilash',
+      _RussianStrings() => 'Отметить на карте',
+      _ => 'Mark on map',
+    };
+  }
+
+  String get continueWithoutLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvsiz davom etish',
+      _RussianStrings() => 'Продолжить без места',
+      _ => 'Continue without location',
+    };
+  }
+
+  String get couldNotResolveYourLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvingizni aniqlab boʻlmadi.',
+      _RussianStrings() => 'Не удалось определить ваше местоположение.',
+      _ => 'Could not resolve your location.',
+    };
+  }
+
+  String get useThisLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Shu joylashuvdan foydalanish',
+      _RussianStrings() => 'Использовать это место',
+      _ => 'Use this location',
+    };
+  }
+
+  String get locatedObservation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvli kuzatuv',
+      _RussianStrings() => 'Наблюдение с местом',
+      _ => 'Located observation',
+    };
+  }
+
+  String get feedOnlyPost {
+    return switch (this) {
+      _UzbekStrings() => 'Faqat lentadagi post',
+      _RussianStrings() => 'Пост только в ленте',
+      _ => 'Feed-only post',
+    };
+  }
+
+  String get changeLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvni oʻzgartirish',
+      _RussianStrings() => 'Изменить место',
+      _ => 'Change location',
+    };
+  }
+
+  String get addLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuv qoʻshish',
+      _RussianStrings() => 'Добавить место',
+      _ => 'Add location',
+    };
+  }
+
+  String get matchCatAndAddDetails {
+    return switch (this) {
+      _UzbekStrings() => 'Mushukni moslang va tafsilot qoʻshing',
+      _RussianStrings() => 'Сопоставьте кошку и добавьте детали',
+      _ => 'Match the cat and add details',
+    };
+  }
+
+  String get feedOnlyObservationHelp {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Bu galereya kuzatuvi faqat lentada chiqadi va xaritada marker yaratmaydi.',
+      _RussianStrings() =>
+        'Это наблюдение из галереи появится только в ленте и не создаст маркер на карте.',
+      _ =>
+        'This gallery observation will appear in the feed only and will not create a map marker.',
+    };
+  }
+
+  String get descriptionHint {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushuk, joylashuv va kerak boʻlishi mumkin boʻlgan yordamni tasvirlang',
+      _RussianStrings() =>
+        'Опишите кошку, место и помощь, которая может понадобиться',
+      _ => 'Describe the cat, location, and any help it may need',
+    };
+  }
+
+  String get newCatNameOptional {
+    return switch (this) {
+      _UzbekStrings() => 'Yangi mushuk nomi (ixtiyoriy)',
+      _RussianStrings() => 'Имя новой кошки (необязательно)',
+      _ => 'New cat name (optional)',
+    };
+  }
+
+  String get unknown {
+    return switch (this) {
+      _UzbekStrings() => 'Nomaʼlum',
+      _RussianStrings() => 'Неизвестно',
+      _ => 'Unknown',
+    };
+  }
+
+  String get healthy {
+    return switch (this) {
+      _UzbekStrings() => 'Sogʻlom',
+      _RussianStrings() => 'Здорова',
+      _ => 'Healthy',
+    };
+  }
+
+  String get catStatus {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuk holati',
+      _RussianStrings() => 'Состояние кошки',
+      _ => 'Cat status',
+    };
+  }
+
+  String get publishObservation {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuvni joylash',
+      _RussianStrings() => 'Опубликовать наблюдение',
+      _ => 'Publish observation',
+    };
+  }
+
+  String get nearbyCats {
+    return switch (this) {
+      _UzbekStrings() => 'Yaqindagi mushuklar',
+      _RussianStrings() => 'Кошки рядом',
+      _ => 'Nearby cats',
+    };
+  }
+
+  String get noNearbyCatsFound {
+    return switch (this) {
+      _UzbekStrings() => 'Yaqinda mushuk topilmadi.',
+      _RussianStrings() => 'Кошек рядом не найдено.',
+      _ => 'No nearby cats found.',
+    };
+  }
+
+  String get thisIsNewCat {
+    return switch (this) {
+      _UzbekStrings() => 'Bu yangi mushuk',
+      _RussianStrings() => 'Это новая кошка',
+      _ => 'This is a new cat',
+    };
+  }
+
+  String get published {
+    return switch (this) {
+      _UzbekStrings() => 'Joylandi',
+      _RussianStrings() => 'Опубликовано',
+      _ => 'Published',
+    };
+  }
+
+  String get observationPublished {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuv joylandi.',
+      _RussianStrings() => 'Наблюдение опубликовано.',
+      _ => 'Observation published.',
+    };
+  }
+
+  String postNowAvailable(String id) {
+    return switch (this) {
+      _UzbekStrings() => '$id posti endi lentada mavjud.',
+      _RussianStrings() => 'Пост $id теперь доступен в ленте.',
+      _ => 'Post $id is now available in the feed.',
+    };
+  }
+
+  String get observationSentToBackend {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuvingiz backendga yuborildi.',
+      _RussianStrings() => 'Ваше наблюдение отправлено на backend.',
+      _ => 'Your observation has been sent to the backend.',
+    };
+  }
+
+  String get viewFeed {
+    return switch (this) {
+      _UzbekStrings() => 'Lentani koʻrish',
+      _RussianStrings() => 'Открыть ленту',
+      _ => 'View feed',
+    };
+  }
+
+  String get addAnother {
+    return switch (this) {
+      _UzbekStrings() => 'Yana qoʻshish',
+      _RussianStrings() => 'Добавить еще',
+      _ => 'Add another',
+    };
+  }
+
+  String addPhotosCount(int count) {
+    return switch (this) {
+      _UzbekStrings() => 'Rasm qoʻshish ($count/5)',
+      _RussianStrings() => 'Добавить фото ($count/5)',
+      _ => 'Add photos ($count/5)',
+    };
+  }
+
+  String get rehoming {
+    return switch (this) {
+      _UzbekStrings() => 'Uy topish',
+      _RussianStrings() => 'Пристройство',
+      _ => 'Rehoming',
+    };
+  }
+
+  String get createRehomingPost {
+    return switch (this) {
+      _UzbekStrings() => 'Uy topish postini yaratish',
+      _RussianStrings() => 'Создать пост о пристройстве',
+      _ => 'Create a rehoming post',
+    };
+  }
+
+  String get createRehomingPostHelp {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushuk va unga qanday uy kerakligini tasvirlang. Bu yoʻqolgan jonivor eʼlonlaridan alohida va xarita joylashuvini talab qilmaydi.',
+      _RussianStrings() =>
+        'Опишите кошку и какой дом ей нужен. Это отдельно от объявлений о потерянных питомцах и не требует места на карте.',
+      _ =>
+        'Describe the cat and the kind of home they need. This is separate from lost-pet alerts and does not require a map location.',
+    };
+  }
+
+  String get petName {
+    return switch (this) {
+      _UzbekStrings() => 'Jonivor nomi',
+      _RussianStrings() => 'Имя питомца',
+      _ => "Pet's name",
+    };
+  }
+
+  String get petNameRequired {
+    return switch (this) {
+      _UzbekStrings() => 'Jonivor nomini kiriting.',
+      _RussianStrings() => 'Введите имя питомца.',
+      _ => "Enter the pet's name.",
+    };
+  }
+
+  String get additionalInformation {
+    return switch (this) {
+      _UzbekStrings() => 'Qoʻshimcha maʼlumot',
+      _RussianStrings() => 'Дополнительная информация',
+      _ => 'Additional information',
+    };
+  }
+
+  String get adoptionInfoHint {
+    return switch (this) {
+      _UzbekStrings() => 'Yoshi, xarakteri, salomatligi va qanday uy maʼqul.',
+      _RussianStrings() =>
+        'Возраст, характер, здоровье и предпочтительный дом.',
+      _ => 'Age, personality, health notes, and preferred home.',
+    };
+  }
+
+  String get showPhonePublicly {
+    return switch (this) {
+      _UzbekStrings() => 'Telefon raqamim ochiq koʻrsatilsin',
+      _RussianStrings() => 'Показывать мой номер телефона публично',
+      _ => 'Show my phone number publicly',
+    };
+  }
+
+  String get adoptionPhoneHelp {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Odamlar asrab olish haqida bogʻlanishi uchun profilingizdagi telefon raqami kerak.',
+      _RussianStrings() =>
+        'Людям нужен телефон из вашего профиля, чтобы связаться по поводу пристройства.',
+      _ =>
+        'People need your profile phone number to contact you about adoption.',
+    };
+  }
+
+  String get addAtLeastOnePhoto {
+    return switch (this) {
+      _UzbekStrings() => 'Kamida bitta rasm qoʻshing.',
+      _RussianStrings() => 'Добавьте хотя бы одно фото.',
+      _ => 'Add at least one photo.',
+    };
+  }
+
+  String get confirmPhonePublic {
+    return switch (this) {
+      _UzbekStrings() => 'Telefon raqamingiz ochiq koʻrsatilishini tasdiqlang.',
+      _RussianStrings() =>
+        'Подтвердите, что ваш номер телефона можно показать публично.',
+      _ => 'Confirm that your phone number may be shown publicly.',
+    };
+  }
+
+  String get publishAdoptionPost {
+    return switch (this) {
+      _UzbekStrings() => 'Asrab olish postini joylash',
+      _RussianStrings() => 'Опубликовать пост о пристройстве',
+      _ => 'Publish adoption post',
+    };
+  }
+
+  String get adoption {
+    return switch (this) {
+      _UzbekStrings() => 'Asrab olish',
+      _RussianStrings() => 'Пристройство',
+      _ => 'Adoption',
+    };
+  }
+
+  String get addComment {
+    return switch (this) {
+      _UzbekStrings() => 'Izoh qoʻshish',
+      _RussianStrings() => 'Добавить комментарий',
+      _ => 'Add a comment',
+    };
+  }
+
+  String get postComment {
+    return switch (this) {
+      _UzbekStrings() => 'Izohni joylash',
+      _RussianStrings() => 'Опубликовать комментарий',
+      _ => 'Post comment',
+    };
+  }
+
+  String get reply {
+    return switch (this) {
+      _UzbekStrings() => 'Javob berish',
+      _RussianStrings() => 'Ответить',
+      _ => 'Reply',
+    };
+  }
+
+  String get replyingTo {
+    return switch (this) {
+      _UzbekStrings() => 'Javob:',
+      _RussianStrings() => 'Ответ пользователю:',
+      _ => 'Replying to',
+    };
+  }
+
+  String get cancelReply {
+    return switch (this) {
+      _UzbekStrings() => 'Javobni bekor qilish',
+      _RussianStrings() => 'Отменить ответ',
+      _ => 'Cancel reply',
+    };
+  }
+
+  String get readMore {
+    return switch (this) {
+      _UzbekStrings() => 'Batafsil',
+      _RussianStrings() => 'Читать далее',
+      _ => 'Read more',
+    };
+  }
+
+  String get showLess {
+    return switch (this) {
+      _UzbekStrings() => 'Kamroq ko‘rsatish',
+      _RussianStrings() => 'Свернуть',
+      _ => 'Show less',
+    };
+  }
+
+  String get hide {
+    return switch (this) {
+      _UzbekStrings() => 'Yashirish',
+      _RussianStrings() => 'Скрыть',
+      _ => 'Hide',
+    };
+  }
+
+  String get noPublicPostFoundForCat {
+    return switch (this) {
+      _UzbekStrings() => 'Bu mushuk uchun ochiq post topilmadi.',
+      _RussianStrings() => 'Публичный пост для этой кошки не найден.',
+      _ => 'No public post found for this cat.',
+    };
+  }
+
+  String couldNotOpenPost(Object error) {
+    return switch (this) {
+      _UzbekStrings() => 'Postni ochib boʻlmadi: $error',
+      _RussianStrings() => 'Не удалось открыть пост: $error',
+      _ => 'Could not open post: $error',
+    };
+  }
+
+  String get useMyLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvimdan foydalanish',
+      _RussianStrings() => 'Использовать мое место',
+      _ => 'Use my location',
+    };
+  }
+
+  String get observation {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuv',
+      _RussianStrings() => 'Наблюдение',
+      _ => 'Observation',
+    };
+  }
+
+  String get report {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyat qilish',
+      _RussianStrings() => 'Пожаловаться',
+      _ => 'Report',
+    };
+  }
+
+  String get changeProfilePicture {
+    return switch (this) {
+      _UzbekStrings() => 'Profil rasmini oʻzgartirish',
+      _RussianStrings() => 'Изменить фото профиля',
+      _ => 'Change profile picture',
+    };
+  }
+
+  String get useCamera {
+    return switch (this) {
+      _UzbekStrings() => 'Kameradan foydalanish',
+      _RussianStrings() => 'Использовать камеру',
+      _ => 'Use camera',
+    };
+  }
+
+  String get telegramUsername {
+    return switch (this) {
+      _UzbekStrings() => 'Telegram username',
+      _RussianStrings() => 'Имя пользователя Telegram',
+      _ => 'Telegram username',
+    };
+  }
+
+  String get bio {
+    return switch (this) {
+      _UzbekStrings() => 'Bio',
+      _RussianStrings() => 'О себе',
+      _ => 'Bio',
+    };
+  }
+
+  String get bioHint {
+    return switch (this) {
+      _UzbekStrings() => 'Toshkentdan Aydos, mushuklarni yaxshi koʻradi',
+      _RussianStrings() => 'Айдос из Ташкента, любит кошек',
+      _ => 'Aydos from Tashkent, cat lover',
+    };
+  }
+
+  String get uzbekPhoneFormatHelp {
+    return switch (this) {
+      _UzbekStrings() => 'Oʻzbekiston formati: +998 xx xxx xx xx',
+      _RussianStrings() => 'Формат Узбекистана: +998 xx xxx xx xx',
+      _ => 'Uzbekistan format: +998 xx xxx xx xx',
+    };
+  }
+
+  String get telegramValidation {
+    return switch (this) {
+      _UzbekStrings() =>
+        '5-32 ta harf, raqam yoki pastki chiziqdan foydalaning.',
+      _RussianStrings() =>
+        'Используйте 5-32 буквы, цифры или нижние подчеркивания.',
+      _ => 'Use 5-32 letters, numbers, or underscores.',
+    };
+  }
+
+  String get profileNotFound {
+    return switch (this) {
+      _UzbekStrings() => 'Profil topilmadi.',
+      _RussianStrings() => 'Профиль не найден.',
+      _ => 'Profile not found.',
+    };
+  }
+
+  String get blockUser {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchini bloklash',
+      _RussianStrings() => 'Заблокировать пользователя',
+      _ => 'Block user',
+    };
+  }
+
+  String get userBlocked {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchi bloklandi.',
+      _RussianStrings() => 'Пользователь заблокирован.',
+      _ => 'User blocked.',
+    };
+  }
+
+  String get blockUserTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchi bloklansinmi?',
+      _RussianStrings() => 'Заблокировать пользователя?',
+      _ => 'Block user?',
+    };
+  }
+
+  String get blockUserMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Foydalanuvchi haqoratli yoki xavfli boʻlsa, shundan foydalaning. Blokdan chiqarish interfeysi qoʻshilguncha supportdan yordam soʻrashingiz mumkin.',
+      _RussianStrings() =>
+        'Используйте это, если пользователь ведет себя оскорбительно или небезопасно. Пока интерфейс разблокировки не добавлен, можно попросить support разблокировать пользователя.',
+      _ =>
+        'Use this when a user is abusive or unsafe. You can ask support to unblock them until the unblock UI is added.',
+    };
+  }
+
+  String get block {
+    return switch (this) {
+      _UzbekStrings() => 'Bloklash',
+      _RussianStrings() => 'Заблокировать',
+      _ => 'Block',
+    };
+  }
+
+  String get englishLanguage {
+    return switch (this) {
+      _UzbekStrings() => 'Inglizcha',
+      _RussianStrings() => 'Английский',
+      _ => 'English',
+    };
+  }
+
+  String get uzbekLanguage {
+    return switch (this) {
+      _UzbekStrings() => 'Oʻzbekcha',
+      _RussianStrings() => 'Узбекский',
+      _ => 'Uzbek',
+    };
+  }
+
+  String get russianLanguage {
+    return switch (this) {
+      _UzbekStrings() => 'Ruscha',
+      _RussianStrings() => 'Русский',
+      _ => 'Russian',
+    };
+  }
+
+  String get confirmingEmail {
+    return switch (this) {
+      _UzbekStrings() => 'Email tasdiqlanmoqda...',
+      _RussianStrings() => 'Email подтверждается...',
+      _ => 'Confirming your email...',
+    };
+  }
+
+  String get emailVerifiedSignInNow {
+    return switch (this) {
+      _UzbekStrings() => 'Email tasdiqlandi. Endi kirishingiz mumkin.',
+      _RussianStrings() => 'Email подтвержден. Теперь можно войти.',
+      _ => 'Email verified. You can sign in now.',
+    };
+  }
+
+  String get couldNotVerifyEmailLink {
+    return switch (this) {
+      _UzbekStrings() => 'Bu email havolasini tasdiqlab boʻlmadi.',
+      _RussianStrings() => 'Не удалось подтвердить эту ссылку email.',
+      _ => 'Could not verify this email link.',
+    };
+  }
+
+  String get googleSignInNoIdToken {
+    return switch (this) {
+      _UzbekStrings() => 'Google kirishi ID token qaytarmadi.',
+      _RussianStrings() => 'Вход через Google не вернул ID token.',
+      _ => 'Google sign-in did not return an ID token.',
+    };
+  }
+
+  String get googleSignInFailed {
+    return switch (this) {
+      _UzbekStrings() => 'Google orqali kirish amalga oshmadi.',
+      _RussianStrings() => 'Не удалось войти через Google.',
+      _ => 'Google sign-in failed.',
+    };
+  }
+
+  String get googleSignInNotConfigured {
+    return switch (this) {
+      _UzbekStrings() => 'Bu build uchun Google orqali kirish sozlanmagan.',
+      _RussianStrings() => 'Вход через Google не настроен для этой сборки.',
+      _ => 'Google sign-in is not configured for this build.',
+    };
+  }
+
+  String get googleSignInUnavailable {
+    return switch (this) {
+      _UzbekStrings() => 'Google orqali kirish hozir mavjud emas.',
+      _RussianStrings() => 'Вход через Google сейчас недоступен.',
+      _ => 'Google sign-in is unavailable.',
+    };
+  }
+
+  String get landOfCats {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuklar yurti',
+      _RussianStrings() => 'Страна кошек',
+      _ => 'The land of cats',
+    };
+  }
+
+  String get everythingCatsTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuklarga oid hammasi bir sokin joyda',
+      _RussianStrings() => 'Все о кошках в одном спокойном месте',
+      _ => 'Everything cats in one calm place',
+    };
+  }
+
+  String get everythingCatsMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Kuzatuvlarni ulashing, yordam kerak mushuklarni belgilang, yoʻqolgan jonivorlarni qidiring, mushuklarga yangi uy toping va yaqin foydali joylarni toping.',
+      _RussianStrings() =>
+        'Делитесь наблюдениями, отмечайте кошек, которым нужна помощь, ищите потерянных питомцев, пристраивайте кошек и находите полезные места рядом.',
+      _ =>
+        'Share sightings, tag observations as Needs help for cats in need, search for lost pets, rehome cats, and discover useful places nearby.',
+    };
+  }
+
+  String get urgentAlerts {
+    return switch (this) {
+      _UzbekStrings() => 'Shoshilinch eʼlonlar',
+      _RussianStrings() => 'Срочные объявления',
+      _ => 'Urgent alerts',
+    };
+  }
+
+  String get newHomes {
+    return switch (this) {
+      _UzbekStrings() => 'Yangi uylar',
+      _RussianStrings() => 'Новые дома',
+      _ => 'New homes',
+    };
+  }
+
+  String get adoptionPosts {
+    return switch (this) {
+      _UzbekStrings() => 'Asrab olish postlari',
+      _RussianStrings() => 'Посты о пристройстве',
+      _ => 'Adoption posts',
+    };
+  }
+
+  String get usefulPlaces {
+    return switch (this) {
+      _UzbekStrings() => 'Foydali joylar',
+      _RussianStrings() => 'Полезные места',
+      _ => 'Useful places',
+    };
+  }
+
+  String get vetsShopsShelters {
+    return switch (this) {
+      _UzbekStrings() => 'Veterinarlar, doʻkonlar, shelterlar',
+      _RussianStrings() => 'Ветклиники, магазины, приюты',
+      _ => 'Vets, shops, shelters',
+    };
+  }
+
+  String get nearbyMap {
+    return switch (this) {
+      _UzbekStrings() => 'Yaqin xarita',
+      _RussianStrings() => 'Карта рядом',
+      _ => 'Nearby map',
+    };
+  }
+
+  String get catsAndServices {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuklar va xizmatlar',
+      _RussianStrings() => 'Кошки и сервисы',
+      _ => 'Cats and services',
+    };
+  }
+
+  String get useYourLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvingizdan foydalanish',
+      _RussianStrings() => 'Использовать ваше местоположение',
+      _ => 'Use your location',
+    };
+  }
+
+  String get locationDisclosureMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushukistan yaqin mushuklar va foydali joylarni koʻrsatish uchun joriy joylashuvingizdan foydalanadi. Ochiq post yaratmasangiz, u joylanmaydi.',
+      _RussianStrings() =>
+        'Mushukistan использует ваше текущее местоположение, чтобы показывать кошек и полезные места рядом. Оно не публикуется, если вы не создадите публичный пост.',
+      _ =>
+        'Mushukistan uses your current location to show nearby cats and useful places. It is not published unless you create a public post.',
+    };
+  }
+
+  String get feedStatus {
+    return switch (this) {
+      _UzbekStrings() => 'Lenta',
+      _RussianStrings() => 'Лента',
+      _ => 'Feed',
+    };
+  }
+
+  String get moderationReports {
+    return switch (this) {
+      _UzbekStrings() => 'Moderatsiya shikoyatlari',
+      _RussianStrings() => 'Жалобы модерации',
+      _ => 'Moderation reports',
+    };
+  }
+
+  String get noOpenReports {
+    return switch (this) {
+      _UzbekStrings() => 'Ochiq shikoyatlar yoʻq.',
+      _RussianStrings() => 'Открытых жалоб нет.',
+      _ => 'No open reports.',
+    };
+  }
+
+  String get noReasonProvided {
+    return switch (this) {
+      _UzbekStrings() => 'Sabab kiritilmagan.',
+      _RussianStrings() => 'Причина не указана.',
+      _ => 'No reason provided.',
+    };
+  }
+
+  String get reportDetail {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyat tafsiloti',
+      _RussianStrings() => 'Детали жалобы',
+      _ => 'Report detail',
+    };
+  }
+
+  String targetId(String id) {
+    return switch (this) {
+      _UzbekStrings() => 'Nishon ID: $id',
+      _RussianStrings() => 'ID объекта: $id',
+      _ => 'Target ID: $id',
+    };
+  }
+
+  String targetTitle(String title) {
+    return switch (this) {
+      _UzbekStrings() => 'Sarlavha: $title',
+      _RussianStrings() => 'Заголовок: $title',
+      _ => 'Title: $title',
+    };
+  }
+
+  String targetStatus(String status) {
+    return switch (this) {
+      _UzbekStrings() => 'Holat: $status',
+      _RussianStrings() => 'Статус: $status',
+      _ => 'Status: $status',
+    };
+  }
+
+  String get resolve {
+    return switch (this) {
+      _UzbekStrings() => 'Hal qilish',
+      _RussianStrings() => 'Решить',
+      _ => 'Resolve',
+    };
+  }
+
+  String get dismiss {
+    return switch (this) {
+      _UzbekStrings() => 'Rad etish',
+      _RussianStrings() => 'Отклонить',
+      _ => 'Dismiss',
+    };
+  }
+
+  String get reportStatus {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyat holati',
+      _RussianStrings() => 'Статус жалобы',
+      _ => 'Report status',
+    };
+  }
+
+  String get noAction {
+    return switch (this) {
+      _UzbekStrings() => 'Amal yoʻq',
+      _RussianStrings() => 'Без действия',
+      _ => 'No action',
+    };
+  }
+
+  String get softDeletePost {
+    return switch (this) {
+      _UzbekStrings() => 'Postni yashirib oʻchirish',
+      _RussianStrings() => 'Мягко удалить пост',
+      _ => 'Soft delete post',
+    };
+  }
+
+  String get softDeleteComment {
+    return switch (this) {
+      _UzbekStrings() => 'Izohni yashirib oʻchirish',
+      _RussianStrings() => 'Мягко удалить комментарий',
+      _ => 'Soft delete comment',
+    };
+  }
+
+  String get suspendUser {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchini toʻxtatish',
+      _RussianStrings() => 'Заблокировать пользователя',
+      _ => 'Suspend user',
+    };
+  }
+
+  String get moderationAction {
+    return switch (this) {
+      _UzbekStrings() => 'Moderatsiya amali',
+      _RussianStrings() => 'Действие модерации',
+      _ => 'Moderation action',
+    };
+  }
+
+  String get note {
+    return switch (this) {
+      _UzbekStrings() => 'Eslatma',
+      _RussianStrings() => 'Заметка',
+      _ => 'Note',
+    };
+  }
+
+  String get saveModerationDecision {
+    return switch (this) {
+      _UzbekStrings() => 'Moderatsiya qarorini saqlash',
+      _RussianStrings() => 'Сохранить решение модерации',
+      _ => 'Save moderation decision',
+    };
+  }
+
+  String get reportContent {
+    return switch (this) {
+      _UzbekStrings() => 'Kontentdan shikoyat qilish',
+      _RussianStrings() => 'Пожаловаться на контент',
+      _ => 'Report content',
+    };
+  }
+
+  String get post {
+    return switch (this) {
+      _UzbekStrings() => 'Post',
+      _RussianStrings() => 'Пост',
+      _ => 'Post',
+    };
+  }
+
+  String get comment {
+    return switch (this) {
+      _UzbekStrings() => 'Izoh',
+      _RussianStrings() => 'Комментарий',
+      _ => 'Comment',
+    };
+  }
+
+  String get user {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchi',
+      _RussianStrings() => 'Пользователь',
+      _ => 'User',
+    };
+  }
+
+  String get cat {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuk',
+      _RussianStrings() => 'Кошка',
+      _ => 'Cat',
+    };
+  }
+
+  String get targetType {
+    return switch (this) {
+      _UzbekStrings() => 'Nishon turi',
+      _RussianStrings() => 'Тип объекта',
+      _ => 'Target type',
+    };
+  }
+
+  String get targetIdLabel {
+    return switch (this) {
+      _UzbekStrings() => 'Nishon ID',
+      _RussianStrings() => 'ID объекта',
+      _ => 'Target ID',
+    };
+  }
+
+  String get targetIdRequired {
+    return switch (this) {
+      _UzbekStrings() => 'Nishon ID kiritilishi kerak.',
+      _RussianStrings() => 'Укажите ID объекта.',
+      _ => 'Target ID is required.',
+    };
+  }
+
+  String get reason {
+    return switch (this) {
+      _UzbekStrings() => 'Sabab',
+      _RussianStrings() => 'Причина',
+      _ => 'Reason',
+    };
+  }
+
+  String get reasonRequired {
+    return switch (this) {
+      _UzbekStrings() => 'Iltimos, sababni kiriting.',
+      _RussianStrings() => 'Пожалуйста, укажите причину.',
+      _ => 'Please provide a reason.',
+    };
+  }
+
+  String get childSafetyReportReason {
+    return switch (this) {
+      _UzbekStrings() => 'Bolalar xavfsizligi / ekspluatatsiya',
+      _RussianStrings() => 'Безопасность детей / эксплуатация',
+      _ => 'Child safety / exploitation',
+    };
+  }
+
+  String get inappropriateContentReportReason {
+    return switch (this) {
+      _UzbekStrings() => 'Nomaqbul kontent',
+      _RussianStrings() => 'Неприемлемый контент',
+      _ => 'Inappropriate content',
+    };
+  }
+
+  String get harassmentReportReason {
+    return switch (this) {
+      _UzbekStrings() => 'Tazyiq yoki haqorat',
+      _RussianStrings() => 'Травля или оскорбления',
+      _ => 'Harassment or abuse',
+    };
+  }
+
+  String get spamReportReason {
+    return switch (this) {
+      _UzbekStrings() => 'Spam',
+      _RussianStrings() => 'Спам',
+      _ => 'Spam',
+    };
+  }
+
+  String get otherReportReason {
+    return switch (this) {
+      _UzbekStrings() => 'Boshqa',
+      _RussianStrings() => 'Другое',
+      _ => 'Other',
+    };
+  }
+
+  String get reportDetails {
+    return switch (this) {
+      _UzbekStrings() => 'Tafsilotlar',
+      _RussianStrings() => 'Подробности',
+      _ => 'Details',
+    };
+  }
+
+  String get reportSubmitted {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyat yuborildi.',
+      _RussianStrings() => 'Жалоба отправлена.',
+      _ => 'Report submitted.',
+    };
+  }
+
+  String get submitReport {
+    return switch (this) {
+      _UzbekStrings() => 'Shikoyatni yuborish',
+      _RussianStrings() => 'Отправить жалобу',
+      _ => 'Submit report',
+    };
+  }
+
   String get catNameLabel {
     return switch (this) {
       _UzbekStrings() => 'Mushuk nomi',
@@ -519,27 +2043,11 @@ class AppStrings {
     };
   }
 
-  String get additionalInformation {
-    return switch (this) {
-      _UzbekStrings() => 'Qo‘shimcha ma’lumot',
-      _RussianStrings() => 'Дополнительная информация',
-      _ => 'Additional information',
-    };
-  }
-
   String get publishLostPet {
     return switch (this) {
       _UzbekStrings() => 'Yo‘qolgan jonivorni joylash',
       _RussianStrings() => 'Опубликовать потерянного питомца',
       _ => 'Publish lost pet',
-    };
-  }
-
-  String get addAtLeastOnePhoto {
-    return switch (this) {
-      _UzbekStrings() => 'Kamida bitta rasm qo‘shing.',
-      _RussianStrings() => 'Добавьте хотя бы одно фото.',
-      _ => 'Add at least one photo.',
     };
   }
 
@@ -549,15 +2057,6 @@ class AppStrings {
       _RussianStrings() =>
         'Укажите на карте, где питомца видели в последний раз.',
       _ => 'Point the last-seen location on the map.',
-    };
-  }
-
-  String get confirmPhonePublic {
-    return switch (this) {
-      _UzbekStrings() => 'Telefon raqamingiz ochiq ko‘rsatilishini tasdiqlang.',
-      _RussianStrings() =>
-        'Подтвердите, что ваш номер телефона можно показать публично.',
-      _ => 'Confirm that your phone number may be shown publicly.',
     };
   }
 

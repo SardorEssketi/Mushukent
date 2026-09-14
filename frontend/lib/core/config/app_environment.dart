@@ -18,47 +18,91 @@ class AppEnvironment {
     this.requestTimeout = const Duration(seconds: 15),
     this.googleClientId,
     this.googleServerClientId,
+    this.isWeb = kIsWeb,
+    this.isAndroid = false,
   });
 
   final Uri apiBaseUri;
   final Duration requestTimeout;
   final String? googleClientId;
   final String? googleServerClientId;
+  final bool isWeb;
+  final bool isAndroid;
 
-  bool get isGoogleSignInConfigured => kIsWeb
+  static const productionApiBaseUrl = 'https://api.mushukistan.uz';
+
+  bool get isGoogleSignInConfigured => isWeb
       ? googleClientId != null && googleClientId!.isNotEmpty
-      : (googleClientId != null && googleClientId!.isNotEmpty) ||
-          (googleServerClientId != null && googleServerClientId!.isNotEmpty);
+      : isAndroid
+          ? googleServerClientId != null && googleServerClientId!.isNotEmpty
+          : (googleClientId != null && googleClientId!.isNotEmpty) ||
+              (googleServerClientId != null &&
+                  googleServerClientId!.isNotEmpty);
 
   static AppEnvironment fromBuildEnvironment() {
-    final override =
-        const String.fromEnvironment('MUSHUKISTAN_API_BASE_URL').trim();
-    final googleClientId =
-        const String.fromEnvironment('MUSHUKISTAN_GOOGLE_CLIENT_ID').trim();
-    final googleServerClientId =
-        const String.fromEnvironment('MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID')
-            .trim();
+    return fromValues(
+      apiBaseUrl:
+          const String.fromEnvironment('MUSHUKISTAN_API_BASE_URL').trim(),
+      googleClientId:
+          const String.fromEnvironment('MUSHUKISTAN_GOOGLE_CLIENT_ID').trim(),
+      googleServerClientId:
+          const String.fromEnvironment('MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID')
+              .trim(),
+      releaseMode: kReleaseMode,
+      web: kIsWeb,
+      android: !kIsWeb && Platform.isAndroid,
+    );
+  }
+
+  @visibleForTesting
+  static AppEnvironment fromValues({
+    String apiBaseUrl = '',
+    String googleClientId = '',
+    String googleServerClientId = '',
+    bool releaseMode = false,
+    bool web = false,
+    bool android = false,
+  }) {
+    final override = apiBaseUrl.trim();
+    final normalizedGoogleClientId = googleClientId.trim();
+    final normalizedGoogleServerClientId = googleServerClientId.trim();
     if (override.isNotEmpty) {
       return AppEnvironment(
         apiBaseUri: _normalizeApiBaseUri(override),
-        googleClientId: googleClientId.isEmpty ? null : googleClientId,
-        googleServerClientId:
-            googleServerClientId.isEmpty ? null : googleServerClientId,
+        googleClientId:
+            normalizedGoogleClientId.isEmpty ? null : normalizedGoogleClientId,
+        googleServerClientId: normalizedGoogleServerClientId.isEmpty
+            ? null
+            : normalizedGoogleServerClientId,
+        isWeb: web,
+        isAndroid: android,
       );
     }
-    if (kReleaseMode) {
-      throw AppEnvironmentConfiguration(
-        'Missing MUSHUKISTAN_API_BASE_URL build configuration.',
+
+    if (releaseMode) {
+      return AppEnvironment(
+        apiBaseUri: _normalizeApiBaseUri(productionApiBaseUrl),
+        googleClientId:
+            normalizedGoogleClientId.isEmpty ? null : normalizedGoogleClientId,
+        googleServerClientId: normalizedGoogleServerClientId.isEmpty
+            ? null
+            : normalizedGoogleServerClientId,
+        isWeb: web,
+        isAndroid: android,
       );
     }
-    final fallback = !kIsWeb && Platform.isAndroid
-        ? 'http://10.0.2.2:8000'
-        : 'http://localhost:8000';
+
+    final fallback =
+        !web && android ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
     return AppEnvironment(
       apiBaseUri: _normalizeApiBaseUri(fallback),
-      googleClientId: googleClientId.isEmpty ? null : googleClientId,
-      googleServerClientId:
-          googleServerClientId.isEmpty ? null : googleServerClientId,
+      googleClientId:
+          normalizedGoogleClientId.isEmpty ? null : normalizedGoogleClientId,
+      googleServerClientId: normalizedGoogleServerClientId.isEmpty
+          ? null
+          : normalizedGoogleServerClientId,
+      isWeb: web,
+      isAndroid: android,
     );
   }
 }

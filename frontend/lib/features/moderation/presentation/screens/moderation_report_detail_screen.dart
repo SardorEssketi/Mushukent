@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import 'moderation_reports_screen.dart';
 
@@ -32,6 +33,7 @@ class _ModerationReportDetailScreenState
   @override
   Widget build(BuildContext context) {
     final reportsAsync = ref.watch(moderationReportsProvider);
+    final strings = ref.watch(appStringsProvider);
     final report = reportsAsync.maybeWhen(
       data: (page) {
         for (final item in page.items) {
@@ -45,11 +47,11 @@ class _ModerationReportDetailScreenState
     );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Report detail')),
+      appBar: AppBar(title: Text(strings.reportDetail)),
       body: report == null
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16),
               children: [
                 Card(
                   child: Padding(
@@ -62,13 +64,15 @@ class _ModerationReportDetailScreenState
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
-                        Text(report.reason ?? 'No reason provided.'),
+                        Text(report.reason ?? strings.noReasonProvided),
                         const SizedBox(height: 12),
-                        Text('Target ID: ${report.targetId}'),
+                        Text(strings.targetId(report.targetId)),
                         if (report.target != null) ...[
                           const SizedBox(height: 8),
-                          Text('Title: ${report.target!.title ?? '-'}'),
-                          Text('Status: ${report.target!.status ?? '-'}'),
+                          Text(
+                              strings.targetTitle(report.target!.title ?? '-')),
+                          Text(strings
+                              .targetStatus(report.target!.status ?? '-')),
                         ],
                       ],
                     ),
@@ -77,33 +81,37 @@ class _ModerationReportDetailScreenState
                 const SizedBox(height: 24),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedStatus,
-                  items: const [
-                    DropdownMenuItem(value: 'resolved', child: Text('Resolve')),
+                  isExpanded: true,
+                  items: [
                     DropdownMenuItem(
-                        value: 'dismissed', child: Text('Dismiss')),
+                        value: 'resolved', child: Text(strings.resolve)),
+                    DropdownMenuItem(
+                        value: 'dismissed', child: Text(strings.dismiss)),
                   ],
                   onChanged: (value) {
                     setState(() {
                       _selectedStatus = value;
                     });
                   },
-                  decoration: const InputDecoration(labelText: 'Report status'),
+                  decoration: InputDecoration(labelText: strings.reportStatus),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String?>(
                   initialValue: _selectedAction,
-                  items: const [
+                  isExpanded: true,
+                  items: [
                     DropdownMenuItem<String?>(
-                        value: null, child: Text('No action')),
+                        value: null, child: Text(strings.noAction)),
                     DropdownMenuItem(
                         value: 'soft_delete_post',
-                        child: Text('Soft delete post')),
+                        child: Text(strings.softDeletePost)),
                     DropdownMenuItem(
                       value: 'soft_delete_comment',
-                      child: Text('Soft delete comment'),
+                      child: Text(strings.softDeleteComment),
                     ),
                     DropdownMenuItem(
-                        value: 'suspend_user', child: Text('Suspend user')),
+                        value: 'suspend_user',
+                        child: Text(strings.suspendUser)),
                   ],
                   onChanged: (value) {
                     setState(() {
@@ -111,13 +119,13 @@ class _ModerationReportDetailScreenState
                     });
                   },
                   decoration:
-                      const InputDecoration(labelText: 'Moderation action'),
+                      InputDecoration(labelText: strings.moderationAction),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: _noteController,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Note'),
+                  decoration: InputDecoration(labelText: strings.note),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
@@ -168,7 +176,7 @@ class _ModerationReportDetailScreenState
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Save moderation decision'),
+                      : Text(strings.saveModerationDecision),
                 ),
               ],
             ),

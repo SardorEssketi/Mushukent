@@ -62,7 +62,9 @@ class MediaStorageService:
                 canonical_kind = (
                     MediaKind.LOST_PET
                     if purpose == UploadPurpose.LOST_PET
-                    else MediaKind.ADOPTION if purpose == UploadPurpose.ADOPTION else MediaKind.POST
+                    else MediaKind.ADOPTION
+                    if purpose == UploadPurpose.ADOPTION
+                    else MediaKind.POST
                 )
                 canonical_variant = MediaVariant.ORIGINAL
                 thumbnail_variant = MediaVariant.THUMBNAIL

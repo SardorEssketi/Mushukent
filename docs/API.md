@@ -32,7 +32,7 @@ Use this envelope consistently across all endpoints. Successful responses return
 Authentication
 --------------
 - Mechanism: JWT access token in Authorization header: "Authorization: Bearer <token>".
-- For MVP: no refresh tokens. Clients re-authenticate when token expires.
+- Clients receive an opaque refresh/session token at login. Store it securely, use it only with `/auth/refresh` and `/auth/logout`, and never send it as a bearer token.
 - Protected routes will return 401 with error.code = "UNAUTHORIZED" for missing/invalid token and 403 with "FORBIDDEN" for insufficient permissions.
 
 Rate limiting (MVP guidance)
@@ -129,8 +129,9 @@ Feature: Authentication
   {
     "success": true,
     "data": {
-      "access_token": "eyJ...",
-      "token_type": "Bearer",
+        "access_token": "eyJ...",
+        "refresh_token": "<opaque-refresh-token>",
+        "token_type": "Bearer",
       "expires_in": 3600,
       "user": {"id":"uuid","email":"user@example.com","name":"Sardor","preferred_language":"en"}
     }
@@ -193,13 +194,22 @@ Feature: Authentication
   - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
   - Google-authenticated accounts are considered verified immediately.
 
-6) POST /api/v1/auth/logout
+6) POST /api/v1/auth/refresh
+- Purpose: Exchange a valid refresh/session token for a new access token and renewed refresh session.
+- Auth: none
+- Request: {"refresh_token":"<opaque-refresh-token>"}
+- Response: same as login
+- Errors:
+  - 401 INVALID_REFRESH_TOKEN
+  - 403 ACCOUNT_DISABLED
+
+7) POST /api/v1/auth/logout
 - Purpose: Logout; optional server-side token blacklist (not used in MVP)
 - Auth: Bearer
-- Request: none
+- Request: optional {"refresh_token":"<opaque-refresh-token>"}
 - Response: 204 No Content
 - Errors: 401
-- Notes: Clients should drop token locally.
+- Notes: Backend revokes the refresh session where possible; clients must drop local access and refresh tokens.
 
 Feature: Users
 --------------
@@ -266,13 +276,53 @@ Feature: Users
   - attempt best-effort media cleanup for profile, post, and lost-pet media URLs.
 - Errors: 401 UNAUTHORIZED, 403 ACCOUNT_DISABLED
 
-5) POST /api/v1/users/{user_id}/block
+5) POST /api/v1/users/account-deletion-requests
+- Purpose: Start outside-the-app account deletion for users who cannot access the app.
+- Auth: none
+- Request:
+  {"email":"user@example.com"}
+- Response: 200 with a generic success response whether or not the email belongs to an account:
+  {
+    "success": true,
+    "data": {
+      "accepted": true,
+      "message": "If an active Mushukistan account exists for this email address, a confirmation link will be sent."
+    }
+  }
+- Behavior:
+  - never reveals whether the email exists;
+  - if an active account exists, issue a signed, time-limited account deletion token tied to that account and email address;
+  - send a confirmation link to the account email address through the configured Resend email integration;
+  - do not delete the account at request time.
+- Rate limit: auth-style anonymous rate limit.
+
+6) POST /api/v1/users/account-deletion-confirmations
+- Purpose: Confirm outside-the-app account deletion after the user opens the emailed confirmation link.
+- Auth: none
+- Request:
+  {"token":"<account-deletion-token>"}
+- Response:
+  {
+    "success": true,
+    "data": {
+      "deleted": true,
+      "message": "Account deletion has been confirmed."
+    }
+  }
+- Behavior:
+  - validate token signature, issuer, audience, expiration, not-before time, token type, subject user ID, and email claim;
+  - reject invalid, expired, wrong-type, mismatched, missing, or already inactive accounts;
+  - execute the same account deletion service used by DELETE /api/v1/users/me.
+- Errors: 401 INVALID_ACCOUNT_DELETION_TOKEN, 410 ACCOUNT_ALREADY_DELETED
+- Rate limit: auth-style anonymous rate limit.
+
+7) POST /api/v1/users/{user_id}/block
 - Purpose: Block another active user.
 - Auth: Bearer required
 - Response: 204 No Content
 - Errors: 401 UNAUTHORIZED, 404 USER_NOT_FOUND, 422 VALIDATION_ERROR when blocking yourself
 
-6) DELETE /api/v1/users/{user_id}/block
+8) DELETE /api/v1/users/{user_id}/block
 - Purpose: Remove a block created by the current user.
 - Auth: Bearer required
 - Response: 204 No Content
@@ -387,7 +437,7 @@ Feature: Posts (Observations)
 - Request options:
   a) multipart/form-data with file:
   - photo/photos (one to five files) required OR photo_url string
-     - cat_id (uuid) OR new_cat object {name,status,canonical_location}
+     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional for the current observation flow
      - description string (max 2000)
      - status (cat_status)
      - latitude, longitude (required if client does not rely on EXIF GPS)
@@ -398,15 +448,14 @@ Feature: Posts (Observations)
   - observation uploads support up to 5 photos
   - If cat_id provided, must exist
   - If new_cat provided, validate per CatCreate
+  - If neither cat_id nor new_cat is provided, create an unnamed cat with status `unknown` automatically
   - latitude in [-90,90], longitude in [-180,180]
   - photo file: content-type image/jpeg|image/png, size<=10MB
 - Pydantic models: PostCreateMultipart (for docs), PostCreateJSON
 - Example request (JSON variant):
   {
     "photo_url":"https://r2.example/buckets/abc.jpg",
-    "cat_id": "uuid-of-cat",
     "description":"Saw this kitty near the market",
-    "status":"healthy",
     "location": {"latitude":41.3, "longitude":69.2},
     "is_public": true
   }
@@ -432,7 +481,7 @@ Feature: Posts (Observations)
   - 401 UNAUTHORIZED
   - 422 INVALID_IMAGE
   - 409 DUPLICATE_OBSERVATION
-- Transactional notes: for new_cat + post in same request, create both within one DB transaction and update cats counters.
+- Transactional notes: when no cat reference is supplied, create the unnamed cat and post within one DB transaction, then update cat counters.
 - Rate limit: image-upload stricter (10 req/min)
 
 2) GET /api/v1/posts/{post_id}
@@ -689,8 +738,8 @@ Feature: Comments
 - Auth: Bearer
 - Request model: CommentCreate
   Example:
-  {"content":"So cute! Hope it's OK."}
-- Validation: content required, max 1000 chars
+  {"content":"So cute! Hope it's OK.","parent_comment_id":null}
+- Validation: content required, max 1000 chars; `parent_comment_id` is optional and must reference a comment on the same target post
 - Response: CommentResponse (201)
   Example:
   {
@@ -698,12 +747,13 @@ Feature: Comments
     "data": {
       "id":"comment-uuid",
       "post_id":"post-uuid",
+      "parent_comment_id":null,
       "user": {"id":"user-uuid","name":"Sardor"},
       "content":"So cute!",
       "created_at":"..."
     }
   }
-- Side effects: increment post.comment_count
+- Side effects: increment post.comment_count; replies use the same counter and retain their parent relationship
 - Errors: 400, 401, 404
 - Pydantic: CommentCreate, CommentResponse
 
@@ -712,6 +762,7 @@ Feature: Comments
 - Auth: optional
 - Query: cursor, limit, order=asc|desc (default asc)
 - Response: GenericListResponse[CommentResponse]
+- The response is a flat page of comments with `parent_comment_id`; clients build the nested conversation tree.
 
 3) POST /api/v1/lost-pets/{lost_pet_id}/comments
 - Purpose: create a comment on a lost pet post
@@ -801,7 +852,8 @@ Feature: Moderation
     "reason":"Contains graphic content",
     "metadata": {"screenshot_url":"https://..."}
   }
-- Validation: target_type in post|comment|user|cat; target_id UUID; reason optional but recommended
+- Validation: target_type in post|comment|user|cat|lost_pet|adoption_post; target_id UUID; reason optional but recommended
+- User-facing report reasons include `Child safety / exploitation`. The backend stores the selected reason as the existing free-text `reason` value so these reports enter the same moderation pipeline as other reports.
 - Response: ReportResponse (201)
 - Errors: 400, 401, 404 (if target not found)
  - Idempotency: duplicate open reports from the same reporter for the same target return the existing open report

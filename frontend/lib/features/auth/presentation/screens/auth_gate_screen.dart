@@ -51,8 +51,8 @@ class AuthGateScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   TextButton(
-                    onPressed: () => context.go('/login'),
-                    child: Text(strings.continueToLogin),
+                    onPressed: () => context.go('/register'),
+                    child: Text(strings.createAccount),
                   ),
                 ],
               ),
@@ -69,8 +69,17 @@ class AuthGateScreen extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.pets, size: 64),
+              Icon(
+                Icons.pets,
+                size: 72,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 24),
+              Text(
+                'Mushukistan',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 16),
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
               Text(strings.restoringSession),

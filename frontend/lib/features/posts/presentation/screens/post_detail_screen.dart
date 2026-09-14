@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
@@ -107,9 +108,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   Widget build(BuildContext context) {
     final ref = this.ref;
     final postAsync = ref.watch(postDetailProvider(widget.postId));
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Observation')),
+      appBar: AppBar(title: Text(strings.observation)),
       body: postAsync.when(
         data: (post) {
           final likeOverride = ref.watch(postLikeOverridesProvider)[post.id];
@@ -119,10 +121,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
               likeOverride?.likeCount ?? _likeCountOverride ?? post.likeCount;
           final author = post.author;
           final authorId = author?.id;
-          final authorName = author?.name ?? 'Anonymous';
-          final statusTag = _postStatusLabel(post.status ?? post.cat.status);
+          final authorName = author?.name ?? strings.anonymous;
+          final statusTag =
+              _postStatusLabel(post.status ?? post.cat.status, strings);
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             children: [
               Card(
                 clipBehavior: Clip.antiAlias,
@@ -135,48 +138,75 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            crossAxisAlignment: WrapCrossAlignment.center,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                post.cat.name ?? 'Unnamed cat',
-                                style:
-                                    Theme.of(context).textTheme.headlineSmall,
+                              Expanded(
+                                child: Text(
+                                  post.cat.name ?? strings.unnamedCat,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      Theme.of(context).textTheme.headlineSmall,
+                                ),
                               ),
-                              if (statusTag != null)
+                              if (statusTag != null) ...[
+                                const SizedBox(width: 8),
                                 _StatusBadge(label: statusTag),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 8),
                           Text(post.description?.trim().isNotEmpty == true
                               ? post.description!.trim()
-                              : 'No description provided.'),
+                              : strings.noDescription),
                           const SizedBox(height: 16),
                           Wrap(
                             spacing: 12,
                             runSpacing: 12,
                             children: [
                               _StatCard(
-                                  label: 'Likes', value: likeCount.toString()),
+                                label: strings.likes,
+                                value: likeCount.toString(),
+                              ),
                               _StatCard(
-                                  label: 'Comments',
-                                  value: post.commentCount.toString()),
+                                label: strings.comments,
+                                value: post.commentCount.toString(),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 16),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                child: _AuthorLink(
-                                  authorName: authorName,
-                                  onTap: authorId == null
-                                      ? null
-                                      : () => context.push('/users/$authorId'),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _AuthorLink(
+                                      authorName: authorName,
+                                      onTap: authorId == null
+                                          ? null
+                                          : () => context.push(
+                                                '/users/$authorId',
+                                              ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${strings.published}: ${_formatDate(post.createdAt)}',
+                                      softWrap: true,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              Text(_formatDate(post.createdAt)),
                             ],
                           ),
                         ],
@@ -195,13 +225,13 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                     icon: Icon(
                       isLiked ? Icons.favorite : Icons.favorite_outline,
                     ),
-                    label: Text(isLiked ? 'Unlike' : 'Like'),
+                    label: Text(isLiked ? strings.unlike : strings.like),
                   ),
                   OutlinedButton.icon(
                     onPressed: () =>
                         context.push('/report?type=post&id=${widget.postId}'),
                     icon: const Icon(Icons.flag_outlined),
-                    label: const Text('Report'),
+                    label: Text(strings.report),
                   ),
                 ],
               ),
@@ -231,7 +261,12 @@ class _AuthorLink extends StatelessWidget {
   Widget build(BuildContext context) {
     final textStyle = Theme.of(context).textTheme.bodyMedium;
     if (onTap == null) {
-      return Text(authorName, style: textStyle);
+      return Text(
+        authorName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: textStyle,
+      );
     }
 
     return Align(
@@ -382,11 +417,11 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-String? _postStatusLabel(String status) {
+String? _postStatusLabel(String status, AppStrings strings) {
   return switch (status) {
-    'healthy' => 'Healthy',
-    'needs_help' => 'Needs help',
-    'feed' => 'Feed',
+    'healthy' => strings.healthy,
+    'needs_help' => strings.needsHelp,
+    'feed' => strings.feedStatus,
     _ => null,
   };
 }

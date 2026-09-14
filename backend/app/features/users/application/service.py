@@ -4,12 +4,14 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import Text, cast, delete, func, or_, select
 from structlog import get_logger
 
 from app.core.phone import UzbekPhoneNumberError, normalize_uzbek_phone_number
 from app.core.security import api_error
 from app.features.auth.domain.models import AuthUser
+from app.features.auth.infrastructure.email import AccountDeletionConfirmationSender
+from app.features.auth.infrastructure.tokens import JoseAccountDeletionTokenService
 from app.features.users.application.schemas import UserProfile, UserPublic, UserUpdate
 from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.models import schema
@@ -30,10 +32,14 @@ class UsersService:
         db_session_manager: DatabaseSessionManager,
         repository_factory: UserProfileRepositoryFactory,
         media_storage_service: MediaStorageService | None = None,
+        account_deletion_token_service: JoseAccountDeletionTokenService | None = None,
+        account_deletion_email_sender: AccountDeletionConfirmationSender | None = None,
     ) -> None:
         self.db_session_manager = db_session_manager
         self.repository_factory = repository_factory
         self.media_storage_service = media_storage_service
+        self.account_deletion_token_service = account_deletion_token_service
+        self.account_deletion_email_sender = account_deletion_email_sender
 
     def get_me(self, user: AuthUser) -> UserProfile:
         with self.db_session_manager.session_scope() as session:
@@ -173,7 +179,29 @@ class UsersService:
                     photo.photo_url = f"deleted://adoption-post/{photo.id}"
                     photo.thumb_url = None
 
+            liked_post_counts = session.execute(
+                select(schema.Like.post_id, func.count(schema.Like.id))
+                .where(schema.Like.user_id == user.id)
+                .group_by(schema.Like.post_id)
+            ).all()
+            for post_id, like_count in liked_post_counts:
+                post = session.get(schema.Post, post_id)
+                if post is not None:
+                    post.like_count = max(0, post.like_count - int(like_count))
             session.execute(delete(schema.Like).where(schema.Like.user_id == user.id))
+            session.execute(
+                delete(schema.UserBlock).where(
+                    or_(
+                        schema.UserBlock.blocker_id == user.id,
+                        schema.UserBlock.blocked_id == user.id,
+                    )
+                )
+            )
+            session.execute(
+                delete(schema.LeaderboardCache).where(
+                    cast(schema.LeaderboardCache.data, Text).contains(str(user.id))
+                )
+            )
             session.execute(
                 schema.Cat.__table__.update()
                 .where(schema.Cat.created_by == user.id)
@@ -197,18 +225,78 @@ class UsersService:
             user_model.avatar_url = None
             user_model.phone_number = None
             user_model.telegram_username = None
+            user_model.preferred_language = "en"
             user_model.bio = None
             user_model.allow_public_activity_view = False
             user_model.accepted_terms_version = None
             user_model.accepted_privacy_version = None
             user_model.accepted_legal_at = None
             user_model.is_active = False
+            user_model.is_moderator = False
             user_model.last_login_at = None
 
             current.is_active = False
             session.flush()
 
         self._delete_media_urls(media_urls, actor_id=user.id)
+
+    def request_external_account_deletion(self, email: str) -> None:
+        normalized_email = email.strip().casefold()
+        if (
+            self.account_deletion_token_service is None
+            or self.account_deletion_email_sender is None
+        ):
+            logger.warning("account_deletion_email_not_configured")
+            return
+
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            user = repository.get_by_email(normalized_email)
+            if user is None or not user.is_active:
+                return
+            token = self.account_deletion_token_service.issue_token(
+                user_id=user.id,
+                email=user.email,
+            )
+            recipient = user.email
+
+        try:
+            self.account_deletion_email_sender.send_confirmation_email(
+                email=recipient,
+                token=token,
+            )
+        except Exception:  # pragma: no cover - preserves anti-enumeration behavior
+            logger.warning(
+                "account_deletion_email_delivery_failed",
+                email_domain=recipient.rsplit("@", 1)[-1],
+            )
+
+    def confirm_external_account_deletion(self, token: str) -> None:
+        if self.account_deletion_token_service is None:
+            raise api_error(
+                500,
+                "ACCOUNT_DELETION_NOT_CONFIGURED",
+                "Account deletion confirmation is not configured.",
+            )
+
+        claims = self.account_deletion_token_service.decode_token(token)
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            user = repository.get_by_id(claims.user_id)
+            if user is None or user.email.casefold() != claims.email.casefold():
+                raise api_error(
+                    401,
+                    "INVALID_ACCOUNT_DELETION_TOKEN",
+                    "Invalid or expired account deletion token.",
+                )
+            if not user.is_active:
+                raise api_error(
+                    410,
+                    "ACCOUNT_ALREADY_DELETED",
+                    "This account is already deleted or inactive.",
+                )
+
+        self.delete_me(user)
 
     def _delete_media_urls(self, urls: list[str | None], *, actor_id: UUID) -> None:
         if self.media_storage_service is None:

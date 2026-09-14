@@ -22,7 +22,7 @@ class MushukistanAuthRepository implements AuthRepository {
       body: credentials.toJson(),
       decoder: AuthSession.fromJson,
     );
-    await _tokenStore.write(session.accessToken);
+    await _persistSession(session);
     return session;
   }
 
@@ -42,7 +42,7 @@ class MushukistanAuthRepository implements AuthRepository {
       },
       decoder: AuthSession.fromJson,
     );
-    await _tokenStore.write(session.accessToken);
+    await _persistSession(session);
     return session;
   }
 
@@ -86,21 +86,66 @@ class MushukistanAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<AuthSession> refreshSession() async {
+    final refreshToken = await _tokenStore.readRefreshToken();
+    if (refreshToken == null || refreshToken.trim().isEmpty) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Invalid or expired session.',
+      );
+    }
+    final session = await _apiClient.postJson<AuthSession>(
+      'auth/refresh',
+      authenticated: false,
+      body: <String, Object?>{'refresh_token': refreshToken},
+      decoder: AuthSession.fromJson,
+    );
+    await _persistSession(session);
+    return session;
+  }
+
+  @override
   Future<SessionRestoreResult> restoreSession() async {
     final token = await _tokenStore.read();
-    if (token == null || token.trim().isEmpty) {
+    final refreshToken = await _tokenStore.readRefreshToken();
+    if ((token == null || token.trim().isEmpty) &&
+        (refreshToken == null || refreshToken.trim().isEmpty)) {
       return const SessionRestoreMissing();
     }
 
     try {
-      final user = await fetchCurrentUser();
-      return SessionRestoreSuccess(
-        AuthSession.restored(accessToken: token, user: user),
-      );
+      if (token != null && token.trim().isNotEmpty) {
+        final user = await fetchCurrentUser();
+        final restoredToken = await _tokenStore.read();
+        return SessionRestoreSuccess(
+          AuthSession.restored(accessToken: restoredToken ?? token, user: user),
+        );
+      }
+      final session = await refreshSession();
+      return SessionRestoreSuccess(session);
     } on MushukistanApiException catch (error) {
       if (error.isSessionInvalid) {
-        await _tokenStore.delete();
-        return SessionRestoreInvalid(message: _restoreInvalidMessage(error));
+        if (refreshToken != null && refreshToken.trim().isNotEmpty) {
+          try {
+            final session = await refreshSession();
+            return SessionRestoreSuccess(session);
+          } on MushukistanApiException catch (refreshError) {
+            if (refreshError.isSessionInvalid) {
+              await _tokenStore.delete();
+              return SessionRestoreInvalid(
+                message: _restoreInvalidMessage(refreshError),
+              );
+            }
+            return SessionRestoreFailure(
+              message: refreshError.userMessage,
+              retryable: refreshError.isRetryable,
+            );
+          }
+        } else {
+          await _tokenStore.delete();
+          return SessionRestoreInvalid(message: _restoreInvalidMessage(error));
+        }
       }
       return SessionRestoreFailure(
         message: error.userMessage,
@@ -111,13 +156,27 @@ class MushukistanAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {
+    final refreshToken = await _tokenStore.readRefreshToken();
     try {
-      await _apiClient.delete('auth/logout');
+      await _apiClient.postJson<Object?>(
+        'auth/logout',
+        body: refreshToken == null
+            ? null
+            : <String, Object?>{'refresh_token': refreshToken},
+        decoder: (_) => null,
+      );
     } catch (_) {
       // Client-side logout must still succeed locally.
     } finally {
       await _tokenStore.delete();
     }
+  }
+
+  Future<void> _persistSession(AuthSession session) {
+    return _tokenStore.writeTokens(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    );
   }
 
   String _restoreInvalidMessage(MushukistanApiException error) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -8,6 +9,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/language_controller.dart';
 import '../../application/auth_controller.dart';
 import '../../domain/auth_models.dart';
+import '../widgets/google_sign_in_entry_button.dart';
 import '../widgets/legal_consent_text.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -25,6 +27,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _obscurePassword = true;
   bool _acceptTerms = false;
   bool _acceptPrivacy = false;
+  bool _acceptGoogleTerms = false;
+  bool _acceptGooglePrivacy = false;
 
   @override
   void dispose() {
@@ -32,6 +36,26 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _continueGoogleWithLegalAcceptance(String idToken) async {
+    final strings = ref.read(appStringsProvider);
+    if (!_acceptGoogleTerms || !_acceptGooglePrivacy) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.acceptTermsAndPrivacy)),
+      );
+      return;
+    }
+
+    try {
+      await ref.read(authControllerProvider.notifier).loginWithGoogleIdToken(
+            idToken,
+            acceptTerms: _acceptGoogleTerms,
+            acceptPrivacy: _acceptGooglePrivacy,
+          );
+    } on Object {
+      // Surface handled by auth state.
+    }
   }
 
   Future<void> _submit() async {
@@ -71,6 +95,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final authState = ref.watch(authControllerProvider);
     final strings = ref.watch(appStringsProvider);
     final isLoading = authState.phase == AuthPhase.authenticating;
+    final pendingGoogleIdToken = authState.pendingGoogleIdToken;
+    final requiresGoogleLegalAcceptance =
+        authState.requiresGoogleLegalAcceptance;
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.createAccount)),
@@ -200,8 +227,92 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(strings.register),
+                          : const Text('Create account'),
                     ),
+                    const SizedBox(height: 12),
+                    if (requiresGoogleLegalAcceptance) ...[
+                      Text(
+                        strings.googleLegalConsentTitle,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        strings.googleLegalConsentMessage,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _acceptGoogleTerms,
+                        onChanged: isLoading
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _acceptGoogleTerms = value ?? false;
+                                });
+                              },
+                        title: LegalConsentText(
+                          leadingText: strings.acceptLegalLeading,
+                          linkText: strings.termsOfService,
+                          trailingText: strings.acceptLegalTrailing,
+                          route: '/legal/terms',
+                          enabled: !isLoading,
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _acceptGooglePrivacy,
+                        onChanged: isLoading
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _acceptGooglePrivacy = value ?? false;
+                                });
+                              },
+                        title: LegalConsentText(
+                          leadingText: strings.acceptLegalLeading,
+                          linkText: strings.privacyPolicy,
+                          trailingText: strings.acceptLegalTrailing,
+                          route: '/legal/privacy',
+                          enabled: !isLoading,
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                    ],
+                    if (pendingGoogleIdToken != null)
+                      FilledButton(
+                        onPressed: isLoading
+                            ? null
+                            : () {
+                                unawaited(
+                                  _continueGoogleWithLegalAcceptance(
+                                    pendingGoogleIdToken,
+                                  ),
+                                );
+                              },
+                        child: Text(strings.continueAction),
+                      )
+                    else if (kIsWeb)
+                      GoogleSignInEntryButton(
+                        enabled: !isLoading,
+                        acceptTerms: _acceptGoogleTerms,
+                        acceptPrivacy: _acceptGooglePrivacy,
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: isLoading
+                            ? null
+                            : () async {
+                                try {
+                                  await ref
+                                      .read(authControllerProvider.notifier)
+                                      .loginWithGoogle();
+                                } on Object {
+                                  // Surface handled by auth state.
+                                }
+                              },
+                        child: Text(strings.continueWithGoogle),
+                      ),
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: isLoading
@@ -209,7 +320,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           : () {
                               context.go('/login');
                             },
-                      child: Text(strings.alreadyHaveAccount),
+                      child: const Text('Already have an account? Sign in'),
                     ),
                   ],
                 ),

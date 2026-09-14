@@ -120,19 +120,9 @@ void main() {
         AuthCredentials(email: email, password: password),
       );
 
-      final cats = await api.listCats(
-        filter: 'nearby',
-        lat: 41.2995,
-        lon: 69.2401,
-        radiusMeters: 4000,
-        limit: 20,
-      );
-      expect(cats.limit, 20);
-
       final photoBytes = base64Decode(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPZ0AAAAASUVORK5CYII=',
       );
-      final existingCatId = cats.items.isNotEmpty ? cats.items.first.id : null;
       final post = await api.createObservation(
         photos: [
           ObservationPhotoUpload(
@@ -143,12 +133,6 @@ void main() {
         ],
         location: const GeoPoint(latitude: 41.2995, longitude: 69.2401),
         description: 'Codex live smoke test',
-        existingCatId: existingCatId,
-        newCatName: existingCatId == null ? 'Codex smoke cat' : null,
-        newCatStatus: existingCatId == null ? 'healthy' : null,
-        newCatLocation: existingCatId == null
-            ? const GeoPoint(latitude: 41.2995, longitude: 69.2401)
-            : null,
       );
 
       expect(post.id, isNotEmpty);

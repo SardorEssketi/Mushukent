@@ -2,12 +2,12 @@
 
 Version: 2026-08-01
 
-Use Mushukistan to help street cats and lost pets in Tashkent.
+Use Mushukistan to help cats, cat owners, and the wider cat community in Tashkent.
 
 Allowed:
-- Real cat sightings and lost-pet posts.
+- Real cat records, observations, lost-pet alerts, and adoption or rehoming posts.
 - Helpful comments.
-- Photos and descriptions relevant to cat welfare.
+- Photos and descriptions relevant to cat care, ownership, adoption, and welfare.
 - Accurate map locations when safe to publish.
 
 Not allowed:

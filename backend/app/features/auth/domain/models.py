@@ -25,3 +25,14 @@ class AuthUser:
     is_moderator: bool = False
     registered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_login_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class AuthRefreshSession:
+    id: UUID
+    user_id: UUID
+    token_hash: str
+    expires_at: datetime
+    revoked_at: datetime | None = None
+    last_used_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_web/web_only.dart' as gis_web;
 
 import '../../../../core/config/app_environment.dart';
+import '../../../../core/localization/app_strings.dart';
 import '../../application/auth_controller.dart';
 
 class GoogleSignInEntryButton extends ConsumerStatefulWidget {
@@ -65,7 +66,7 @@ class _GoogleSignInEntryButtonState
       final idToken = user.authentication.idToken;
       if (idToken == null || idToken.trim().isEmpty) {
         ref.read(authControllerProvider.notifier).showUnauthenticatedMessage(
-              'Google sign-in did not return an ID token.',
+              ref.read(appStringsProvider).googleSignInNoIdToken,
             );
         return;
       }
@@ -86,7 +87,7 @@ class _GoogleSignInEntryButtonState
       GoogleSignInException(:final description)
           when description != null && description.trim().isNotEmpty =>
         description.trim(),
-      _ => 'Google sign-in failed.',
+      _ => ref.read(appStringsProvider).googleSignInFailed,
     };
     ref
         .read(authControllerProvider.notifier)
@@ -96,8 +97,9 @@ class _GoogleSignInEntryButtonState
   @override
   Widget build(BuildContext context) {
     final environment = ref.watch(appEnvironmentProvider);
+    final strings = ref.watch(appStringsProvider);
     if (!environment.isGoogleSignInConfigured) {
-      return const Text('Google sign-in is not configured for this build.');
+      return Text(strings.googleSignInNotConfigured);
     }
 
     return FutureBuilder<void>(
@@ -105,7 +107,7 @@ class _GoogleSignInEntryButtonState
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Text(
-            'Google sign-in is unavailable.',
+            strings.googleSignInUnavailable,
             style: TextStyle(color: Theme.of(context).colorScheme.error),
           );
         }

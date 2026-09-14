@@ -52,6 +52,8 @@ report_target_type_enum = ENUM(
     ReportTargetType.COMMENT.value,
     ReportTargetType.USER.value,
     ReportTargetType.CAT.value,
+    ReportTargetType.LOST_PET.value,
+    ReportTargetType.ADOPTION_POST.value,
     name="report_target_type",
 )
 
@@ -161,6 +163,11 @@ class User(UUIDPrimaryKeyMixin, Base):
         back_populates="author",
         passive_deletes=True,
     )
+    refresh_sessions: Mapped[list["AuthRefreshSession"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -168,6 +175,28 @@ class User(UUIDPrimaryKeyMixin, Base):
             name="preferred_language_supported",
         ),
         Index("idx_users_registered_at", "registered_at"),
+    )
+
+
+class AuthRefreshSession(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "auth_refresh_sessions"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="refresh_sessions")
+
+    __table_args__ = (
+        Index("idx_auth_refresh_sessions_user_id", "user_id"),
+        Index("idx_auth_refresh_sessions_token_hash", "token_hash"),
+        Index("idx_auth_refresh_sessions_expires_at", "expires_at"),
     )
 
 
@@ -232,7 +261,7 @@ class Cat(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "approximate_age_smallyears IS NULL OR " "approximate_age_smallyears BETWEEN 0 AND 60",
+            "approximate_age_smallyears IS NULL OR approximate_age_smallyears BETWEEN 0 AND 60",
             name="approximate_age_smallyears_range",
         ),
         CheckConstraint("merged_into IS NULL OR merged_into <> id", name="merged_into_not_self"),
@@ -361,6 +390,11 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         ForeignKey("adoption_posts.id", ondelete="CASCADE"),
         nullable=True,
     )
+    parent_comment_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("comments.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -383,6 +417,7 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         Index("idx_comments_post_id", "post_id"),
         Index("idx_comments_lost_pet_id", "lost_pet_id"),
         Index("idx_comments_adoption_post_id", "adoption_post_id"),
+        Index("idx_comments_parent_comment_id", "parent_comment_id"),
         Index("idx_comments_user_id", "user_id"),
     )
 

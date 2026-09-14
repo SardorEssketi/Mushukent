@@ -129,6 +129,10 @@ def _rate_limit_key_and_limit(request: Request, settings: Settings) -> tuple[str
     path = request.url.path.rstrip("/")
     api_prefix = settings.api_prefix.rstrip("/")
     is_auth_endpoint = path.startswith(f"{api_prefix}/auth")
+    is_account_deletion_endpoint = path in {
+        f"{api_prefix}/users/account-deletion-requests",
+        f"{api_prefix}/users/account-deletion-confirmations",
+    }
     is_upload_endpoint = request.method.upper() == "POST" and path == f"{api_prefix}/posts"
     is_public_read_endpoint = request.method.upper() == "GET" and (
         path == f"{api_prefix}/feed"
@@ -139,7 +143,7 @@ def _rate_limit_key_and_limit(request: Request, settings: Settings) -> tuple[str
         or path.startswith(f"{api_prefix}/leaderboards/")
     )
 
-    if is_auth_endpoint:
+    if is_auth_endpoint or is_account_deletion_endpoint:
         return f"auth:ip:{_client_ip(request)}", settings.rate_limit_auth_per_minute
 
     bearer_identity = _bearer_identity(request)

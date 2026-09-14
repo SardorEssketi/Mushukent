@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Body, Depends, Response, status
 
 from app.core.dependencies import (
     get_auth_service,
@@ -11,6 +11,8 @@ from app.features.auth.application.schemas import (
     AuthRegisterRequest,
     AuthRegisterResponse,
     GoogleLoginRequest,
+    LogoutRequest,
+    RefreshTokenRequest,
     ResendVerificationRequest,
     ResendVerificationResponse,
     UserPublic,
@@ -67,6 +69,7 @@ def login(
     return ApiSuccess(
         data=AuthLoginData(
             access_token=result.access_token,
+            refresh_token=result.refresh_token,
             token_type=result.token_type,
             expires_in=result.expires_in,
             user=UserPublic.from_auth_user(result.user),
@@ -91,6 +94,28 @@ def login_with_google(
     return ApiSuccess(
         data=AuthLoginData(
             access_token=result.access_token,
+            refresh_token=result.refresh_token,
+            token_type=result.token_type,
+            expires_in=result.expires_in,
+            user=UserPublic.from_auth_user(result.user),
+        )
+    )
+
+
+@router.post(
+    "/refresh",
+    response_model=ApiSuccess[AuthLoginData],
+    response_model_exclude_none=True,
+)
+def refresh(
+    payload: RefreshTokenRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> ApiSuccess[AuthLoginData]:
+    result = auth_service.refresh_session(payload.refresh_token)
+    return ApiSuccess(
+        data=AuthLoginData(
+            access_token=result.access_token,
+            refresh_token=result.refresh_token,
             token_type=result.token_type,
             expires_in=result.expires_in,
             user=UserPublic.from_auth_user(result.user),
@@ -99,7 +124,15 @@ def login_with_google(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(_: object = Depends(get_current_active_user)) -> Response:
+def logout(
+    payload: LogoutRequest | None = Body(default=None),
+    user=Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Response:
+    auth_service.revoke_refresh_session(
+        payload.refresh_token if payload is not None else None,
+        user_id=user.id,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

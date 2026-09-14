@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.features.auth.domain.models import AuthUser
+from app.features.auth.domain.models import AuthRefreshSession, AuthUser
 from app.features.auth.domain.repositories import AuthUserRepository
 from app.infrastructure.db.models import schema
 
@@ -95,6 +95,71 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         self.session.refresh(model)
         return self._to_domain(model)
 
+    def create_refresh_session(
+        self,
+        *,
+        user_id: UUID,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> AuthRefreshSession:
+        model = schema.AuthRefreshSession(
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
+        self.session.add(model)
+        self.session.flush()
+        self.session.refresh(model)
+        return self._refresh_to_domain(model)
+
+    def get_refresh_session_by_hash(self, token_hash: str) -> AuthRefreshSession | None:
+        model = self.session.scalar(
+            select(schema.AuthRefreshSession).where(
+                schema.AuthRefreshSession.token_hash == token_hash
+            )
+        )
+        return self._refresh_to_domain(model) if model is not None else None
+
+    def rotate_refresh_session(
+        self,
+        session_id: UUID,
+        *,
+        new_token_hash: str,
+        expires_at: datetime,
+        used_at: datetime,
+    ) -> AuthRefreshSession | None:
+        model = self.session.get(schema.AuthRefreshSession, session_id)
+        if model is None:
+            return None
+        model.token_hash = new_token_hash
+        model.expires_at = expires_at
+        model.last_used_at = used_at
+        self.session.flush()
+        self.session.refresh(model)
+        return self._refresh_to_domain(model)
+
+    def revoke_refresh_session(self, token_hash: str, revoked_at: datetime) -> None:
+        model = self.session.scalar(
+            select(schema.AuthRefreshSession).where(
+                schema.AuthRefreshSession.token_hash == token_hash
+            )
+        )
+        if model is not None and model.revoked_at is None:
+            model.revoked_at = revoked_at
+            self.session.flush()
+
+    def revoke_user_refresh_sessions(self, user_id: UUID, revoked_at: datetime) -> None:
+        models = self.session.scalars(
+            select(schema.AuthRefreshSession).where(
+                schema.AuthRefreshSession.user_id == user_id,
+                schema.AuthRefreshSession.revoked_at.is_(None),
+            )
+        ).all()
+        for model in models:
+            model.revoked_at = revoked_at
+        if models:
+            self.session.flush()
+
     @staticmethod
     def _to_domain(model: schema.User) -> AuthUser:
         return AuthUser(
@@ -116,4 +181,16 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
             is_moderator=model.is_moderator,
             registered_at=model.registered_at,
             last_login_at=model.last_login_at,
+        )
+
+    @staticmethod
+    def _refresh_to_domain(model: schema.AuthRefreshSession) -> AuthRefreshSession:
+        return AuthRefreshSession(
+            id=model.id,
+            user_id=model.user_id,
+            token_hash=model.token_hash,
+            expires_at=model.expires_at,
+            revoked_at=model.revoked_at,
+            last_used_at=model.last_used_at,
+            created_at=model.created_at,
         )

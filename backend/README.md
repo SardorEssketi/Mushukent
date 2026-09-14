@@ -1,9 +1,10 @@
 # Mushukistan Backend
 
-This is the FastAPI backend for the Mushukistan MVP.
+This is the FastAPI backend for Mushukistan, a Tashkent-focused app for cat
+owners and the wider cat community.
 
 ## Included
-- FastAPI application shell
+- FastAPI application
 - Clean Architecture folder layout
 - Feature-first module structure
 - SQLAlchemy 2.x and Alembic scaffolding
@@ -11,7 +12,7 @@ This is the FastAPI backend for the Mushukistan MVP.
 - Dependency injection entry points
 - Structured logging setup
 - `/api/v1/health` endpoint
-- MVP authentication, users, cats, posts, feed, comments, likes, reports, moderation, leaderboards, and map places
+- Authentication, profiles, cats, observations, feed, comments, likes, lost-pet alerts, adoption and rehoming posts, reports, moderation, leaderboards, and map places
 
 ## Run (local)
 ```powershell
@@ -39,19 +40,23 @@ or machine-specific `.env` files.
   ```
 - If you use Docker Compose instead, the equivalent is:
   ```powershell
-  docker compose up --build backend
+  cd ..
+  docker compose -f docker-compose.yml -f docker-compose.local.yml up --build -d db backend
   ```
-  The compose file already publishes backend port `8000:8000`.
+  The local override keeps the API in development mode while preserving the
+  real authentication flow. The compose file publishes backend port
+  `8300:8000`, so the host URL is `http://localhost:8300`.
   Development uploads are stored in a persistent Docker volume mounted at `/app/.data/media`,
   so post images survive backend container restarts and rebuilds.
 - The PC and phone normally need to be on the same local network.
 - Build the APK with the PC's LAN IPv4 address, for example:
   ```powershell
-  flutter build apk --debug --dart-define=MUSHUKISTAN_API_BASE_URL=http://192.168.1.50:8000
+  flutter build apk --debug --dart-define=MUSHUKISTAN_API_BASE_URL=http://192.168.1.50:8300
   ```
 - `10.0.2.2` works only in the Android emulator.
 - `localhost` on the phone means the phone itself, not the development PC.
-- Windows Firewall must allow inbound TCP traffic on port `8000`.
+- Windows Firewall must allow inbound TCP traffic on port `8300` when using
+  Docker Compose. (The direct Uvicorn command above uses port `8000`.)
 - Local `http://` is for development only. Production deployments should use HTTPS.
 
 ## Auth Development Notes

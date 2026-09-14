@@ -129,9 +129,11 @@ class AuthSession {
     required this.user,
     this.tokenType = 'Bearer',
     this.expiresIn,
+    this.refreshToken,
   });
 
   final String accessToken;
+  final String? refreshToken;
   final String tokenType;
   final int? expiresIn;
   final MushukistanUser user;
@@ -140,6 +142,7 @@ class AuthSession {
     final map = _readMap(json);
     return AuthSession(
       accessToken: _readString(map['access_token']),
+      refreshToken: _readOptionalString(map['refresh_token']),
       tokenType: _readOptionalString(map['token_type']) ?? 'Bearer',
       expiresIn: _readOptionalInt(map['expires_in']),
       user: MushukistanUser.fromJson(map['user']),
@@ -157,6 +160,7 @@ class AuthSession {
         'access_token': accessToken,
         'token_type': tokenType,
         if (expiresIn != null) 'expires_in': expiresIn,
+        if (refreshToken != null) 'refresh_token': refreshToken,
         'user': user.toJson(),
       };
 }

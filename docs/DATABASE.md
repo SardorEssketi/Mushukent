@@ -146,6 +146,7 @@ CREATE TABLE comments (
     post_id UUID NULL REFERENCES posts(id) ON DELETE CASCADE,
     lost_pet_id UUID NULL REFERENCES lost_pets(id) ON DELETE CASCADE,
     adoption_post_id UUID NULL REFERENCES adoption_posts(id) ON DELETE CASCADE,
+    parent_comment_id UUID NULL REFERENCES comments(id) ON DELETE CASCADE,
     user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -155,6 +156,7 @@ CREATE TABLE comments (
 CREATE INDEX idx_comments_post_id ON comments (post_id);
 CREATE INDEX idx_comments_lost_pet_id ON comments (lost_pet_id);
 CREATE INDEX idx_comments_adoption_post_id ON comments (adoption_post_id);
+CREATE INDEX idx_comments_parent_comment_id ON comments (parent_comment_id);
 CREATE INDEX idx_comments_user_id ON comments (user_id);
 
 -- Likes: ensure unique (user + post) to prevent duplicate likes
@@ -180,7 +182,7 @@ CREATE INDEX idx_user_blocks_blocker_id ON user_blocks (blocker_id);
 CREATE INDEX idx_user_blocks_blocked_id ON user_blocks (blocked_id);
 
 -- Reports (content moderation)
-CREATE TYPE report_target_type AS ENUM ('post','comment','user','cat');
+CREATE TYPE report_target_type AS ENUM ('post','comment','user','cat','lost_pet','adoption_post');
 CREATE TYPE report_status AS ENUM ('open','resolved','dismissed');
 
 CREATE TABLE reports (
@@ -317,7 +319,7 @@ Important constraints, indexes and rationale
 ------------------------------------------
 - Use geometry(Point, 4326) and GIST indexes for all geospatial queries (nearby posts/cats). Use ST_DWithin for distance searches when querying in meters (note: ST_DWithin with geography is meter-accurate; if using geometry keep in mind the units).
 - Posts.location is required. We also store latitude/longitude as generated columns for convenience.
-- For "nearby cats" suggestion flow, query posts within a radius first (e.g., 100–200m) using posts.location, then group by cat_id.
+- New observations create an unnamed `unknown` cat record automatically; the client does not perform nearby-cat matching.
 - Unique constraint (post_id, user_id) in likes enforces single-like policy.
 - Soft-delete: queries should include WHERE deleted_at IS NULL where appropriate; consider adding partial indexes to speed up active-only queries. Example:
 CREATE INDEX idx_posts_active_created_at ON posts (created_at DESC) WHERE deleted_at IS NULL;
@@ -382,7 +384,7 @@ WHERE deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT :limit;
 
-2) Suggest nearby cats for a new observation (group posts by cat within radius):
+2) Group observations by their automatically created cat record when displaying cat history:
 SELECT c.id, c.name, count(p.id) as obs_count, ST_AsGeoJSON(c.canonical_location) as loc
 FROM cats c
 JOIN posts p ON p.cat_id = c.id
@@ -416,10 +418,13 @@ Security & privacy considerations (DB-related)
 - Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, clears report actor links where possible, and attempts best-effort media cleanup.
 - Audit logs: keep moderator actions and important security events in write-once logs or a separate audit table. Don't store secrets in DB.
 
-Data retention policy (recommended for MVP)
-------------------------------------------
-- Soft-deleted posts/comments/cats/lost pets/adoption posts: keep for 90 days by default, then run `backend/scripts/cleanup_retention.py` from a scheduled production job after legal review.
-- Backups: keep 30 days of daily backups and 12 monthly snapshots (adjust later as needed).
+Data retention policy
+---------------------
+- Active account and content data is retained while the account or content remains active.
+- Account deletion anonymizes/deactivates the account and hides/anonymizes user-owned content according to `docs/legal/ACCOUNT_DELETION_POLICY.md`.
+- The repository includes `backend/scripts/cleanup_retention.py` for optional cleanup of some soft-deleted records, but production scheduling has not been verified.
+- Do not publish a guaranteed automatic deletion period until production cleanup scheduling and backup retention are verified.
+- Backups are not configured in the verified repository. If backups are enabled later, backup retention and deletion schedules must be documented before production release.
 
 Open questions / decisions to confirm (these will affect final schema)
 --------------------------------------------------------------------

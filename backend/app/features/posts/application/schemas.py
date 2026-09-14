@@ -108,8 +108,6 @@ class _PostCreateBase(BaseModel):
 
     @model_validator(mode="after")
     def _validate_payload(self) -> "_PostCreateBase":
-        if self.cat_id is None and self.new_cat is None:
-            raise ValueError("Either cat_id or new_cat must be provided.")
         if self.cat_id is not None and self.new_cat is not None:
             raise ValueError("Provide either cat_id or new_cat, not both.")
         return self

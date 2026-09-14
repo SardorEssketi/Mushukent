@@ -52,9 +52,13 @@ abstract class MushukistanApiClient {
 class DioMushukistanApiClient implements MushukistanApiClient {
   DioMushukistanApiClient({
     required Dio dio,
-  }) : _dio = dio;
+    required AuthTokenStore tokenStore,
+  })  : _dio = dio,
+        _tokenStore = tokenStore;
 
   final Dio _dio;
+  final AuthTokenStore _tokenStore;
+  Future<bool>? _refreshInFlight;
 
   @override
   Uri? get baseUri => Uri.tryParse(_dio.options.baseUrl);
@@ -87,7 +91,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         },
       ),
     );
-    return DioMushukistanApiClient(dio: dio);
+    return DioMushukistanApiClient(dio: dio, tokenStore: tokenStore);
   }
 
   @override
@@ -184,6 +188,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     required Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     required bool authenticated,
+    bool retriedAfterRefresh = false,
   }) async {
     try {
       final response = await _dio.request<Object?>(
@@ -203,10 +208,30 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       final statusCode = response.statusCode ?? 0;
 
       if (statusCode >= 400) {
-        throw MushukistanApiException.fromEnvelope(
+        final error = MushukistanApiException.fromEnvelope(
           payload,
           statusCode: statusCode,
         );
+        if (_shouldRefreshAndRetry(
+          error,
+          path: path,
+          authenticated: authenticated,
+          retriedAfterRefresh: retriedAfterRefresh,
+        )) {
+          final refreshed = await _refreshAccessToken();
+          if (refreshed) {
+            return _request<T>(
+              method,
+              path,
+              body: body,
+              queryParameters: queryParameters,
+              decoder: decoder,
+              authenticated: authenticated,
+              retriedAfterRefresh: true,
+            );
+          }
+        }
+        throw error;
       }
 
       if (normalizedPayload == null) {
@@ -227,6 +252,95 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       }
 
       return _decodePayload(decoder, normalizedPayload);
+    } on DioException catch (error) {
+      throw MushukistanApiException.fromDioException(error);
+    }
+  }
+
+  bool _shouldRefreshAndRetry(
+    MushukistanApiException error, {
+    required String path,
+    required bool authenticated,
+    required bool retriedAfterRefresh,
+  }) {
+    if (!authenticated || retriedAfterRefresh) {
+      return false;
+    }
+    final normalizedPath = _normalizePath(path);
+    if (normalizedPath == 'auth/refresh' ||
+        normalizedPath == 'auth/login' ||
+        normalizedPath == 'auth/google') {
+      return false;
+    }
+    return error.kind == ApiFailureKind.unauthorized;
+  }
+
+  Future<bool> _refreshAccessToken() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final future = _performRefreshAccessToken();
+    _refreshInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    });
+  }
+
+  Future<bool> _performRefreshAccessToken() async {
+    final refreshToken = await _tokenStore.readRefreshToken();
+    if (refreshToken == null || refreshToken.trim().isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await _dio.request<Object?>(
+        'auth/refresh',
+        data: <String, Object?>{'refresh_token': refreshToken},
+        options: Options(
+          method: 'POST',
+          responseType: ResponseType.json,
+          extra: {'skipAuth': true},
+        ),
+      );
+      final payload = _normalizePayload(response.data);
+      final statusCode = response.statusCode ?? 0;
+      if (statusCode >= 400) {
+        final error = MushukistanApiException.fromEnvelope(
+          payload,
+          statusCode: statusCode,
+        );
+        if (error.isSessionInvalid) {
+          await _tokenStore.delete();
+        }
+        throw error;
+      }
+      final data = payload is Map ? payload['data'] : payload;
+      if (data is! Map) {
+        throw const MushukistanApiException(
+          kind: ApiFailureKind.parse,
+          code: 'MALFORMED_RESPONSE',
+          message: 'Malformed response received.',
+        );
+      }
+      final accessToken = data['access_token'];
+      if (accessToken is! String || accessToken.trim().isEmpty) {
+        throw const MushukistanApiException(
+          kind: ApiFailureKind.parse,
+          code: 'MALFORMED_RESPONSE',
+          message: 'Malformed response received.',
+        );
+      }
+      final newRefreshToken = data['refresh_token'];
+      await _tokenStore.writeTokens(
+        accessToken: accessToken,
+        refreshToken: newRefreshToken is String && newRefreshToken.isNotEmpty
+            ? newRefreshToken
+            : refreshToken,
+      );
+      return true;
     } on DioException catch (error) {
       throw MushukistanApiException.fromDioException(error);
     }

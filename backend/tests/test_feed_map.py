@@ -223,8 +223,7 @@ def _create_place(
         )
         if categories is not None:
             place.category_links = [
-                schema.PlaceCategoryLink(category=place_category)
-                for place_category in categories
+                schema.PlaceCategoryLink(category=place_category) for place_category in categories
             ]
         session.add(place)
         session.flush()

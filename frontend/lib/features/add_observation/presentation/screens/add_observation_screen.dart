@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/localization/app_strings.dart';
+import '../../../../core/localization/language_controller.dart';
 import '../../../../core/media/image_upload_preprocessor.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
@@ -12,7 +14,9 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../application/add_observation_controller.dart';
 
 class AddObservationScreen extends ConsumerStatefulWidget {
-  const AddObservationScreen({super.key});
+  const AddObservationScreen({super.key, this.observationOnly = false});
+
+  final bool observationOnly;
 
   @override
   ConsumerState<AddObservationScreen> createState() =>
@@ -22,6 +26,18 @@ class AddObservationScreen extends ConsumerStatefulWidget {
 class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
   bool _preparingPhotos = false;
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.observationOnly) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          unawaited(_openObservationPhotoSource(context, ref));
+        }
+      });
+    }
+  }
+
   Future<void> _chooseGalleryPhoto(
     BuildContext context,
     WidgetRef ref,
@@ -29,6 +45,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     if (_preparingPhotos) {
       return;
     }
+    final strings = ref.read(appStringsProvider);
     final controller = ref.read(addObservationControllerProvider.notifier);
     final images = await ImagePicker().pickMultiImage(
       imageQuality: 90,
@@ -44,6 +61,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
       context,
       controller,
       images.take(5).toList(growable: false),
+      strings,
     );
   }
 
@@ -51,6 +69,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     BuildContext context,
     AddObservationController controller,
     List<XFile> images,
+    AppStrings strings,
   ) async {
     setState(() {
       _preparingPhotos = true;
@@ -80,7 +99,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not prepare photo: $error')),
+        SnackBar(content: Text(strings.couldNotPreparePhoto(error))),
       );
     } finally {
       if (mounted) {
@@ -109,31 +128,44 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
       return;
     }
     final controller = ref.read(addObservationControllerProvider.notifier);
+    final strings = ref.read(appStringsProvider);
     await _preparePickedImages(
       context,
       controller,
       [image],
+      strings,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(addObservationControllerProvider);
+    final strings = ref.watch(appStringsProvider);
+
+    if (widget.observationOnly) {
+      return Scaffold(
+        body: Center(
+          child: _preparingPhotos
+              ? const CircularProgressIndicator()
+              : const SizedBox.shrink(),
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create')),
+      appBar: AppBar(title: Text(strings.create)),
       body: AppContentWidth(
         maxWidth: AppWidths.readable,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
             Text(
-              'What are you creating?',
+              strings.whatAreYouCreating,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Choose the right type first so Mushukistan can ask only for the details that matter.',
+              strings.chooseTypeFirst,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -141,9 +173,8 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
             const SizedBox(height: AppSpacing.xl),
             _AddCategoryCard(
               icon: Icons.add_a_photo_outlined,
-              title: 'Cat observation',
-              subtitle:
-                  'Add one to five cat photos, then choose whether to attach a location.',
+              title: strings.catObservation,
+              subtitle: strings.catObservationSubtitle,
               color: Theme.of(context).colorScheme.primary,
               onTap: _preparingPhotos
                   ? null
@@ -152,18 +183,16 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
             const SizedBox(height: AppSpacing.md),
             _AddCategoryCard(
               icon: Icons.search_outlined,
-              title: 'Lost pet alert',
-              subtitle:
-                  'Pet photos, last-seen map point, status, and owner contact.',
+              title: strings.lostPetAlert,
+              subtitle: strings.lostPetAlertSubtitle,
               color: Theme.of(context).colorScheme.error,
               onTap: () => context.go('/add/lost-pet'),
             ),
             const SizedBox(height: AppSpacing.md),
             _AddCategoryCard(
               icon: Icons.home_outlined,
-              title: 'Find a new home',
-              subtitle:
-                  'A separate rehoming post with photos, description, and owner contact. No map required.',
+              title: strings.findANewHome,
+              subtitle: strings.findANewHomeSubtitle,
               color: AppPalette.adoption,
               onTap: () => context.go('/add/adoption'),
             ),
@@ -172,7 +201,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               const LinearProgressIndicator(),
               const SizedBox(height: AppSpacing.md),
               Text(
-                'Preparing photo for upload...',
+                strings.preparingPhotoForUpload,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.md),
@@ -183,7 +212,29 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               onPressed:
                   state.hasPhoto ? () => context.go('/add/location') : null,
               icon: const Icon(Icons.arrow_forward),
-              label: const Text('Continue draft'),
+              label: Text(strings.continueDraft),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            TextButton.icon(
+              onPressed: state.hasDraft
+                  ? () async {
+                      final shouldDelete =
+                          await _confirmDeleteDraft(context, strings);
+                      if (!shouldDelete) {
+                        return;
+                      }
+                      ref
+                          .read(addObservationControllerProvider.notifier)
+                          .reset();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(strings.draftDeleted)),
+                        );
+                      }
+                    }
+                  : null,
+              icon: const Icon(Icons.delete_outline),
+              label: Text(strings.deleteDraft),
             ),
           ],
         ),
@@ -195,6 +246,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     BuildContext context,
     WidgetRef ref,
   ) async {
+    final strings = ref.read(appStringsProvider);
     final source = await showModalBottomSheet<_ObservationPhotoSource>(
       context: context,
       showDragHandle: true,
@@ -207,21 +259,21 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Add cat photos',
+                  strings.addCatPhotos,
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 ListTile(
                   leading: const Icon(Icons.photo_library_outlined),
-                  title: const Text('Choose from gallery'),
-                  subtitle: const Text('Select up to five photos.'),
+                  title: Text(strings.chooseFromGallery),
+                  subtitle: Text(strings.selectUpToFivePhotos),
                   onTap: () => Navigator.of(context)
                       .pop(_ObservationPhotoSource.gallery),
                 ),
                 ListTile(
                   leading: const Icon(Icons.photo_camera_outlined),
-                  title: const Text('Take a photo'),
-                  subtitle: const Text('Use the camera, then choose location.'),
+                  title: Text(strings.takeAPhoto),
+                  subtitle: Text(strings.useCameraThenChooseLocation),
                   onTap: () =>
                       Navigator.of(context).pop(_ObservationPhotoSource.camera),
                 ),
@@ -231,7 +283,13 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
         );
       },
     );
-    if (!context.mounted || source == null) {
+    if (!context.mounted) {
+      return;
+    }
+    if (source == null) {
+      if (widget.observationOnly) {
+        context.go('/feed');
+      }
       return;
     }
     switch (source) {
@@ -242,27 +300,56 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
         await _takePhoto(context, ref);
         break;
     }
+    if (widget.observationOnly &&
+        context.mounted &&
+        !ref.read(addObservationControllerProvider).hasPhoto &&
+        !_preparingPhotos) {
+      context.go('/feed');
+    }
   }
 }
 
 enum _ObservationPhotoSource { gallery, camera }
 
-Future<bool> confirmObservationLocationUse(BuildContext context) async {
+Future<bool> _confirmDeleteDraft(
+    BuildContext context, AppStrings strings) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Use current location?'),
-      content: const Text(
-        'Mushukistan will read your current location and attach it to this observation. If you publish the post, that cat location can be visible to other users.',
-      ),
+      title: Text(strings.deleteDraftTitle),
+      content: Text(strings.deleteDraftMessage),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(strings.cancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Continue'),
+          child: Text(strings.delete),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
+Future<bool> confirmObservationLocationUse(BuildContext context) async {
+  final strings = AppStrings.forLanguage(AppLanguage.fromCode(
+    Localizations.localeOf(context).languageCode,
+  ));
+  final result = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(strings.useCurrentLocationTitle),
+      content: Text(strings.useCurrentLocationMessage),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(strings.cancel),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(strings.continueAction),
         ),
       ],
     ),
@@ -327,26 +414,27 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.forLanguage(AppLanguage.fromCode(
+      Localizations.localeOf(context).languageCode,
+    ));
     return AppCard(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Draft status', style: Theme.of(context).textTheme.titleMedium),
+          Text(strings.draftStatus,
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: AppSpacing.md),
           _SummaryRow(
-              label: 'Photo', value: state.hasPhoto ? 'Selected' : 'Missing'),
+              label: strings.photo,
+              value: state.hasPhoto ? strings.selected : strings.missing),
           _SummaryRow(
-            label: 'Location',
-            value: state.hasLocation ? 'Set' : 'Missing',
+            label: strings.location,
+            value: state.hasLocation ? strings.set : strings.missing,
           ),
           _SummaryRow(
-            label: 'Cat choice',
-            value: state.useNewCat ? 'New cat' : 'Existing cat',
-          ),
-          _SummaryRow(
-            label: 'Visibility',
-            value: state.isPublic ? 'Public' : 'Private',
+            label: strings.visibility,
+            value: state.isPublic ? strings.public : strings.private,
           ),
         ],
       ),

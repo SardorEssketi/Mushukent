@@ -6,22 +6,24 @@ Mushukistan
 
 Mission
 
-Mushukistan is a location-based social network that allows people to discover, photograph and help street cats in Tashkent.
+Mushukistan is a Tashkent-focused social platform and interactive map for cat owners and the wider cat community.
 
-The application combines geolocation, community-generated content and interactive mapping to build the largest database of street cats in Uzbekistan.
+The application combines cat records, observations, geolocation, nearby pet-care places, lost-pet alerts, adoption and rehoming posts, owner contact tools, and community interaction in one service.
 
-The primary object of the application is the cat, not the post.
+Cats remain the central subject of the application, while observations, lost-pet alerts, and adoption posts give owners and community members practical ways to care for and find homes for cats.
 
 2. Vision
 
-The long-term vision of Mushukistan is to become the largest digital ecosystem dedicated to street cats in Uzbekistan.
+The long-term vision of Mushukistan is to become the most useful digital home for cat owners and the cat community in Uzbekistan.
 
 The application should:
 
-help volunteers locate animals in need;
-preserve the history of each cat;
-encourage community participation;
-provide valuable geographical data about the city's street cat population.
+help owners find nearby veterinary clinics, pet shops, and shelters;
+help reunite lost pets with their owners;
+support responsible adoption and rehoming;
+preserve the history of cats and their observations;
+encourage helpful local community participation;
+provide useful geographical information about cats and pet-care places in Tashkent.
 3. Target Platforms
 MVP
 Android
@@ -137,7 +139,7 @@ The database distinguishes between two main entities.
 
 Cat
 
-Represents one real street cat.
+Represents a real cat tracked by the community.
 
 Contains:
 
@@ -168,23 +170,25 @@ Never merge these concepts.
 
 The backend must remain provider-agnostic for maps and spatial visualization.
 
-9. MVP Scope
+9. Product Scope
 
-The first public release contains only:
+The current product includes:
 
 Authentication
 Interactive Map
-Add Cat
+Cat records and observations
 Feed
-Cat Pages
+Lost-pet alerts
+Adoption and rehoming posts
+Nearby veterinary clinics, pet shops, and shelters
 Likes
 Comments
 User Profiles
 Leaderboards
-Moderation
-Manual cat matching
+Profile settings and account lifecycle controls
+Reports and moderation
 
-Nothing else should delay the MVP.
+These capabilities define the current product scope.
 
 10. Future Scope
 
@@ -305,9 +309,7 @@ bugfix/feed
 
 Artificial Intelligence must never make final decisions.
 
-The AI only suggests candidate matches.
-
-The user always confirms whether two observations belong to the same cat.
+The current MVP does not perform cat matching. Each new observation receives an unnamed Unknown cat record automatically. Any future identification feature must remain an explicit, separately approved scope change.
 
 AI should improve user experience, not replace user decisions.
 

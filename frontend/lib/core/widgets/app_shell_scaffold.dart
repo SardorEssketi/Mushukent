@@ -54,12 +54,12 @@ class AppShellScaffold extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Create in Mushukistan',
+                    strings.createInMushukistan,
                     style: Theme.of(sheetContext).textTheme.titleLarge,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Choose the kind of cat help or update you want to share.',
+                    strings.chooseShareType,
                     style:
                         Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
                               color: Theme.of(sheetContext)
@@ -70,20 +70,18 @@ class AppShellScaffold extends ConsumerWidget {
                   const SizedBox(height: 12),
                   _AddOptionTile(
                     icon: Icons.add_a_photo_outlined,
-                    title: 'Cat observation',
-                    subtitle:
-                        'Add cat photos, then choose current location, mark on map, or skip location.',
+                    title: strings.catObservation,
+                    subtitle: strings.catObservationAddSubtitle,
                     onTap: () {
                       Navigator.of(sheetContext).pop();
-                      context.go('/add');
+                      context.go('/add/entry');
                     },
                   ),
                   const SizedBox(height: 8),
                   _AddOptionTile(
                     icon: Icons.search_outlined,
                     title: strings.lostPet,
-                    subtitle:
-                        'Create a distinct alert with owner contact and last-seen location.',
+                    subtitle: strings.lostPetAddSubtitle,
                     onTap: () async {
                       final profile = await ref.read(profileMeProvider.future);
                       final phone = profile.phoneNumber?.trim() ?? '';
@@ -128,9 +126,8 @@ class AppShellScaffold extends ConsumerWidget {
                   const SizedBox(height: 8),
                   _AddOptionTile(
                     icon: Icons.home_outlined,
-                    title: 'Find a new home',
-                    subtitle:
-                        'Create a separate rehoming post with contact details.',
+                    title: strings.findANewHome,
+                    subtitle: strings.adoptionAddSubtitle,
                     onTap: () async {
                       final profile = await ref.read(profileMeProvider.future);
                       final phone = profile.phoneNumber?.trim() ?? '';
@@ -146,9 +143,8 @@ class AppShellScaffold extends ConsumerWidget {
                           context: context,
                           builder: (dialogContext) => AlertDialog(
                             title: Text(strings.phoneNumberRequired),
-                            content: const Text(
-                              'Add a phone number before creating an adoption post so people can reach you.',
-                            ),
+                            content:
+                                Text(strings.phoneNumberRequiredForAdoption),
                             actions: [
                               TextButton(
                                 onPressed: () =>
@@ -189,13 +185,20 @@ class AppShellScaffold extends ConsumerWidget {
     return Scaffold(
       body: AuthenticatedOnboardingFlow(child: navigationShell),
       bottomNavigationBar: NavigationBar(
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: selected ? 11 : 10.5,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          );
+        }),
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => _selectBranch(context, ref, index),
         destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
+          NavigationDestination(
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: const Icon(Icons.home),
+            label: strings.home,
           ),
           NavigationDestination(
             icon: const Icon(Icons.map_outlined),
@@ -207,10 +210,10 @@ class AppShellScaffold extends ConsumerWidget {
             selectedIcon: const Icon(Icons.add_circle),
             label: strings.add,
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.forum_outlined),
-            selectedIcon: Icon(Icons.forum),
-            label: 'Community',
+          NavigationDestination(
+            icon: const Icon(Icons.forum_outlined),
+            selectedIcon: const Icon(Icons.forum),
+            label: strings.community,
           ),
           NavigationDestination(
             icon: const Icon(Icons.person_outline),

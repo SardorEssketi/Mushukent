@@ -5,7 +5,7 @@ Version 1.0
 
 1. Overview
 
-Mushukistan is a location-based social network that allows users to photograph, discover and help street cats in Tashkent.
+Mushukistan is a Tashkent-focused social platform and interactive map for cat owners and the wider cat community. It supports cat records and observations, nearby pet-care places, lost-pet alerts, adoption and rehoming posts, owner contact tools, and community features.
 
 The system consists of several independent components communicating through REST APIs.
 

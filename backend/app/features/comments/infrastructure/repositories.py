@@ -53,6 +53,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
             post_id=draft.post_id,
             lost_pet_id=draft.lost_pet_id,
             adoption_post_id=draft.adoption_post_id,
+            parent_comment_id=draft.parent_comment_id,
             user_id=draft.user_id,
             content=draft.content,
         )
@@ -250,6 +251,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
                 schema.Comment.post_id.label("post_id"),
                 schema.Comment.lost_pet_id.label("lost_pet_id"),
                 schema.Comment.adoption_post_id.label("adoption_post_id"),
+                schema.Comment.parent_comment_id.label("parent_comment_id"),
                 schema.Comment.user_id.label("comment_user_id"),
                 schema.Comment.content.label("content"),
                 schema.Comment.created_at.label("created_at"),
@@ -377,6 +379,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
             post_id=row["post_id"],
             lost_pet_id=row["lost_pet_id"],
             adoption_post_id=row["adoption_post_id"],
+            parent_comment_id=row["parent_comment_id"],
             user_id=row["comment_user_id"],
             content=row["content"],
             created_at=row["created_at"],

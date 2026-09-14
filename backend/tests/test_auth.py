@@ -25,6 +25,7 @@ from app.features.auth.infrastructure.repositories import SqlAlchemyAuthUserRepo
 from app.features.auth.infrastructure.tokens import (
     GoogleOAuthIdTokenVerifier,
     JoseAccessTokenService,
+    JoseAccountDeletionTokenService,
 )
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
@@ -67,6 +68,7 @@ class InMemoryAuthUserRepository:
     def __init__(self) -> None:
         self.users_by_id: dict[UUID, AuthUser] = {}
         self.users_by_email: dict[str, AuthUser] = {}
+        self.refresh_sessions: dict[UUID, SimpleNamespace] = {}
 
     def get_by_id(self, user_id: UUID) -> AuthUser | None:
         return self.users_by_id.get(user_id)
@@ -121,6 +123,56 @@ class InMemoryAuthUserRepository:
             return None
         user.email_verified = True
         return user
+
+    def create_refresh_session(
+        self,
+        *,
+        user_id: UUID,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> SimpleNamespace:
+        session = SimpleNamespace(
+            id=uuid4(),
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            revoked_at=None,
+            last_used_at=None,
+        )
+        self.refresh_sessions[session.id] = session
+        return session
+
+    def get_refresh_session_by_hash(self, token_hash: str) -> SimpleNamespace | None:
+        for session in self.refresh_sessions.values():
+            if session.token_hash == token_hash:
+                return session
+        return None
+
+    def rotate_refresh_session(
+        self,
+        session_id: UUID,
+        *,
+        new_token_hash: str,
+        expires_at: datetime,
+        used_at: datetime,
+    ) -> SimpleNamespace | None:
+        session = self.refresh_sessions.get(session_id)
+        if session is None:
+            return None
+        session.token_hash = new_token_hash
+        session.expires_at = expires_at
+        session.last_used_at = used_at
+        return session
+
+    def revoke_refresh_session(self, token_hash: str, revoked_at: datetime) -> None:
+        session = self.get_refresh_session_by_hash(token_hash)
+        if session is not None:
+            session.revoked_at = revoked_at
+
+    def revoke_user_refresh_sessions(self, user_id: UUID, revoked_at: datetime) -> None:
+        for session in self.refresh_sessions.values():
+            if session.user_id == user_id:
+                session.revoked_at = revoked_at
 
 
 class InMemorySessionManager:
@@ -241,6 +293,52 @@ def test_access_token_rejects_invalid_issuer_audience_or_type(
         assert excinfo.value.status_code == 401
 
 
+def test_account_deletion_token_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _test_settings(monkeypatch)
+    service = JoseAccountDeletionTokenService(settings)
+    user_id = UUID("11111111-1111-4111-8111-111111111111")
+
+    token = service.issue_token(user_id=user_id, email="delete@example.com")
+    claims = service.decode_token(token)
+
+    assert claims.user_id == user_id
+    assert claims.email == "delete@example.com"
+
+
+def test_account_deletion_token_rejects_wrong_type_and_expired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _test_settings(monkeypatch)
+    service = JoseAccountDeletionTokenService(settings)
+    now = datetime.now(UTC)
+    base_claims = {
+        "sub": "11111111-1111-4111-8111-111111111111",
+        "email": "delete@example.com",
+        "iss": settings.jwt_issuer,
+        "aud": settings.jwt_audience,
+        "iat": int(now.timestamp()),
+        "nbf": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=5)).timestamp()),
+        "token_type": "account_deletion",
+    }
+    wrong_type = jwt.encode(
+        {**base_claims, "token_type": "email_verification"},
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+    expired = jwt.encode(
+        {**base_claims, "exp": int((now - timedelta(minutes=5)).timestamp())},
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    for token in (wrong_type, expired):
+        with pytest.raises(HTTPException) as excinfo:
+            service.decode_token(token)
+        assert excinfo.value.status_code == 401
+        assert excinfo.value.detail["error"]["code"] == "INVALID_ACCOUNT_DELETION_TOKEN"
+
+
 def test_settings_parse_multiple_google_oauth_client_ids(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "web-client-id, android-client-id")
 
@@ -346,6 +444,50 @@ def test_google_service_creates_user_with_legal_acceptance(
     assert result.user.accepted_privacy_version == CURRENT_PRIVACY_VERSION
     assert result.user.accepted_legal_at is not None
     assert result.access_token
+    assert result.refresh_token
+
+
+def test_refresh_session_renews_existing_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    repository = InMemoryAuthUserRepository()
+    repository.create(
+        email="refresh@example.com",
+        password_hash=None,
+        name="Refresh User",
+        email_verified=True,
+        accepted_terms_version=CURRENT_TERMS_VERSION,
+        accepted_privacy_version=CURRENT_PRIVACY_VERSION,
+        accepted_legal_at=datetime.now(UTC),
+    )
+    service = _auth_service_with_repository(monkeypatch, repository)
+    issued = service.authenticate_with_google_id_token(
+        "google-id-token",
+        accept_terms=True,
+        accept_privacy=True,
+    )
+
+    refreshed = service.refresh_session(issued.refresh_token)
+
+    assert refreshed.user.email == "google-user@example.com"
+    assert refreshed.access_token
+    assert refreshed.refresh_token
+    assert refreshed.refresh_token == issued.refresh_token
+
+
+def test_refresh_session_rejects_revoked_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    repository = InMemoryAuthUserRepository()
+    service = _auth_service_with_repository(monkeypatch, repository)
+    issued = service.authenticate_with_google_id_token(
+        "google-id-token",
+        accept_terms=True,
+        accept_privacy=True,
+    )
+    service.revoke_refresh_session(issued.refresh_token)
+
+    with pytest.raises(HTTPException) as excinfo:
+        service.refresh_session(issued.refresh_token)
+
+    assert excinfo.value.status_code == 401
+    assert excinfo.value.detail["error"]["code"] == "INVALID_REFRESH_TOKEN"
 
 
 def test_google_service_existing_user_with_legal_acceptance_does_not_require_flags(
@@ -537,6 +679,91 @@ def test_register_login_logout_flow(client: TestClient, auth_runtime) -> None:
     assert logout_response.status_code == 204
 
 
+def test_refresh_endpoint_renews_refresh_session_and_new_access_token_works(
+    client: TestClient,
+    auth_runtime,
+) -> None:
+    settings, _ = auth_runtime
+    email = "refresh-rotation@example.com"
+    password = "StrongPass123"
+
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "name": "Refresh Rotation User",
+            "accept_terms": True,
+            "accept_privacy": True,
+        },
+    )
+    assert register_response.status_code == 201
+    verification_token = register_response.json()["data"]["dev_verification_token"]
+
+    verify_response = client.post(
+        "/api/v1/auth/verify-email",
+        json={"token": verification_token},
+    )
+    assert verify_response.status_code == 200
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert login_response.status_code == 200
+    login_payload = login_response.json()["data"]
+    user_id = login_payload["user"]["id"]
+    old_refresh_token = login_payload["refresh_token"]
+    now = datetime.now(UTC)
+    expired_access_token = jwt.encode(
+        {
+            "sub": user_id,
+            "role": "user",
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+            "iat": int((now - timedelta(minutes=10)).timestamp()),
+            "nbf": int((now - timedelta(minutes=10)).timestamp()),
+            "exp": int((now - timedelta(minutes=5)).timestamp()),
+            "token_type": "access",
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    expired_access_response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {expired_access_token}"},
+    )
+    assert expired_access_response.status_code == 401
+
+    refresh_response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_refresh_token},
+    )
+    assert refresh_response.status_code == 200
+    refresh_payload = refresh_response.json()["data"]
+    assert refresh_payload["access_token"]
+    assert refresh_payload["access_token"] != expired_access_token
+    assert refresh_payload["refresh_token"]
+    assert refresh_payload["refresh_token"] == old_refresh_token
+    assert refresh_payload["user"]["email"] == email
+
+    old_refresh_response = client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": old_refresh_token},
+    )
+    assert old_refresh_response.status_code == 200
+
+    protected_response = client.get(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {refresh_payload['access_token']}"},
+    )
+    assert protected_response.status_code == 200
+    protected_payload = protected_response.json()
+    assert protected_payload["success"] is True
+    assert protected_payload["data"]["email"] == email
+
+
 def test_register_requires_name(client: TestClient) -> None:
     response = client.post(
         "/api/v1/auth/register",
@@ -585,7 +812,7 @@ def test_google_login_creates_or_updates_user(client: TestClient, auth_runtime) 
     assert payload["data"]["user"]["email"] == "google-user@example.com"
     assert payload["data"]["user"]["name"] == "Google User"
     assert payload["data"]["user"]["email"] is not None
-    assert "refresh_token" not in payload["data"]
+    assert payload["data"]["refresh_token"]
 
     with auth_service.db_session_manager.session_scope() as session:
         user = session.scalar(

@@ -12,7 +12,7 @@ This document defines the canonical authentication and authorization design for 
 MVP constraints:
 - No Redis, no RabbitMQ, no background workers.
 - No additional identity provider besides Google OAuth and email/password.
-- No web app in MVP.
+- Flutter web is available for the MVP production frontend.
 
 2. Authentication Flows
 -----------------------
@@ -28,8 +28,8 @@ MVP constraints:
 - Backend looks up user by normalized email.
 - Backend verifies password hash.
 - Backend rejects unverified users with `EMAIL_NOT_VERIFIED`.
-- Backend issues JWT access token.
-- Client stores token securely and attaches it to protected requests.
+- Backend issues a short-lived JWT access token and a refresh/session token.
+- Client stores both credentials using secure storage and attaches only the access token to protected requests.
 
 2.3 Email Verification
 - Client submits verification token received through email delivery.
@@ -46,18 +46,18 @@ MVP constraints:
   - if exists but current legal acceptance is missing, require explicit Terms and Privacy acceptance before completing login;
   - if not exists, create user with `password_hash = NULL` only when explicit Terms and Privacy acceptance is provided.
 - Google-authenticated users are treated as verified immediately.
-- Backend issues JWT access token.
+- Backend issues a short-lived JWT access token and a refresh/session token.
 
 2.5 Logout
-- MVP logout is client-side token deletion.
-- Backend `POST /auth/logout` may return 204 for consistency.
-- Server-side token revocation/blacklist is out of MVP scope.
+- Client calls `POST /auth/logout` with the current refresh token when available, then deletes local credentials.
+- Backend revokes the matching refresh session, or all active refresh sessions for the authenticated user when no token is provided.
+- Access-token blacklist remains out of MVP scope.
 
 3. JWT Strategy
 ---------------
-3.1 Token Type
-- Access token only (Bearer JWT).
-- Refresh token not used in MVP.
+3.1 Token Types
+- Access token: Bearer JWT.
+- Refresh/session token: opaque random token stored hashed server-side.
 
 3.2 Signing
 - Algorithm: HS256 for MVP simplicity.
@@ -81,14 +81,17 @@ MVP constraints:
 
 4. Token Lifetime
 -----------------
-MVP policy:
 - Access token lifetime: 60 minutes.
+- Refresh/session lifetime: 30 days.
+- Refresh uses sliding renewal and keeps the refresh token stable for MVP to avoid accidental sign-outs from stale tabs or clients.
 - Clock skew tolerance: 60 seconds.
-- Re-authentication required after expiration.
+- Re-authentication is required only when the refresh/session token is expired, revoked, invalid, or the account is disabled/deleted.
 
-Rationale:
-- Keeps implementation simple (no refresh-token lifecycle).
-- Acceptable UX for MVP while reducing long-lived token risk.
+Startup/session restore:
+- valid access token -> enter the app.
+- expired access token with valid refresh session -> silently refresh, persist renewed credentials, then enter the app.
+- invalid/revoked/expired refresh session -> clear local auth state and route to Registration.
+- transient network/server failure during refresh -> preserve local auth state and show retry.
 
 5. Google OAuth Flow (Detailed)
 -------------------------------
@@ -179,8 +182,14 @@ Rationale:
 - Suspended users cannot authenticate or create content.
 
 8.5 Deletion
-- MVP behavior: soft-deactivate account (set `is_active = false`) and keep content for moderation/audit continuity.
-- Hard-delete/anonymization workflow is post-MVP policy work.
+- Account deletion is available from Settings -> About account -> Delete account.
+- The backend anonymizes and deactivates the account instead of hard-deleting the `users` row.
+- Login is disabled by setting `is_active = false`; existing access tokens are rejected on subsequent protected requests because the account is inactive.
+- Authentication credentials and profile personal data are removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data.
+- User-owned posts, comments, lost-pet posts, and adoption/rehoming posts are hidden and anonymized.
+- User likes, user block rows, and affected leaderboard cache entries are removed.
+- Shared domain records such as cats may remain when they no longer identify the deleted user; user attribution is cleared where possible.
+- Some anonymized operational and moderation records may remain for service integrity, moderation, safety, abuse prevention, or legal compliance.
 
 9. Security Controls Specific to Auth
 -------------------------------------
@@ -210,7 +219,6 @@ This document aligns to these endpoint families in `API.md`:
 
 12. Future Evolution (Post-MVP)
 -------------------------------
-- Add refresh token flow with rotation.
 - Add password reset flow.
 - Add MFA for moderators.
 - Add audit table for auth events.

@@ -13,7 +13,7 @@ from app.core.storage import (
     StorageValidationError,
 )
 from app.features.auth.domain.models import AuthUser
-from app.features.cats.domain.models import CatRecord
+from app.features.cats.domain.models import CatRecord, CatStatus
 from app.features.cats.domain.repositories import CatRepository
 from app.features.posts.application.schemas import (
     GenericListResponse,
@@ -126,15 +126,27 @@ class PostsService:
                 location = payload.location
 
                 cat = self._resolve_cat_for_create(cat_repository, user, payload)
-                if payload.new_cat is not None:
+                if payload.new_cat is not None or payload.cat_id is None:
                     cat = cat_repository.create(
                         cat=CatRecord(
                             id=cat.id,
-                            name=payload.new_cat.name.strip() if payload.new_cat.name else None,
-                            status=payload.new_cat.status,
+                            name=(
+                                payload.new_cat.name.strip()
+                                if payload.new_cat is not None and payload.new_cat.name
+                                else None
+                            ),
+                            status=(
+                                payload.new_cat.status
+                                if payload.new_cat is not None
+                                else CatStatus.UNKNOWN
+                            ),
                             approximate_age_smallyears=None,
                             cover_photo_url=None,
-                            canonical_location=payload.new_cat.canonical_location,
+                            canonical_location=(
+                                payload.new_cat.canonical_location
+                                if payload.new_cat is not None
+                                else payload.location
+                            ),
                             first_seen_at=None,
                             last_seen_at=None,
                             total_observations=0,
@@ -156,9 +168,8 @@ class PostsService:
                         description=payload.description.strip() if payload.description else None,
                         location_latitude=location.latitude if location is not None else None,
                         location_longitude=location.longitude if location is not None else None,
-                        status=(
-                            payload.status or (payload.new_cat.status if payload.new_cat else None)
-                        ),
+                        status=payload.status
+                        or (payload.new_cat.status if payload.new_cat is not None else None),
                         is_public=payload.is_public,
                     )
                 )
@@ -339,8 +350,25 @@ class PostsService:
                 raise api_error(404, "CAT_NOT_FOUND", "Cat not found.")
             return cat
 
+        # Cat matching is intentionally no longer part of the observation flow.
+        # Keep the legacy fields optional for older clients, but create an
+        # unnamed cat record automatically when neither is supplied.
         if payload.new_cat is None:
-            raise api_error(400, "INVALID_PAYLOAD", "Either cat_id or new_cat must be provided.")
+            return CatRecord(
+                id=uuid4(),
+                name=None,
+                status=CatStatus.UNKNOWN,
+                approximate_age_smallyears=None,
+                cover_photo_url=None,
+                canonical_location=payload.location,
+                first_seen_at=None,
+                last_seen_at=None,
+                total_observations=0,
+                total_contributors=0,
+                total_likes=0,
+                created_by=user.id,
+                is_active=True,
+            )
 
         return CatRecord(
             id=uuid4(),

@@ -15,6 +15,7 @@ void main() {
       expect(call.body, isA<Map>());
       return <String, Object?>{
         'access_token': 'token-123',
+        'refresh_token': 'refresh-123',
         'token_type': 'Bearer',
         'expires_in': 3600,
         'user': testUser().toJson(),
@@ -31,6 +32,7 @@ void main() {
 
     expect(session.accessToken, 'token-123');
     expect(await tokenStore.read(), 'token-123');
+    expect(await tokenStore.readRefreshToken(), 'refresh-123');
     expect(apiClient.calls.single.path, 'auth/login');
   });
 
@@ -72,6 +74,7 @@ void main() {
       });
       return <String, Object?>{
         'access_token': 'token-123',
+        'refresh_token': 'refresh-123',
         'token_type': 'Bearer',
         'expires_in': 3600,
         'user': testUser(email: 'google-user@example.com').toJson(),
@@ -90,6 +93,7 @@ void main() {
 
     expect(session.user.email, 'google-user@example.com');
     expect(await tokenStore.read(), 'token-123');
+    expect(await tokenStore.readRefreshToken(), 'refresh-123');
   });
 
   test('session restoration returns the current user when the token is valid',
@@ -135,9 +139,108 @@ void main() {
     expect(await tokenStore.read(), isNull);
   });
 
+  test('expired access token with valid refresh restores session', () async {
+    final apiClient = FakeApiClient();
+    final tokenStore = FakeAuthTokenStore('expired-token', 'refresh-123');
+    apiClient.setHandler('GET', 'users/me', (call) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'UNAUTHORIZED',
+        message: 'Missing or invalid Authorization header.',
+      );
+    });
+    apiClient.setHandler('POST', 'auth/refresh', (call) {
+      expect(call.authenticated, isFalse);
+      expect(call.body, <String, Object?>{'refresh_token': 'refresh-123'});
+      return <String, Object?>{
+        'access_token': 'token-456',
+        'refresh_token': 'refresh-456',
+        'token_type': 'Bearer',
+        'expires_in': 3600,
+        'user': testUser().toJson(),
+      };
+    });
+
+    final repository = MushukistanAuthRepository(
+      apiClient: apiClient,
+      tokenStore: tokenStore,
+    );
+    final result = await repository.restoreSession();
+
+    expect(result, isA<SessionRestoreSuccess>());
+    expect(await tokenStore.read(), 'token-456');
+    expect(await tokenStore.readRefreshToken(), 'refresh-456');
+    expect(
+      apiClient.calls.where((call) => call.path == 'auth/refresh'),
+      hasLength(1),
+    );
+    expect(apiClient.calls.map((call) => '${call.method} ${call.path}'), [
+      'GET users/me',
+      'POST auth/refresh',
+    ]);
+  });
+
+  test('invalid refresh token clears local session', () async {
+    final apiClient = FakeApiClient();
+    final tokenStore = FakeAuthTokenStore('expired-token', 'refresh-123');
+    apiClient.setHandler('GET', 'users/me', (call) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'UNAUTHORIZED',
+        message: 'Missing or invalid Authorization header.',
+      );
+    });
+    apiClient.setHandler('POST', 'auth/refresh', (call) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'INVALID_REFRESH_TOKEN',
+        message: 'Invalid or expired session.',
+      );
+    });
+
+    final repository = MushukistanAuthRepository(
+      apiClient: apiClient,
+      tokenStore: tokenStore,
+    );
+    final result = await repository.restoreSession();
+
+    expect(result, isA<SessionRestoreInvalid>());
+    expect(await tokenStore.read(), isNull);
+    expect(await tokenStore.readRefreshToken(), isNull);
+  });
+
+  test('transient refresh failure preserves local session', () async {
+    final apiClient = FakeApiClient();
+    final tokenStore = FakeAuthTokenStore('expired-token', 'refresh-123');
+    apiClient.setHandler('GET', 'users/me', (call) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'UNAUTHORIZED',
+        message: 'Missing or invalid Authorization header.',
+      );
+    });
+    apiClient.setHandler('POST', 'auth/refresh', (call) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.network,
+        code: 'NETWORK_ERROR',
+        message: 'Network request failed.',
+      );
+    });
+
+    final repository = MushukistanAuthRepository(
+      apiClient: apiClient,
+      tokenStore: tokenStore,
+    );
+    final result = await repository.restoreSession();
+
+    expect(result, isA<SessionRestoreFailure>());
+    expect(await tokenStore.read(), 'expired-token');
+    expect(await tokenStore.readRefreshToken(), 'refresh-123');
+  });
+
   test('network failures stay distinguishable from invalid sessions', () async {
     final apiClient = FakeApiClient();
-    final tokenStore = FakeAuthTokenStore('token-123');
+    final tokenStore = FakeAuthTokenStore('token-123', 'refresh-123');
     apiClient.setHandler('GET', 'users/me', (call) {
       throw const MushukistanApiException(
         kind: ApiFailureKind.network,
@@ -159,7 +262,7 @@ void main() {
   test('logout clears the local token', () async {
     final apiClient = FakeApiClient();
     final tokenStore = FakeAuthTokenStore('token-123');
-    apiClient.setHandler('DELETE', 'auth/logout', (call) => null);
+    apiClient.setHandler('POST', 'auth/logout', (call) => null);
 
     final repository = MushukistanAuthRepository(
       apiClient: apiClient,
@@ -168,7 +271,9 @@ void main() {
     await repository.logout();
 
     expect(await tokenStore.read(), isNull);
-    expect(apiClient.calls.single.method, 'DELETE');
+    expect(await tokenStore.readRefreshToken(), isNull);
+    expect(apiClient.calls.single.method, 'POST');
+    expect(apiClient.calls.single.path, 'auth/logout');
   });
 
   test('register returns verification requirement instead of session',

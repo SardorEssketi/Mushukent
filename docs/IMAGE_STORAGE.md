@@ -133,12 +133,16 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 - Old objects may remain for safety until cleanup policy runs.
 
 10.3 Deletion
-- Post soft-delete does not immediately remove files in MVP.
+- Standard post soft-delete does not guarantee immediate media removal.
+- Account deletion attempts best-effort cleanup for profile, post, lost-pet, and adoption/rehoming media URLs associated with the deleted account.
+- Best-effort cleanup may skip a URL if object storage is not configured, if the URL cannot be mapped to a known storage key, or if the storage provider rejects the delete request.
+- Database URL references for hidden/anonymized account-owned content are cleared or replaced with deleted placeholders where required by response contracts.
 - Periodic manual cleanup may remove orphaned media.
 
 10.4 Retention Guidance
-- Keep active content indefinitely for MVP.
-- Consider later retention policy for deleted content once legal/product policy is finalized.
+- Keep active content while the account or content remains active.
+- The verified repository does not define a guaranteed automatic media deletion period for all retained or orphaned media.
+- Do not publish a retention period until production cleanup scheduling and backup retention are verified.
 
 11. Failure Handling
 -------------------

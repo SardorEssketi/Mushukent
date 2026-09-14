@@ -149,15 +149,19 @@ class FakeApiClient implements MushukistanApiClient {
 }
 
 class FakeAuthTokenStore implements AuthTokenStore {
-  FakeAuthTokenStore([this.initialToken]);
+  FakeAuthTokenStore([this.initialToken, this.initialRefreshToken]);
 
   String? initialToken;
+  String? initialRefreshToken;
   String? currentToken;
+  String? currentRefreshToken;
 
   @override
   Future<void> delete() async {
     currentToken = null;
+    currentRefreshToken = null;
     initialToken = null;
+    initialRefreshToken = null;
   }
 
   @override
@@ -166,9 +170,25 @@ class FakeAuthTokenStore implements AuthTokenStore {
   }
 
   @override
+  Future<String?> readRefreshToken() async {
+    return currentRefreshToken ?? initialRefreshToken;
+  }
+
+  @override
   Future<void> write(String token) async {
     currentToken = token;
     initialToken = token;
+  }
+
+  @override
+  Future<void> writeTokens({
+    required String accessToken,
+    required String? refreshToken,
+  }) async {
+    currentToken = accessToken;
+    initialToken = accessToken;
+    currentRefreshToken = refreshToken;
+    initialRefreshToken = refreshToken;
   }
 }
 
@@ -194,6 +214,9 @@ class FakeAuthRepository implements AuthRepository {
   Completer<AuthSession>? loginCompleter;
   Completer<VerificationRequirement>? registerCompleter;
   Completer<SessionRestoreResult>? restoreCompleter;
+  AuthSession? refreshResult;
+  Object? refreshError;
+  int refreshCalls = 0;
 
   final VerificationRequirement? registerResult;
   AuthSession? loginResult;
@@ -289,6 +312,19 @@ class FakeAuthRepository implements AuthRepository {
       throw StateError('No fake current user configured.');
     }
     return user;
+  }
+
+  @override
+  Future<AuthSession> refreshSession() async {
+    refreshCalls += 1;
+    if (refreshError != null) {
+      throw refreshError!;
+    }
+    final result = refreshResult ?? loginResult;
+    if (result == null) {
+      throw StateError('No fake refresh result configured.');
+    }
+    return result;
   }
 
   @override

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import secrets
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
 from structlog import get_logger
@@ -35,6 +38,7 @@ class AuthRepositoryFactory(Protocol):
 class AuthSessionResult:
     user: AuthUser
     access_token: str
+    refresh_token: str
     token_type: str = "Bearer"
     expires_in: int = 3600
 
@@ -152,12 +156,7 @@ class AuthService(AuthenticationService):
             user = repository.update_last_login_at(user.id, now) or user
             principal = self._principal_from_user(user)
 
-        access_token = self.access_token_service.issue_access_token(principal)
-        return AuthSessionResult(
-            user=user,
-            access_token=access_token,
-            expires_in=self.settings.jwt_access_token_exp_minutes * 60,
-        )
+        return self._issue_session(user, principal)
 
     def resend_verification(self, email: str) -> str | None:
         normalized_email = self._normalize_email(email)
@@ -245,12 +244,67 @@ class AuthService(AuthenticationService):
             user = repository.update_last_login_at(user.id, datetime.now(UTC)) or user
             principal = self._principal_from_user(user)
 
+        return self._issue_session(user, principal)
+
+    def refresh_session(self, refresh_token: str) -> AuthSessionResult:
+        token = refresh_token.strip()
+        if not token:
+            raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
+
+        now = datetime.now(UTC)
+        token_hash = self._hash_refresh_token(token)
+        new_expires_at = now + timedelta(days=self.settings.refresh_session_exp_days)
+
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            refresh_session = repository.get_refresh_session_by_hash(token_hash)
+            if (
+                refresh_session is None
+                or refresh_session.revoked_at is not None
+                or refresh_session.expires_at <= now
+            ):
+                raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
+
+            user = repository.get_by_id(refresh_session.user_id)
+            if user is None:
+                raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
+            if not user.is_active:
+                repository.revoke_user_refresh_sessions(user.id, now)
+                raise api_error(403, "ACCOUNT_DISABLED", "Account is disabled.")
+
+            rotated = repository.rotate_refresh_session(
+                refresh_session.id,
+                new_token_hash=token_hash,
+                expires_at=new_expires_at,
+                used_at=now,
+            )
+            if rotated is None:
+                raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
+            user = repository.update_last_login_at(user.id, now) or user
+            principal = self._principal_from_user(user)
+
         access_token = self.access_token_service.issue_access_token(principal)
         return AuthSessionResult(
             user=user,
             access_token=access_token,
+            refresh_token=token,
             expires_in=self.settings.jwt_access_token_exp_minutes * 60,
         )
+
+    def revoke_refresh_session(
+        self, refresh_token: str | None, user_id: UUID | None = None
+    ) -> None:
+        now = datetime.now(UTC)
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            if isinstance(refresh_token, str) and refresh_token.strip():
+                repository.revoke_refresh_session(
+                    self._hash_refresh_token(refresh_token.strip()),
+                    now,
+                )
+                return
+            if user_id is not None:
+                repository.revoke_user_refresh_sessions(user_id, now)
 
     def resolve_bearer_token(self, token: str) -> AuthenticatedPrincipal:
         principal = self.access_token_service.decode_access_token(token)
@@ -279,6 +333,39 @@ class AuthService(AuthenticationService):
                 role=expected_role,
                 is_active=user.is_active,
             )
+
+    def _issue_session(
+        self,
+        user: AuthUser,
+        principal: AuthenticatedPrincipal,
+    ) -> AuthSessionResult:
+        refresh_token = self._generate_refresh_token()
+        refresh_expires_at = datetime.now(UTC) + timedelta(
+            days=self.settings.refresh_session_exp_days
+        )
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            repository.create_refresh_session(
+                user_id=user.id,
+                token_hash=self._hash_refresh_token(refresh_token),
+                expires_at=refresh_expires_at,
+            )
+
+        access_token = self.access_token_service.issue_access_token(principal)
+        return AuthSessionResult(
+            user=user,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=self.settings.jwt_access_token_exp_minutes * 60,
+        )
+
+    @staticmethod
+    def _generate_refresh_token() -> str:
+        return secrets.token_urlsafe(48)
+
+    @staticmethod
+    def _hash_refresh_token(token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _normalize_email(email: str) -> str:

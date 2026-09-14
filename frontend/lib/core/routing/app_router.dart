@@ -6,7 +6,6 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_create_screen.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_detail_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_details_screen.dart';
-import '../../features/add_observation/presentation/screens/add_observation_entry_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_location_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
 import '../../features/add_observation/presentation/screens/publish_success_screen.dart';
@@ -77,10 +76,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return null;
         case AuthPhase.unauthenticated:
           if (location == '/auth-gate') {
-            return '/login';
+            return '/register';
           }
           if (isProtectedRoute) {
-            return '/login';
+            return '/register';
           }
           return null;
         case AuthPhase.verificationRequired:
@@ -190,7 +189,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'entry',
                     builder: (context, state) =>
-                        const AddObservationEntryScreen(),
+                        const AddObservationScreen(observationOnly: true),
                   ),
                   GoRoute(
                     path: 'details',

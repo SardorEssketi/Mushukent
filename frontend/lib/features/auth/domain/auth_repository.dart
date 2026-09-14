@@ -43,6 +43,7 @@ abstract interface class AuthRepository {
   Future<VerificationRequirement> resendVerification(String email);
   Future<void> verifyEmail(String token);
   Future<MushukistanUser> fetchCurrentUser();
+  Future<AuthSession> refreshSession();
   Future<SessionRestoreResult> restoreSession();
   Future<void> logout();
 }

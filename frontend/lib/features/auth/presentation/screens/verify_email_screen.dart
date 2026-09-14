@@ -105,7 +105,8 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
       }
       final message = ref.read(authControllerProvider).message;
       setState(() {
-        _verificationError = message ?? 'Could not verify this email link.';
+        _verificationError =
+            message ?? ref.read(appStringsProvider).couldNotVerifyEmailLink;
       });
     }
   }
@@ -138,11 +139,11 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
                 ),
                 const SizedBox(height: 16),
                 if (!_verificationComplete && _verificationError == null) ...[
-                  const Text('Confirming your email...'),
+                  Text(strings.confirmingEmail),
                   const SizedBox(height: 24),
                   const Center(child: CircularProgressIndicator()),
                 ] else if (_verificationComplete) ...[
-                  const Text('Email verified. You can sign in now.'),
+                  Text(strings.emailVerifiedSignInNow),
                   const SizedBox(height: 24),
                   FilledButton(
                     onPressed: () => context.go('/login'),

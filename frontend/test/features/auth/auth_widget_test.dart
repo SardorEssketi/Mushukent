@@ -12,6 +12,7 @@ import 'package:mushukistan_frontend/core/onboarding/authenticated_onboarding_st
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
+import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
 
 import '../../support/fakes.dart';
 
@@ -34,69 +35,75 @@ ProviderContainer _containerWithRepo(
   FakeGoogleIdentityTokenProvider? googleIdentityTokens,
 }) {
   final fakeApiClient = apiClient ?? FakeApiClient();
-  fakeApiClient.setHandler('GET', 'feed', (_) {
-    return <String, Object?>{
-      'items': <Object?>[
-        <String, Object?>{
-          'id': 'post-1',
-          'cat': <String, Object?>{
+  fakeApiClient.handlers.putIfAbsent('GET feed', () {
+    return (_) {
+      return <String, Object?>{
+        'items': <Object?>[
+          <String, Object?>{
+            'id': 'post-1',
+            'cat': <String, Object?>{
+              'id': 'cat-1',
+              'name': 'Mushu',
+              'cover_photo_url': null,
+            },
+            'author': <String, Object?>{
+              'id': '11111111-1111-4111-8111-111111111111',
+              'name': 'Sardor',
+              'avatar_url': null,
+            },
+            'photo_url': 'https://example.com/cat.jpg',
+            'thumb_url': 'https://example.com/cat-thumb.jpg',
+            'description': 'Spotted near the park.',
+            'location': <String, Object?>{
+              'latitude': 41.2995,
+              'longitude': 69.2401,
+            },
+            'created_at': '2026-07-01T10:00:00.000Z',
+            'like_count': 3,
+            'comment_count': 1,
+          },
+        ],
+        'next_cursor': null,
+        'limit': 30,
+      };
+    };
+  });
+  fakeApiClient.handlers.putIfAbsent('GET cats', () {
+    return (_) {
+      return <String, Object?>{
+        'items': <Object?>[
+          <String, Object?>{
             'id': 'cat-1',
             'name': 'Mushu',
+            'status': 'healthy',
             'cover_photo_url': null,
+            'canonical_location': <String, Object?>{
+              'latitude': 41.2995,
+              'longitude': 69.2401,
+            },
+            'last_seen_at': null,
+            'total_observations': 1,
+            'distance_meters': 12.0,
           },
-          'author': <String, Object?>{
-            'id': '11111111-1111-4111-8111-111111111111',
-            'name': 'Sardor',
-            'avatar_url': null,
-          },
-          'photo_url': 'https://example.com/cat.jpg',
-          'thumb_url': 'https://example.com/cat-thumb.jpg',
-          'description': 'Spotted near the park.',
-          'location': <String, Object?>{
-            'latitude': 41.2995,
-            'longitude': 69.2401,
-          },
-          'created_at': '2026-07-01T10:00:00.000Z',
-          'like_count': 3,
-          'comment_count': 1,
-        },
-      ],
-      'next_cursor': null,
-      'limit': 30,
+        ],
+        'next_cursor': null,
+        'limit': 20,
+      };
     };
   });
-  fakeApiClient.setHandler('GET', 'cats', (_) {
-    return <String, Object?>{
-      'items': <Object?>[
-        <String, Object?>{
-          'id': 'cat-1',
-          'name': 'Mushu',
-          'status': 'healthy',
-          'cover_photo_url': null,
-          'canonical_location': <String, Object?>{
-            'latitude': 41.2995,
-            'longitude': 69.2401,
-          },
-          'last_seen_at': null,
-          'total_observations': 1,
-          'distance_meters': 12.0,
-        },
-      ],
-      'next_cursor': null,
-      'limit': 20,
-    };
-  });
-  fakeApiClient.setHandler('GET', 'users/me', (_) {
-    return <String, Object?>{
-      'id': '11111111-1111-4111-8111-111111111111',
-      'email': 'user@example.com',
-      'name': 'Sardor',
-      'avatar_url': null,
-      'bio': 'Cat lover',
-      'registered_at': '2026-07-01T10:00:00.000Z',
-      'observation_count': 12,
-      'total_likes_received': 45,
-      'comment_count': 17,
+  fakeApiClient.handlers.putIfAbsent('GET users/me', () {
+    return (_) {
+      return <String, Object?>{
+        'id': '11111111-1111-4111-8111-111111111111',
+        'email': 'user@example.com',
+        'name': 'Sardor',
+        'avatar_url': null,
+        'bio': 'Cat lover',
+        'registered_at': '2026-07-01T10:00:00.000Z',
+        'observation_count': 12,
+        'total_likes_received': 45,
+        'comment_count': 17,
+      };
     };
   });
   return ProviderContainer(
@@ -119,8 +126,18 @@ ProviderContainer _containerWithRepo(
 }
 
 Future<void> _pumpApp(WidgetTester tester, ProviderContainer container) async {
+  tester.view.physicalSize = const Size(800, 1000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(_buildApp(container));
   await tester.pump();
+}
+
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -137,7 +154,7 @@ void main() {
     router.go('/profile');
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Join Mushukistan'), findsOneWidget);
   });
 
   testWidgets('authenticated users are redirected away from login',
@@ -174,12 +191,66 @@ void main() {
     await _pumpApp(tester, container);
 
     expect(find.text('Restoring session...'), findsOneWidget);
-    expect(find.text('Welcome back'), findsNothing);
+    expect(find.text('Join Mushukistan'), findsNothing);
 
     repo.restoreCompleter!.complete(const SessionRestoreMissing());
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Join Mushukistan'), findsOneWidget);
+  });
+
+  testWidgets(
+      'expired access token silently refreshes once before entering the app',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    final tokenStore = FakeAuthTokenStore('expired-token', 'refresh-123');
+    final refreshCompleter = Completer<Object?>();
+    apiClient.setHandler('GET', 'users/me', (_) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'UNAUTHORIZED',
+        message: 'Missing or invalid Authorization header.',
+      );
+    });
+    apiClient.setHandler('POST', 'auth/refresh', (call) {
+      expect(call.authenticated, isFalse);
+      expect(call.body, <String, Object?>{'refresh_token': 'refresh-123'});
+      return refreshCompleter.future;
+    });
+    final repository = MushukistanAuthRepository(
+      apiClient: apiClient,
+      tokenStore: tokenStore,
+    );
+    final container = _containerWithRepo(repository, apiClient: apiClient);
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pump();
+
+    expect(find.text('Restoring session...'), findsOneWidget);
+    expect(find.text('Join Mushukistan'), findsNothing);
+    expect(find.text('Welcome back'), findsNothing);
+    expect(apiClient.calls.where((call) => call.path == 'auth/refresh'),
+        hasLength(1));
+
+    refreshCompleter.complete(<String, Object?>{
+      'access_token': 'token-456',
+      'refresh_token': 'refresh-456',
+      'token_type': 'Bearer',
+      'expires_in': 3600,
+      'user': testUser().toJson(),
+    });
+    await tester.pumpAndSettle();
+
+    expect(
+        container.read(authControllerProvider).phase, AuthPhase.authenticated);
+    expect(find.text('Mushukistan'), findsOneWidget);
+    expect(find.text('Join Mushukistan'), findsNothing);
+    expect(find.text('Welcome back'), findsNothing);
+    expect(await tokenStore.read(), 'token-456');
+    expect(await tokenStore.readRefreshToken(), 'refresh-456');
+    expect(apiClient.calls.where((call) => call.path == 'auth/refresh'),
+        hasLength(1));
   });
 
   testWidgets('login loading and error state are visible', (tester) async {
@@ -191,6 +262,8 @@ void main() {
 
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
+
+    await _tapVisible(tester, find.text('Already have an account? Sign in'));
 
     await tester.enterText(
         find.byType(TextFormField).first, 'user@example.com');
@@ -226,6 +299,8 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
+    await _tapVisible(tester, find.text('Already have an account? Sign in'));
+
     await tester.enterText(
         find.byType(TextFormField).first, 'user@example.com');
     await tester.enterText(find.byType(TextFormField).last, 'password1');
@@ -247,12 +322,14 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
+    await _tapVisible(tester, find.text('Already have an account? Sign in'));
+
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Google sign-in is unavailable.'), findsNothing);
   });
 
-  testWidgets('register navigation does not corrupt Google availability',
+  testWidgets('auth navigation does not corrupt Google availability',
       (tester) async {
     final repo = FakeAuthRepository(
       restoreResult: const SessionRestoreMissing(),
@@ -272,15 +349,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Continue with Google'), findsOneWidget);
-    await tester.tap(find.text('Create an account'));
-    await tester.pumpAndSettle();
-
     expect(find.text('Join Mushukistan'), findsOneWidget);
     expect(find.text('Google sign-in is unavailable.'), findsNothing);
-    expect(find.text('Continue with Google'), findsNothing);
 
-    await tester.tap(find.text('Already have an account?'));
-    await tester.pumpAndSettle();
+    await _tapVisible(tester, find.text('Already have an account? Sign in'));
 
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
@@ -358,16 +430,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Before you continue'), findsOneWidget);
-    expect(find.text('Terms of Service'), findsOneWidget);
-    expect(find.text('Privacy Policy'), findsOneWidget);
+    expect(find.text('Terms of Service'), findsWidgets);
+    expect(find.text('Privacy Policy'), findsWidgets);
     expect(find.text('Google sign-in is unavailable.'), findsNothing);
     expect(container.read(authControllerProvider).pendingGoogleIdToken,
         'google-id-token');
     expect(google.calls, 1);
 
     repo.loginError = null;
-    final termsCheckbox = find.byType(Checkbox).at(0);
-    final privacyCheckbox = find.byType(Checkbox).at(1);
+    final termsCheckbox = find.byType(Checkbox).at(2);
+    final privacyCheckbox = find.byType(Checkbox).at(3);
     await tester.ensureVisible(termsCheckbox);
     await tester.tap(termsCheckbox);
     await tester.ensureVisible(privacyCheckbox);
@@ -396,8 +468,6 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Create an account'));
-    await tester.pumpAndSettle();
     expect(find.text('Join Mushukistan'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).at(0), 'Sardor');
@@ -407,7 +477,7 @@ void main() {
     await tester.tap(find.byType(Checkbox).at(0));
     await tester.tap(find.byType(Checkbox).at(1));
     await tester.pump();
-    final registerButton = find.widgetWithText(FilledButton, 'Register');
+    final registerButton = find.widgetWithText(FilledButton, 'Create account');
     await tester.ensureVisible(registerButton);
     await tester.tap(registerButton);
     await tester.pump();
@@ -508,7 +578,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Logout'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome back'), findsOneWidget);
+    expect(find.text('Join Mushukistan'), findsOneWidget);
     expect(repo.logoutCalled, isTrue);
   });
 }

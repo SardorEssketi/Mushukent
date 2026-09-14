@@ -2,7 +2,7 @@
 
 Version: 2026-08-01
 
-Mushukistan hosts user-generated cat sightings, cat photos, cat profiles, descriptions, comments, likes, reports, and lost-pet posts.
+Mushukistan hosts user-generated cat records, observations, cat photos, descriptions, comments, likes, reports, lost-pet alerts, and adoption or rehoming posts.
 
 Mushukistan may remove or hide content that violates law, these policies, user privacy, animal safety, platform rules, or service security.
 

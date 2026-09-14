@@ -290,10 +290,17 @@ class MushukistanApi {
     );
   }
 
-  Future<CommentData> createComment(String postId, String content) {
+  Future<CommentData> createComment(
+    String postId,
+    String content, {
+    String? parentCommentId,
+  }) {
     return _client.postJson<CommentData>(
       'posts/$postId/comments',
-      body: <String, Object?>{'content': content},
+      body: <String, Object?>{
+        'content': content,
+        if (parentCommentId != null) 'parent_comment_id': parentCommentId,
+      },
       decoder: (json) => CommentData.fromJson(json),
     );
   }
@@ -319,10 +326,17 @@ class MushukistanApi {
     );
   }
 
-  Future<CommentData> createLostPetComment(String lostPetId, String content) {
+  Future<CommentData> createLostPetComment(
+    String lostPetId,
+    String content, {
+    String? parentCommentId,
+  }) {
     return _client.postJson<CommentData>(
       'lost-pets/$lostPetId/comments',
-      body: <String, Object?>{'content': content},
+      body: <String, Object?>{
+        'content': content,
+        if (parentCommentId != null) 'parent_comment_id': parentCommentId,
+      },
       decoder: (json) => CommentData.fromJson(json),
     );
   }
@@ -350,11 +364,15 @@ class MushukistanApi {
 
   Future<CommentData> createAdoptionPostComment(
     String adoptionPostId,
-    String content,
-  ) {
+    String content, {
+    String? parentCommentId,
+  }) {
     return _client.postJson<CommentData>(
       'adoption-posts/$adoptionPostId/comments',
-      body: <String, Object?>{'content': content},
+      body: <String, Object?>{
+        'content': content,
+        if (parentCommentId != null) 'parent_comment_id': parentCommentId,
+      },
       decoder: (json) => CommentData.fromJson(json),
     );
   }
@@ -495,12 +513,7 @@ class MushukistanApi {
     required List<ObservationPhotoUpload> photos,
     GeoPoint? location,
     String? description,
-    String? existingCatId,
-    String? newCatName,
-    String? newCatStatus,
-    GeoPoint? newCatLocation,
     bool isPublic = true,
-    String? postStatus,
   }) {
     final formData = FormData.fromMap(
       <String, dynamic>{
@@ -517,18 +530,6 @@ class MushukistanApi {
         'is_public': isPublic,
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
-        if (existingCatId != null) 'cat_id': existingCatId,
-        if (postStatus != null) 'status': postStatus,
-        if (newCatName != null ||
-            newCatStatus != null ||
-            newCatLocation != null)
-          'new_cat': jsonEncode(<String, Object?>{
-            if (newCatName != null && newCatName.trim().isNotEmpty)
-              'name': newCatName.trim(),
-            if (newCatStatus != null) 'status': newCatStatus,
-            if (newCatLocation != null)
-              'canonical_location': newCatLocation.toJson(),
-          }),
       },
     );
 
@@ -1197,12 +1198,14 @@ class CommentData {
     this.user,
     this.lostPetId,
     this.adoptionPostId,
+    this.parentCommentId,
   });
 
   final String id;
   final String? postId;
   final String? lostPetId;
   final String? adoptionPostId;
+  final String? parentCommentId;
   final CommentUserData? user;
   final String content;
   final DateTime createdAt;
@@ -1214,6 +1217,7 @@ class CommentData {
       postId: _readStringOrNull(map['post_id']),
       lostPetId: _readStringOrNull(map['lost_pet_id']),
       adoptionPostId: _readStringOrNull(map['adoption_post_id']),
+      parentCommentId: _readStringOrNull(map['parent_comment_id']),
       user: map['user'] == null ? null : CommentUserData.fromJson(map['user']),
       content: _readString(map['content']),
       createdAt: _readDateTime(map['created_at']),

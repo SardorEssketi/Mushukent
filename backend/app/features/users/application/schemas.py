@@ -79,5 +79,28 @@ class UserUpdate(BaseModel):
         return self
 
 
+class AccountDeletionRequest(BaseModel):
+    email: EmailStr
+
+
+class AccountDeletionRequestStatus(BaseModel):
+    accepted: bool = True
+    message: str = (
+        "If an active Mushukistan account exists for this email address, "
+        "a confirmation link will be sent."
+    )
+
+
+class AccountDeletionConfirmRequest(BaseModel):
+    token: str = Field(min_length=1)
+
+
+class AccountDeletionConfirmStatus(BaseModel):
+    deleted: bool = True
+    message: str = "Account deletion has been confirmed."
+
+
 UserProfileResponse = ApiSuccess[UserProfile]
 UserPublicResponse = ApiSuccess[UserPublic]
+AccountDeletionRequestResponse = ApiSuccess[AccountDeletionRequestStatus]
+AccountDeletionConfirmResponse = ApiSuccess[AccountDeletionConfirmStatus]

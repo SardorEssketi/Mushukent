@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/localization/language_controller.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
@@ -115,8 +116,8 @@ class FeedScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.lg),
               ],
               _SectionHeader(
-                title: _sectionTitle(feedMode),
-                subtitle: _sectionSubtitle(feedMode),
+                title: strings.feedSectionTitle(feedMode),
+                subtitle: strings.feedSectionSubtitle(feedMode),
               ),
               const SizedBox(height: AppSpacing.md),
               _FeedFilterBar(
@@ -184,6 +185,7 @@ class FeedScreen extends ConsumerWidget {
                   child: Center(child: CircularProgressIndicator()),
                 ),
                 error: (error, stackTrace) => _ErrorPanel(
+                  title: strings.couldNotLoadSection,
                   message: error.toString(),
                   retryLabel: strings.retry,
                   onRetry: () => ref.invalidate(feedPostsProvider),
@@ -216,6 +218,9 @@ class _HomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final strings = AppStrings.forLanguage(AppLanguage.fromCode(
+      Localizations.localeOf(context).languageCode,
+    ));
     return AppCard(
       color: colors.surfaceContainerLow,
       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -225,13 +230,13 @@ class _HomeHeader extends StatelessWidget {
           Row(
             children: [
               AppBadge(
-                label: 'The land of cats',
+                label: strings.landOfCats,
                 icon: Icons.public_outlined,
                 color: colors.primary,
               ),
               const Spacer(),
               IconButton(
-                tooltip: 'Hide',
+                tooltip: strings.hide,
                 onPressed: onDismiss,
                 icon: const Icon(Icons.close),
               ),
@@ -239,12 +244,12 @@ class _HomeHeader extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            'Everything cats in one calm place',
+            strings.everythingCatsTitle,
             style: theme.textTheme.headlineSmall,
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Find help, share sightings, search for lost pets, rehome cats, and discover useful places nearby.',
+            strings.everythingCatsMessage,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.onSurfaceVariant,
               height: 1.35,
@@ -257,29 +262,29 @@ class _HomeHeader extends StatelessWidget {
               final actions = [
                 _QuickActionCard(
                   icon: Icons.search_outlined,
-                  title: 'Lost pets',
-                  subtitle: 'Urgent alerts',
+                  title: strings.lostPets,
+                  subtitle: strings.urgentAlerts,
                   color: AppPalette.lost,
                   onTap: onLostPetsTap,
                 ),
                 _QuickActionCard(
                   icon: Icons.home_outlined,
-                  title: 'New homes',
-                  subtitle: 'Adoption posts',
+                  title: strings.newHomes,
+                  subtitle: strings.adoptionPosts,
                   color: AppPalette.adoption,
                   onTap: onAdoptionTap,
                 ),
                 _QuickActionCard(
                   icon: Icons.local_hospital_outlined,
-                  title: 'Useful places',
-                  subtitle: 'Vets, shops, shelters',
+                  title: strings.usefulPlaces,
+                  subtitle: strings.vetsShopsShelters,
                   color: colors.secondary,
                   onTap: onPlacesTap,
                 ),
                 _QuickActionCard(
                   icon: Icons.map_outlined,
-                  title: 'Nearby map',
-                  subtitle: 'Cats and services',
+                  title: strings.nearbyMap,
+                  subtitle: strings.catsAndServices,
                   color: colors.primary,
                   onTap: onMapTap,
                 ),
@@ -417,27 +422,6 @@ class _FeedItemCard extends StatelessWidget {
   }
 }
 
-String _sectionTitle(String mode) {
-  return switch (mode) {
-    'lost_pets' => 'Lost pets',
-    'adoption' => 'Looking for a home',
-    'needs_help' => 'Cats that may need help',
-    'popular' => 'Popular in the community',
-    _ => 'Latest from Mushukistan',
-  };
-}
-
-String _sectionSubtitle(String mode) {
-  return switch (mode) {
-    'lost_pets' =>
-      'Recognizable alerts with owner contact and last-seen areas.',
-    'adoption' => 'Separate rehoming posts for cats who need a good home.',
-    'needs_help' => 'Community observations that may need volunteer attention.',
-    'popular' => 'Posts people are responding to most.',
-    _ => 'Recent sightings, stories, and updates from people helping cats.',
-  };
-}
-
 class _FeedFilterBar extends StatelessWidget {
   const _FeedFilterBar({
     required this.selectedMode,
@@ -451,52 +435,84 @@ class _FeedFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _ResponsiveFilterChoices(
+      children: [
+        _FilterChoiceChip(
+          value: 'recent',
+          selectedValue: selectedMode,
+          icon: Icons.schedule_outlined,
+          label: strings.recent,
+          onSelected: onSelected,
+        ),
+        _FilterChoiceChip(
+          value: 'popular',
+          selectedValue: selectedMode,
+          icon: Icons.favorite_outline,
+          label: strings.popular,
+          onSelected: onSelected,
+        ),
+        _FilterChoiceChip(
+          value: 'needs_help',
+          selectedValue: selectedMode,
+          icon: Icons.volunteer_activism_outlined,
+          label: strings.needsHelp,
+          onSelected: onSelected,
+        ),
+        _FilterChoiceChip(
+          value: 'lost_pets',
+          selectedValue: selectedMode,
+          icon: Icons.search_outlined,
+          label: strings.lostPets,
+          onSelected: onSelected,
+        ),
+        _FilterChoiceChip(
+          value: 'adoption',
+          selectedValue: selectedMode,
+          icon: Icons.home_outlined,
+          label: strings.adoption,
+          onSelected: onSelected,
+        ),
+      ],
+    );
+  }
+}
+
+class _ResponsiveFilterChoices extends StatelessWidget {
+  const _ResponsiveFilterChoices({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _FilterChoiceChip(
-              value: 'recent',
-              selectedValue: selectedMode,
-              icon: Icons.schedule_outlined,
-              label: strings.recent,
-              onSelected: onSelected,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 560) {
+            return SizedBox(
+              height: 44,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.zero,
+                itemCount: children.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) => Center(
+                  child: children[index],
+                ),
+              ),
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: children,
             ),
-            _FilterChoiceChip(
-              value: 'popular',
-              selectedValue: selectedMode,
-              icon: Icons.favorite_outline,
-              label: strings.popular,
-              onSelected: onSelected,
-            ),
-            _FilterChoiceChip(
-              value: 'needs_help',
-              selectedValue: selectedMode,
-              icon: Icons.volunteer_activism_outlined,
-              label: strings.needsHelp,
-              onSelected: onSelected,
-            ),
-            _FilterChoiceChip(
-              value: 'lost_pets',
-              selectedValue: selectedMode,
-              icon: Icons.search_outlined,
-              label: strings.lostPets,
-              onSelected: onSelected,
-            ),
-            _FilterChoiceChip(
-              value: 'adoption',
-              selectedValue: selectedMode,
-              icon: Icons.home_outlined,
-              label: 'Adoption',
-              onSelected: onSelected,
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -521,7 +537,14 @@ class _FilterChoiceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChoiceChip(
       avatar: Icon(icon, size: 18),
-      label: Text(label),
+      label: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 132),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label, maxLines: 1),
+        ),
+      ),
+      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
       selected: selectedValue == value,
       onSelected: (_) => onSelected(value),
     );
@@ -541,39 +564,30 @@ class _PopularPeriodBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surface,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _FilterChoiceChip(
-              value: 'day',
-              selectedValue: selectedPeriod,
-              icon: Icons.today_outlined,
-              label: strings.today,
-              onSelected: onSelected,
-            ),
-            _FilterChoiceChip(
-              value: 'month',
-              selectedValue: selectedPeriod,
-              icon: Icons.calendar_month_outlined,
-              label: strings.month,
-              onSelected: onSelected,
-            ),
-            _FilterChoiceChip(
-              value: 'all',
-              selectedValue: selectedPeriod,
-              icon: Icons.all_inclusive,
-              label: strings.allTime,
-              onSelected: onSelected,
-            ),
-          ],
+    return _ResponsiveFilterChoices(
+      children: [
+        _FilterChoiceChip(
+          value: 'day',
+          selectedValue: selectedPeriod,
+          icon: Icons.today_outlined,
+          label: strings.today,
+          onSelected: onSelected,
         ),
-      ),
+        _FilterChoiceChip(
+          value: 'month',
+          selectedValue: selectedPeriod,
+          icon: Icons.calendar_month_outlined,
+          label: strings.month,
+          onSelected: onSelected,
+        ),
+        _FilterChoiceChip(
+          value: 'all',
+          selectedValue: selectedPeriod,
+          icon: Icons.all_inclusive,
+          label: strings.allTime,
+          onSelected: onSelected,
+        ),
+      ],
     );
   }
 }
@@ -800,7 +814,7 @@ class _AdoptionPostCard extends StatelessWidget {
                     _CatNameLine(
                       label: strings.catNameLabel,
                       name: adoptionPost.petName,
-                      trailing: const _AdoptionBadge(label: 'Adoption'),
+                      trailing: _AdoptionBadge(label: strings.adoption),
                     ),
                     if (info != null && info.isNotEmpty) ...[
                       const SizedBox(height: 6),
@@ -931,32 +945,34 @@ class _CatNameLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          text: TextSpan(
-            style: Theme.of(context).textTheme.bodyMedium,
-            children: [
-              TextSpan(
-                text: '$label: ',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-              TextSpan(text: name),
-            ],
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                TextSpan(text: name),
+              ],
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        if (trailing != null) trailing!,
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
       ],
     );
   }
 }
 
-class _LabeledBodyText extends StatelessWidget {
+class _LabeledBodyText extends StatefulWidget {
   const _LabeledBodyText({
     required this.label,
     required this.text,
@@ -968,20 +984,62 @@ class _LabeledBodyText extends StatelessWidget {
   final int? maxLines;
 
   @override
+  State<_LabeledBodyText> createState() => _LabeledBodyTextState();
+}
+
+class _LabeledBodyTextState extends State<_LabeledBodyText> {
+  bool _expanded = false;
+
+  TextSpan _textSpan(BuildContext context) {
+    return TextSpan(
+      style: Theme.of(context).textTheme.bodyMedium,
+      children: [
+        TextSpan(
+          text: '${widget.label}: ',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        TextSpan(text: widget.text),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return RichText(
-      maxLines: maxLines,
-      overflow: maxLines == null ? TextOverflow.clip : TextOverflow.ellipsis,
-      text: TextSpan(
-        style: Theme.of(context).textTheme.bodyMedium,
-        children: [
-          TextSpan(
-            text: '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          TextSpan(text: text),
-        ],
-      ),
+    final strings = AppStrings.forLanguage(
+      AppLanguage.fromCode(Localizations.localeOf(context).languageCode),
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: _textSpan(context),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: widget.maxLines,
+          ellipsis: '…',
+        )..layout(maxWidth: constraints.maxWidth);
+        final isLong = widget.maxLines != null && painter.didExceedMaxLines;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            RichText(
+              maxLines: _expanded ? null : widget.maxLines,
+              overflow: _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
+              textScaler: MediaQuery.textScalerOf(context),
+              text: _textSpan(context),
+            ),
+            if (isLong || _expanded)
+              TextButton(
+                onPressed: () => setState(() => _expanded = !_expanded),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(_expanded ? strings.showLess : strings.readMore),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1167,24 +1225,31 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _IconCountAction(
-                    tooltip: isLiked ? strings.unlike : strings.like,
-                    icon: isLiked ? Icons.favorite : Icons.favorite_outline,
-                    count: likeCount,
-                    color: isLiked ? colorScheme.error : null,
-                    onPressed: _submittingLike ? null : _toggleLike,
+                  Row(
+                    children: [
+                      _IconCountAction(
+                        tooltip: isLiked ? strings.unlike : strings.like,
+                        icon: isLiked
+                            ? Icons.favorite
+                            : Icons.favorite_outline,
+                        count: likeCount,
+                        color: isLiked ? colorScheme.error : null,
+                        onPressed: _submittingLike ? null : _toggleLike,
+                      ),
+                      _IconCountAction(
+                        tooltip: strings.comments,
+                        icon: Icons.chat_bubble_outline,
+                        count: widget.post.commentCount,
+                        onPressed: widget.onTap,
+                      ),
+                    ],
                   ),
-                  _IconCountAction(
-                    tooltip: strings.comments,
-                    icon: Icons.chat_bubble_outline,
-                    count: widget.post.commentCount,
-                    onPressed: widget.onTap,
-                  ),
-                  const Spacer(),
                   Text(
-                    'Published: ${_formatDate(widget.post.createdAt)}',
+                    '${strings.published}: ${_formatDate(widget.post.createdAt)}',
+                    softWrap: true,
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
@@ -1210,6 +1275,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                     _LabeledBodyText(
                       label: strings.descriptionLabel,
                       text: description,
+                      maxLines: 4,
                     ),
                     const SizedBox(height: 6),
                   ],
@@ -1560,19 +1626,20 @@ class _EmptyFeed extends StatelessWidget {
     return AppStatePanel(
       icon: Icons.dynamic_feed_outlined,
       title: strings.noObservationsYet,
-      message:
-          'Share an observation, lost-pet alert, or rehoming post to help the community start here.',
+      message: strings.emptyFeedMessage,
     );
   }
 }
 
 class _ErrorPanel extends StatelessWidget {
   const _ErrorPanel({
+    required this.title,
     required this.message,
     required this.retryLabel,
     required this.onRetry,
   });
 
+  final String title;
   final String message;
   final String retryLabel;
   final VoidCallback onRetry;
@@ -1581,7 +1648,7 @@ class _ErrorPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppStatePanel(
       icon: Icons.cloud_off_outlined,
-      title: 'Could not load this section',
+      title: title,
       message: message,
       action: FilledButton(onPressed: onRetry, child: Text(retryLabel)),
     );

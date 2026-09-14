@@ -165,7 +165,7 @@ const _termsOfService = _LegalDocument(
       heading: 'Your account',
       paragraphs: [
         'You are responsible for your account credentials and for all content you submit.',
-        'You may delete your account from Settings. You may also request deletion support by email at support@mushukistan.uz.',
+        'You may delete your account from Settings.',
       ],
     ),
     _LegalSection(
@@ -277,7 +277,6 @@ const _privacyPolicy = _LegalDocument(
       heading: 'Technical and security data',
       paragraphs: [
         'Mushukistan processes API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.',
-        'Security and operational logs are kept for up to 90 days unless needed for security or legal reasons.',
       ],
     ),
     _LegalSection(
@@ -327,16 +326,16 @@ const _privacyPolicy = _LegalDocument(
       heading: 'Retention and deletion',
       paragraphs: [
         'Active account and content data is retained while the account/content remains active.',
-        'Account deletion anonymizes the account, disables login, deletes likes, removes profile personal data, hides and anonymizes user-owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, and attempts media cleanup.',
-        'Mushukistan may retain limited records when necessary for legal compliance, security, fraud prevention, abuse prevention, copyright enforcement, or moderation audit purposes.',
-        'Backups are not configured in the verified repository. If backups are enabled later, backup retention and hard-delete schedules must be documented before production release.',
+        'Account deletion anonymizes and deactivates the account, disables login, removes authentication credentials and profile personal data, deletes likes, removes account-related blocking records, removes affected leaderboard cache entries, hides and anonymizes user-owned posts, comments, lost-pet posts, and adoption/rehoming posts, clears copied contact details, and attempts best-effort media cleanup.',
+        'Some non-public or anonymized records may remain where needed for service integrity, moderation, safety, abuse prevention, or legal compliance. The verified repository does not define a guaranteed automatic deletion period for all retained records.',
+        'Backups are not configured in the verified repository. If backups are enabled later, backup retention and deletion schedules must be documented before production release.',
       ],
     ),
     _LegalSection(
       heading: 'Your rights and choices',
       paragraphs: [
         'Users can delete their Mushukistan account directly inside the app: Settings -> About account -> Delete account.',
-        'Users can also submit a deletion request by email: support@mushukistan.uz.',
+        'Users who cannot access the app can start account deletion from https://mushukistan.uz/delete-account and confirm deletion through a time-limited email link.',
         'Users may request access, correction, deletion, restriction, objection, portability, and withdrawal of consent where applicable by contacting: sardor.datascience@gmail.com.',
       ],
     ),

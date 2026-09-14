@@ -79,9 +79,18 @@ class UserPublic(BaseModel):
 
 class AuthLoginData(BaseModel):
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "Bearer"
     expires_in: int
     user: UserPublic
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(min_length=1)
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str | None = Field(default=None)
 
 
 class VerificationTokenData(BaseModel):

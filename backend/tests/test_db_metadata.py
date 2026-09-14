@@ -27,6 +27,7 @@ def test_metadata_discovers_all_mvp_tables() -> None:
         "leaderboard_cache",
         "places",
         "place_category_links",
+        "auth_refresh_sessions",
     }
     assert Base.metadata.naming_convention == NAMING_CONVENTION
 
@@ -74,6 +75,7 @@ def test_table_definitions_match_database_contract() -> None:
     assert comments.c.post_id.nullable is True
     assert comments.c.lost_pet_id.nullable is True
     assert comments.c.adoption_post_id.nullable is True
+    assert comments.c.parent_comment_id.nullable is True
     assert comments.c.deleted_at.type.timezone is True
     assert adoption_posts.c.created_at.type.timezone is True
     assert adoption_posts.c.updated_at.type.timezone is True
@@ -150,6 +152,11 @@ def test_constraints_and_indexes_match_mvp_rules() -> None:
         index.name for index in schema.Base.metadata.tables["post_photos"].indexes
     }
     assert "idx_post_photos_post_id_position" in post_photo_indexes
+
+    comment_indexes = {
+        index.name for index in schema.Base.metadata.tables["comments"].indexes
+    }
+    assert "idx_comments_parent_comment_id" in comment_indexes
 
     active_index = next(
         index

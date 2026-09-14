@@ -1,6 +1,12 @@
-# Mushukistan Monorepo
+# Mushukistan
 
-This repository contains the Mushukistan MVP backend, Flutter client, canonical
+Mushukistan is a Tashkent-focused app for cat owners and the wider cat community.
+It combines cat records and observations, an interactive map, nearby veterinary
+clinics and pet-care places, lost-pet alerts, adoption and rehoming posts, owner
+contact tools, community discussions, profiles, leaderboards, reporting, and
+moderation in one service.
+
+This repository contains the FastAPI backend, Flutter client, canonical
 documentation, and deployment scaffolding.
 
 ## Top-level layout

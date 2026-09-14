@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../core/config/app_environment.dart';
@@ -46,7 +48,14 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
         );
       }
       return idToken;
-    } on GoogleSignInException catch (error) {
+    } on GoogleSignInException catch (error, stackTrace) {
+      developer.log(
+        'Google Sign-In failed: code=${error.code}, '
+        'description=${error.description}, details=${error.details}',
+        name: 'Mushukistan.GoogleSignIn',
+        error: error,
+        stackTrace: stackTrace,
+      );
       throw GoogleSignInFlowException(
         error.description?.trim().isNotEmpty == true
             ? error.description!.trim()

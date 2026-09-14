@@ -270,7 +270,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             : () {
                                 context.go('/register');
                               },
-                        child: Text(strings.createAnAccount),
+                        child: const Text(
+                          "Don't have an account? Create an account",
+                        ),
                       ),
                     ],
                   ),

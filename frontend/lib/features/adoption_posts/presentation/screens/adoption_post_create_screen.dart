@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/media/image_upload_preprocessor.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -73,12 +74,13 @@ class _AdoptionPostCreateScreenState
   }
 
   Future<void> _submit() async {
+    final strings = ref.read(appStringsProvider);
     if (_isSubmitting) {
       return;
     }
     if (_photos.isEmpty) {
       setState(() {
-        _error = 'Add at least one photo.';
+        _error = strings.addAtLeastOnePhoto;
       });
       return;
     }
@@ -87,7 +89,7 @@ class _AdoptionPostCreateScreenState
     }
     if (!_phonePublicationConsent) {
       setState(() {
-        _error = 'Confirm that your phone number may be shown publicly.';
+        _error = strings.confirmPhonePublic;
       });
       return;
     }
@@ -131,8 +133,9 @@ class _AdoptionPostCreateScreenState
 
   @override
   Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Find a new home')),
+      appBar: AppBar(title: Text(strings.findANewHome)),
       body: AppContentWidth(
         maxWidth: AppWidths.readable,
         child: Form(
@@ -140,25 +143,26 @@ class _AdoptionPostCreateScreenState
           child: ListView(
             padding: const EdgeInsets.all(AppSpacing.xl),
             children: [
-              const AppBadge(
-                label: 'Rehoming',
+              AppBadge(
+                label: strings.rehoming,
                 icon: Icons.home_outlined,
                 color: AppPalette.adoption,
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                'Create a rehoming post',
+                strings.createRehomingPost,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Describe the cat and the kind of home they need. This is separate from lost-pet alerts and does not require a map location.',
+                strings.createRehomingPostHelp,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              Text('Photos', style: Theme.of(context).textTheme.titleMedium),
+              Text(strings.photos,
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -195,7 +199,7 @@ class _AdoptionPostCreateScreenState
                         ? null
                         : _pickPhotos,
                     icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: Text('Add photos (${_photos.length}/5)'),
+                    label: Text(strings.addPhotosCount(_photos.length)),
                   ),
                 ],
               ),
@@ -203,14 +207,14 @@ class _AdoptionPostCreateScreenState
               TextFormField(
                 controller: _petNameController,
                 maxLength: 100,
-                decoration: const InputDecoration(
-                  labelText: "Pet's name",
+                decoration: InputDecoration(
+                  labelText: strings.petName,
                   hintText: 'Mittens',
                 ),
                 validator: (value) {
                   final name = value?.trim() ?? '';
                   if (name.isEmpty) {
-                    return "Enter the pet's name.";
+                    return strings.petNameRequired;
                   }
                   return null;
                 },
@@ -220,10 +224,9 @@ class _AdoptionPostCreateScreenState
                 controller: _infoController,
                 maxLines: 5,
                 maxLength: 2000,
-                decoration: const InputDecoration(
-                  labelText: 'Additional information',
-                  hintText:
-                      'Age, personality, health notes, and preferred home.',
+                decoration: InputDecoration(
+                  labelText: strings.additionalInformation,
+                  hintText: strings.adoptionInfoHint,
                   alignLabelWithHint: true,
                 ),
               ),
@@ -238,10 +241,8 @@ class _AdoptionPostCreateScreenState
                           _error = null;
                         });
                       },
-                title: const Text('Show my phone number publicly'),
-                subtitle: const Text(
-                  'People need your profile phone number to contact you about adoption.',
-                ),
+                title: Text(strings.showPhonePublicly),
+                subtitle: Text(strings.adoptionPhoneHelp),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
               if (_error != null) ...[
@@ -261,7 +262,7 @@ class _AdoptionPostCreateScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.publish_outlined),
-                label: const Text('Publish adoption post'),
+                label: Text(strings.publishAdoptionPost),
               ),
             ],
           ),

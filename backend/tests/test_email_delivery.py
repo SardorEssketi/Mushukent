@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.features.auth.infrastructure import email as email_module
 from app.features.auth.infrastructure.email import (
     RESEND_USER_AGENT,
+    AccountDeletionConfirmationSender,
     EmailVerificationSender,
 )
 
@@ -72,6 +73,43 @@ def test_verification_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch
             "Confirm your Mushukistan account by opening this link:\n\n"
             "https://mushukistan.uz/verify-email?token=verification-token\n\n"
             "If you did not create this account, ignore this email."
+        ),
+    }
+
+
+def test_account_deletion_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(resend_request, timeout: int):
+        captured["url"] = resend_request.full_url
+        captured["timeout"] = timeout
+        captured["headers"] = dict(resend_request.header_items())
+        captured["payload"] = json.loads(resend_request.data.decode("utf-8"))
+        return StubResponse()
+
+    monkeypatch.setattr(email_module.request, "urlopen", fake_urlopen)
+    settings = _production_settings()
+
+    AccountDeletionConfirmationSender(settings).send_confirmation_email(
+        email="user@example.com",
+        token="deletion-token",
+    )
+
+    assert captured["url"] == "https://api.resend.com/emails"
+    assert captured["timeout"] == 10
+    assert captured["headers"]["Authorization"] == "Bearer re_test_key"
+    assert captured["headers"]["Content-type"] == "application/json"
+    assert captured["headers"]["User-agent"] == RESEND_USER_AGENT
+    assert captured["payload"] == {
+        "from": "noreply@mushukistan.uz",
+        "to": ["user@example.com"],
+        "subject": "Confirm deletion of your Mushukistan account",
+        "text": (
+            "Open this link to confirm deletion of your Mushukistan account:\n\n"
+            "https://mushukistan.uz/delete-account?token=deletion-token\n\n"
+            "After the page opens, press Confirm account deletion to complete deletion. "
+            "This link is time-limited. If you did not request account deletion, "
+            "ignore this email and your account will not be deleted."
         ),
     }
 

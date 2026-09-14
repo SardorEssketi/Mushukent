@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 
 class ReportContentScreen extends ConsumerStatefulWidget {
@@ -23,6 +24,7 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
   final _reasonController = TextEditingController();
   final _targetIdController = TextEditingController();
   String _targetType = 'post';
+  String? _selectedReason;
   bool _submitting = false;
   String? _message;
   String? _error;
@@ -45,23 +47,71 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = ref.watch(appStringsProvider);
+    final reasonOptions = <String>[
+      strings.childSafetyReportReason,
+      strings.inappropriateContentReportReason,
+      strings.harassmentReportReason,
+      strings.spamReportReason,
+      strings.otherReportReason,
+    ];
+    final isOtherReason = _selectedReason == strings.otherReportReason;
     return Scaffold(
-      appBar: AppBar(title: const Text('Report content')),
+      appBar: AppBar(title: Text(strings.reportContent)),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(16),
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: _targetType,
-                  items: const [
-                    DropdownMenuItem(value: 'post', child: Text('Post')),
-                    DropdownMenuItem(value: 'comment', child: Text('Comment')),
-                    DropdownMenuItem(value: 'user', child: Text('User')),
-                    DropdownMenuItem(value: 'cat', child: Text('Cat')),
+                  isExpanded: true,
+                  items: [
+                    DropdownMenuItem(
+                      value: 'post',
+                      child: Text(
+                        strings.post,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'comment',
+                      child: Text(
+                        strings.comment,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'user',
+                      child: Text(
+                        strings.user,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'cat',
+                      child: Text(
+                        strings.cat,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'lost_pet',
+                      child: Text(
+                        strings.lostPet,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'adoption_post',
+                      child: Text(
+                        strings.adoption,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -70,33 +120,69 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                       });
                     }
                   },
-                  decoration: const InputDecoration(labelText: 'Target type'),
+                  decoration: InputDecoration(labelText: strings.targetType),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _targetIdController,
-                  decoration: const InputDecoration(labelText: 'Target ID'),
+                  decoration: InputDecoration(labelText: strings.targetIdLabel),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Target ID is required.';
+                      return strings.targetIdRequired;
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
-                  controller: _reasonController,
-                  maxLines: 4,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason',
-                  ),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedReason,
+                  isExpanded: true,
+                  items: [
+                    for (final reason in reasonOptions)
+                      DropdownMenuItem(
+                        value: reason,
+                        child: Text(
+                          reason,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedReason = value;
+                      if (value != strings.otherReportReason) {
+                        _reasonController.clear();
+                      }
+                    });
+                  },
+                  decoration: InputDecoration(labelText: strings.reason),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Please provide a reason.';
+                      return strings.reasonRequired;
                     }
                     return null;
                   },
                 ),
+                if (isOtherReason) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _reasonController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: strings.reportDetails,
+                    ),
+                    validator: (value) {
+                      if (!isOtherReason) {
+                        return null;
+                      }
+                      if (value == null || value.trim().isEmpty) {
+                        return strings.reasonRequired;
+                      }
+                      return null;
+                    },
+                  ),
+                ],
                 if (_message != null) ...[
                   const SizedBox(height: 16),
                   Text(_message!, style: const TextStyle(color: Colors.green)),
@@ -123,13 +209,16 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                             _message = null;
                           });
                           try {
+                            final selectedReason = _selectedReason!.trim();
+                            final details = _reasonController.text.trim();
                             await ref.read(mushukistanApiProvider).createReport(
                                   targetType: _targetType,
                                   targetId: _targetIdController.text.trim(),
-                                  reason: _reasonController.text.trim(),
+                                  reason:
+                                      isOtherReason ? details : selectedReason,
                                 );
                             setState(() {
-                              _message = 'Report submitted.';
+                              _message = strings.reportSubmitted;
                             });
                           } catch (error) {
                             setState(() {
@@ -149,7 +238,7 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Submit report'),
+                      : Text(strings.submitReport),
                 ),
               ],
             ),

@@ -15,12 +15,14 @@ class CommentCreateDraft:
         post_id: UUID | None,
         lost_pet_id: UUID | None = None,
         adoption_post_id: UUID | None = None,
+        parent_comment_id: UUID | None = None,
         user_id: UUID,
         content: str,
     ) -> None:
         self.post_id = post_id
         self.lost_pet_id = lost_pet_id
         self.adoption_post_id = adoption_post_id
+        self.parent_comment_id = parent_comment_id
         self.user_id = user_id
         self.content = content
 

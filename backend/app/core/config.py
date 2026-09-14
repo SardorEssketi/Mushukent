@@ -27,12 +27,17 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(default="change-me", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_access_token_exp_minutes: int = Field(default=60, alias="JWT_ACCESS_TOKEN_EXP_MINUTES")
+    refresh_session_exp_days: int = Field(default=30, alias="REFRESH_SESSION_EXP_DAYS")
     jwt_clock_skew_seconds: int = Field(default=60, alias="JWT_CLOCK_SKEW_SECONDS")
     jwt_issuer: str = Field(default="mushukistan-api", alias="JWT_ISSUER")
     jwt_audience: str = Field(default="mushukistan-mobile", alias="JWT_AUDIENCE")
     email_verification_token_exp_hours: int = Field(
         default=24,
         alias="EMAIL_VERIFICATION_TOKEN_EXP_HOURS",
+    )
+    account_deletion_token_exp_hours: int = Field(
+        default=24,
+        alias="ACCOUNT_DELETION_TOKEN_EXP_HOURS",
     )
     public_app_base_url: str = Field(default="", alias="PUBLIC_APP_BASE_URL")
     resend_api_key: str = Field(default="", alias="RESEND_API_KEY")

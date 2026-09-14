@@ -434,6 +434,32 @@ def test_create_comment_and_validation_behaviour(
     assert payload["content"] == "So cute!"
     assert payload["user"]["id"] == str(user.id)
 
+    reply_response = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "content": "A reply",
+            "parent_comment_id": payload["id"],
+        },
+    )
+    assert reply_response.status_code == 201
+    reply_payload = reply_response.json()["data"]
+    assert reply_payload["parent_comment_id"] == payload["id"]
+
+    nested_reply_response = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "content": "A reply to the reply",
+            "parent_comment_id": reply_payload["id"],
+        },
+    )
+    assert nested_reply_response.status_code == 201
+    assert (
+        nested_reply_response.json()["data"]["parent_comment_id"]
+        == reply_payload["id"]
+    )
+
     blank_response = client.post(
         f"/api/v1/posts/{post_id}/comments",
         headers={"Authorization": f"Bearer {token}"},

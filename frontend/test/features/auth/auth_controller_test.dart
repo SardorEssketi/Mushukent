@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
@@ -70,6 +72,33 @@ void main() {
     await settle();
 
     expect(controller.state.phase, AuthPhase.failure);
+    expect(controller.state.retryable, isTrue);
+  });
+
+  test('startup restore exception becomes retryable failure', () async {
+    final repo = FakeAuthRepository()..restoreError = StateError('boom');
+    final controller = AuthController(repo, FakeGoogleIdentityTokenProvider());
+
+    await settle();
+
+    expect(controller.state.phase, AuthPhase.failure);
+    expect(controller.state.message, 'Session check failed.');
+    expect(controller.state.retryable, isTrue);
+  });
+
+  test('startup restore timeout does not stay restoring forever', () async {
+    final repo = FakeAuthRepository()
+      ..restoreCompleter = Completer<SessionRestoreResult>();
+    final controller = AuthController(
+      repo,
+      FakeGoogleIdentityTokenProvider(),
+      restoreTimeout: const Duration(milliseconds: 1),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(controller.state.phase, AuthPhase.failure);
+    expect(controller.state.message, contains('timed out'));
     expect(controller.state.retryable, isTrue);
   });
 

@@ -13,11 +13,13 @@ from app.core.storage import ObjectStorage
 from app.features.adoption_posts.application.service import AdoptionPostsService
 from app.features.adoption_posts.infrastructure.repositories import SqlAlchemyAdoptionPostRepository
 from app.features.auth.application.service import AuthService
+from app.features.auth.infrastructure.email import AccountDeletionConfirmationSender
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.repositories import SqlAlchemyAuthUserRepository
 from app.features.auth.infrastructure.tokens import (
     GoogleOAuthIdTokenVerifier,
     JoseAccessTokenService,
+    JoseAccountDeletionTokenService,
 )
 from app.features.cats.application.service import CatsService
 from app.features.cats.infrastructure.repositories import SqlAlchemyCatRepository
@@ -95,6 +97,8 @@ def get_users_service(request: Request) -> UsersService:
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyUserProfileRepository,
         media_storage_service=media_storage_service,
+        account_deletion_token_service=JoseAccountDeletionTokenService(container.settings),
+        account_deletion_email_sender=AccountDeletionConfirmationSender(container.settings),
     )
 
 
@@ -163,6 +167,8 @@ def get_reports_service(request: Request) -> ReportsService:
         post_repository_factory=SqlAlchemyPostRepository,
         comment_repository_factory=SqlAlchemyCommentRepository,
         cat_repository_factory=SqlAlchemyCatRepository,
+        lost_pet_repository_factory=SqlAlchemyLostPetRepository,
+        adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,
     )
 

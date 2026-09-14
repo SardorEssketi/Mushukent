@@ -58,12 +58,12 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
       body: profileAsync.when(
         data: (result) {
           if (result == null) {
-            return const Center(child: Text('Profile not found.'));
+            return Center(child: Text(strings.profileNotFound));
           }
           final profile = result.profile;
           final posts = result.posts;
           return ListView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(16),
             children: [
               Card(
                 child: Padding(
@@ -88,12 +88,16 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  profile.name ?? 'Unnamed user',
+                                  profile.name ?? strings.unnamedUser,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: Theme.of(context).textTheme.titleLarge,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   '${profile.observationCount} ${strings.observations}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
@@ -117,11 +121,12 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.block_outlined),
-                    label: const Text('Block user'),
+                    label: Text(strings.blockUser),
                     onPressed: _isBlocking
                         ? null
                         : () async {
-                            final confirmed = await _confirmBlock(context);
+                            final confirmed =
+                                await _confirmBlock(context, strings);
                             if (!confirmed || !context.mounted) {
                               return;
                             }
@@ -136,7 +141,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                                 return;
                               }
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('User blocked.')),
+                                SnackBar(content: Text(strings.userBlocked)),
                               );
                             } finally {
                               if (mounted) {
@@ -174,10 +179,19 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                   (post) => Card(
                     child: ListTile(
                       leading: const Icon(Icons.pets_outlined),
-                      title: Text(post.cat.name ?? strings.unnamedCat),
-                      subtitle: Text(post.description?.trim().isNotEmpty == true
-                          ? post.description!.trim()
-                          : strings.noDescription),
+                      title: Text(
+                        post.cat.name ?? strings.unnamedCat,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        post.description?.trim().isNotEmpty == true
+                            ? post.description!.trim()
+                            : strings.noDescription,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      isThreeLine: true,
                       onTap: () => context.push('/posts/${post.id}'),
                     ),
                   ),
@@ -192,22 +206,20 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
   }
 }
 
-Future<bool> _confirmBlock(BuildContext context) async {
+Future<bool> _confirmBlock(BuildContext context, AppStrings strings) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Block user?'),
-      content: const Text(
-        'Use this when a user is abusive or unsafe. You can ask support to unblock them until the unblock UI is added.',
-      ),
+      title: Text(strings.blockUserTitle),
+      content: Text(strings.blockUserMessage),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(strings.cancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Block'),
+          child: Text(strings.block),
         ),
       ],
     ),

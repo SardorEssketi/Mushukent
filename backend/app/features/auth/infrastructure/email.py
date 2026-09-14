@@ -72,3 +72,71 @@ class EmailVerificationSender:
                 "EMAIL_DELIVERY_FAILED",
                 "Email verification could not be sent.",
             ) from exc
+
+
+class AccountDeletionConfirmationSender:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def send_confirmation_email(self, *, email: str, token: str) -> None:
+        if self.settings.app_env.casefold() == "development":
+            return
+        if (
+            not self.settings.resend_api_key
+            or not self.settings.resend_from_email
+            or not self.settings.public_app_base_url
+        ):
+            raise api_error(
+                500,
+                "EMAIL_NOT_CONFIGURED",
+                "Account deletion email is not configured.",
+            )
+
+        confirm_url = (
+            f"{self.settings.public_app_base_url.rstrip('/')}/delete-account?token={token}"
+        )
+        text = (
+            "Open this link to confirm deletion of your Mushukistan account:\n\n"
+            f"{confirm_url}\n\n"
+            "After the page opens, press Confirm account deletion to complete deletion. "
+            "This link is time-limited. If you did not request account deletion, "
+            "ignore this email and your account will not be deleted."
+        )
+        payload = {
+            "from": self.settings.resend_from_email,
+            "to": [email],
+            "subject": "Confirm deletion of your Mushukistan account",
+            "text": text,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        resend_request = request.Request(
+            RESEND_EMAILS_API_URL,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {self.settings.resend_api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": RESEND_USER_AGENT,
+            },
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(resend_request, timeout=10) as response:
+                if response.status >= 400:
+                    raise api_error(
+                        502,
+                        "EMAIL_DELIVERY_FAILED",
+                        "Account deletion email could not be sent.",
+                    )
+        except error.HTTPError as exc:
+            raise api_error(
+                502,
+                "EMAIL_DELIVERY_FAILED",
+                "Account deletion email could not be sent.",
+            ) from exc
+        except error.URLError as exc:
+            raise api_error(
+                502,
+                "EMAIL_DELIVERY_FAILED",
+                "Account deletion email could not be sent.",
+            ) from exc

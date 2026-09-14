@@ -12,7 +12,7 @@ Contact: sardor.datascience@gmail.com
 
 ## 2. What Mushukistan does
 
-Mushukistan is a social platform and interactive map for street cats in Tashkent. Users can publish and browse cat sightings, photos, comments, cat profiles, places, reports, and lost-pet posts.
+Mushukistan is a social platform and interactive map for cat owners and the wider cat community in Tashkent. Users can publish and browse cat records, observations, photos, comments, nearby pet-care places, reports, lost-pet alerts, and adoption or rehoming posts.
 
 Mushukistan is not an emergency service, veterinary service, rescue organization, or government service. Map data, place data, public posts, and user-generated content may be incomplete, delayed, inaccurate, or unavailable.
 
@@ -24,11 +24,11 @@ You must be at least 16 years old to use Mushukistan. If you are under 16, you m
 
 You are responsible for your account credentials and for all activity under your account. You must provide accurate information when creating or updating your account.
 
-You may delete your account from Settings. You may also request deletion support by email at support@mushukistan.uz.
+You may delete your account from Settings.
 
 ## 5. Your content
 
-You are responsible for the content you submit, including photos, cat sightings, comments, cat profile information, reports, and lost-pet posts.
+You are responsible for the content you submit, including cat records, observations, photos, comments, reports, lost-pet alerts, and adoption or rehoming posts.
 
 You may submit content only if you own it or have permission to use it. By submitting content, you grant Mushukistan a limited license to host, store, resize, display, transmit, moderate, remove, and otherwise use that content only to operate, secure, and improve Mushukistan.
 
@@ -36,11 +36,11 @@ You remain responsible for making sure your content does not violate another per
 
 ## 6. Location and public information
 
-Mushukistan uses location information for map, nearby cats, cat sightings, places, and lost-pet features.
+Mushukistan uses location information for map, cat observation, nearby-place, and lost-pet features.
 
-Some information you submit may be public, including cat photos, cat sighting descriptions, cat locations, comments, public profile summaries, lost-pet photos, lost-pet last-seen locations, and lost-pet phone numbers.
+Some information you submit may be public, including cat photos, observation descriptions and locations, comments, public profile summaries, lost-pet photos and last-seen locations, adoption or rehoming photos, and contact details that you approve for publication.
 
-Lost-pet posts may publish your profile phone number only after you explicitly confirm that it may be displayed publicly.
+Lost-pet and adoption or rehoming posts may publish copied contact details only after you explicitly confirm that they may be displayed publicly.
 
 ## 7. Prohibited conduct
 

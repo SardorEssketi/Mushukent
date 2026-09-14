@@ -24,6 +24,7 @@ class CommentRecord:
     post_id: UUID | None
     lost_pet_id: UUID | None
     adoption_post_id: UUID | None
+    parent_comment_id: UUID | None
     user_id: UUID | None
     content: str
     created_at: datetime

@@ -102,65 +102,71 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(strings.settings)),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         children: [
           Text(strings.theme, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
-          SegmentedButton<AppThemeMode>(
-            showSelectedIcon: false,
-            segments: [
-              ButtonSegment(
-                value: AppThemeMode.original,
-                label: Text(strings.themeAuto),
-                icon: const Icon(Icons.brightness_auto_outlined),
-              ),
-              ButtonSegment(
-                value: AppThemeMode.dark,
-                label: Text(strings.themeDark),
-                icon: const Icon(Icons.dark_mode_outlined),
-              ),
-              ButtonSegment(
-                value: AppThemeMode.light,
-                label: Text(strings.themeLight),
-                icon: const Icon(Icons.light_mode_outlined),
-              ),
-            ],
-            selected: {_pendingTheme},
-            onSelectionChanged: (selection) {
-              setState(() {
-                _pendingTheme = selection.first;
-              });
-            },
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<AppThemeMode>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                  value: AppThemeMode.original,
+                  label: _CompactSegmentLabel(strings.themeAuto),
+                  icon: const Icon(Icons.brightness_auto_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  label: _CompactSegmentLabel(strings.themeDark),
+                  icon: const Icon(Icons.dark_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  label: _CompactSegmentLabel(strings.themeLight),
+                  icon: const Icon(Icons.light_mode_outlined),
+                ),
+              ],
+              selected: {_pendingTheme},
+              onSelectionChanged: (selection) {
+                setState(() {
+                  _pendingTheme = selection.first;
+                });
+              },
+            ),
           ),
           const SizedBox(height: 28),
           Text(strings.language,
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
-          SegmentedButton<AppLanguage>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: AppLanguage.english,
-                label: Text('English'),
-                icon: Icon(Icons.language_outlined),
-              ),
-              ButtonSegment(
-                value: AppLanguage.uzbek,
-                label: Text('Uzbek'),
-                icon: Icon(Icons.language_outlined),
-              ),
-              ButtonSegment(
-                value: AppLanguage.russian,
-                label: Text('Russian'),
-                icon: Icon(Icons.language_outlined),
-              ),
-            ],
-            selected: {_pendingLanguage},
-            onSelectionChanged: (selection) {
-              setState(() {
-                _pendingLanguage = selection.first;
-              });
-            },
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<AppLanguage>(
+              showSelectedIcon: false,
+              segments: [
+                ButtonSegment(
+                  value: AppLanguage.english,
+                  label: _CompactSegmentLabel(strings.englishLanguage),
+                  icon: const Icon(Icons.language_outlined),
+                ),
+                ButtonSegment(
+                  value: AppLanguage.uzbek,
+                  label: _CompactSegmentLabel(strings.uzbekLanguage),
+                  icon: const Icon(Icons.language_outlined),
+                ),
+                ButtonSegment(
+                  value: AppLanguage.russian,
+                  label: _CompactSegmentLabel(strings.russianLanguage),
+                  icon: const Icon(Icons.language_outlined),
+                ),
+              ],
+              selected: {_pendingLanguage},
+              onSelectionChanged: (selection) {
+                setState(() {
+                  _pendingLanguage = selection.first;
+                });
+              },
+            ),
           ),
           const SizedBox(height: 28),
           Text(strings.privacy, style: Theme.of(context).textTheme.titleMedium),
@@ -203,6 +209,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             label: Text(strings.saveChanges),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CompactSegmentLabel extends StatelessWidget {
+  const _CompactSegmentLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 96),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(label, maxLines: 1),
       ),
     );
   }

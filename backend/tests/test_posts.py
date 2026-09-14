@@ -332,6 +332,45 @@ def test_create_post_with_new_cat_workflow(client: TestClient, posts_runtime) ->
         assert stored_post.cat_id == stored_cat.id
 
 
+def test_create_observation_without_cat_creates_unknown_cat(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="automatic-cat-post@example.com",
+    )
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "photo_url": "https://storage.example/automatic-cat.jpg",
+            "description": "Observation without cat matching",
+            "location": {"latitude": 41.32, "longitude": 69.27},
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()["data"]
+    assert payload["cat"]["status"] == "unknown"
+    cat_id = UUID(payload["cat"]["id"])
+
+    with posts_runtime.db_session_manager.session_scope() as session:
+        stored_cat = session.get(schema.Cat, cat_id)
+        stored_post = session.scalar(
+            select(schema.Post).where(
+                schema.Post.description == "Observation without cat matching"
+            )
+        )
+        assert stored_cat is not None
+        assert stored_cat.name is None
+        assert stored_cat.created_by == user.id
+        assert stored_post is not None
+        assert stored_post.cat_id == cat_id
+
+
 def test_unauthorized_creation(client: TestClient) -> None:
     response = client.post("/api/v1/posts", json={"photo_url": "https://example.com/photo.jpg"})
     assert response.status_code == 401

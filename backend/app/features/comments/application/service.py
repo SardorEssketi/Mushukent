@@ -54,12 +54,18 @@ class CommentsService:
             post = repository.lock_visible_post(post_id, viewer_user_id=user.id)
             if post is None or not self._can_view_post(post, user):
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")
+            self._validate_parent_comment(
+                repository,
+                payload.parent_comment_id,
+                post_id=post_id,
+            )
 
             created = repository.create(
                 CommentCreateDraft(
                     post_id=post_id,
                     lost_pet_id=None,
                     adoption_post_id=None,
+                    parent_comment_id=payload.parent_comment_id,
                     user_id=user.id,
                     content=payload.content.strip(),
                 )
@@ -83,12 +89,18 @@ class CommentsService:
             repository = self.repository_factory(session)
             if not repository.lost_pet_exists(lost_pet_id):
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
+            self._validate_parent_comment(
+                repository,
+                payload.parent_comment_id,
+                lost_pet_id=lost_pet_id,
+            )
 
             created = repository.create(
                 CommentCreateDraft(
                     post_id=None,
                     lost_pet_id=lost_pet_id,
                     adoption_post_id=None,
+                    parent_comment_id=payload.parent_comment_id,
                     user_id=user.id,
                     content=payload.content.strip(),
                 )
@@ -112,12 +124,18 @@ class CommentsService:
             repository = self.repository_factory(session)
             if not repository.adoption_post_exists(adoption_post_id):
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
+            self._validate_parent_comment(
+                repository,
+                payload.parent_comment_id,
+                adoption_post_id=adoption_post_id,
+            )
 
             created = repository.create(
                 CommentCreateDraft(
                     post_id=None,
                     lost_pet_id=None,
                     adoption_post_id=adoption_post_id,
+                    parent_comment_id=payload.parent_comment_id,
                     user_id=user.id,
                     content=payload.content.strip(),
                 )
@@ -323,6 +341,37 @@ class CommentsService:
                 ),
                 actor_id=str(user.id),
                 moderator=user.is_moderator,
+            )
+
+    @staticmethod
+    def _validate_parent_comment(
+        repository: CommentRepository,
+        parent_comment_id: UUID | None,
+        *,
+        post_id: UUID | None = None,
+        lost_pet_id: UUID | None = None,
+        adoption_post_id: UUID | None = None,
+    ) -> None:
+        if parent_comment_id is None:
+            return
+
+        parent = repository.get_by_id(parent_comment_id)
+        if parent is None or parent.deleted_at is not None:
+            raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+
+        same_target = (
+            (post_id is not None and parent.post_id == post_id)
+            or (lost_pet_id is not None and parent.lost_pet_id == lost_pet_id)
+            or (
+                adoption_post_id is not None
+                and parent.adoption_post_id == adoption_post_id
+            )
+        )
+        if not same_target:
+            raise api_error(
+                400,
+                "INVALID_PARENT_COMMENT",
+                "Reply must belong to the same post.",
             )
 
     @staticmethod

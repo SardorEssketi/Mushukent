@@ -43,7 +43,7 @@ Bottom navigation with 5 tabs:
 -------------------
 4.1 First Launch Flow
 - App opens -> Auth Gate
-- If no valid token -> Auth screen
+- If no valid token/session -> Register screen
 - If valid token -> Feed tab
 
 4.2 Authenticated Main Flow
@@ -54,8 +54,8 @@ Bottom navigation with 5 tabs:
 4.3 Add Observation Flow
 - User taps Add tab or map quick action
 - Cat Observation -> choose camera or gallery photos -> choose location behavior:
-  - Use current location -> match/select cat -> submit -> success.
-  - Mark on map -> user sees current location, can recenter on user, taps map to place observation marker -> match/select cat -> submit -> success.
+  - Use current location -> observation details -> submit -> success.
+  - Mark on map -> user sees current location, can recenter on user, taps map to place observation marker -> observation details -> submit -> success.
   - Continue without location -> feed-only observation details -> submit -> success.
 - Lost Pet -> require profile phone number -> choose one to five photos -> enter pet name -> point last-seen location on map or use current location -> submit -> feed.
 
@@ -72,8 +72,10 @@ Bottom navigation with 5 tabs:
 - Interaction:
   - none except automatic route decision.
 - Edge cases:
-  - expired token -> clear token and route to Login.
-  - corrupted local auth state -> fallback to Login.
+  - expired access token with refresh/session token -> silently refresh before routing.
+  - invalid refresh/session token -> clear auth state and route to Register.
+  - transient refresh failure -> show retryable startup error.
+  - corrupted local auth state -> fallback to Register.
 
 5.2 Login Screen
 - Purpose: authenticate existing users.
@@ -108,6 +110,7 @@ Bottom navigation with 5 tabs:
   - Terms of Service acceptance
   - Privacy Policy acceptance
   - register button
+  - Continue with Google button
   - link to Login
 - Interactions:
   - tapping Register after valid fields submits registration using the current app language.
@@ -187,6 +190,7 @@ Bottom navigation with 5 tabs:
 5.7 Add Observation Entry Screen
 - Purpose: start observation creation process.
 - Layout:
+- The Add tab still lets the user choose a post type. The cat-observation quick action opens the camera/gallery chooser directly.
 - Cat observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
 - Lost Pet: creates a lost pet post shown in the feed.
 - Interactions:
@@ -224,24 +228,15 @@ Bottom navigation with 5 tabs:
 - Layout:
 - one to five image previews
 - description input
-- status selector for located observations only (Healthy/Needs Help/Unknown)
 - located observations include an explicitly confirmed current location or manually selected map point.
-- cat matching section:
-    - nearby suggestions list,
-    - action buttons: "This is existing cat" / "This is new cat"
-  - submit button
-- Interaction:
-  - selecting existing cat links observation to chosen cat.
-  - selecting new cat reveals optional cat name and approximate age fields.
+- submit button
+- The backend creates an unnamed `Unknown` cat record automatically for each observation. The user is not asked to search for, select, or name a cat during this flow.
 - Validation:
   - image required,
-  - location required,
-  - status enum valid.
+  - location optional.
 - Edge cases:
 - GPS unavailable for current-location flow -> show error and retry or allow manual map placement / skip location.
-- no nearby suggestions -> emphasize "new cat" path.
 - observations without explicit location do not create map markers.
-- observations without explicit location do not show a status selector.
 - upload failure -> keep entered data in memory and allow retry.
 
 5.9 Observation Publish Success Screen/State
@@ -268,6 +263,7 @@ Bottom navigation with 5 tabs:
   - timestamp,
   - distance (if nearby),
   - like count next to the like icon, comment count next to the comment icon and publish date as `Published: <date>`,
+  - long descriptions show a compact preview with a `Read more` control and expand inline,
   - all visible tags appear next to the cat/pet name; `Unknown` is not displayed as a tag,
   - quick like action.
 - Interactions:
@@ -304,11 +300,14 @@ Bottom navigation with 5 tabs:
 5.12 Comments Section
 - Purpose: display and add comments inside the post detail screen.
 - Layout:
-  - comment list
+  - comment list rendered as nested conversation threads,
+  - each comment shows author, full publication date, content, report action, and Reply action,
+  - reply composer identifies the selected parent comment and can be cancelled,
   - input box + send button
 - Interactions:
   - tap comment author -> User Profile
   - submit comment,
+  - reply to any comment; replies may be nested without a depth limit,
   - delete own comment via long-press/menu.
 - Validation:
   - max 1000 chars.

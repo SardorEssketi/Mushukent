@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 
 final moderationReportsProvider =
@@ -15,13 +16,14 @@ class ModerationReportsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reportsAsync = ref.watch(moderationReportsProvider);
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Moderation reports'),
+        title: Text(strings.moderationReports),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: strings.refresh,
             onPressed: () => ref.invalidate(moderationReportsProvider),
             icon: const Icon(Icons.refresh),
           ),
@@ -30,7 +32,7 @@ class ModerationReportsScreen extends ConsumerWidget {
       body: reportsAsync.when(
         data: (page) {
           if (page.items.isEmpty) {
-            return const Center(child: Text('No open reports.'));
+            return Center(child: Text(strings.noOpenReports));
           }
           return ListView.separated(
             padding: const EdgeInsets.all(24),
@@ -41,7 +43,7 @@ class ModerationReportsScreen extends ConsumerWidget {
               return Card(
                 child: ListTile(
                   title: Text('${report.targetType} · ${report.status}'),
-                  subtitle: Text(report.reason ?? 'No reason provided'),
+                  subtitle: Text(report.reason ?? strings.noReasonProvided),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/moderation/reports/${report.id}'),
                 ),

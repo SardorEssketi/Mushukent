@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/validation/phone_numbers.dart';
@@ -43,6 +44,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(profileMeProvider);
+    final strings = ref.watch(appStringsProvider);
     if (!_initialised && profileAsync.hasValue) {
       final profile = profileAsync.value!;
       _nameController.text = profile.name ?? '';
@@ -53,7 +55,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit profile')),
+      appBar: AppBar(title: Text(strings.editProfile)),
       body: profileAsync.when(
         data: (profile) => Form(
           key: _formKey,
@@ -67,20 +69,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 avatarBytes: _avatarBytes,
                 onGallery: _pickAvatarFromGallery,
                 onCamera: _pickAvatarFromCamera,
+                strings: strings,
               ),
               const SizedBox(height: 24),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: InputDecoration(labelText: strings.nameOptional),
                 maxLength: 100,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone number',
+                decoration: InputDecoration(
+                  labelText: strings.phoneNumber,
                   hintText: '+998 xx xxx xx xx',
-                  helperText: 'Uzbekistan format: +998 xx xxx xx xx',
+                  helperText: strings.uzbekPhoneFormatHelp,
                 ),
                 keyboardType: TextInputType.phone,
                 maxLength: 32,
@@ -97,8 +100,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _telegramController,
-                decoration: const InputDecoration(
-                  labelText: 'Telegram username',
+                decoration: InputDecoration(
+                  labelText: strings.telegramUsername,
                   hintText: 'sardor_dev',
                   prefixText: '@',
                 ),
@@ -110,17 +113,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   }
                   final valid =
                       RegExp(r'^[A-Za-z0-9_]{5,32}$').hasMatch(username);
-                  return valid
-                      ? null
-                      : 'Use 5-32 letters, numbers, or underscores.';
+                  return valid ? null : strings.telegramValidation;
                 },
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _bioController,
-                decoration: const InputDecoration(
-                  labelText: 'Bio',
-                  hintText: 'Aydos from Tashkent, cat lover',
+                decoration: InputDecoration(
+                  labelText: strings.bio,
+                  hintText: strings.bioHint,
                 ),
                 maxLines: 4,
                 maxLength: 1000,
@@ -141,7 +142,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Save changes'),
+                    : Text(strings.saveChanges),
               ),
             ],
           ),
@@ -150,6 +151,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         error: (error, stackTrace) => _ErrorPanel(
           message: error.toString(),
           onRetry: () => ref.invalidate(profileMeProvider),
+          retryLabel: strings.retry,
         ),
       ),
     );
@@ -246,6 +248,7 @@ class _AvatarEditor extends StatelessWidget {
     required this.avatarBytes,
     required this.onGallery,
     required this.onCamera,
+    required this.strings,
   });
 
   final String name;
@@ -254,6 +257,7 @@ class _AvatarEditor extends StatelessWidget {
   final Uint8List? avatarBytes;
   final VoidCallback onGallery;
   final VoidCallback onCamera;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
@@ -272,13 +276,13 @@ class _AvatarEditor extends StatelessWidget {
             FilledButton.tonalIcon(
               onPressed: onGallery,
               icon: const Icon(Icons.photo_library_outlined),
-              label: const Text('Change profile picture'),
+              label: Text(strings.changeProfilePicture),
             ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: onCamera,
               icon: const Icon(Icons.photo_camera_outlined),
-              label: const Text('Use camera'),
+              label: Text(strings.useCamera),
             ),
           ],
         ),
@@ -302,10 +306,12 @@ class _ErrorPanel extends StatelessWidget {
   const _ErrorPanel({
     required this.message,
     required this.onRetry,
+    required this.retryLabel,
   });
 
   final String message;
   final VoidCallback onRetry;
+  final String retryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +323,7 @@ class _ErrorPanel extends StatelessWidget {
           children: [
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            FilledButton(onPressed: onRetry, child: Text(retryLabel)),
           ],
         ),
       ),

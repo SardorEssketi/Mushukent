@@ -136,13 +136,19 @@ final currentUserProvider = Provider<MushukistanUser?>((ref) {
 });
 
 class AuthController extends StateNotifier<AuthState> {
-  AuthController(this._repository, this._googleIdentityTokens)
-      : super(AuthState.restoring()) {
+  AuthController(
+    this._repository,
+    this._googleIdentityTokens, {
+    Duration restoreTimeout = const Duration(seconds: 20),
+  })  : _restoreTimeout = restoreTimeout,
+        super(AuthState.restoring()) {
     unawaited(restoreSession());
   }
 
   final AuthRepository _repository;
   final GoogleIdentityTokenProvider _googleIdentityTokens;
+  final Duration _restoreTimeout;
+  final Set<Timer> _restoreTimeoutTimers = <Timer>{};
   Future<void>? _restoreInFlight;
 
   Future<void> restoreSession({bool force = false}) async {
@@ -163,7 +169,22 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> _performRestoreSession() async {
     state = AuthState.restoring();
-    final result = await _repository.restoreSession();
+    late final SessionRestoreResult result;
+    try {
+      result = await _withRestoreTimeout(_repository.restoreSession());
+    } on TimeoutException {
+      state = AuthState.failure(
+        message: 'Session check timed out. Please try again.',
+        retryable: true,
+      );
+      return;
+    } catch (_) {
+      state = AuthState.failure(
+        message: 'Session check failed.',
+        retryable: true,
+      );
+      return;
+    }
     switch (result) {
       case SessionRestoreMissing():
         state = AuthState.unauthenticated();
@@ -178,6 +199,37 @@ class AuthController extends StateNotifier<AuthState> {
         state = AuthState.authenticated(session.user);
         break;
     }
+  }
+
+  Future<T> _withRestoreTimeout<T>(Future<T> future) {
+    final completer = Completer<T>();
+    late final Timer timer;
+    timer = Timer(_restoreTimeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('Session restore timed out.', _restoreTimeout),
+        );
+      }
+    });
+    _restoreTimeoutTimers.add(timer);
+
+    future.then((value) {
+      if (!completer.isCompleted) {
+        completer.complete(value);
+      }
+    }).catchError((Object error, StackTrace stackTrace) {
+      if (!completer.isCompleted) {
+        completer.completeError(error, stackTrace);
+      }
+    }).whenComplete(() {
+      timer.cancel();
+      _restoreTimeoutTimers.remove(timer);
+    });
+
+    return completer.future.whenComplete(() {
+      timer.cancel();
+      _restoreTimeoutTimers.remove(timer);
+    });
   }
 
   Future<void> login(AuthCredentials credentials) async {
@@ -348,5 +400,14 @@ class AuthController extends StateNotifier<AuthState> {
           message: error.userMessage);
     }
     return AuthState.unauthenticated(message: error.userMessage);
+  }
+
+  @override
+  void dispose() {
+    for (final timer in _restoreTimeoutTimers) {
+      timer.cancel();
+    }
+    _restoreTimeoutTimers.clear();
+    super.dispose();
   }
 }

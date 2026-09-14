@@ -27,9 +27,19 @@ docker compose up --build
 2. Build the Flutter web bundle with the production API origin:
    ```powershell
    cd frontend
-   flutter build web --release --dart-define=MUSHUKISTAN_API_BASE_URL=https://your-domain.example
+   flutter build web --release `
+     --dart-define=MUSHUKISTAN_API_BASE_URL=https://api.your-domain.example `
+     --dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=<web-oauth-client-id>
    ```
-3. Start the production Compose overlay:
+3. Build the Android release bundle with the production API origin and Web OAuth
+   client ID as the Android `serverClientId`:
+   ```powershell
+   cd frontend
+   flutter build appbundle --release `
+     --dart-define=MUSHUKISTAN_API_BASE_URL=https://api.mushukistan.uz `
+     --dart-define=MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID=44189213881-ib7s9mle615m2roof0lp3fisduq934cg.apps.googleusercontent.com
+   ```
+4. Start the production Compose overlay:
    ```powershell
    cd ..
    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build

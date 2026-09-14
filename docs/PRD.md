@@ -12,36 +12,37 @@ Author: Sardor Muxtorov
 1. Overview
 Product Description
 
-Mushukistan is a location-based social networking application that enables users to discover, photograph, document, and help street cats in Tashkent.
+Mushukistan is a Tashkent-focused social application and interactive map for cat owners and the wider cat community.
 
-Every observation is associated with geographic coordinates, allowing the application to build a live, interactive OpenStreetMap of the city's street cats.
+Users can record cats and observations, find nearby veterinary clinics, pet shops, and shelters, publish lost-pet alerts, create adoption and rehoming posts, contact owners, and participate in community discussions.
 
-Unlike traditional social media platforms, Mushukistan focuses on documenting real animals rather than individual posts. Each cat can have a complete observation history contributed by multiple users over time.
+Mushukistan combines practical cat-care tools with community content. Cat records and observation histories remain important, while lost-pet and adoption/rehoming workflows address everyday needs of cat owners in Tashkent.
 
 2. Problem Statement
 
-There is currently no centralized platform in Tashkent where people can:
+There is currently no single local platform in Tashkent where cat owners and community members can:
 
-discover nearby street cats;
-report cats requiring assistance;
-document cat sightings;
-preserve the history of individual cats;
-connect volunteers through location-based information.
+find nearby veterinary clinics, pet shops, and shelters;
+publish and discover lost-pet alerts;
+help cats find new homes through adoption and rehoming posts;
+document cats and preserve their observation history;
+share useful locations and information with other cat owners;
+discuss posts, report problems, and rely on community moderation.
 
 As a result, valuable information is fragmented across social media platforms or lost entirely.
 
 3. Product Vision
 
-Create the largest digital map and historical database of street cats in Tashkent while building a local community that contributes to animal welfare and urban exploration.
+Build the most useful digital service for cat owners in Tashkent by combining cat-care information, lost-pet recovery, adoption and rehoming, local discovery, and community participation.
 
 4. Goals
 
 Primary goals:
 
-Build a reliable platform for recording street cat observations.
-Encourage community participation.
-Help volunteers locate cats that require assistance.
-Preserve observation history for individual cats.
+Build a reliable platform for recording cats and observations.
+Help owners find nearby pet-care places and useful local information.
+Support lost-pet recovery and responsible adoption or rehoming.
+Encourage helpful community participation and moderation.
 Create a scalable platform that can later expand to other cities.
 5. Success Metrics
 
@@ -58,13 +59,13 @@ API uptime above 99%.
 
 Primary audience:
 
-Residents of Tashkent
-Cat lovers
-Volunteers
+Cat owners in Tashkent
+People searching for lost pets
+People adopting or rehoming cats
+Cat lovers and volunteers
+Veterinary clinics, pet shops, and shelters
 Animal welfare organizations
-Students
-Tourists
-Urban photographers
+Other local community members
 
 Age:
 
@@ -74,24 +75,33 @@ Age:
 
 Mushukistan provides users with the ability to:
 
-discover nearby street cats;
-document cat sightings;
-preserve observation history;
-help injured or endangered animals;
-participate in a local community;
-explore the city through interactive mapping.
+record and discover cats and observations;
+find nearby veterinary clinics, pet shops, and shelters;
+publish and find lost-pet alerts;
+create or browse adoption and rehoming posts;
+contact owners when a post allows it;
+participate in discussions, reports, leaderboards, and moderation;
+manage profiles, privacy, language, and account settings.
 8. User Stories
-General User
+Cat Owner
 
-As a user, I want to photograph a street cat so that other people can discover it.
+As a cat owner, I want to share information about my cat or an observation so that the local community can help and participate.
 
-Volunteer
+Lost Pet Owner
 
-As a volunteer, I want to find cats marked as Needs Help so I can provide assistance.
+As a cat owner, I want to publish a lost-pet alert with photos, location, and contact information so that people in Tashkent can help find my pet.
+
+Adopter or Fosterer
+
+As someone looking to adopt or rehome a cat, I want to browse adoption posts and contact the owner.
+
+Cat Care Seeker
+
+As a cat owner, I want to find nearby veterinary clinics, pet shops, and shelters so I can get help for a cat.
 
 Cat Lover
 
-As a cat lover, I want to browse nearby cats so I can enjoy discovering them.
+As a cat lover, I want to browse nearby cats and community posts so I can discover and support local cats.
 
 Explorer
 
@@ -144,16 +154,15 @@ Animal Shelters
 
 Place markers shall show available public contact details, including phone number, second phone number, website, Instagram, Telegram, opening hours, days off and description when present in the free source data or manually verified by moderators.
 One real place may belong to more than one supported place category.
-Add Cat
+Cats and Observations
 
 Users shall be able to create a new observation by providing:
 
 photo;
-optional name;
-optional approximate age;
 description;
-status;
-automatically detected GPS location.
+an optional current or manually selected location.
+
+Each observation automatically receives an unnamed cat record with status Unknown. The observation flow does not ask the user to choose an existing cat or create/name a new cat.
 
 Cat statuses:
 
@@ -234,6 +243,7 @@ Comments
 Users shall be able to:
 
 create comments;
+reply to comments with unlimited nesting;
 delete their own comments.
 Likes
 
@@ -256,7 +266,7 @@ Users shall be able to change their preferred app language later from Settings.
 
 Users shall be able to delete their own account from Settings under About account.
 
-MVP account deletion shall anonymize the account, deactivate login, end the current session, delete likes, and hide/anonymize user-owned posts, comments, and lost-pet posts according to the account lifecycle policy.
+MVP account deletion shall anonymize the account, deactivate login, end the current session, delete likes, and hide/anonymize user-owned posts, comments, lost-pet alerts, and adoption or rehoming posts according to the account lifecycle policy.
 Leaderboards
 
 The application shall include:
@@ -288,17 +298,10 @@ Moderators shall be able to:
 review reports;
 remove content;
 suspend users.
-10. Cat Identification
+10. Cat Grouping
 MVP
 
-After uploading a photo, the application shall display nearby existing cats.
-
-The user chooses:
-
-This is a new cat.
-This is an existing cat.
-
-The application then links the observation accordingly.
+After uploading a photo, the application creates an unnamed Unknown cat record and links the observation to it automatically. No nearby-cat suggestions or existing/new cat choice are shown.
 
 Future AI
 
@@ -327,16 +330,18 @@ support future scaling to at least 100,000 users.
 Included:
 
 Authentication
-Interactive map
-Add observation
+Interactive map and nearby pet-care places
+Cats and observations
 Feed
-Cat pages
+Lost-pet alerts
+Adoption and rehoming posts
 Likes
 Comments
 Profiles
+Profile settings and account lifecycle controls
 Leaderboards
+Reports
 Moderation
-Manual cat matching
 13. Out of Scope
 
 The following features are not included in MVP:
@@ -358,7 +363,6 @@ Feed
 Profiles
 Comments
 Likes
-Manual matching
 Moderation
 Leaderboards
 Version 1.1
@@ -407,4 +411,3 @@ comment on observations;
 report inappropriate content;
 view user profiles;
 access leaderboards;
-link observations to existing cats.

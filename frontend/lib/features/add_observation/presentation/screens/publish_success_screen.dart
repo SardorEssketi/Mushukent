@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../application/add_observation_controller.dart';
 
@@ -14,9 +15,10 @@ class PublishSuccessScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final createdPost = post;
     final state = ref.watch(addObservationControllerProvider);
+    final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Published')),
+      appBar: AppBar(title: Text(strings.published)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -33,15 +35,15 @@ class PublishSuccessScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Observation published.',
+                    strings.observationPublished,
                     style: Theme.of(context).textTheme.headlineSmall,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
                   Text(
                     createdPost != null
-                        ? 'Post ${createdPost.id} is now available in the feed.'
-                        : 'Your observation has been sent to the backend.',
+                        ? strings.postNowAvailable(createdPost.id)
+                        : strings.observationSentToBackend,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -75,8 +77,8 @@ class PublishSuccessScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 24),
                     _SummaryRow(
-                        label: 'Cat',
-                        value: createdPost.cat.name ?? 'Unnamed cat'),
+                        label: strings.cats,
+                        value: createdPost.cat.name ?? strings.unnamedCat),
                     const SizedBox(height: 24),
                   ],
                   FilledButton(
@@ -86,7 +88,7 @@ class PublishSuccessScreen extends ConsumerWidget {
                           .reset();
                       context.go('/feed');
                     },
-                    child: const Text('View feed'),
+                    child: Text(strings.viewFeed),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton(
@@ -96,7 +98,7 @@ class PublishSuccessScreen extends ConsumerWidget {
                           .reset();
                       context.go('/add/entry');
                     },
-                    child: const Text('Add another'),
+                    child: Text(strings.addAnother),
                   ),
                   if (state.errorMessage != null) ...[
                     const SizedBox(height: 16),
