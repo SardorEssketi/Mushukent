@@ -178,7 +178,49 @@ void main() {
     router.go('/login');
     await tester.pumpAndSettle();
 
-    expect(find.text('Mushukistan'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('non-moderators cannot open moderation routes', (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token-123', user: testUser()),
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    container.read(appRouterProvider).go('/moderation/reports');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(AppBar, 'Profile'), findsOneWidget);
+  });
+
+  testWidgets('moderators can open moderation routes', (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(
+            accessToken: 'token-123',
+            user: testUser(isModerator: true),
+          ),
+        ),
+      ),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    container.read(appRouterProvider).go('/moderation/reports');
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(AppBar, 'Moderation reports'), findsOneWidget);
   });
 
   testWidgets('restoration state stays on the gate until it resolves',
@@ -244,7 +286,10 @@ void main() {
 
     expect(
         container.read(authControllerProvider).phase, AuthPhase.authenticated);
-    expect(find.text('Mushukistan'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
     expect(find.text('Join Mushukistan'), findsNothing);
     expect(find.text('Welcome back'), findsNothing);
     expect(await tokenStore.read(), 'token-456');
@@ -281,7 +326,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Mushukistan'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('login failures are displayed without corrupting state',
@@ -454,7 +502,10 @@ void main() {
     expect(repo.lastGoogleAcceptTerms, isTrue);
     expect(repo.lastGoogleAcceptPrivacy, isTrue);
     expect(google.calls, 1);
-    expect(find.text('Mushukistan'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('registration loading and error state are visible',

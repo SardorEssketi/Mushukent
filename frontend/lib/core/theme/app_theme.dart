@@ -99,6 +99,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colorScheme.primary,
+          minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.control),
           ),
@@ -267,6 +268,7 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: colorScheme.primary,
+          minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadii.control),
           ),
@@ -278,9 +280,8 @@ class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => TextStyle(
             fontSize: 12,
-            fontWeight: states.contains(WidgetState.selected)
-                ? FontWeight.w600
-                : null,
+            fontWeight:
+                states.contains(WidgetState.selected) ? FontWeight.w600 : null,
           ),
         ),
       ),

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
@@ -18,13 +16,6 @@ final feedPopularPeriodProvider = StateProvider<String>((ref) => 'day');
 final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
   (ref) => const {},
 );
-const _homeHeaderDismissedKey = 'mushukistan_home_header_dismissed';
-
-final homeHeaderVisibleProvider = FutureProvider<bool>((ref) async {
-  const storage = FlutterSecureStorage();
-  final dismissed = await storage.read(key: _homeHeaderDismissedKey);
-  return dismissed != 'true';
-});
 
 void setPostLikeOverride(
   WidgetRef ref,
@@ -64,23 +55,11 @@ class FeedScreen extends ConsumerWidget {
     final feedMode = ref.watch(feedModeProvider);
     final popularPeriod = ref.watch(feedPopularPeriodProvider);
     final postsAsync = ref.watch(feedPostsProvider);
-    final showHomeHeader = ref.watch(homeHeaderVisibleProvider).value ?? true;
     final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Mushukistan'),
-        actions: [
-          if (kIsWeb)
-            IconButton(
-              tooltip: strings.refresh,
-              onPressed: () async {
-                final refreshedPosts = ref.refresh(feedPostsProvider.future);
-                await refreshedPosts;
-              },
-              icon: const Icon(Icons.refresh),
-            ),
-        ],
+        title: Text(strings.feed),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -88,38 +67,10 @@ class FeedScreen extends ConsumerWidget {
           await refreshedPosts;
         },
         child: AppContentWidth(
-          maxWidth: AppWidths.wide,
+          maxWidth: AppWidths.compact,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
-              if (showHomeHeader) ...[
-                _HomeHeader(
-                  onDismiss: () async {
-                    const storage = FlutterSecureStorage();
-                    await storage.write(
-                      key: _homeHeaderDismissedKey,
-                      value: 'true',
-                    );
-                    ref.invalidate(homeHeaderVisibleProvider);
-                  },
-                  onLostPetsTap: () {
-                    ref.read(feedModeProvider.notifier).state = 'lost_pets';
-                    ref.invalidate(feedPostsProvider);
-                  },
-                  onAdoptionTap: () {
-                    ref.read(feedModeProvider.notifier).state = 'adoption';
-                    ref.invalidate(feedPostsProvider);
-                  },
-                  onPlacesTap: () => context.go('/map'),
-                  onMapTap: () => context.go('/map'),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-              ],
-              _SectionHeader(
-                title: strings.feedSectionTitle(feedMode),
-                subtitle: strings.feedSectionSubtitle(feedMode),
-              ),
-              const SizedBox(height: AppSpacing.md),
               _FeedFilterBar(
                 selectedMode: feedMode,
                 strings: strings,
@@ -145,256 +96,35 @@ class FeedScreen extends ConsumerWidget {
                   if (page.items.isEmpty) {
                     return _EmptyFeed(strings: strings);
                   }
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final useGrid = constraints.maxWidth >= 900;
-                      if (useGrid) {
-                        return GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            mainAxisSpacing: AppSpacing.md,
-                            crossAxisSpacing: AppSpacing.md,
-                            childAspectRatio: 0.78,
-                          ),
-                          itemCount: page.items.length,
-                          itemBuilder: (context, index) => _FeedItemCard(
-                            item: page.items[index],
-                            strings: strings,
-                          ),
-                        );
-                      }
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: page.items.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: AppSpacing.md),
-                        itemBuilder: (context, index) => _FeedItemCard(
-                          item: page.items[index],
-                          strings: strings,
-                        ),
-                      );
-                    },
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: page.items.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.md),
+                    itemBuilder: (context, index) => _FeedItemCard(
+                      item: page.items[index],
+                      strings: strings,
+                    ),
                   );
                 },
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: 64),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-                error: (error, stackTrace) => _ErrorPanel(
+                error: (error, stackTrace) => AppStatePanel(
+                  icon: Icons.error_outline,
                   title: strings.couldNotLoadSection,
-                  message: error.toString(),
-                  retryLabel: strings.retry,
-                  onRetry: () => ref.invalidate(feedPostsProvider),
+                  action: FilledButton(
+                    onPressed: () => ref.invalidate(feedPostsProvider),
+                    child: Text(strings.retry),
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-}
-
-class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({
-    required this.onDismiss,
-    required this.onLostPetsTap,
-    required this.onAdoptionTap,
-    required this.onPlacesTap,
-    required this.onMapTap,
-  });
-
-  final VoidCallback onDismiss;
-  final VoidCallback onLostPetsTap;
-  final VoidCallback onAdoptionTap;
-  final VoidCallback onPlacesTap;
-  final VoidCallback onMapTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final strings = AppStrings.forLanguage(AppLanguage.fromCode(
-      Localizations.localeOf(context).languageCode,
-    ));
-    return AppCard(
-      color: colors.surfaceContainerLow,
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              AppBadge(
-                label: strings.landOfCats,
-                icon: Icons.public_outlined,
-                color: colors.primary,
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: strings.hide,
-                onPressed: onDismiss,
-                icon: const Icon(Icons.close),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            strings.everythingCatsTitle,
-            style: theme.textTheme.headlineSmall,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            strings.everythingCatsMessage,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 680;
-              final actions = [
-                _QuickActionCard(
-                  icon: Icons.search_outlined,
-                  title: strings.lostPets,
-                  subtitle: strings.urgentAlerts,
-                  color: AppPalette.lost,
-                  onTap: onLostPetsTap,
-                ),
-                _QuickActionCard(
-                  icon: Icons.home_outlined,
-                  title: strings.newHomes,
-                  subtitle: strings.adoptionPosts,
-                  color: AppPalette.adoption,
-                  onTap: onAdoptionTap,
-                ),
-                _QuickActionCard(
-                  icon: Icons.local_hospital_outlined,
-                  title: strings.usefulPlaces,
-                  subtitle: strings.vetsShopsShelters,
-                  color: colors.secondary,
-                  onTap: onPlacesTap,
-                ),
-                _QuickActionCard(
-                  icon: Icons.map_outlined,
-                  title: strings.nearbyMap,
-                  subtitle: strings.catsAndServices,
-                  color: colors.primary,
-                  onTap: onMapTap,
-                ),
-              ];
-              if (wide) {
-                return Row(
-                  children: [
-                    for (final action in actions) ...[
-                      Expanded(child: action),
-                      if (action != actions.last)
-                        const SizedBox(width: AppSpacing.sm),
-                    ],
-                  ],
-                );
-              }
-              return Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: actions[0]),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(child: actions[1]),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Row(
-                    children: [
-                      Expanded(child: actions[2]),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(child: actions[3]),
-                    ],
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: theme.textTheme.titleLarge),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -435,118 +165,85 @@ class _FeedFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ResponsiveFilterChoices(
-      children: [
-        _FilterChoiceChip(
-          value: 'recent',
-          selectedValue: selectedMode,
-          icon: Icons.schedule_outlined,
-          label: strings.recent,
-          onSelected: onSelected,
-        ),
-        _FilterChoiceChip(
-          value: 'popular',
-          selectedValue: selectedMode,
-          icon: Icons.favorite_outline,
-          label: strings.popular,
-          onSelected: onSelected,
-        ),
-        _FilterChoiceChip(
-          value: 'needs_help',
-          selectedValue: selectedMode,
-          icon: Icons.volunteer_activism_outlined,
-          label: strings.needsHelp,
-          onSelected: onSelected,
-        ),
-        _FilterChoiceChip(
-          value: 'lost_pets',
-          selectedValue: selectedMode,
-          icon: Icons.search_outlined,
-          label: strings.lostPets,
-          onSelected: onSelected,
-        ),
-        _FilterChoiceChip(
-          value: 'adoption',
-          selectedValue: selectedMode,
-          icon: Icons.home_outlined,
-          label: strings.adoption,
-          onSelected: onSelected,
-        ),
-      ],
-    );
-  }
-}
-
-class _ResponsiveFilterChoices extends StatelessWidget {
-  const _ResponsiveFilterChoices({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surface,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth < 560) {
-            return SizedBox(
-              height: 44,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.zero,
-                itemCount: children.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, index) => Center(
-                  child: children[index],
-                ),
-              ),
-            );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: children,
-            ),
-          );
-        },
+    return SizedBox(
+      height: 48,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _FilterTab(
+            value: 'recent',
+            selectedValue: selectedMode,
+            label: strings.recent,
+            onSelected: onSelected,
+          ),
+          _FilterTab(
+            value: 'popular',
+            selectedValue: selectedMode,
+            label: strings.popular,
+            onSelected: onSelected,
+          ),
+          _FilterTab(
+            value: 'needs_help',
+            selectedValue: selectedMode,
+            label: strings.needsHelp,
+            onSelected: onSelected,
+          ),
+          _FilterTab(
+            value: 'lost_pets',
+            selectedValue: selectedMode,
+            label: strings.lostPets,
+            onSelected: onSelected,
+          ),
+          _FilterTab(
+            value: 'adoption',
+            selectedValue: selectedMode,
+            label: strings.adoption,
+            onSelected: onSelected,
+          ),
+        ],
       ),
     );
   }
 }
 
-class _FilterChoiceChip extends StatelessWidget {
-  const _FilterChoiceChip({
+class _FilterTab extends StatelessWidget {
+  const _FilterTab({
     required this.value,
     required this.selectedValue,
-    required this.icon,
     required this.label,
     required this.onSelected,
   });
 
   final String value;
   final String selectedValue;
-  final IconData icon;
   final String label;
   final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      avatar: Icon(icon, size: 18),
-      label: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 132),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(label, maxLines: 1),
+    final colors = Theme.of(context).colorScheme;
+    final selected = selectedValue == value;
+    return InkWell(
+      onTap: () => onSelected(value),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 64),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? colors.primary : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: selected ? colors.primary : colors.onSurfaceVariant,
+              ),
         ),
       ),
-      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-      selected: selectedValue == value,
-      onSelected: (_) => onSelected(value),
     );
   }
 }
@@ -564,30 +261,17 @@ class _PopularPeriodBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ResponsiveFilterChoices(
-      children: [
-        _FilterChoiceChip(
-          value: 'day',
-          selectedValue: selectedPeriod,
-          icon: Icons.today_outlined,
-          label: strings.today,
-          onSelected: onSelected,
-        ),
-        _FilterChoiceChip(
-          value: 'month',
-          selectedValue: selectedPeriod,
-          icon: Icons.calendar_month_outlined,
-          label: strings.month,
-          onSelected: onSelected,
-        ),
-        _FilterChoiceChip(
-          value: 'all',
-          selectedValue: selectedPeriod,
-          icon: Icons.all_inclusive,
-          label: strings.allTime,
-          onSelected: onSelected,
-        ),
+    return DropdownButton<String>(
+      value: selectedPeriod,
+      isExpanded: true,
+      items: [
+        DropdownMenuItem(value: 'day', child: Text(strings.today)),
+        DropdownMenuItem(value: 'month', child: Text(strings.month)),
+        DropdownMenuItem(value: 'all', child: Text(strings.allTime)),
       ],
+      onChanged: (value) {
+        if (value != null) onSelected(value);
+      },
     );
   }
 }
@@ -855,7 +539,7 @@ class _AdoptionBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -890,7 +574,7 @@ class _LostPetBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
         border: Border.all(color: colorScheme.error.withValues(alpha: 0.32)),
       ),
       child: Padding(
@@ -1232,9 +916,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                     children: [
                       _IconCountAction(
                         tooltip: isLiked ? strings.unlike : strings.like,
-                        icon: isLiked
-                            ? Icons.favorite
-                            : Icons.favorite_outline,
+                        icon: isLiked ? Icons.favorite : Icons.favorite_outline,
                         count: likeCount,
                         color: isLiked ? colorScheme.error : null,
                         onPressed: _submittingLike ? null : _toggleLike,
@@ -1553,7 +1235,7 @@ class _PhotoCountBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.68),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1591,7 +1273,7 @@ class _StatusBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -1627,30 +1309,6 @@ class _EmptyFeed extends StatelessWidget {
       icon: Icons.dynamic_feed_outlined,
       title: strings.noObservationsYet,
       message: strings.emptyFeedMessage,
-    );
-  }
-}
-
-class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({
-    required this.title,
-    required this.message,
-    required this.retryLabel,
-    required this.onRetry,
-  });
-
-  final String title;
-  final String message;
-  final String retryLabel;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppStatePanel(
-      icon: Icons.cloud_off_outlined,
-      title: title,
-      message: message,
-      action: FilledButton(onPressed: onRetry, child: Text(retryLabel)),
     );
   }
 }

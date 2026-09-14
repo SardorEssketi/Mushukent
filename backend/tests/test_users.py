@@ -164,6 +164,7 @@ def test_authenticated_profile_retrieval(client: TestClient, users_runtime) -> N
     assert payload["observation_count"] == 2
     assert payload["total_likes_received"] == 2
     assert payload["comment_count"] == 1
+    assert payload["is_moderator"] is False
 
 
 def test_unauthorized_access_rejected(client: TestClient) -> None:

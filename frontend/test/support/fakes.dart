@@ -377,6 +377,7 @@ MushukistanUser testUser({
   int totalLikesReceived = 45,
   int commentCount = 17,
   bool allowPublicActivityView = true,
+  bool isModerator = false,
 }) {
   return MushukistanUser(
     id: id,
@@ -389,5 +390,6 @@ MushukistanUser testUser({
     totalLikesReceived: totalLikesReceived,
     commentCount: commentCount,
     allowPublicActivityView: allowPublicActivityView,
+    isModerator: isModerator,
   );
 }

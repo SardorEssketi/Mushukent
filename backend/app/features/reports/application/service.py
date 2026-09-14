@@ -7,8 +7,8 @@ from uuid import UUID
 from structlog import get_logger
 
 from app.core.security import api_error
-from app.features.auth.domain.models import AuthUser
 from app.features.adoption_posts.domain.repositories import AdoptionPostRepository
+from app.features.auth.domain.models import AuthUser
 from app.features.cats.domain.repositories import CatRepository
 from app.features.comments.domain.repositories import CommentRepository
 from app.features.lost_pets.domain.repositories import LostPetRepository
@@ -159,6 +159,21 @@ class ReportsService:
 
             target_map = self._load_target_previews(session, page.items, current_user=user)
             return to_report_page_response(page, target_by_report_id=target_map)
+
+    def get_report(self, report_id: UUID, *, user: AuthUser) -> ReportResponse:
+        with self.db_session_manager.session_scope() as session:
+            report_repository = self.report_repository_factory(session)
+            report = report_repository.get_by_id(report_id)
+            if report is None:
+                raise api_error(404, "REPORT_NOT_FOUND", "Report not found.")
+            target = self._resolve_target(
+                session=session,
+                user=user,
+                target_type=report.target_type,
+                target_id=report.target_id,
+                allow_missing=True,
+            )
+            return to_report_response(report, target=target)
 
     def handle_report(
         self,

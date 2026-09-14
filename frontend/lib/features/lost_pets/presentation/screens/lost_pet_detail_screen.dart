@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 
 final lostPetDetailProvider =
@@ -99,7 +101,14 @@ class LostPetDetailScreen extends ConsumerWidget {
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
                   onPressed: () => context.push(
-                    '/report?type=lost_pet&id=$lostPetId',
+                    Uri(
+                      path: '/report',
+                      queryParameters: {
+                        'type': 'lost_pet',
+                        'id': lostPetId,
+                        'label': lostPet.petName,
+                      },
+                    ).toString(),
                   ),
                   icon: const Icon(Icons.flag_outlined),
                   label: Text(strings.report),
@@ -114,7 +123,15 @@ class LostPetDetailScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        error: (error, stackTrace) => AppStatePanel(
+          icon: Icons.error_outline,
+          title: strings.lostPet,
+          message: strings.couldNotLoadSection,
+          action: FilledButton(
+            onPressed: () => ref.invalidate(lostPetDetailProvider(lostPetId)),
+            child: Text(strings.retry),
+          ),
+        ),
       ),
     );
   }
@@ -228,7 +245,7 @@ class _GalleryCounter extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.68),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -294,7 +311,7 @@ class _GalleryDots extends StatelessWidget {
               color: Colors.white.withValues(
                 alpha: index == activeIndex ? 0.95 : 0.58,
               ),
-              borderRadius: BorderRadius.circular(999),
+              borderRadius: BorderRadius.circular(AppRadii.sm),
             ),
           ),
       ],
@@ -331,7 +348,7 @@ class _LostPetDetailBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
         border: Border.all(color: colorScheme.error.withValues(alpha: 0.32)),
       ),
       child: Padding(

@@ -145,6 +145,7 @@ Startup/session restore:
 - Ownership check for user-managed content.
 - Role check for moderation endpoints.
 - Return 403 `FORBIDDEN` when user lacks permission.
+- Auth session responses and `GET /users/me` expose `is_moderator` so the client can show moderator navigation. This is a discoverability hint only; every moderation endpoint still enforces the server-side role check.
 
 7. Password Hashing
 -------------------

@@ -21,13 +21,6 @@ class AppShellScaffold extends ConsumerWidget {
     return Scaffold(
       body: AuthenticatedOnboardingFlow(child: navigationShell),
       bottomNavigationBar: NavigationBar(
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          final selected = states.contains(WidgetState.selected);
-          return TextStyle(
-            fontSize: selected ? 11 : 10.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          );
-        }),
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: _selectBranch,
         destinations: [

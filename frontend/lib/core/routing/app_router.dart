@@ -98,6 +98,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           if (isAuthRoute) {
             return '/feed';
           }
+          if (location.startsWith('/moderation') &&
+              authState.user?.isModerator != true) {
+            return '/profile';
+          }
           return null;
       }
     },
@@ -331,6 +335,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ReportContentScreen(
           initialTargetType: state.uri.queryParameters['type'],
           initialTargetId: state.uri.queryParameters['id'],
+          initialTargetLabel: state.uri.queryParameters['label'],
         ),
       ),
       GoRoute(

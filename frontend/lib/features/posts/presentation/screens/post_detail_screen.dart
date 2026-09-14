@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
@@ -228,8 +230,16 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                     label: Text(isLiked ? strings.unlike : strings.like),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () =>
-                        context.push('/report?type=post&id=${widget.postId}'),
+                    onPressed: () => context.push(
+                      Uri(
+                        path: '/report',
+                        queryParameters: {
+                          'type': 'post',
+                          'id': widget.postId,
+                          'label': post.cat.name ?? post.description ?? '',
+                        },
+                      ).toString(),
+                    ),
                     icon: const Icon(Icons.flag_outlined),
                     label: Text(strings.report),
                   ),
@@ -242,7 +252,15 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        error: (error, stackTrace) => AppStatePanel(
+          icon: Icons.error_outline,
+          title: strings.post,
+          message: strings.couldNotLoadSection,
+          action: FilledButton(
+            onPressed: () => ref.invalidate(postDetailProvider(widget.postId)),
+            child: Text(strings.retry),
+          ),
+        ),
       ),
     );
   }
@@ -401,7 +419,7 @@ class _StatusBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),

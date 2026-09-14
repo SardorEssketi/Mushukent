@@ -61,6 +61,7 @@ class UserPublic(BaseModel):
     observation_count: int | None = None
     total_likes_received: int | None = None
     comment_count: int | None = None
+    is_moderator: bool = False
 
     @classmethod
     def from_auth_user(cls, user: AuthUser) -> "UserPublic":
@@ -74,6 +75,7 @@ class UserPublic(BaseModel):
             allow_public_activity_view=user.allow_public_activity_view,
             bio=user.bio,
             registered_at=user.registered_at,
+            is_moderator=user.is_moderator,
         )
 
 

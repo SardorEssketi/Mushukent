@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/widgets/app_surface.dart';
 
@@ -96,7 +97,8 @@ class _PostCommentsSectionState extends ConsumerState<PostCommentsSection> {
       showCardChrome: widget.showCardChrome,
       onSubmit: (content, parentCommentId) => ref
           .read(mushukistanApiProvider)
-          .createComment(widget.postId, content, parentCommentId: parentCommentId),
+          .createComment(widget.postId, content,
+              parentCommentId: parentCommentId),
       onRefresh: () => ref.invalidate(commentsProvider(widget.postId)),
       controller: _controller,
       submitting: _submitting,
@@ -128,13 +130,12 @@ class _LostPetCommentsSectionState
       strings: strings,
       padding: widget.padding,
       showCardChrome: widget.showCardChrome,
-      onSubmit: (content, parentCommentId) => ref
-          .read(mushukistanApiProvider)
-          .createLostPetComment(
-            widget.lostPetId,
-            content,
-            parentCommentId: parentCommentId,
-          ),
+      onSubmit: (content, parentCommentId) =>
+          ref.read(mushukistanApiProvider).createLostPetComment(
+                widget.lostPetId,
+                content,
+                parentCommentId: parentCommentId,
+              ),
       onRefresh: () =>
           ref.invalidate(lostPetCommentsProvider(widget.lostPetId)),
       controller: _controller,
@@ -168,13 +169,12 @@ class _AdoptionPostCommentsSectionState
       strings: strings,
       padding: widget.padding,
       showCardChrome: widget.showCardChrome,
-      onSubmit: (content, parentCommentId) => ref
-          .read(mushukistanApiProvider)
-          .createAdoptionPostComment(
-            widget.adoptionPostId,
-            content,
-            parentCommentId: parentCommentId,
-          ),
+      onSubmit: (content, parentCommentId) =>
+          ref.read(mushukistanApiProvider).createAdoptionPostComment(
+                widget.adoptionPostId,
+                content,
+                parentCommentId: parentCommentId,
+              ),
       onRefresh: () =>
           ref.invalidate(adoptionPostCommentsProvider(widget.adoptionPostId)),
       controller: _controller,
@@ -239,7 +239,11 @@ class _CommentsContentState extends State<_CommentsContent> {
         });
       }
     } catch (error) {
-      widget.setError(error.toString());
+      widget.setError(
+        error is MushukistanApiException
+            ? error.userMessage
+            : widget.strings.couldNotSaveChanges,
+      );
     } finally {
       widget.setSubmitting(false);
     }
@@ -394,7 +398,15 @@ class _CommentsContentState extends State<_CommentsContent> {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => Center(child: Text(error.toString())),
+      error: (error, stackTrace) => AppStatePanel(
+        icon: Icons.error_outline,
+        title: widget.strings.comments,
+        message: widget.strings.couldNotLoadSection,
+        action: FilledButton(
+          onPressed: widget.onRefresh,
+          child: Text(widget.strings.retry),
+        ),
+      ),
     );
   }
 }
@@ -459,7 +471,7 @@ class _CommentBubble extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: colors.outlineVariant),
       ),
       padding: const EdgeInsets.fromLTRB(12, 12, 8, 8),
@@ -473,7 +485,8 @@ class _CommentBubble extends StatelessWidget {
                 radius: 18,
                 backgroundImage:
                     avatarUrl == null ? null : NetworkImage(avatarUrl),
-                child: avatarUrl == null ? Text(_avatarInitial(userName)) : null,
+                child:
+                    avatarUrl == null ? Text(_avatarInitial(userName)) : null,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -497,9 +510,10 @@ class _CommentBubble extends StatelessWidget {
                         Text(
                           _formatDate(comment.createdAt),
                           softWrap: true,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: colors.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
                         ),
                       ],
                     ),
@@ -509,10 +523,16 @@ class _CommentBubble extends StatelessWidget {
               IconButton(
                 tooltip: strings.report,
                 onPressed: () => context.push(
-                  '/report?type=comment&id=${comment.id}',
+                  Uri(
+                    path: '/report',
+                    queryParameters: {
+                      'type': 'comment',
+                      'id': comment.id,
+                      'label': comment.content,
+                    },
+                  ).toString(),
                 ),
                 icon: const Icon(Icons.flag_outlined, size: 20),
-                visualDensity: VisualDensity.compact,
               ),
             ],
           ),
@@ -530,8 +550,7 @@ class _CommentBubble extends StatelessWidget {
                 label: Text(strings.reply),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 32),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  minimumSize: const Size(48, 48),
                 ),
               ),
             ),

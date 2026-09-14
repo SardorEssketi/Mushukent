@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
 import 'profile_screen.dart';
 
@@ -127,7 +128,15 @@ class _AboutAccountScreenState extends ConsumerState<AboutAccountScreen> {
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        error: (error, stackTrace) => AppStatePanel(
+          icon: Icons.error_outline,
+          title: strings.aboutAccount,
+          message: strings.couldNotLoadProfile,
+          action: FilledButton(
+            onPressed: () => ref.invalidate(profileMeProvider),
+            child: Text(strings.retry),
+          ),
+        ),
       ),
     );
   }

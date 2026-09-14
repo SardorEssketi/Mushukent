@@ -39,10 +39,6 @@ class ProfileScreen extends ConsumerWidget {
             tooltip: strings.settings,
             onSelected: (action) async {
               switch (action) {
-                case _ProfileAction.adoptionHelp:
-                  context.push('/profile/adoption-help');
-                case _ProfileAction.settings:
-                  context.push('/profile/settings');
                 case _ProfileAction.logout:
                   if (authState.isBusy) {
                     return;
@@ -54,14 +50,6 @@ class ProfileScreen extends ConsumerWidget {
               }
             },
             itemBuilder: (context) => [
-              PopupMenuItem(
-                value: _ProfileAction.adoptionHelp,
-                child: Text(strings.adoptionHelpTooltip),
-              ),
-              PopupMenuItem(
-                value: _ProfileAction.settings,
-                child: Text(strings.settings),
-              ),
               PopupMenuItem(
                 value: _ProfileAction.logout,
                 enabled: !authState.isBusy,
@@ -92,14 +80,45 @@ class ProfileScreen extends ConsumerWidget {
                 onObservationsTap: () => context.push('/profile/observations'),
                 onCommentsTap: () => context.push('/profile/comments'),
               ),
+              const SizedBox(height: AppSpacing.lg),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.home_outlined),
+                title: Text(strings.adoptionHelpTooltip),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/profile/adoption-help'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.settings_outlined),
+                title: Text(strings.settings),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/profile/settings'),
+              ),
+              if (profile.isModerator || currentUser?.isModerator == true) ...[
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.admin_panel_settings_outlined),
+                  title: Text(strings.moderationReports),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.push('/moderation/reports'),
+                ),
+              ],
             ],
           ),
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ErrorPanel(
+        error: (error, stackTrace) => AppStatePanel(
+          icon: Icons.error_outline,
+          title: strings.profile,
           message: strings.couldNotLoadProfile,
-          retryLabel: strings.retry,
-          onRetry: () => ref.invalidate(profileMeProvider),
+          action: FilledButton(
+            onPressed: () => ref.invalidate(profileMeProvider),
+            child: Text(strings.retry),
+          ),
         ),
       ),
     );
@@ -185,7 +204,8 @@ class _Header extends StatelessWidget {
               ],
               if (telegram != null && telegram.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xs),
-                Text('@$telegram', style: Theme.of(context).textTheme.bodySmall),
+                Text('@$telegram',
+                    style: Theme.of(context).textTheme.bodySmall),
               ],
               if (profileBio != null && profileBio.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
@@ -278,8 +298,8 @@ class _StatCard extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -288,36 +308,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-enum _ProfileAction { adoptionHelp, settings, logout }
-
-class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({
-    required this.message,
-    required this.retryLabel,
-    required this.onRetry,
-  });
-
-  final String message;
-  final String retryLabel;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: Text(retryLabel)),
-          ],
-        ),
-      ),
-    );
-  }
-}
+enum _ProfileAction { logout }
 
 String _initials(String name, String email) {
   final source = name.trim().isEmpty ? email : name;

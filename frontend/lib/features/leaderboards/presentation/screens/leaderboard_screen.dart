@@ -42,16 +42,8 @@ class LeaderboardScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      strings.community,
+                      strings.leaderboard,
                       style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      strings.communitySubtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
                     ),
                   ],
                 ),
@@ -82,7 +74,7 @@ class LeaderboardScreen extends ConsumerWidget {
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                       itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, __) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         final entry = entries[index];
                         return _LeaderboardTile(
@@ -94,10 +86,14 @@ class LeaderboardScreen extends ConsumerWidget {
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, stackTrace) => _ErrorPanel(
-                  message: error.toString(),
-                  retryLabel: strings.retry,
-                  onRetry: () => ref.invalidate(leaderboardProvider),
+                error: (error, stackTrace) => AppStatePanel(
+                  icon: Icons.error_outline,
+                  title: strings.leaderboard,
+                  message: strings.couldNotLoadSection,
+                  action: FilledButton(
+                    onPressed: () => ref.invalidate(leaderboardProvider),
+                    child: Text(strings.retry),
+                  ),
                 ),
               ),
             ),
@@ -134,55 +130,39 @@ class _LeaderboardControls extends StatelessWidget {
           children: [
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SegmentedButton<String>(
-                showSelectedIcon: false,
-                selected: {type},
-                onSelectionChanged: (values) => onTypeChanged(values.first),
-                segments: [
-                  ButtonSegment(
-                    value: 'most_active',
-                    icon: const Icon(Icons.directions_walk),
-                    label: _CompactSegmentLabel(strings.mostActive),
+              child: Row(
+                children: [
+                  _FilterTab(
+                    label: strings.mostActive,
+                    selected: type == 'most_active',
+                    onTap: () => onTypeChanged('most_active'),
                   ),
-                  ButtonSegment(
-                    value: 'most_popular',
-                    icon: const Icon(Icons.favorite_border),
-                    label: _CompactSegmentLabel(strings.mostPopular),
+                  _FilterTab(
+                    label: strings.mostPopular,
+                    selected: type == 'most_popular',
+                    onTap: () => onTypeChanged('most_popular'),
                   ),
-                  ButtonSegment(
-                    value: 'top_helpers',
-                    icon: const Icon(Icons.volunteer_activism_outlined),
-                    label: _CompactSegmentLabel(strings.topHelpers),
+                  _FilterTab(
+                    label: strings.topHelpers,
+                    selected: type == 'top_helpers',
+                    onTap: () => onTypeChanged('top_helpers'),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SegmentedButton<String>(
-                showSelectedIcon: false,
-                selected: {period},
-                onSelectionChanged: (values) => onPeriodChanged(values.first),
-                segments: [
-                  ButtonSegment(
-                    value: 'day',
-                    label: _CompactSegmentLabel(strings.day),
-                  ),
-                  ButtonSegment(
-                    value: 'week',
-                    label: _CompactSegmentLabel(strings.week),
-                  ),
-                  ButtonSegment(
-                    value: 'month',
-                    label: _CompactSegmentLabel(strings.month),
-                  ),
-                  ButtonSegment(
-                    value: 'all',
-                    label: _CompactSegmentLabel(strings.allTime),
-                  ),
-                ],
-              ),
+            DropdownButton<String>(
+              value: period,
+              isExpanded: true,
+              items: [
+                DropdownMenuItem(value: 'day', child: Text(strings.day)),
+                DropdownMenuItem(value: 'week', child: Text(strings.week)),
+                DropdownMenuItem(value: 'month', child: Text(strings.month)),
+                DropdownMenuItem(value: 'all', child: Text(strings.allTime)),
+              ],
+              onChanged: (value) {
+                if (value != null) onPeriodChanged(value);
+              },
             ),
           ],
         ),
@@ -191,18 +171,40 @@ class _LeaderboardControls extends StatelessWidget {
   }
 }
 
-class _CompactSegmentLabel extends StatelessWidget {
-  const _CompactSegmentLabel(this.label);
+class _FilterTab extends StatelessWidget {
+  const _FilterTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 116),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(label, maxLines: 1),
+    final colors = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? colors.primary : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: selected ? colors.primary : colors.onSurfaceVariant,
+              ),
+        ),
       ),
     );
   }
@@ -219,91 +221,94 @@ class _LeaderboardTile extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final userName = entry.user.name ?? strings.unnamedUser;
-    return AppCard(
+    return InkWell(
       onTap: () => context.push('/users/${entry.user.id}'),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          _RankBadge(rank: entry.rank),
-          const SizedBox(width: 12),
-          CircleAvatar(
-            radius: 22,
-            backgroundImage: entry.user.avatarUrl == null
-                ? null
-                : NetworkImage(entry.user.avatarUrl!),
-            backgroundColor: colors.secondaryContainer,
-            foregroundColor: colors.onSecondaryContainer,
-            child:
-                entry.user.avatarUrl == null ? Text(_initials(userName)) : null,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  userName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.photo_camera_outlined,
-                      size: 16,
-                      color: colors.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        '${entry.user.observationCount} ${strings.observations}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          children: [
+            _RankBadge(rank: entry.rank),
+            const SizedBox(width: 12),
+            CircleAvatar(
+              radius: 22,
+              backgroundImage: entry.user.avatarUrl == null
+                  ? null
+                  : NetworkImage(entry.user.avatarUrl!),
+              backgroundColor: colors.secondaryContainer,
+              foregroundColor: colors.onSecondaryContainer,
+              child: entry.user.avatarUrl == null
+                  ? Text(_initials(userName))
+                  : null,
             ),
-          ),
-          const SizedBox(width: 12),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: colors.primaryContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
-              ),
+            const SizedBox(width: 12),
+            Expanded(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${entry.score}',
+                    userName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      color: colors.onPrimaryContainer,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Text(
-                    strings.score,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colors.onPrimaryContainer,
-                    ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.photo_camera_outlined,
+                        size: 16,
+                        color: colors.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '${entry.user.observationCount} ${strings.observations}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 12),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      '${entry.score}',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: colors.onPrimaryContainer,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      strings.score,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colors.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -350,32 +355,9 @@ class _EmptyLeaderboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colors.surface,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.leaderboard_outlined,
-                  size: 36,
-                  color: colors.primary,
-                ),
-                const SizedBox(height: 12),
-                Text(message, textAlign: TextAlign.center),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return AppStatePanel(
+      icon: Icons.leaderboard_outlined,
+      title: message,
     );
   }
 }
@@ -384,33 +366,4 @@ String _initials(String name) {
   final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
   final initials = parts.take(2).map((part) => part[0]).join();
   return initials.isEmpty ? 'MU' : initials.toUpperCase();
-}
-
-class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({
-    required this.message,
-    required this.retryLabel,
-    required this.onRetry,
-  });
-
-  final String message;
-  final String retryLabel;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: Text(retryLabel)),
-          ],
-        ),
-      ),
-    );
-  }
 }

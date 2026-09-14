@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 final userPostsProvider = FutureProvider.autoDispose
@@ -63,7 +64,8 @@ class UserPostsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => _ActivityError(
           error: error,
-          fallbackMessage: error.toString(),
+          fallbackMessage: strings.couldNotLoadSection,
+          onRetry: () => ref.invalidate(userPostsProvider(userId)),
         ),
       ),
     );
@@ -119,7 +121,8 @@ class UserCommentsScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => _ActivityError(
           error: error,
-          fallbackMessage: error.toString(),
+          fallbackMessage: strings.couldNotLoadSection,
+          onRetry: () => ref.invalidate(userCommentsProvider(userId)),
         ),
       ),
     );
@@ -130,10 +133,12 @@ class _ActivityError extends ConsumerWidget {
   const _ActivityError({
     required this.error,
     required this.fallbackMessage,
+    required this.onRetry,
   });
 
   final Object error;
   final String fallbackMessage;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -142,11 +147,12 @@ class _ActivityError extends ConsumerWidget {
             (error as MushukistanApiException).code == 'ACTIVITY_PRIVATE'
         ? strings.noActivityVisible
         : fallbackMessage;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(message, textAlign: TextAlign.center),
-      ),
+    return AppStatePanel(
+      icon: Icons.error_outline,
+      title: message,
+      action: message == strings.noActivityVisible
+          ? null
+          : FilledButton(onPressed: onRetry, child: Text(strings.retry)),
     );
   }
 }

@@ -88,7 +88,6 @@ def _create_user(
             AuthenticatedPrincipal(
                 user_id=user.id,
                 role=Role.MODERATOR if is_moderator else Role.USER,
-                email=user.email,
             )
         )
         return user, token
@@ -610,6 +609,27 @@ def test_moderation_report_listing_resolution_and_delete_post(
     assert page1["next_cursor"] is not None
     assert page1["items"][0]["reporter"]["id"] == str(reporter.id)
 
+    report_id = post_report.json()["data"]["id"]
+    forbidden_detail = client.get(
+        f"/api/v1/moderation/reports/{report_id}",
+        headers={"Authorization": f"Bearer {reporter_token}"},
+    )
+    assert forbidden_detail.status_code == 403
+
+    detail = client.get(
+        f"/api/v1/moderation/reports/{report_id}",
+        headers={"Authorization": f"Bearer {mod_token}"},
+    )
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["data"]["id"] == report_id
+    assert detail.json()["data"]["target"]["id"] == str(post.id)
+
+    missing_detail = client.get(
+        "/api/v1/moderation/reports/99999999-9999-4999-8999-999999999999",
+        headers={"Authorization": f"Bearer {mod_token}"},
+    )
+    assert missing_detail.status_code == 404
+
     second_page = client.get(
         "/api/v1/moderation/reports",
         headers={"Authorization": f"Bearer {mod_token}"},
@@ -619,7 +639,7 @@ def test_moderation_report_listing_resolution_and_delete_post(
     assert len(second_page.json()["data"]["items"]) == 2 - 1
 
     resolved = client.patch(
-        f"/api/v1/moderation/reports/{post_report.json()['data']['id']}",
+        f"/api/v1/moderation/reports/{report_id}",
         headers={"Authorization": f"Bearer {mod_token}"},
         json={"status": "resolved", "action": "soft_delete_post", "note": "Removed spam"},
     )

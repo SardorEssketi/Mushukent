@@ -267,7 +267,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         13.6,
       );
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(ref.read(appStringsProvider).locationOutsideMap)),
+        SnackBar(
+            content: Text(ref.read(appStringsProvider).locationOutsideMap)),
       );
     }
   }
@@ -302,16 +303,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final selectedLayers = ref.watch(_mapLayersProvider);
     final strings = ref.watch(appStringsProvider);
@@ -331,9 +322,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             .toList(growable: false) ??
         const <LostPetData>[];
     final focusLocation = widget.focusLocation;
-    final mapLocation = selectedLocation != null && _isInsideTashkent(selectedLocation)
-        ? selectedLocation
-        : null;
+    final mapLocation =
+        selectedLocation != null && _isInsideTashkent(selectedLocation)
+            ? selectedLocation
+            : null;
     final center = _clampToTashkent(
       focusLocation != null
           ? LatLng(focusLocation.latitude, focusLocation.longitude)
@@ -362,9 +354,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           child: const _FocusedLostPetMarker(),
         ),
       if (showCats && catPage != null)
-        ...catPage.items
-            .where((cat) => cat.canonicalLocation != null)
-            .map(
+        ...catPage.items.where((cat) => cat.canonicalLocation != null).map(
               (cat) => Marker(
                 point: LatLng(
                   cat.canonicalLocation!.latitude,
@@ -413,7 +403,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             options: MapOptions(
               initialCenter: center,
               initialZoom: focusLocation == null ? 13.6 : 16,
-              cameraConstraint: CameraConstraint.contain(bounds: _tashkentBounds),
+              cameraConstraint:
+                  CameraConstraint.contain(bounds: _tashkentBounds),
               minZoom: 12.5,
               maxZoom: 18,
               interactionOptions: const InteractionOptions(
@@ -441,7 +432,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             top: 12,
             child: SafeArea(
               child: _MapControlButton(
-                heroTag: 'map-refresh',
                 tooltip: strings.refresh,
                 icon: _refreshingMap ? Icons.hourglass_top : Icons.refresh,
                 onPressed: _refreshMap,
@@ -453,16 +443,30 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             top: 12,
             child: SafeArea(
               child: _LayerFilterButton(
-                selectedLayers: selectedLayers,
                 strings: strings,
                 onPressed: () => _openLayerFilterSheet(strings),
               ),
             ),
           ),
+          if (catsAsync.hasError ||
+              placesAsync.hasError ||
+              lostPetsAsync.hasError)
+            Positioned(
+              left: 12,
+              right: 76,
+              bottom: 24,
+              child: SafeArea(
+                child: _MapLoadError(
+                  message: strings.couldNotLoadSection,
+                  retryLabel: strings.retry,
+                  onRetry: _refreshMap,
+                ),
+              ),
+            ),
           Positioned(
             right: 12,
             bottom: 24,
-            child: FloatingActionButton.small(
+            child: FloatingActionButton(
               heroTag: 'map-center-on-user',
               tooltip: strings.centerOnUser,
               onPressed: _requestAndCenterOnUser,
@@ -525,119 +529,124 @@ void _showPlaceSheet(
     builder: (sheetContext) {
       final theme = Theme.of(sheetContext);
       return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  _PlaceBadge(category: place.category),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      place.name,
-                      style: theme.textTheme.titleLarge,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    _PlaceBadge(category: place.category),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        place.name,
+                        style: theme.textTheme.titleLarge,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final category in place.categories)
+                      _PlaceCategoryChip(
+                        label: _placeCategoryLabel(category, strings),
+                      ),
+                  ],
+                ),
+                if (place.address != null) ...[
+                  const SizedBox(height: 12),
+                  _PlaceDetailRow(
+                    icon: Icons.place_outlined,
+                    text: place.address!,
+                  ),
+                ],
+                if (place.phone != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.phone_outlined,
+                    text: place.phone!,
+                    onTap: () =>
+                        unawaited(_launchPlaceUri(_phoneUri(place.phone!))),
+                  ),
+                ],
+                if (place.phone2 != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.phone_outlined,
+                    text: place.phone2!,
+                    onTap: () =>
+                        unawaited(_launchPlaceUri(_phoneUri(place.phone2!))),
+                  ),
+                ],
+                if (place.openingHours != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.schedule_outlined,
+                    text: place.openingHours!,
+                  ),
+                ],
+                if (place.daysOff != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.event_busy_outlined,
+                    text: place.daysOff!,
+                  ),
+                ],
+                if (place.website != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.language_outlined,
+                    text: place.website!,
+                    onTap: () => unawaited(
+                      _launchPlaceUri(_webUri(place.website!)),
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final category in place.categories)
-                    _PlaceCategoryChip(
-                      label: _placeCategoryLabel(category, strings),
+                if (place.instagram != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.camera_alt_outlined,
+                    text: place.instagram!,
+                    onTap: () => unawaited(
+                      _launchPlaceUri(_webUri(place.instagram!)),
                     ),
+                  ),
                 ],
-              ),
-              if (place.address != null) ...[
-                const SizedBox(height: 12),
-                _PlaceDetailRow(
-                  icon: Icons.place_outlined,
-                  text: place.address!,
-                ),
-              ],
-              if (place.phone != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.phone_outlined,
-                  text: place.phone!,
-                  onTap: () =>
-                      unawaited(_launchPlaceUri(_phoneUri(place.phone!))),
-                ),
-              ],
-              if (place.phone2 != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.phone_outlined,
-                  text: place.phone2!,
-                  onTap: () =>
-                      unawaited(_launchPlaceUri(_phoneUri(place.phone2!))),
-                ),
-              ],
-              if (place.openingHours != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.schedule_outlined,
-                  text: place.openingHours!,
-                ),
-              ],
-              if (place.daysOff != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.event_busy_outlined,
-                  text: place.daysOff!,
-                ),
-              ],
-              if (place.website != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.language_outlined,
-                  text: place.website!,
-                  onTap: () => unawaited(
-                    _launchPlaceUri(_webUri(place.website!)),
+                if (place.telegram != null) ...[
+                  const SizedBox(height: 8),
+                  _PlaceDetailRow(
+                    icon: Icons.send_outlined,
+                    text: place.telegram!,
+                    onTap: () => unawaited(
+                      _launchPlaceUri(_telegramUri(place.telegram!)),
+                    ),
                   ),
-                ),
-              ],
-              if (place.instagram != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.camera_alt_outlined,
-                  text: place.instagram!,
-                  onTap: () => unawaited(
-                    _launchPlaceUri(_webUri(place.instagram!)),
+                ],
+                if (place.description != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    place.description!,
+                    style: theme.textTheme.bodyMedium,
                   ),
-                ),
-              ],
-              if (place.telegram != null) ...[
-                const SizedBox(height: 8),
-                _PlaceDetailRow(
-                  icon: Icons.send_outlined,
-                  text: place.telegram!,
-                  onTap: () => unawaited(
-                    _launchPlaceUri(_telegramUri(place.telegram!)),
-                  ),
-                ),
-              ],
-              if (place.description != null) ...[
+                ],
                 const SizedBox(height: 12),
                 Text(
-                  place.description!,
-                  style: theme.textTheme.bodyMedium,
+                  place.source == 'osm'
+                      ? strings.sourceOpenStreetMap
+                      : strings.sourceMushukistan,
+                  style: theme.textTheme.bodySmall,
                 ),
               ],
-              const SizedBox(height: 12),
-              Text(
-                place.source == 'osm'
-                    ? strings.sourceOpenStreetMap
-                    : strings.sourceMushukistan,
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
+            ),
           ),
         ),
       );
@@ -684,6 +693,14 @@ void _showLostPetSheet(
               Text('${strings.lostPet} · ${_formatDate(lostPet.createdAt)}'),
               const SizedBox(height: 16),
               FilledButton.icon(
+                onPressed: () => unawaited(
+                  _launchPlaceUri(_phoneUri(lostPet.ownerPhoneNumber)),
+                ),
+                icon: const Icon(Icons.phone_outlined),
+                label: Text(strings.contactOwner),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
                   context.push('/lost-pets/${lostPet.id}');
@@ -945,39 +962,30 @@ class _MarkerIcon extends StatelessWidget {
 
 class _LayerFilterButton extends StatelessWidget {
   const _LayerFilterButton({
-    required this.selectedLayers,
     required this.strings,
     required this.onPressed,
   });
 
-  final Set<_MapLayer> selectedLayers;
   final AppStrings strings;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Badge.count(
-      count: selectedLayers.length,
-      isLabelVisible: selectedLayers.isNotEmpty,
-      child: _MapControlButton(
-        heroTag: 'map-filter-layers',
-        tooltip: strings.filters,
-        icon: Icons.tune,
-        onPressed: onPressed,
-      ),
+    return _MapControlButton(
+      tooltip: strings.filters,
+      icon: Icons.tune,
+      onPressed: onPressed,
     );
   }
 }
 
 class _MapControlButton extends StatelessWidget {
   const _MapControlButton({
-    required this.heroTag,
     required this.tooltip,
     required this.icon,
     required this.onPressed,
   });
 
-  final String heroTag;
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
@@ -985,14 +993,21 @@ class _MapControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return FloatingActionButton.small(
-      heroTag: heroTag,
-      tooltip: tooltip,
-      elevation: 3,
-      backgroundColor: colors.surface,
-      foregroundColor: colors.onSurface,
-      onPressed: onPressed,
-      child: Icon(icon),
+    return Material(
+      color: colors.surface,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(8),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox.square(
+            dimension: 48,
+            child: Icon(icon, color: colors.onSurface),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1072,13 +1087,16 @@ class _PlaceDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final row = Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20),
-        const SizedBox(width: 10),
-        Expanded(child: Text(text)),
-      ],
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text)),
+        ],
+      ),
     );
     if (onTap == null) {
       return row;
@@ -1086,9 +1104,41 @@ class _PlaceDetailRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
+      child: row,
+    );
+  }
+}
+
+class _MapLoadError extends StatelessWidget {
+  const _MapLoadError({
+    required this.message,
+    required this.retryLabel,
+    required this.onRetry,
+  });
+
+  final String message;
+  final String retryLabel;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: row,
+        padding: const EdgeInsets.only(left: 12),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child:
+                  Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            TextButton(onPressed: onRetry, child: Text(retryLabel)),
+          ],
+        ),
       ),
     );
   }

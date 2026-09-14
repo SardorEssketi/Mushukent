@@ -149,7 +149,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => _ErrorPanel(
-          message: error.toString(),
+          message: strings.couldNotLoadProfile,
           onRetry: () => ref.invalidate(profileMeProvider),
           retryLabel: strings.retry,
         ),
@@ -228,7 +228,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       setState(() {
         _error = error is MushukistanApiException
             ? error.userMessage
-            : error.toString();
+            : ref.read(appStringsProvider).couldNotSaveChanges;
       });
     } finally {
       if (mounted) {

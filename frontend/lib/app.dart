@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +22,13 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp> {
   @override
   void initState() {
     super.initState();
+    unawaited(
+      loadSavedThemeMode().then((mode) {
+        if (mounted) {
+          ref.read(appThemeModeProvider.notifier).state = mode;
+        }
+      }),
+    );
     ref.listenManual<String?>(
       authControllerProvider.select((state) => state.user?.preferredLanguage),
       (previous, next) {

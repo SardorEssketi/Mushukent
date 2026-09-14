@@ -5,7 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
+import '../../../../core/widgets/app_surface.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 
 final adoptionPostDetailProvider = FutureProvider.autoDispose
@@ -88,7 +90,14 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
                   onPressed: () => context.push(
-                    '/report?type=adoption_post&id=$adoptionPostId',
+                    Uri(
+                      path: '/report',
+                      queryParameters: {
+                        'type': 'adoption_post',
+                        'id': adoptionPostId,
+                        'label': post.petName,
+                      },
+                    ).toString(),
                   ),
                   icon: const Icon(Icons.flag_outlined),
                   label: Text(strings.report),
@@ -103,7 +112,17 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        error: (error, stackTrace) => AppStatePanel(
+          icon: Icons.error_outline,
+          title: strings.adoption,
+          message: strings.couldNotLoadSection,
+          action: FilledButton(
+            onPressed: () => ref.invalidate(
+              adoptionPostDetailProvider(adoptionPostId),
+            ),
+            child: Text(strings.retry),
+          ),
+        ),
       ),
     );
   }
@@ -208,7 +227,7 @@ class _GalleryCounter extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.68),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -271,7 +290,7 @@ class _AdoptionBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),

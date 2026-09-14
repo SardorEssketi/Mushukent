@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/localization/app_strings.dart';
-import '../../../../core/localization/language_controller.dart';
 import '../../../../core/media/image_upload_preprocessor.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
@@ -204,33 +203,25 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
-            Text(
-              strings.whatAreYouCreating,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              strings.chooseTypeFirst,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            _AddCategoryCard(
-              icon: Icons.add_a_photo_outlined,
-              title: strings.catObservation,
-              subtitle: strings.catObservationSubtitle,
-              color: Theme.of(context).colorScheme.primary,
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              minVerticalPadding: AppSpacing.md,
+              leading: const Icon(Icons.add_a_photo_outlined),
+              title: Text(strings.catObservation),
+              subtitle: Text(strings.catObservationSubtitle),
+              trailing: const Icon(Icons.chevron_right),
               onTap: _preparingPhotos
                   ? null
                   : () => unawaited(_openObservationPhotoSource(context, ref)),
             ),
-            const SizedBox(height: AppSpacing.md),
-            _AddCategoryCard(
-              icon: Icons.search_outlined,
-              title: strings.lostPetAlert,
-              subtitle: strings.lostPetAlertSubtitle,
-              color: Theme.of(context).colorScheme.error,
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              minVerticalPadding: AppSpacing.md,
+              leading: const Icon(Icons.search_outlined),
+              title: Text(strings.lostPetAlert),
+              subtitle: Text(strings.lostPetAlertSubtitle),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () => unawaited(
                 _openContactRequiredFlow(
                   path: '/add/lost-pet',
@@ -238,12 +229,14 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
-            _AddCategoryCard(
-              icon: Icons.home_outlined,
-              title: strings.findANewHome,
-              subtitle: strings.findANewHomeSubtitle,
-              color: AppPalette.adoption,
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              minVerticalPadding: AppSpacing.md,
+              leading: const Icon(Icons.home_outlined),
+              title: Text(strings.findANewHome),
+              subtitle: Text(strings.findANewHomeSubtitle),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () => unawaited(
                 _openContactRequiredFlow(
                   path: '/add/adoption',
@@ -251,8 +244,8 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
             if (_preparingPhotos) ...[
+              const SizedBox(height: AppSpacing.lg),
               const LinearProgressIndicator(),
               const SizedBox(height: AppSpacing.md),
               Text(
@@ -261,36 +254,36 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
             ],
-            _SummaryCard(state: state),
-            const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
-              onPressed:
-                  state.hasPhoto ? () => context.go('/add/location') : null,
-              icon: const Icon(Icons.arrow_forward),
-              label: Text(strings.continueDraft),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextButton.icon(
-              onPressed: state.hasDraft
-                  ? () async {
-                      final shouldDelete =
-                          await _confirmDeleteDraft(context, strings);
-                      if (!shouldDelete) {
-                        return;
-                      }
-                      ref
-                          .read(addObservationControllerProvider.notifier)
-                          .reset();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(strings.draftDeleted)),
-                        );
-                      }
-                    }
-                  : null,
-              icon: const Icon(Icons.delete_outline),
-              label: Text(strings.deleteDraft),
-            ),
+            if (state.hasDraft) ...[
+              const SizedBox(height: AppSpacing.lg),
+              const Divider(),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.edit_note_outlined),
+                title: Text(strings.continueDraft),
+                subtitle: Text(strings.draftStatus),
+                trailing: const Icon(Icons.chevron_right),
+                onTap:
+                    state.hasPhoto ? () => context.go('/add/location') : null,
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  final shouldDelete =
+                      await _confirmDeleteDraft(context, strings);
+                  if (!shouldDelete) {
+                    return;
+                  }
+                  ref.read(addObservationControllerProvider.notifier).reset();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(strings.draftDeleted)),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.delete_outline),
+                label: Text(strings.deleteDraft),
+              ),
+            ],
           ],
         ),
       ),
@@ -386,112 +379,4 @@ Future<bool> _confirmDeleteDraft(
     ),
   );
   return result ?? false;
-}
-
-class _AddCategoryCard extends StatelessWidget {
-  const _AddCategoryCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return AppCard(
-      onTap: onTap,
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.12),
-            foregroundColor: color,
-            child: Icon(icon),
-          ),
-          const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.state});
-
-  final AddObservationState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.forLanguage(AppLanguage.fromCode(
-      Localizations.localeOf(context).languageCode,
-    ));
-    return AppCard(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(strings.draftStatus,
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.md),
-          _SummaryRow(
-              label: strings.photo,
-              value: state.hasPhoto ? strings.selected : strings.missing),
-          _SummaryRow(
-            label: strings.location,
-            value: state.hasLocation ? strings.set : strings.missing,
-          ),
-          _SummaryRow(
-            label: strings.visibility,
-            value: state.isPublic ? strings.public : strings.private,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
 }

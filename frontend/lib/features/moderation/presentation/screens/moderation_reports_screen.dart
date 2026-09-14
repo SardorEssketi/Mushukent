@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_surface.dart';
 
 final moderationReportsProvider =
     FutureProvider.autoDispose<ApiPage<ReportData>>((ref) async {
@@ -32,12 +34,15 @@ class ModerationReportsScreen extends ConsumerWidget {
       body: reportsAsync.when(
         data: (page) {
           if (page.items.isEmpty) {
-            return Center(child: Text(strings.noOpenReports));
+            return AppStatePanel(
+              icon: Icons.inbox_outlined,
+              title: strings.noOpenReports,
+            );
           }
           return ListView.separated(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             itemCount: page.items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, __) => const Divider(height: 1),
             itemBuilder: (context, index) {
               final report = page.items[index];
               return Card(
@@ -52,7 +57,15 @@ class ModerationReportsScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
+        error: (error, stackTrace) => AppStatePanel(
+          icon: Icons.error_outline,
+          title: strings.moderationReports,
+          message: strings.couldNotLoadReports,
+          action: FilledButton(
+            onPressed: () => ref.invalidate(moderationReportsProvider),
+            child: Text(strings.retry),
+          ),
+        ),
       ),
     );
   }

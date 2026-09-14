@@ -96,7 +96,9 @@ class AddObservationDetailsScreen extends ConsumerWidget {
                   ? null
                   : () async {
                       try {
-                        final post = await controller.submit();
+                        final post = await controller.submit(
+                          fallbackErrorMessage: strings.couldNotSaveChanges,
+                        );
                         ref.invalidate(feedPostsProvider);
                         ref.invalidate(mapCatsProvider);
                         ref.invalidate(profileMeProvider);

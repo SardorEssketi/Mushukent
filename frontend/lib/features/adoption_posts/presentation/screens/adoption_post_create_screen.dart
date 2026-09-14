@@ -116,10 +116,10 @@ class _AdoptionPostCreateScreenState
           _error = error.userMessage;
         });
       }
-    } catch (error) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = error.toString();
+          _error = strings.couldNotSaveChanges;
         });
       }
     } finally {

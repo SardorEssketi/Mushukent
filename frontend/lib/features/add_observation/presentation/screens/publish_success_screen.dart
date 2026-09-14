@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/theme/app_design_tokens.dart';
 import '../../application/add_observation_controller.dart';
 
 class PublishSuccessScreen extends ConsumerWidget {
@@ -30,7 +31,7 @@ class PublishSuccessScreen extends ConsumerWidget {
                 children: [
                   Icon(
                     Icons.check_circle_outline,
-                    size: 72,
+                    size: 56,
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(height: 16),
@@ -49,7 +50,7 @@ class PublishSuccessScreen extends ConsumerWidget {
                   const SizedBox(height: 24),
                   if (createdPost != null) ...[
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppRadii.lg),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxHeight: 240),
                         child: AspectRatio(

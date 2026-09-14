@@ -426,6 +426,13 @@ class MushukistanApi {
     );
   }
 
+  Future<ReportData> getReport(String reportId) {
+    return _client.get<ReportData>(
+      'moderation/reports/$reportId',
+      decoder: (json) => ReportData.fromJson(json),
+    );
+  }
+
   Future<ReportData> handleReport({
     required String reportId,
     required String status,
@@ -1076,6 +1083,7 @@ class UserProfileData {
     this.preferredLanguage = 'en',
     this.allowPublicActivityView = true,
     this.bio,
+    this.isModerator = false,
   });
 
   final String id;
@@ -1091,6 +1099,7 @@ class UserProfileData {
   final int observationCount;
   final int totalLikesReceived;
   final int commentCount;
+  final bool isModerator;
 
   factory UserProfileData.fromJson(Object? json) {
     final map = _readMap(json);
@@ -1109,6 +1118,7 @@ class UserProfileData {
       observationCount: _readInt(map['observation_count']),
       totalLikesReceived: _readInt(map['total_likes_received']),
       commentCount: _readInt(map['comment_count']),
+      isModerator: _readBoolOrNull(map['is_moderator']) ?? false,
     );
   }
 }

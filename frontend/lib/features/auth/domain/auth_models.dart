@@ -73,6 +73,7 @@ class MushukistanUser {
     this.observationCount = 0,
     this.totalLikesReceived = 0,
     this.commentCount = 0,
+    this.isModerator = false,
   });
 
   final String id;
@@ -86,6 +87,7 @@ class MushukistanUser {
   final int observationCount;
   final int totalLikesReceived;
   final int commentCount;
+  final bool isModerator;
 
   bool get hasAvatar => avatarUrl != null && avatarUrl!.isNotEmpty;
 
@@ -104,6 +106,7 @@ class MushukistanUser {
       observationCount: _readInt(map['observation_count']),
       totalLikesReceived: _readInt(map['total_likes_received']),
       commentCount: _readInt(map['comment_count']),
+      isModerator: _readOptionalBool(map['is_moderator']) ?? false,
     );
   }
 
@@ -119,6 +122,7 @@ class MushukistanUser {
         'observation_count': observationCount,
         'total_likes_received': totalLikesReceived,
         'comment_count': commentCount,
+        'is_moderator': isModerator,
       };
 }
 

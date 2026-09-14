@@ -133,7 +133,7 @@ Feature: Authentication
         "refresh_token": "<opaque-refresh-token>",
         "token_type": "Bearer",
       "expires_in": 3600,
-      "user": {"id":"uuid","email":"user@example.com","name":"Sardor","preferred_language":"en"}
+      "user": {"id":"uuid","email":"user@example.com","name":"Sardor","preferred_language":"en","is_moderator":false}
     }
   }
 - Errors:
@@ -231,7 +231,8 @@ Feature: Users
       "total_likes_received": 45,
       "comment_count": 17,
       "preferred_language": "en",
-      "allow_public_activity_view": true
+      "allow_public_activity_view": true,
+      "is_moderator": false
     }
   }
 - Errors: 401 UNAUTHORIZED
@@ -866,7 +867,13 @@ Feature: Moderation
 - Response: GenericListResponse[ReportResponse]
 - Errors: 401, 403
 
-3) PATCH /api/v1/moderation/reports/{report_id}
+3) GET /api/v1/moderation/reports/{report_id}
+- Purpose: moderators retrieve one report directly, including its target preview
+- Auth: Bearer + moderator role
+- Response: ReportResponse
+- Errors: 401, 403, 404
+
+4) PATCH /api/v1/moderation/reports/{report_id}
 - Purpose: handle report and optionally take action
 - Auth: Bearer + moderator
 - Request model: ReportHandleRequest
@@ -877,7 +884,7 @@ Feature: Moderation
 - Side effects: any action (delete post, suspend user) must be recorded in an audit trail
 - Pydantic: ReportHandleRequest
 
-4) DELETE /api/v1/moderation/posts/{post_id}
+5) DELETE /api/v1/moderation/posts/{post_id}
 - Purpose: moderator deletes content
 - Auth: Bearer + moderator
 - Response: 204 No Content

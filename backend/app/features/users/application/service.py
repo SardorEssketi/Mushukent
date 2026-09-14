@@ -380,4 +380,5 @@ class UsersService:
             observation_count=repository.count_observations(user.id),
             total_likes_received=repository.count_likes_received(user.id),
             comment_count=repository.count_comments(user.id),
+            is_moderator=user.is_moderator,
         )

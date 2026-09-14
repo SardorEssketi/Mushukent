@@ -13,10 +13,12 @@ class ReportContentScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialTargetType,
     this.initialTargetId,
+    this.initialTargetLabel,
   });
 
   final String? initialTargetType;
   final String? initialTargetId;
+  final String? initialTargetLabel;
 
   @override
   ConsumerState<ReportContentScreen> createState() =>
@@ -90,7 +92,8 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
           icon: Icons.check_circle_outline,
           title: strings.reportSubmitted,
           action: FilledButton(
-            onPressed: () => context.canPop() ? context.pop() : context.go('/feed'),
+            onPressed: () =>
+                context.canPop() ? context.pop() : context.go('/feed'),
             child: Text(strings.feed),
           ),
         ),
@@ -110,7 +113,13 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(_targetIcon(targetType)),
                 title: Text(_targetLabel(targetType, strings)),
-                subtitle: Text(strings.reportTargetSummary),
+                subtitle: Text(
+                  widget.initialTargetLabel?.trim().isNotEmpty == true
+                      ? widget.initialTargetLabel!.trim()
+                      : strings.reportTargetSummary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const Divider(),
               const SizedBox(height: AppSpacing.sm),

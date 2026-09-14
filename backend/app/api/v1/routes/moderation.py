@@ -29,6 +29,21 @@ def list_reports(
     return ApiSuccess(data=moderation_service.list_reports(query, current_user=current_user))
 
 
+@router.get(
+    "/reports/{report_id}",
+    response_model=ApiSuccess[ReportResponse],
+    response_model_exclude_none=True,
+)
+def get_report(
+    report_id: UUID,
+    current_user: AuthUser = Depends(require_moderator),
+    moderation_service: ModerationService = Depends(get_moderation_service),
+) -> ApiSuccess[ReportResponse]:
+    return ApiSuccess(
+        data=moderation_service.get_report(report_id, current_user=current_user)
+    )
+
+
 @router.patch(
     "/reports/{report_id}",
     response_model=ApiSuccess[ReportResponse],

@@ -45,5 +45,13 @@ class ModerationService:
     ) -> ReportResponse:
         return self.reports_service.handle_report(report_id, current_user, payload)
 
+    def get_report(
+        self,
+        report_id: UUID,
+        *,
+        current_user: AuthUser,
+    ) -> ReportResponse:
+        return self.reports_service.get_report(report_id, user=current_user)
+
     def delete_post(self, post_id: UUID, *, current_user: AuthUser) -> None:
         self.posts_service_factory().delete_post(post_id, current_user)

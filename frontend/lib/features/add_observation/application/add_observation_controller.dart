@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/network/api_error.dart';
 import '../../../core/network/mushukistan_api.dart';
 
 final addObservationControllerProvider =
@@ -97,7 +98,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     state = state.copyWith(isPublic: value);
   }
 
-  Future<PostDetail> submit() async {
+  Future<PostDetail> submit({required String fallbackErrorMessage}) async {
     final location = state.location;
     if (state.photos.isEmpty) {
       throw StateError('Missing observation data.');
@@ -120,7 +121,9 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     } catch (error) {
       state = state.copyWith(
         submitting: false,
-        errorMessage: error.toString(),
+        errorMessage: error is MushukistanApiException
+            ? error.userMessage
+            : fallbackErrorMessage,
       );
       rethrow;
     }

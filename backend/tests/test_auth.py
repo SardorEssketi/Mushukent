@@ -712,6 +712,7 @@ def test_refresh_endpoint_renews_refresh_session_and_new_access_token_works(
     )
     assert login_response.status_code == 200
     login_payload = login_response.json()["data"]
+    assert login_payload["user"]["is_moderator"] is False
     user_id = login_payload["user"]["id"]
     old_refresh_token = login_payload["refresh_token"]
     now = datetime.now(UTC)

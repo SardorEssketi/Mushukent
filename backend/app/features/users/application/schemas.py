@@ -37,6 +37,7 @@ class UserProfile(BaseModel):
     observation_count: int = 0
     total_likes_received: int = 0
     comment_count: int = 0
+    is_moderator: bool = False
 
 
 class UserPublic(BaseModel):
