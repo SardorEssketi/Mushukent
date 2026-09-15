@@ -24,26 +24,24 @@ docker compose up --build
 
 ## Production deployment
 1. Set real production values in `.env`.
-2. Build the Flutter web bundle with the production API origin:
+2. Set `MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID` from the secure operator
+   configuration and run the canonical production web build:
    ```powershell
-   cd frontend
-   flutter build web --release `
-     --dart-define=MUSHUKISTAN_API_BASE_URL=https://api.your-domain.example `
-     --dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=<web-oauth-client-id>
+   .\frontend\tool\build_production.ps1 -Target Web
    ```
-3. Build the Android release bundle with the production API origin and Web OAuth
-   client ID as the Android `serverClientId`:
+3. Build the Android bundle separately with the same Web OAuth client ID as the
+   Android `serverClientId`:
    ```powershell
-   cd frontend
-   flutter build appbundle --release `
-     --dart-define=MUSHUKISTAN_API_BASE_URL=https://api.mushukistan.uz `
-     --dart-define=MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID=44189213881-ib7s9mle615m2roof0lp3fisduq934cg.apps.googleusercontent.com
+   .\frontend\tool\build_production.ps1 -Target Android
    ```
 4. Start the production Compose overlay:
    ```powershell
    cd ..
    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
    ```
+
+See `docs/DEPLOYMENT.md` for the mandatory backup, migration, artifact
+inspection, deployment, and post-deployment verification gates.
 
 Required production settings:
 - `APP_ENV=production`

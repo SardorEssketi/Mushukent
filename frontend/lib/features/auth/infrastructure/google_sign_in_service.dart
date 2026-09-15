@@ -31,15 +31,15 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
       );
     }
 
-    await _ensureInitialized();
-
-    if (!GoogleSignIn.instance.supportsAuthenticate()) {
-      throw const GoogleSignInFlowException(
-        'Google sign-in is not supported on this platform in the current app flow.',
-      );
-    }
-
     try {
+      await _ensureInitialized();
+
+      if (!GoogleSignIn.instance.supportsAuthenticate()) {
+        throw const GoogleSignInFlowException(
+          'Google sign-in is not supported on this platform in the current app flow.',
+        );
+      }
+
       final user = await GoogleSignIn.instance.authenticate();
       final idToken = user.authentication.idToken;
       if (idToken == null || idToken.trim().isEmpty) {
@@ -48,6 +48,8 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
         );
       }
       return idToken;
+    } on GoogleSignInFlowException {
+      rethrow;
     } on GoogleSignInException catch (error, stackTrace) {
       developer.log(
         'Google Sign-In failed: code=${error.code}, '
@@ -60,6 +62,16 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
         error.description?.trim().isNotEmpty == true
             ? error.description!.trim()
             : 'Google sign-in failed.',
+      );
+    } on Object catch (error, stackTrace) {
+      developer.log(
+        'Google Sign-In initialization failed.',
+        name: 'Mushukistan.GoogleSignIn',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      throw const GoogleSignInFlowException(
+        'Google sign-in could not be initialized for this build.',
       );
     }
   }

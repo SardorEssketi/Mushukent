@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,10 +54,20 @@ class _GoogleSignInEntryButtonState
     if (clientId == null || clientId.isEmpty) {
       return;
     }
-    await GoogleSignIn.instance.initialize(
-      clientId: clientId,
-      serverClientId: environment.googleServerClientId,
-    );
+    try {
+      await GoogleSignIn.instance.initialize(
+        clientId: clientId,
+        serverClientId: environment.googleServerClientId,
+      );
+    } on Object catch (error, stackTrace) {
+      developer.log(
+        'Google Sign-In web initialization failed.',
+        name: 'Mushukistan.GoogleSignIn',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      rethrow;
+    }
   }
 
   Future<void> _handleAuthenticationEvent(

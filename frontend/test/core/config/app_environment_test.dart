@@ -2,12 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/config/app_environment.dart';
 
 void main() {
-  test('release build without override uses production API', () {
-    final environment = AppEnvironment.fromValues(releaseMode: true);
-
+  test('release build without API override fails fast', () {
     expect(
-      environment.apiBaseUri.toString(),
-      'https://api.mushukistan.uz/api/v1/',
+      () => AppEnvironment.fromValues(releaseMode: true),
+      throwsA(
+        isA<AppEnvironmentConfiguration>().having(
+          (error) => error.message,
+          'message',
+          contains('MUSHUKISTAN_API_BASE_URL'),
+        ),
+      ),
     );
   });
 
@@ -18,6 +22,66 @@ void main() {
     );
 
     expect(environment.apiBaseUri.toString(), 'https://example.com/api/v1/');
+  });
+
+  test('release web build requires Google web client ID', () {
+    expect(
+      () => AppEnvironment.fromValues(
+        apiBaseUrl: 'https://api.mushukistan.uz',
+        releaseMode: true,
+        web: true,
+      ),
+      throwsA(
+        isA<AppEnvironmentConfiguration>().having(
+          (error) => error.message,
+          'message',
+          contains('MUSHUKISTAN_GOOGLE_CLIENT_ID'),
+        ),
+      ),
+    );
+  });
+
+  test('release Android build requires Google server client ID', () {
+    expect(
+      () => AppEnvironment.fromValues(
+        apiBaseUrl: 'https://api.mushukistan.uz',
+        releaseMode: true,
+        android: true,
+      ),
+      throwsA(
+        isA<AppEnvironmentConfiguration>().having(
+          (error) => error.message,
+          'message',
+          contains('MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID'),
+        ),
+      ),
+    );
+  });
+
+  test('complete release web configuration is accepted', () {
+    final environment = AppEnvironment.fromValues(
+      apiBaseUrl: 'https://api.mushukistan.uz',
+      googleClientId: 'web-client.apps.googleusercontent.com',
+      releaseMode: true,
+      web: true,
+    );
+
+    expect(
+      environment.apiBaseUri.toString(),
+      'https://api.mushukistan.uz/api/v1/',
+    );
+    expect(environment.isGoogleSignInConfigured, isTrue);
+  });
+
+  test('complete release Android configuration is accepted', () {
+    final environment = AppEnvironment.fromValues(
+      apiBaseUrl: 'https://api.mushukistan.uz',
+      googleServerClientId: 'web-client.apps.googleusercontent.com',
+      releaseMode: true,
+      android: true,
+    );
+
+    expect(environment.isGoogleSignInConfigured, isTrue);
   });
 
   test('debug Android without override uses emulator host', () {

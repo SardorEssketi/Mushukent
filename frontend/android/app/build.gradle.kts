@@ -13,6 +13,30 @@ if (releaseKeystorePropertiesFile.exists()) {
     releaseKeystorePropertiesFile.inputStream().use { releaseKeystoreProperties.load(it) }
 }
 
+val requestedReleaseBuild = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+val requiredReleaseSigningProperties = listOf(
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword",
+)
+if (requestedReleaseBuild) {
+    require(releaseKeystorePropertiesFile.isFile) {
+        "Release signing requires frontend/android/key.properties."
+    }
+    requiredReleaseSigningProperties.forEach { propertyName ->
+        require(!releaseKeystoreProperties.getProperty(propertyName).isNullOrBlank()) {
+            "Release signing property '$propertyName' is missing from key.properties."
+        }
+    }
+    val releaseStoreFile = project.file(releaseKeystoreProperties.getProperty("storeFile"))
+    require(releaseStoreFile.isFile) {
+        "Release signing keystore does not exist at the configured storeFile path."
+    }
+}
+
 android {
     namespace = "uz.mushukistan.app"
     compileSdk = 36
@@ -47,7 +71,7 @@ android {
 
     buildTypes {
         release {
-            if (releaseKeystorePropertiesFile.exists()) {
+            if (releaseKeystorePropertiesFile.isFile) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }

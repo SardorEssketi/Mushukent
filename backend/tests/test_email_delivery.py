@@ -37,6 +37,7 @@ def _production_settings(**overrides: object) -> Settings:
         "JWT_SECRET_KEY": "a" * 64,
         "RESEND_API_KEY": "re_test_key",
         "RESEND_FROM_EMAIL": "noreply@mushukistan.uz",
+        "GOOGLE_OAUTH_CLIENT_ID": "web-client.apps.googleusercontent.com",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -134,3 +135,8 @@ def test_verification_email_maps_resend_failures(monkeypatch: pytest.MonkeyPatch
 def test_production_settings_require_resend_api_key() -> None:
     with pytest.raises(ValueError, match="RESEND_API_KEY"):
         _production_settings(RESEND_API_KEY="")
+
+
+def test_production_settings_require_google_oauth_client_id() -> None:
+    with pytest.raises(ValueError, match="GOOGLE_OAUTH_CLIENT_ID"):
+        _production_settings(GOOGLE_OAUTH_CLIENT_ID="")

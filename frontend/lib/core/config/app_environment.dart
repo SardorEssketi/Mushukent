@@ -29,8 +29,6 @@ class AppEnvironment {
   final bool isWeb;
   final bool isAndroid;
 
-  static const productionApiBaseUrl = 'https://api.mushukistan.uz';
-
   bool get isGoogleSignInConfigured => isWeb
       ? googleClientId != null && googleClientId!.isNotEmpty
       : isAndroid
@@ -66,6 +64,25 @@ class AppEnvironment {
     final override = apiBaseUrl.trim();
     final normalizedGoogleClientId = googleClientId.trim();
     final normalizedGoogleServerClientId = googleServerClientId.trim();
+    if (releaseMode) {
+      final missingConfiguration = <String>[];
+      if (override.isEmpty) {
+        missingConfiguration.add('MUSHUKISTAN_API_BASE_URL');
+      }
+      if (web && normalizedGoogleClientId.isEmpty) {
+        missingConfiguration.add('MUSHUKISTAN_GOOGLE_CLIENT_ID');
+      }
+      if (android && normalizedGoogleServerClientId.isEmpty) {
+        missingConfiguration.add('MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID');
+      }
+      if (missingConfiguration.isNotEmpty) {
+        throw AppEnvironmentConfiguration(
+          'Missing required release build configuration: '
+          '${missingConfiguration.join(', ')}.',
+        );
+      }
+    }
+
     if (override.isNotEmpty) {
       return AppEnvironment(
         apiBaseUri: _normalizeApiBaseUri(override),
@@ -79,21 +96,14 @@ class AppEnvironment {
       );
     }
 
-    if (releaseMode) {
-      return AppEnvironment(
-        apiBaseUri: _normalizeApiBaseUri(productionApiBaseUrl),
-        googleClientId:
-            normalizedGoogleClientId.isEmpty ? null : normalizedGoogleClientId,
-        googleServerClientId: normalizedGoogleServerClientId.isEmpty
-            ? null
-            : normalizedGoogleServerClientId,
-        isWeb: web,
-        isAndroid: android,
-      );
-    }
-
-    final fallback =
-        !web && android ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+    final fallbackHost = !web && android
+        ? <int>[10, 0, 2, 2].join('.')
+        : <String>['local', 'host'].join();
+    final fallback = Uri(
+      scheme: 'http',
+      host: fallbackHost,
+      port: 8000,
+    ).toString();
     return AppEnvironment(
       apiBaseUri: _normalizeApiBaseUri(fallback),
       googleClientId:

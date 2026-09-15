@@ -106,6 +106,8 @@ class Settings(BaseSettings):
             errors.append("RESEND_API_KEY must be set for production email delivery.")
         if not self.resend_from_email:
             errors.append("RESEND_FROM_EMAIL must be set to a verified sender address.")
+        if not self.google_oauth_client_ids:
+            errors.append("GOOGLE_OAUTH_CLIENT_ID must be set for production Google sign-in.")
         if errors:
             raise ValueError("Invalid production configuration: " + " ".join(errors))
         return self
