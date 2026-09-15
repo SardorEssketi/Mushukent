@@ -10,6 +10,31 @@ import '../../../../core/config/app_environment.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../application/auth_controller.dart';
 
+Future<void>? _googleSignInInitialization;
+String? _googleSignInInitializationClientId;
+
+Future<void> _initializeGoogleSignInOnce({
+  required String clientId,
+  String? serverClientId,
+}) {
+  final initialization = _googleSignInInitialization;
+  if (initialization != null) {
+    if (_googleSignInInitializationClientId != clientId) {
+      return Future<void>.error(
+        StateError(
+            'Google Sign-In was initialized with a different client ID.'),
+      );
+    }
+    return initialization;
+  }
+
+  _googleSignInInitializationClientId = clientId;
+  return _googleSignInInitialization = GoogleSignIn.instance.initialize(
+    clientId: clientId,
+    serverClientId: serverClientId,
+  );
+}
+
 class GoogleSignInEntryButton extends ConsumerStatefulWidget {
   const GoogleSignInEntryButton({
     super.key,
@@ -55,7 +80,7 @@ class _GoogleSignInEntryButtonState
       return;
     }
     try {
-      await GoogleSignIn.instance.initialize(
+      await _initializeGoogleSignInOnce(
         clientId: clientId,
         serverClientId: environment.googleServerClientId,
       );
