@@ -175,6 +175,7 @@ Bottom navigation with 5 tabs:
 - Interactions:
   - pan/zoom map,
   - tap marker -> no detail page in MVP,
+  - recenter on the user's location with a smooth transition and north-up map orientation,
   - tap vet/shop/shelter marker -> place preview with phone, website and opening hours when available,
   - tap filter button -> choose visible marker types -> apply filters,
   - filter selection updates marker set.
@@ -251,7 +252,8 @@ Bottom navigation with 5 tabs:
 5.10 Feed Screen
 - Purpose: browse observations in list format.
 - Layout:
-  - top filter chips: Recent, Popular, Needs help, Lost pets
+  - on mobile, top filter chips: Popular, Needs help, Lost pets, Adoption; the standard Recent feed has no chip
+  - on wider layouts, top filter chips: Recent, Popular, Needs help, Lost pets, Adoption
   - when Popular is selected, show period selector: Today, Month, All time
   - vertically scrolling post cards
   - on wide web screens, keep the feed column constrained and use shorter media previews so cards remain compact.
@@ -260,9 +262,8 @@ Bottom navigation with 5 tabs:
   - Lost Pet tag for lost pet posts,
   - author,
   - cat summary,
-  - timestamp,
   - distance (if nearby),
-  - like count next to the like icon, comment count next to the comment icon and publish date as `Published: <date>`,
+  - like count next to the like icon and comment count next to the comment icon,
   - long descriptions show a compact preview with a `Read more` control and expand inline,
   - all visible tags appear next to the cat/pet name; `Unknown` is not displayed as a tag,
   - quick like action.
@@ -274,6 +275,7 @@ Bottom navigation with 5 tabs:
   - pull to refresh,
   - infinite scroll pagination.
   - filter selection is visible in the feed header, not hidden in an overflow menu.
+  - on mobile, tapping an inactive filter applies it; tapping the active filter again returns to the standard Recent feed.
   - Today means the last 24 hours.
 - Edge cases:
   - empty feed -> helper CTA to add first observation.
@@ -285,6 +287,7 @@ Bottom navigation with 5 tabs:
   - large image/gallery
   - author info
   - cat name
+  - publication date,
   - description
   - location mini-map
   - likes/comments section

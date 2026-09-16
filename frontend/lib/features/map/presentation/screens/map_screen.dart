@@ -129,15 +129,73 @@ class MapScreen extends ConsumerStatefulWidget {
   ConsumerState<MapScreen> createState() => _MapScreenState();
 }
 
-class _MapScreenState extends ConsumerState<MapScreen> {
+class _MapScreenState extends ConsumerState<MapScreen>
+    with TickerProviderStateMixin {
   final MapController _mapController = MapController();
+  AnimationController? _centerAnimationController;
   bool _refreshingMap = false;
+
+  void _centerOnLocation(LatLng targetCenter, double targetZoom) {
+    final camera = _mapController.camera;
+    final latTween = Tween<double>(
+      begin: camera.center.latitude,
+      end: targetCenter.latitude,
+    );
+    final lonTween = Tween<double>(
+      begin: camera.center.longitude,
+      end: targetCenter.longitude,
+    );
+    final zoomTween = Tween<double>(
+      begin: camera.zoom,
+      end: targetZoom,
+    );
+    final rotationStart = camera.rotation;
+    final rotationDelta = _shortestRotationDelta(rotationStart, 0);
+
+    _centerAnimationController?.dispose();
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: this,
+    );
+    _centerAnimationController = controller;
+    final animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    controller.addListener(() {
+      final progress = animation.value;
+      _mapController.moveAndRotate(
+        LatLng(
+          latTween.evaluate(animation),
+          lonTween.evaluate(animation),
+        ),
+        zoomTween.evaluate(animation),
+        rotationStart + rotationDelta * progress,
+      );
+    });
+    controller.addStatusListener((status) {
+      if (status != AnimationStatus.completed &&
+          status != AnimationStatus.dismissed) {
+        return;
+      }
+      if (status == AnimationStatus.completed && mounted) {
+        // Normalize shortest-path rotations such as 350° -> 360° to 0°.
+        _mapController.moveAndRotate(targetCenter, targetZoom, 0);
+      }
+      if (identical(_centerAnimationController, controller)) {
+        _centerAnimationController = null;
+      }
+      controller.dispose();
+    });
+    controller.forward();
+  }
 
   void _centerOnUser(GeoPoint location) {
     final targetCenter = _clampToTashkent(
       LatLng(location.latitude, location.longitude),
     );
-    _mapController.move(targetCenter, 15.5);
+    _centerOnLocation(targetCenter, 15.5);
   }
 
   Future<void> _openLayerFilterSheet(AppStrings strings) async {
@@ -259,7 +317,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     if (_isInsideTashkent(location)) {
       _centerOnUser(location);
     } else {
-      _mapController.move(
+      _centerOnLocation(
         LatLng(
           LocationService.fallbackLocation.latitude,
           LocationService.fallbackLocation.longitude,
@@ -476,6 +534,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _centerAnimationController?.dispose();
+    _mapController.dispose();
+    super.dispose();
   }
 }
 
@@ -726,6 +791,16 @@ LatLng _clampToTashkent(LatLng point) {
     _tashkentBounds.east,
   );
   return LatLng(latitude, longitude);
+}
+
+double _shortestRotationDelta(double current, double target) {
+  var delta = (target - current) % 360;
+  if (delta > 180) {
+    delta -= 360;
+  } else if (delta < -180) {
+    delta += 360;
+  }
+  return delta;
 }
 
 bool _isInsideTashkent(GeoPoint point) {

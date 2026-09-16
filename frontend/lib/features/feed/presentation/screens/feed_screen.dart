@@ -17,6 +17,8 @@ final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
   (ref) => const {},
 );
 
+const _mobileFeedBreakpoint = 700.0;
+
 void setPostLikeOverride(
   WidgetRef ref,
   String postId, {
@@ -128,7 +130,6 @@ class FeedScreen extends ConsumerWidget {
     );
   }
 }
-
 class _FeedItemCard extends StatelessWidget {
   const _FeedItemCard({required this.item, required this.strings});
 
@@ -165,40 +166,47 @@ class _FeedFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = MediaQuery.sizeOf(context).width < _mobileFeedBreakpoint;
+
+    void selectMode(String value) {
+      onSelected(mobile && selectedMode == value ? 'recent' : value);
+    }
+
     return SizedBox(
       height: 48,
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          _FilterTab(
-            value: 'recent',
-            selectedValue: selectedMode,
-            label: strings.recent,
-            onSelected: onSelected,
-          ),
+          if (!mobile)
+            _FilterTab(
+              value: 'recent',
+              selectedValue: selectedMode,
+              label: strings.recent,
+              onSelected: selectMode,
+            ),
           _FilterTab(
             value: 'popular',
             selectedValue: selectedMode,
             label: strings.popular,
-            onSelected: onSelected,
+            onSelected: selectMode,
           ),
           _FilterTab(
             value: 'needs_help',
             selectedValue: selectedMode,
             label: strings.needsHelp,
-            onSelected: onSelected,
+            onSelected: selectMode,
           ),
           _FilterTab(
             value: 'lost_pets',
             selectedValue: selectedMode,
             label: strings.lostPets,
-            onSelected: onSelected,
+            onSelected: selectMode,
           ),
           _FilterTab(
             value: 'adoption',
             selectedValue: selectedMode,
             label: strings.adoption,
-            onSelected: onSelected,
+            onSelected: selectMode,
           ),
         ],
       ),
@@ -929,14 +937,6 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                       ),
                     ],
                   ),
-                  Text(
-                    '${strings.published}: ${_formatDate(widget.post.createdAt)}',
-                    softWrap: true,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: colorScheme.onSurfaceVariant),
-                  ),
                 ],
               ),
             ),
@@ -1106,7 +1106,7 @@ String _avatarInitial(String value) {
 }
 
 double _feedImageAspectRatio(BuildContext context) {
-  return MediaQuery.sizeOf(context).width >= 700 ? 4 / 3 : 1;
+  return MediaQuery.sizeOf(context).width >= _mobileFeedBreakpoint ? 4 / 3 : 1;
 }
 
 class _FeedMediaPreview extends StatefulWidget {
@@ -1153,7 +1153,8 @@ class _FeedMediaPreviewState extends State<_FeedMediaPreview> {
   @override
   Widget build(BuildContext context) {
     final urls = _urls;
-    final desktop = MediaQuery.sizeOf(context).width >= 700;
+    final desktop =
+        MediaQuery.sizeOf(context).width >= _mobileFeedBreakpoint;
     return AspectRatio(
       aspectRatio: _feedImageAspectRatio(context),
       child: Stack(
@@ -1311,11 +1312,4 @@ class _EmptyFeed extends StatelessWidget {
       message: strings.emptyFeedMessage,
     );
   }
-}
-
-String _formatDate(DateTime dateTime) {
-  final local = dateTime.toLocal();
-  return '${local.year.toString().padLeft(4, '0')}-'
-      '${local.month.toString().padLeft(2, '0')}-'
-      '${local.day.toString().padLeft(2, '0')}';
 }
