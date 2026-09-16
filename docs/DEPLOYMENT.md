@@ -70,14 +70,19 @@ The script executes this release build and verifies the generated JavaScript:
 
 ```powershell
 flutter build web --release `
+  --no-web-resources-cdn `
   --dart-define=MUSHUKISTAN_API_BASE_URL=https://api.mushukistan.uz/api/v1/ `
   --dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=$env:MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID
 ```
 
 Do not run a later plain `flutter build web --release`; it would omit mandatory
-Google configuration. Inspect the final `frontend/build/web/main.dart.js` for
-the production API URL and configured client ID, and reject localhost/emulator
-URLs before deployment.
+Google configuration and could switch CanvasKit back to its remote CDN. The
+`--no-web-resources-cdn` flag keeps the CanvasKit JavaScript/WebAssembly files
+on the Mushukistan origin, which is required for reliable Safari/WebKit startup.
+Inspect the final `frontend/build/web/main.dart.js` for the production API URL
+and configured client ID, confirm `frontend/build/web/flutter_bootstrap.js`
+contains `"useLocalCanvasKit":true`, and reject localhost/emulator URLs before
+deployment.
 
 ## Database backup and migration gate
 

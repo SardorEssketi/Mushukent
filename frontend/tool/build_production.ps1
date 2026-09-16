@@ -29,7 +29,10 @@ $frontendRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $frontendRoot
 try {
     if ($Target -eq 'Web') {
-        & flutter build web --release `
+        # Keep CanvasKit on the same origin. This avoids Safari/WebKit startup
+        # failures when the remote gstatic CanvasKit CDN is blocked or cannot
+        # complete its WebAssembly load.
+        & flutter build web --release --no-web-resources-cdn `
             "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
             "--dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=$normalizedGoogleClientId"
         if ($LASTEXITCODE -ne 0) {
@@ -46,6 +49,14 @@ try {
         }
         if (-not $webContents.Contains($normalizedGoogleClientId)) {
             throw 'Production web artifact does not contain the configured Google web client ID.'
+        }
+        $bootstrap = Join-Path $frontendRoot 'build/web/flutter_bootstrap.js'
+        if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) {
+            throw 'Production web build did not create build/web/flutter_bootstrap.js.'
+        }
+        $bootstrapContents = Get-Content -LiteralPath $bootstrap -Raw
+        if (-not $bootstrapContents.Contains('"useLocalCanvasKit":true')) {
+            throw 'Production web artifact is not configured to load CanvasKit locally.'
         }
         if ($webContents.Contains('http://localhost') -or
             $webContents.Contains('http://10.0.2.2')) {
