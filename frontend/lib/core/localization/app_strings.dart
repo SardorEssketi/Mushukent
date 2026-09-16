@@ -577,6 +577,16 @@ class AppStrings {
     };
   }
 
+  String get donateToAuthor {
+    return switch (this) {
+      _UzbekStrings() => 'Muallifga xayriya',
+      _RussianStrings() => 'Пожертвовать автору',
+      _ => 'Donate to author',
+    };
+  }
+
+  String get supportCardNumber => '5614 6810 1028 4564';
+
   String get supportCardIntro {
     return switch (this) {
       _UzbekStrings() =>

@@ -300,7 +300,7 @@ Future<void> _showWelcomeDialog(BuildContext context, AppStrings strings) {
                         ),
                         const SizedBox(height: 8),
                         SelectableText(
-                          '5614 6810 1028 4564 ☕️🙂',
+                          strings.supportCardNumber,
                           style: theme.textTheme.titleMedium?.copyWith(
                             color: colorScheme.onPrimaryContainer,
                             fontWeight: FontWeight.w700,

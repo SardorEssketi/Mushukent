@@ -31,6 +31,11 @@ class ProfileScreen extends ConsumerWidget {
         title: Text(strings.profile),
         actions: [
           IconButton(
+            tooltip: strings.donateToAuthor,
+            onPressed: () => _showDonationDialog(context, strings),
+            icon: const Icon(Icons.volunteer_activism_outlined),
+          ),
+          IconButton(
             tooltip: strings.editProfile,
             onPressed: () => context.push('/profile/edit'),
             icon: const Icon(Icons.edit_outlined),
@@ -123,6 +128,43 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+Future<void> _showDonationDialog(
+  BuildContext context,
+  AppStrings strings,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (context) {
+      final colorScheme = Theme.of(context).colorScheme;
+      return AlertDialog(
+        title: Text(strings.donateToAuthor),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(strings.supportCardIntro),
+            const SizedBox(height: AppSpacing.md),
+            SelectableText(
+              strings.supportCardNumber,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(strings.cancel),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 Future<bool> _confirmLogout(BuildContext context, AppStrings strings) async {

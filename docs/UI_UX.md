@@ -343,7 +343,9 @@ Bottom navigation with 5 tabs:
   - owner-only phone number
   - stats: observations, likes received, comments count
   - list: My Observations
-  - actions: Adoption help, Edit Profile, Settings, Logout
+  - app bar actions, in order: Donate to author, Edit Profile, Settings, Logout
+  - donation dialog shows the support card number from the welcome message as selectable text
+  - actions: Adoption help, Settings, Logout
   - if moderator: Moderator Tools entry
 - Interactions:
   - tap Adoption help -> opens informational guidance about adopting a cat in Uzbekistan, including veterinary checks, identification/passport, ownership transfer, apartment/common-area rules, and official source links
