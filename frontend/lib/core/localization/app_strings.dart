@@ -596,6 +596,24 @@ class AppStrings {
     };
   }
 
+  String get copyCardNumber {
+    return switch (this) {
+      _UzbekStrings() => 'Karta raqamini nusxalash',
+      _RussianStrings() =>
+        '\u{421}\u{43a}\u{43e}\u{43f}\u{438}\u{440}\u{43e}\u{432}\u{430}\u{442}\u{44c} \u{43d}\u{43e}\u{43c}\u{435}\u{440} \u{43a}\u{430}\u{440}\u{442}\u{44b}',
+      _ => 'Copy card number',
+    };
+  }
+
+  String get cardNumberCopied {
+    return switch (this) {
+      _UzbekStrings() => 'Karta raqami nusxalandi.',
+      _RussianStrings() =>
+        '\u{41d}\u{43e}\u{43c}\u{435}\u{440} \u{43a}\u{430}\u{440}\u{442}\u{44b} \u{441}\u{43a}\u{43e}\u{43f}\u{438}\u{440}\u{43e}\u{432}\u{430}\u{43d}.',
+      _ => 'Card number copied.',
+    };
+  }
+
   String get startExploring {
     return switch (this) {
       _UzbekStrings() => 'Boshlash',

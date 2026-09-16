@@ -62,5 +62,6 @@ void main() {
     expect(find.text('Donate to author'), findsNWidgets(2));
     expect(find.byType(SelectableText), findsOneWidget);
     expect(find.text('5614 6810 1028 4564'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Copy card number'), findsOneWidget);
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
@@ -160,6 +161,21 @@ Future<void> _showDonationDialog(
           ],
         ),
         actions: [
+          TextButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(
+                ClipboardData(text: strings.supportCardNumber),
+              );
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(strings.cardNumberCopied)),
+              );
+            },
+            icon: const Icon(Icons.copy_outlined),
+            label: Text(strings.copyCardNumber),
+          ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text(strings.cancel),
