@@ -51,13 +51,16 @@ void main() {
     await tester.pumpAndSettle();
 
     final appBar = tester.widget<AppBar>(find.byType(AppBar));
-    expect((appBar.actions![0] as IconButton).tooltip, 'Donate to author');
+    expect(appBar.actions![0], isA<Tooltip>());
+    expect((appBar.actions![0] as Tooltip).message, 'Donate to author');
+    expect(find.widgetWithText(TextButton, 'Donate to author'), findsOneWidget);
     expect((appBar.actions![1] as IconButton).tooltip, 'Edit profile');
 
     await tester.tap(find.byTooltip('Donate to author'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Donate to author'), findsOneWidget);
+    expect(find.text('Donate to author'), findsNWidgets(2));
+    expect(find.byType(SelectableText), findsOneWidget);
     expect(find.text('5614 6810 1028 4564'), findsOneWidget);
   });
 }

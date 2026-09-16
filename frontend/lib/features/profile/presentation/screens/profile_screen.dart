@@ -30,10 +30,13 @@ class ProfileScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(strings.profile),
         actions: [
-          IconButton(
-            tooltip: strings.donateToAuthor,
-            onPressed: () => _showDonationDialog(context, strings),
-            icon: const Icon(Icons.volunteer_activism_outlined),
+          Tooltip(
+            message: strings.donateToAuthor,
+            child: TextButton.icon(
+              onPressed: () => _showDonationDialog(context, strings),
+              icon: const Icon(Icons.volunteer_activism_outlined),
+              label: Text(strings.donateToAuthor),
+            ),
           ),
           IconButton(
             tooltip: strings.editProfile,
