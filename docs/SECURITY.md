@@ -65,6 +65,7 @@ MVP baseline limits:
 - Public read endpoints used for Feed, Map, places, lost pets and leaderboards: 180 req/min per IP or authenticated token.
 - Authenticated endpoints: 60 req/min per user.
 - Auth endpoints and upload endpoints: 10 req/min per IP/user.
+- Upload classification covers every multipart image route, including post create/edit, lost-pet, adoption/rehoming, cat, and avatar uploads.
 - CORS preflight requests are not counted against user-facing request buckets.
 
 Behavior:
@@ -76,6 +77,7 @@ Notes:
 - External distributed limiter (Redis) is out of MVP scope.
 - Current MVP implementation uses an in-process fixed-window limiter. This is sufficient for a single backend process and should be replaced with a shared Redis-backed limiter before horizontal scaling.
 - The limiter is split into rate-limit policy and storage. `RATE_LIMIT_BACKEND=memory` is active now; `RATE_LIMIT_BACKEND=redis` and `RATE_LIMIT_REDIS_URL` are reserved for a future Redis-backed store so route behavior and response envelopes do not need to change.
+- Forwarded client IPs are used only when the immediate peer is in `TRUSTED_PROXY_CIDRS`; the proxy chain is walked from the trusted edge toward the first untrusted address. Direct clients cannot choose their rate-limit identity with `X-Forwarded-For`.
 
 6. File Upload Security
 -----------------------
@@ -92,9 +94,10 @@ Notes:
 - Normalize image orientation and re-encode output.
 
 6.4 Storage Controls
-- Store files in Cloudflare R2 private bucket policy suitable for app usage.
+- Store files in Cloudflare R2 with an explicitly configured public/CDN URL suitable for app usage. Production requires `R2_PUBLIC_BASE_URL`; bucket accessibility must not be inferred.
 - Save only generated canonical URLs in DB.
 - Never trust user-provided path names.
+- For local storage and cleanup, URL-decode and canonicalize object paths and verify that the resolved path remains inside the configured media root.
 
 7. Secrets Management
 ---------------------

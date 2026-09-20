@@ -13,6 +13,7 @@ from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 
 os.environ["APP_ENV"] = "development"
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 
 def _integration_enabled() -> bool:

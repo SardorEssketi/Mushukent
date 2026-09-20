@@ -188,7 +188,7 @@ Feature: Authentication
 - Response: same as login
 - Errors: 401 INVALID_GOOGLE_TOKEN
 - Notes:
-  - Validate iss, expiry, and `aud` against one configured Google OAuth client ID on server.
+  - Validate issuer, expiry, `aud` against one configured Google OAuth client ID, and require `email_verified=true`.
   - If the Google email does not match an existing account, the backend creates the account only when Terms and Privacy acceptance are true.
   - Existing accounts with current legal acceptance may authenticate without resubmitting acceptance flags.
   - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
@@ -272,6 +272,7 @@ Feature: Users
   - future requests with the same token are rejected as disabled;
   - delete the user's likes;
   - hide and anonymize owned posts, comments, and lost-pet posts;
+  - redact owned-post history descriptions, locations, and media URLs, and remove the deleted user from history actor links;
   - remove copied lost-pet phone numbers;
   - remove the user from cat creator, report reporter, and report handler links where possible;
   - attempt best-effort media cleanup for profile, post, and lost-pet media URLs.
@@ -366,7 +367,7 @@ Feature: Cats
 - Notes: Creating a Cat does not create an observation automatically.
 
 2) GET /api/v1/cats/{cat_id}
-- Purpose: Cat page with aggregated stats and paginated observation history
+- Purpose: Legacy/internal cat-record detail with aggregated stats and paginated observation history. A dedicated cat profile page is not required by the current MVP client.
 - Auth: optional
 - Path param: cat_id (UUID)
 - Query params: limit, cursor, sort=latest|oldest (default latest)
@@ -441,7 +442,7 @@ Feature: Posts (Observations)
      - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional for the current observation flow
      - description string (max 2000)
      - status (cat_status)
-     - latitude, longitude (required if client does not rely on EXIF GPS)
+     - location / latitude and longitude (optional; when supplied, both coordinates must be valid)
      - is_public boolean
   b) application/json (if photo already hosted): same fields but photo_url required
 - Validation rules:
@@ -451,6 +452,7 @@ Feature: Posts (Observations)
   - If new_cat provided, validate per CatCreate
   - If neither cat_id nor new_cat is provided, create an unnamed cat with status `unknown` automatically
   - latitude in [-90,90], longitude in [-180,180]
+  - location may be omitted for a locationless observation
   - photo file: content-type image/jpeg|image/png, size<=10MB
 - Pydantic models: PostCreateMultipart (for docs), PostCreateJSON
 - Example request (JSON variant):
@@ -509,17 +511,26 @@ Feature: Posts (Observations)
 - Errors: 404 POST_NOT_FOUND
 - Pydantic model: PostResponse
 
-3) DELETE /api/v1/posts/{post_id}
+3) PATCH /api/v1/posts/{post_id}
+- Purpose: update an observation owned by the authenticated user.
+- Auth: Bearer required.
+- Authorization: owner only; moderators do not receive an edit override.
+- Mutable fields: description (max 2000), status, location, is_public, and a complete replacement set of 1-5 photos. Cat association, author, counters, creation timestamp, and deletion metadata are immutable.
+- Request: JSON for text/location/visibility changes, or multipart with 1-5 validated image uploads when replacing photos. Update requests do not accept arbitrary `photo_url` values.
+- Response: PostResponse, including `updated_at`, `is_public`, and history-derived `is_edited`.
+- Side effects: a changed update writes an atomic `post_history` version record. No-op updates do not create history.
+- Errors: 401 UNAUTHORIZED, 403 FORBIDDEN, 404 POST_NOT_FOUND, 422 VALIDATION_ERROR.
+
+4) DELETE /api/v1/posts/{post_id}
 - Purpose: Soft-delete a post (owner or moderator)
 - Auth: Bearer required
 - Authorization: owner or moderator (403 otherwise)
 - Request: none
 - Response: 204 No Content (empty body) OR 200 with success envelope
 - Errors: 401, 403, 404
-- Side effects: decrement cat.total_observations, update counters transactionally
-- Audit: record moderator_id if moderator deletes
+- Side effects: decrement cat.total_observations, update counters transactionally, and append a `deleted` post-history audit event with the actor.
 
-4) GET /api/v1/users/{user_id}/posts
+5) GET /api/v1/users/{user_id}/posts
 - Purpose: list posts by a user
 - Auth: optional
 - Query: cursor, limit, sort=latest|oldest
@@ -527,7 +538,7 @@ Feature: Posts (Observations)
 - Pydantic: PostListItem
 - Privacy: returns 403 ACTIVITY_PRIVATE when the target user has disabled public activity viewing, except for the owner and moderators.
 
-5) GET /api/v1/users/{user_id}/comments
+6) GET /api/v1/users/{user_id}/comments
 - Purpose: list comments by a user
 - Auth: optional
 - Query: cursor, limit, order=asc|desc
@@ -549,11 +560,12 @@ Feature: Feed
 - Query params:
   - cursor, limit
   - filter: recent|popular|nearby|adoption (default recent)
+  - popular_period: all|day|month (used only with filter=popular; default all)
   - lat, lon, radius_meters (required if filter=nearby)
 - Sorting options:
-  - recent: created_at desc
-  - popular: like_count desc, then created_at desc
-  - nearby: distance asc then created_at desc
+  - recent: all three item types, ordered by created_at desc, then item-type rank desc, then UUID desc
+  - popular: observation items only, ordered by like_count desc, then created_at desc
+  - nearby: geolocated observation and lost-pet items, ordered by distance asc, then created_at desc, item-type rank desc, and UUID desc; adoption items have no location and are excluded
 - Response: GenericListResponse[FeedListItem]
 - Observation items include `is_liked_by_me`, which is `true` only when the request includes a valid authenticated user token and that user has liked the post.
 - Example response:
@@ -597,6 +609,11 @@ Feature: Feed
     }
   }
 - Validation: if filter=nearby require lat/lon and radius_meters<=5000 (MVP limit)
+- Cursor contract for mixed `recent` and `nearby` feeds:
+  - `cursor` is an opaque, versioned Base64URL token produced by the API; clients must not construct or alter it.
+  - It records the active filter and the complete last global sort key. Nearby cursors also bind the latitude, longitude, and radius used for the first page.
+  - The API applies a strict tuple boundary after the last item, so equal timestamps remain stable without duplicates or omissions.
+  - Reusing a cursor with another filter or nearby search scope returns `422 VALIDATION_ERROR`.
 
 Feature: Lost Pets
 ------------------
@@ -751,7 +768,9 @@ Feature: Comments
       "parent_comment_id":null,
       "user": {"id":"user-uuid","name":"Sardor"},
       "content":"So cute!",
-      "created_at":"..."
+      "created_at":"...",
+      "edited_at":null,
+      "edit_until":"..."
     }
   }
 - Side effects: increment post.comment_count; replies use the same counter and retain their parent relationship
@@ -788,11 +807,23 @@ Feature: Comments
 - Response: GenericListResponse[CommentResponse]
 
 7) DELETE /api/v1/comments/{comment_id}
-- Purpose: delete comment (owner or moderator)
+- Purpose: soft-delete a comment (owner or moderator)
 - Auth: Bearer
 - Response: 204 No Content
 - Errors: 401,403,404
-- Side effects: decrement post.comment_count
+- Side effects: decrement the target comment counter. The deletion actor is
+  retained for moderation/audit purposes and deleted comments are excluded
+  from normal comment lists.
+
+8) PATCH /api/v1/comments/{comment_id}
+- Purpose: edit the author's comment while it is inside the configured edit window
+- Auth: Bearer; only the comment author may edit (moderators cannot edit another user's comment)
+- Request: `{"content":"Updated text"}`; unknown fields are rejected
+- Response: CommentResponse (200), with `edited_at` set after a real change
+- Edit window: `COMMENT_EDIT_WINDOW_MINUTES` (default `30`). A comment is editable
+  only while database age is strictly less than the configured duration; at the
+  exact boundary (`age >= duration`) the API returns `403 COMMENT_EDIT_WINDOW_EXPIRED`.
+- Errors: 401,403,404,422
 
 Feature: Likes
 ---------------
@@ -888,7 +919,13 @@ Feature: Moderation
 - Purpose: moderator deletes content
 - Auth: Bearer + moderator
 - Response: 204 No Content
-- Side effects: set deleted_at and record audit
+- Side effects: set deleted_at and append a moderator-attributed `deleted` post-history event.
+
+6) GET /api/v1/moderation/posts/{post_id}/history
+- Purpose: inspect immutable edit/deletion history for one post.
+- Auth: Bearer + moderator required.
+- Response: newest-first records with action, actor, timestamp, and before/after editable-field snapshots (including photo URLs).
+- Errors: 401 UNAUTHORIZED, 403 FORBIDDEN, 404 POST_NOT_FOUND.
 
 Common error response examples
 ------------------------------

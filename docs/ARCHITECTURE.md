@@ -264,19 +264,11 @@ Select Marker
 
 ↓
 
-Cat Page
+Marker Preview
 
-↓
-
-History
-
-↓
-
-Comments
-
-↓
-
-Like
+Cat records remain internal grouping entities in the MVP. Dedicated cat profile
+pages are not required; users interact with observation posts, comments, and
+likes from Feed and Map entry points.
 7. Cat Recognition Flow
 
 Current MVP
@@ -285,17 +277,13 @@ Take Photo
 
 ↓
 
-Nearby Cats (100–200 m)
+Create unnamed cat with status Unknown
 
 ↓
 
-User chooses
+Create observation linked to that cat
 
-Existing Cat
-
-or
-
-New Cat
+The MVP does not ask the user to match a nearby cat or choose existing/new.
 
 Future AI
 
@@ -367,7 +355,9 @@ Response
 
 Access Tokens should expire.
 
-Refresh Tokens may be added later.
+Opaque refresh sessions are part of the MVP. Refresh tokens are stored only by
+the client, hashed in the database, renewed using the documented sliding
+session behavior, and revoked on logout or account deletion.
 
 10. Map Flow
 User Location

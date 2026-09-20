@@ -11,6 +11,8 @@ class LostPetRepository(Protocol):
 
     def get_by_id(self, lost_pet_id: UUID) -> LostPetRecord | None: ...
 
+    def get_by_ids(self, lost_pet_ids: list[UUID]) -> list[LostPetRecord]: ...
+
     def list_public(
         self,
         *,

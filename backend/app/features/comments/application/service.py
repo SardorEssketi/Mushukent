@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 from uuid import UUID
 
 from structlog import get_logger
 
+from app.core.config import Settings
 from app.core.security import api_error
 from app.features.auth.domain.models import AuthUser
 from app.features.comments.application.schemas import (
     CommentCreate,
     CommentResponse,
+    CommentUpdate,
     GenericListResponse,
     to_comment_page_response,
     to_comment_response,
@@ -21,6 +23,16 @@ from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.session import DatabaseSessionManager
 
 logger = get_logger(__name__)
+
+
+def comment_edit_window_is_open(
+    *,
+    created_at: datetime,
+    current_time: datetime,
+    edit_window_minutes: int,
+) -> bool:
+    """Return whether the server-side edit deadline has not yet been reached."""
+    return current_time < created_at + timedelta(minutes=edit_window_minutes)
 
 
 class CommentRepositoryFactory(Protocol):
@@ -35,10 +47,12 @@ class CommentsService:
     def __init__(
         self,
         *,
+        settings: Settings,
         db_session_manager: DatabaseSessionManager,
         repository_factory: CommentRepositoryFactory,
         user_repository_factory: UserProfileRepositoryFactory,
     ) -> None:
+        self.settings = settings
         self.db_session_manager = db_session_manager
         self.repository_factory = repository_factory
         self.user_repository_factory = user_repository_factory
@@ -77,7 +91,10 @@ class CommentsService:
                 comment_id=str(created.id),
                 actor_id=str(user.id),
             )
-            return to_comment_response(created)
+            return to_comment_response(
+                created,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def create_lost_pet_comment(
         self,
@@ -112,7 +129,10 @@ class CommentsService:
                 comment_id=str(created.id),
                 actor_id=str(user.id),
             )
-            return to_comment_response(created)
+            return to_comment_response(
+                created,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def create_adoption_post_comment(
         self,
@@ -147,7 +167,10 @@ class CommentsService:
                 comment_id=str(created.id),
                 actor_id=str(user.id),
             )
-            return to_comment_response(created)
+            return to_comment_response(
+                created,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def list_comments(
         self,
@@ -179,7 +202,10 @@ class CommentsService:
                     "Validation failed.",
                     details={"cursor": ["invalid"]},
                 ) from exc
-            return to_comment_page_response(page)
+            return to_comment_page_response(
+                page,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def list_adoption_post_comments(
         self,
@@ -209,7 +235,10 @@ class CommentsService:
                     "Validation failed.",
                     details={"cursor": ["invalid"]},
                 ) from exc
-            return to_comment_page_response(page)
+            return to_comment_page_response(
+                page,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def list_lost_pet_comments(
         self,
@@ -239,7 +268,10 @@ class CommentsService:
                     "Validation failed.",
                     details={"cursor": ["invalid"]},
                 ) from exc
-            return to_comment_page_response(page)
+            return to_comment_page_response(
+                page,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def list_comments_by_user(
         self,
@@ -283,7 +315,76 @@ class CommentsService:
                     "Validation failed.",
                     details={"cursor": ["invalid"]},
                 ) from exc
-            return to_comment_page_response(page)
+            return to_comment_page_response(
+                page,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
+
+    def update_comment(
+        self,
+        comment_id: UUID,
+        user: AuthUser,
+        payload: CommentUpdate,
+    ) -> CommentResponse:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            current = repository.get_by_id(comment_id, include_deleted=True)
+            if current is None or current.deleted_at is not None:
+                raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+
+            self._ensure_target_access(repository, current, user)
+            if current.user_id != user.id:
+                raise api_error(
+                    403,
+                    "FORBIDDEN",
+                    "You do not have permission to perform this action.",
+                )
+
+            locked = repository.get_by_id(comment_id, include_deleted=True, for_update=True)
+            if locked is None or locked.deleted_at is not None:
+                raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+            if locked.user_id != user.id:
+                raise api_error(
+                    403,
+                    "FORBIDDEN",
+                    "You do not have permission to perform this action.",
+                )
+
+            now = repository.database_now()
+            if not comment_edit_window_is_open(
+                created_at=locked.created_at,
+                current_time=now,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            ):
+                raise api_error(
+                    403,
+                    "COMMENT_EDIT_WINDOW_EXPIRED",
+                    "The comment editing window has expired.",
+                )
+
+            content = payload.content.strip()
+            if content == locked.content:
+                return to_comment_response(
+                    locked,
+                    edit_window_minutes=self.settings.comment_edit_window_minutes,
+                )
+
+            updated = repository.update_content(
+                comment_id,
+                content=content,
+                edited_at=now,
+            )
+            if updated is None:
+                raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+            logger.info(
+                "comment_updated",
+                comment_id=str(comment_id),
+                actor_id=str(user.id),
+            )
+            return to_comment_response(
+                updated,
+                edit_window_minutes=self.settings.comment_edit_window_minutes,
+            )
 
     def delete_comment(self, comment_id: UUID, user: AuthUser) -> None:
         with self.db_session_manager.session_scope() as session:
@@ -292,18 +393,7 @@ class CommentsService:
             if current is None:
                 raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
 
-            if current.post_id is not None:
-                post = repository.lock_visible_post(current.post_id, viewer_user_id=user.id)
-                if post is None or not self._can_view_post(post, user):
-                    raise api_error(404, "POST_NOT_FOUND", "Post not found.")
-            elif current.lost_pet_id is not None and not repository.lost_pet_exists(
-                current.lost_pet_id
-            ):
-                raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
-            elif current.adoption_post_id is not None and not repository.adoption_post_exists(
-                current.adoption_post_id
-            ):
-                raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
+            self._ensure_target_access(repository, current, user)
 
             locked = repository.get_by_id(comment_id, include_deleted=True, for_update=True)
             if locked is None:
@@ -321,7 +411,12 @@ class CommentsService:
                     "You do not have permission to perform this action.",
                 )
 
-            deleted = repository.mark_deleted(comment_id, deleted_at=datetime.now(UTC))
+            deleted_at = repository.database_now()
+            deleted = repository.mark_deleted(
+                comment_id,
+                deleted_at=deleted_at,
+                deleted_by_id=user.id,
+            )
             if not deleted:
                 return
 
@@ -344,6 +439,21 @@ class CommentsService:
             )
 
     @staticmethod
+    def _ensure_target_access(repository: CommentRepository, comment, user: AuthUser) -> None:
+        if comment.post_id is not None:
+            post = repository.lock_visible_post(comment.post_id, viewer_user_id=user.id)
+            if post is None or not CommentsService._can_view_post(post, user):
+                raise api_error(404, "POST_NOT_FOUND", "Post not found.")
+        elif comment.lost_pet_id is not None and not repository.lost_pet_exists(
+            comment.lost_pet_id
+        ):
+            raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
+        elif comment.adoption_post_id is not None and not repository.adoption_post_exists(
+            comment.adoption_post_id
+        ):
+            raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
+
+    @staticmethod
     def _validate_parent_comment(
         repository: CommentRepository,
         parent_comment_id: UUID | None,
@@ -362,10 +472,7 @@ class CommentsService:
         same_target = (
             (post_id is not None and parent.post_id == post_id)
             or (lost_pet_id is not None and parent.lost_pet_id == lost_pet_id)
-            or (
-                adoption_post_id is not None
-                and parent.adoption_post_id == adoption_post_id
-            )
+            or (adoption_post_id is not None and parent.adoption_post_id == adoption_post_id)
         )
         if not same_target:
             raise api_error(

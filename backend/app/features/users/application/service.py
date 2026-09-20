@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import Text, cast, delete, func, or_, select
+from sqlalchemy import Text, cast, delete, func, or_, select, update
 from structlog import get_logger
 
 from app.core.phone import UzbekPhoneNumberError, normalize_uzbek_phone_number
@@ -123,6 +123,7 @@ class UsersService:
             post_rows = session.scalars(
                 select(schema.Post).where(schema.Post.user_id == user.id)
             ).all()
+            owned_post_ids = {post.id for post in post_rows}
             for post in post_rows:
                 media_urls.extend([post.photo_url, post.thumb_url])
                 media_urls.extend(photo.photo_url for photo in post.photos)
@@ -137,6 +138,22 @@ class UsersService:
                     photo.photo_url = f"deleted://post-photo/{photo.id}"
                     photo.thumb_url = None
 
+            history_filter = schema.PostHistory.actor_id == user.id
+            if owned_post_ids:
+                history_filter = or_(
+                    history_filter,
+                    schema.PostHistory.post_id.in_(owned_post_ids),
+                )
+            history_rows = session.scalars(select(schema.PostHistory).where(history_filter)).all()
+            for history in history_rows:
+                if history.post_id in owned_post_ids:
+                    media_urls.extend(self._history_photo_urls(history.before))
+                    media_urls.extend(self._history_photo_urls(history.after))
+                    history.before = self._redact_post_history_snapshot(history.before)
+                    history.after = self._redact_post_history_snapshot(history.after)
+                if history.actor_id == user.id:
+                    history.actor_id = None
+
             comment_rows = session.scalars(
                 select(schema.Comment).where(schema.Comment.user_id == user.id)
             ).all()
@@ -144,6 +161,11 @@ class UsersService:
                 comment.user_id = None
                 comment.content = "[deleted]"
                 comment.deleted_at = comment.deleted_at or now
+            session.execute(
+                schema.Comment.__table__.update()
+                .where(schema.Comment.deleted_by_id == user.id)
+                .values(deleted_by_id=None)
+            )
 
             lost_pet_rows = session.scalars(
                 select(schema.LostPet).options().where(schema.LostPet.user_id == user.id)
@@ -201,6 +223,14 @@ class UsersService:
                 delete(schema.LeaderboardCache).where(
                     cast(schema.LeaderboardCache.data, Text).contains(str(user.id))
                 )
+            )
+            session.execute(
+                update(schema.AuthRefreshSession)
+                .where(
+                    schema.AuthRefreshSession.user_id == user.id,
+                    schema.AuthRefreshSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=now)
             )
             session.execute(
                 schema.Cat.__table__.update()
@@ -306,6 +336,24 @@ class UsersService:
                 self.media_storage_service.delete_media_url(url)
             except Exception:  # pragma: no cover
                 logger.warning("account_delete_media_cleanup_failed", actor_id=str(actor_id))
+
+    @staticmethod
+    def _history_photo_urls(snapshot: dict[str, object]) -> list[str]:
+        photo_urls = snapshot.get("photo_urls")
+        if not isinstance(photo_urls, list):
+            return []
+        return [url for url in photo_urls if isinstance(url, str)]
+
+    @staticmethod
+    def _redact_post_history_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
+        redacted = dict(snapshot)
+        if "description" in redacted:
+            redacted["description"] = None
+        if "location" in redacted:
+            redacted["location"] = None
+        if "photo_urls" in redacted:
+            redacted["photo_urls"] = []
+        return redacted
 
     def update_avatar(
         self,

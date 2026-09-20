@@ -42,6 +42,14 @@ abstract class MushukistanApiClient {
     bool authenticated = true,
   });
 
+  Future<T> patchMultipart<T>(
+    String path, {
+    required FormData formData,
+    Map<String, dynamic>? queryParameters,
+    required T Function(Object? json) decoder,
+    bool authenticated = true,
+  });
+
   Future<void> delete(
     String path, {
     Map<String, dynamic>? queryParameters,
@@ -157,6 +165,24 @@ class DioMushukistanApiClient implements MushukistanApiClient {
   }) {
     return _request<T>(
       'POST',
+      path,
+      body: formData,
+      queryParameters: queryParameters,
+      decoder: decoder,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
+  Future<T> patchMultipart<T>(
+    String path, {
+    required FormData formData,
+    Map<String, dynamic>? queryParameters,
+    required T Function(Object? json) decoder,
+    bool authenticated = true,
+  }) {
+    return _request<T>(
+      'PATCH',
       path,
       body: formData,
       queryParameters: queryParameters,

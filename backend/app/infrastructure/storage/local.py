@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-from urllib.parse import quote
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import quote, unquote
 
 from app.core.storage import ObjectStorage, StorageOperationError, StoredObject
 
@@ -57,7 +57,22 @@ class LocalFileObjectStorage(ObjectStorage):
         return f"/media/{quote(self._public_key(key), safe='/')}"
 
     def _resolve_path(self, key: str) -> Path:
-        return self.root_dir / self.bucket_name / Path(key)
+        if not key or "\x00" in key:
+            raise StorageOperationError("Invalid local storage key.")
+
+        decoded_key = unquote(key).replace("\\", "/")
+        if PurePosixPath(decoded_key).is_absolute() or PureWindowsPath(decoded_key).drive:
+            raise StorageOperationError("Local storage key must be relative.")
+        key_path = Path(decoded_key)
+        bucket_root = (self.root_dir / self.bucket_name).resolve()
+        candidate = (bucket_root / key_path).resolve()
+        try:
+            candidate.relative_to(bucket_root)
+        except ValueError as exc:
+            raise StorageOperationError("Local storage key escapes the media root.") from exc
+        if candidate == bucket_root:
+            raise StorageOperationError("Invalid local storage key.")
+        return candidate
 
     def _public_key(self, key: str) -> str:
         return f"{self.bucket_name}/{key.replace('\\', '/')}"

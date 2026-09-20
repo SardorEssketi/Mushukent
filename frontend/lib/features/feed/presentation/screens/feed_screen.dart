@@ -33,6 +33,7 @@ void setPostLikeOverride(
 
 final feedPostsProvider =
     FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
+  ref.watch(postMutationRevisionProvider);
   final api = ref.watch(mushukistanApiProvider);
   final mode = ref.watch(feedModeProvider);
   final popularPeriod = ref.watch(feedPopularPeriodProvider);
@@ -130,6 +131,7 @@ class FeedScreen extends ConsumerWidget {
     );
   }
 }
+
 class _FeedItemCard extends StatelessWidget {
   const _FeedItemCard({required this.item, required this.strings});
 
@@ -1153,8 +1155,7 @@ class _FeedMediaPreviewState extends State<_FeedMediaPreview> {
   @override
   Widget build(BuildContext context) {
     final urls = _urls;
-    final desktop =
-        MediaQuery.sizeOf(context).width >= _mobileFeedBreakpoint;
+    final desktop = MediaQuery.sizeOf(context).width >= _mobileFeedBreakpoint;
     return AspectRatio(
       aspectRatio: _feedImageAspectRatio(context),
       child: Stack(

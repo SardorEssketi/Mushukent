@@ -65,6 +65,23 @@ class SqlAlchemyAdoptionPostRepository:
         )
         return self._model_to_record(item) if item is not None else None
 
+    def get_by_ids(self, adoption_post_ids: list[UUID]) -> list[AdoptionPostRecord]:
+        if not adoption_post_ids:
+            return []
+        items = self.session.scalars(
+            select(schema.AdoptionPost)
+            .options(
+                selectinload(schema.AdoptionPost.photos),
+                selectinload(schema.AdoptionPost.author),
+            )
+            .where(
+                schema.AdoptionPost.id.in_(adoption_post_ids),
+                schema.AdoptionPost.deleted_at.is_(None),
+                schema.AdoptionPost.is_public.is_(True),
+            )
+        ).all()
+        return [self._model_to_record(item) for item in items]
+
     def list_public(
         self,
         *,

@@ -143,7 +143,11 @@ class User(UUIDPrimaryKeyMixin, Base):
         passive_deletes=True,
     )
     posts: Mapped[list["Post"]] = relationship(back_populates="author", passive_deletes=True)
-    comments: Mapped[list["Comment"]] = relationship(back_populates="author", passive_deletes=True)
+    comments: Mapped[list["Comment"]] = relationship(
+        back_populates="author",
+        foreign_keys="Comment.user_id",
+        passive_deletes=True,
+    )
     likes: Mapped[list["Like"]] = relationship(back_populates="user", passive_deletes=True)
     reports_created: Mapped[list["Report"]] = relationship(
         back_populates="reporter",
@@ -331,6 +335,11 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
     comments: Mapped[list["Comment"]] = relationship(back_populates="post", passive_deletes=True)
     likes: Mapped[list["Like"]] = relationship(back_populates="post", passive_deletes=True)
+    history: Mapped[list["PostHistory"]] = relationship(
+        back_populates="post",
+        passive_deletes=True,
+        order_by="PostHistory.created_at.desc()",
+    )
 
     __table_args__ = (
         CheckConstraint("like_count >= 0", name="like_count_non_negative"),
@@ -372,6 +381,33 @@ class PostPhoto(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
 
 
+class PostHistory(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "post_history"
+
+    post_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    before: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    after: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    post: Mapped["Post"] = relationship(back_populates="history")
+    actor: Mapped["User | None"] = relationship(foreign_keys=[actor_id])
+
+    __table_args__ = (
+        CheckConstraint("action IN ('edited', 'deleted')", name="post_history_action_valid"),
+        Index("idx_post_history_post_id_created_at", "post_id", "created_at"),
+        Index("idx_post_history_actor_id", "actor_id"),
+    )
+
+
 class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     __tablename__ = "comments"
 
@@ -400,12 +436,25 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    edited_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    deleted_by_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     post: Mapped["Post"] = relationship(back_populates="comments")
     lost_pet: Mapped["LostPet | None"] = relationship(back_populates="comments")
     adoption_post: Mapped["AdoptionPost | None"] = relationship(back_populates="comments")
-    author: Mapped["User | None"] = relationship(back_populates="comments")
+    author: Mapped["User | None"] = relationship(
+        back_populates="comments",
+        foreign_keys=[user_id],
+    )
+    deleted_by: Mapped["User | None"] = relationship(foreign_keys=[deleted_by_id])
 
     __table_args__ = (
         CheckConstraint(
@@ -419,6 +468,7 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         Index("idx_comments_adoption_post_id", "adoption_post_id"),
         Index("idx_comments_parent_comment_id", "parent_comment_id"),
         Index("idx_comments_user_id", "user_id"),
+        Index("idx_comments_deleted_by_id", "deleted_by_id"),
     )
 
 

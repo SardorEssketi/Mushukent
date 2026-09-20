@@ -13,6 +13,11 @@ class PostSortOrder(StrEnum):
     OLDEST = "oldest"
 
 
+class PostHistoryAction(StrEnum):
+    EDITED = "edited"
+    DELETED = "deleted"
+
+
 @dataclass(slots=True)
 class PostAuthorSummary:
     id: UUID | None
@@ -51,6 +56,7 @@ class PostRecord:
     author: PostAuthorSummary | None
     cat: PostCatSummary
     is_liked_by_me: bool = False
+    is_edited: bool = False
 
 
 @dataclass(slots=True)
@@ -72,3 +78,50 @@ class CatObservationStats:
     total_observations: int
     total_contributors: int
     total_likes: int
+
+
+@dataclass(slots=True)
+class PostHistoryRecord:
+    id: UUID
+    post_id: UUID
+    actor_id: UUID | None
+    actor_name: str | None
+    action: PostHistoryAction
+    before: dict[str, object]
+    after: dict[str, object]
+    created_at: datetime
+
+
+def post_history_snapshot(post: PostDetailRecord) -> dict[str, object]:
+    """Return the stable, moderator-visible subset of a post used for auditing."""
+    location = post.location
+    return post_history_snapshot_from_values(
+        description=post.description,
+        status=post.status.value if post.status is not None else None,
+        location_latitude=location.latitude if location is not None else None,
+        location_longitude=location.longitude if location is not None else None,
+        is_public=post.is_public,
+        photo_urls=post.photo_urls,
+    )
+
+
+def post_history_snapshot_from_values(
+    *,
+    description: str | None,
+    status: str | None,
+    location_latitude: float | None,
+    location_longitude: float | None,
+    is_public: bool,
+    photo_urls: list[str],
+) -> dict[str, object]:
+    return {
+        "description": description,
+        "status": status,
+        "location": (
+            {"latitude": location_latitude, "longitude": location_longitude}
+            if location_latitude is not None and location_longitude is not None
+            else None
+        ),
+        "is_public": is_public,
+        "photo_urls": list(photo_urls),
+    }

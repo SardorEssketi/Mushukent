@@ -5,6 +5,7 @@ import time
 from collections import defaultdict, deque
 from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
+from ipaddress import ip_address
 from threading import Lock
 from typing import Protocol
 
@@ -133,7 +134,17 @@ def _rate_limit_key_and_limit(request: Request, settings: Settings) -> tuple[str
         f"{api_prefix}/users/account-deletion-requests",
         f"{api_prefix}/users/account-deletion-confirmations",
     }
-    is_upload_endpoint = request.method.upper() == "POST" and path == f"{api_prefix}/posts"
+    method = request.method.upper()
+    upload_paths = {
+        f"{api_prefix}/posts",
+        f"{api_prefix}/lost-pets",
+        f"{api_prefix}/adoption-posts",
+        f"{api_prefix}/cats",
+        f"{api_prefix}/users/me/avatar",
+    }
+    is_upload_endpoint = path in upload_paths and method in {"POST", "PATCH"}
+    if method == "PATCH" and path.startswith(f"{api_prefix}/posts/"):
+        is_upload_endpoint = True
     is_public_read_endpoint = request.method.upper() == "GET" and (
         path == f"{api_prefix}/feed"
         or path == f"{api_prefix}/cats"
@@ -144,10 +155,12 @@ def _rate_limit_key_and_limit(request: Request, settings: Settings) -> tuple[str
     )
 
     if is_auth_endpoint or is_account_deletion_endpoint:
-        return f"auth:ip:{_client_ip(request)}", settings.rate_limit_auth_per_minute
+        return f"auth:ip:{_client_ip(request, settings)}", settings.rate_limit_auth_per_minute
 
     bearer_identity = _bearer_identity(request)
-    actor = bearer_identity if bearer_identity is not None else f"ip:{_client_ip(request)}"
+    actor = (
+        bearer_identity if bearer_identity is not None else f"ip:{_client_ip(request, settings)}"
+    )
 
     if is_upload_endpoint:
         return f"upload:{actor}", settings.rate_limit_upload_per_minute
@@ -157,16 +170,32 @@ def _rate_limit_key_and_limit(request: Request, settings: Settings) -> tuple[str
 
     if bearer_identity is not None:
         return f"user:{bearer_identity}", settings.rate_limit_user_per_minute
-    return f"anon:ip:{_client_ip(request)}", settings.rate_limit_anon_per_minute
+    return f"anon:ip:{_client_ip(request, settings)}", settings.rate_limit_anon_per_minute
 
 
-def _client_ip(request: Request) -> str:
+def _client_ip(request: Request, settings: Settings) -> str:
+    immediate_client = request.client.host if request.client is not None else None
+    if immediate_client is None:
+        return "unknown"
+    try:
+        immediate_address = ip_address(immediate_client)
+    except ValueError:
+        return immediate_client
+
+    is_trusted_proxy = any(immediate_address in network for network in settings.trusted_proxy_cidrs)
     forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",", maxsplit=1)[0].strip()
-    if request.client is not None:
-        return request.client.host
-    return "unknown"
+    if is_trusted_proxy and forwarded_for:
+        chain = [part.strip() for part in forwarded_for.split(",") if part.strip()]
+        for candidate in reversed(chain):
+            try:
+                candidate_address = ip_address(candidate)
+            except ValueError:
+                continue
+            if not any(candidate_address in network for network in settings.trusted_proxy_cidrs):
+                return str(candidate_address)
+        if chain:
+            return chain[0]
+    return str(immediate_address)
 
 
 def _bearer_identity(request: Request) -> str | None:

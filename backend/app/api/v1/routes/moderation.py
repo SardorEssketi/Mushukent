@@ -6,6 +6,7 @@ from app.core.dependencies import get_moderation_service, require_moderator
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
 from app.features.moderation.application.service import ModerationService
+from app.features.posts.application.schemas import PostHistoryEntryResponse
 from app.features.reports.application.schemas import (
     GenericListResponse,
     ReportHandleRequest,
@@ -39,9 +40,7 @@ def get_report(
     current_user: AuthUser = Depends(require_moderator),
     moderation_service: ModerationService = Depends(get_moderation_service),
 ) -> ApiSuccess[ReportResponse]:
-    return ApiSuccess(
-        data=moderation_service.get_report(report_id, current_user=current_user)
-    )
+    return ApiSuccess(data=moderation_service.get_report(report_id, current_user=current_user))
 
 
 @router.patch(
@@ -75,3 +74,16 @@ def delete_post(
 ):
     moderation_service.delete_post(post_id, current_user=current_user)
     return None
+
+
+@router.get(
+    "/posts/{post_id}/history",
+    response_model=ApiSuccess[list[PostHistoryEntryResponse]],
+    response_model_exclude_none=True,
+)
+def get_post_history(
+    post_id: UUID,
+    current_user: AuthUser = Depends(require_moderator),
+    moderation_service: ModerationService = Depends(get_moderation_service),
+) -> ApiSuccess[list[PostHistoryEntryResponse]]:
+    return ApiSuccess(data=moderation_service.get_post_history(post_id, current_user=current_user))

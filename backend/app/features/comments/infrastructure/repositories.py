@@ -64,6 +64,16 @@ class SqlAlchemyCommentRepository(CommentRepository):
             raise RuntimeError("Created comment could not be loaded.")
         return created
 
+    def database_now(self) -> datetime:
+        # PostgreSQL ``now()`` is fixed at transaction start.  Mutations first
+        # load and lock their target, so use the database wall clock for the
+        # strict comment-edit deadline instead of allowing that earlier
+        # transaction timestamp to extend it.
+        value = self.session.scalar(select(func.clock_timestamp()))
+        if value is None:  # pragma: no cover - database contract
+            raise RuntimeError("Database clock returned no timestamp.")
+        return value
+
     def lost_pet_exists(self, lost_pet_id: UUID) -> bool:
         exists = self.session.scalar(
             select(schema.LostPet.id).where(
@@ -178,11 +188,26 @@ class SqlAlchemyCommentRepository(CommentRepository):
         )
         if not include_private:
             statement = statement.where(
-                schema.Post.deleted_at.is_(None),
-                schema.Post.is_public.is_(True),
-                schema.Cat.deleted_at.is_(None),
-                schema.Cat.is_active.is_(True),
-                schema.Cat.merged_into.is_(None),
+                or_(
+                    and_(
+                        schema.Comment.post_id.is_not(None),
+                        schema.Post.deleted_at.is_(None),
+                        schema.Post.is_public.is_(True),
+                        schema.Cat.deleted_at.is_(None),
+                        schema.Cat.is_active.is_(True),
+                        schema.Cat.merged_into.is_(None),
+                    ),
+                    and_(
+                        schema.Comment.lost_pet_id.is_not(None),
+                        schema.LostPet.deleted_at.is_(None),
+                        schema.LostPet.is_public.is_(True),
+                    ),
+                    and_(
+                        schema.Comment.adoption_post_id.is_not(None),
+                        schema.AdoptionPost.deleted_at.is_(None),
+                        schema.AdoptionPost.is_public.is_(True),
+                    ),
+                )
             )
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
@@ -194,13 +219,41 @@ class SqlAlchemyCommentRepository(CommentRepository):
         )
         return CommentPage(items=items, next_cursor=next_cursor, limit=limit)
 
-    def mark_deleted(self, comment_id: UUID, *, deleted_at: datetime) -> bool:
+    def mark_deleted(
+        self,
+        comment_id: UUID,
+        *,
+        deleted_at: datetime,
+        deleted_by_id: UUID,
+    ) -> bool:
         result = self.session.execute(
             update(schema.Comment)
             .where(schema.Comment.id == comment_id, schema.Comment.deleted_at.is_(None))
-            .values(deleted_at=deleted_at)
+            .values(
+                deleted_at=deleted_at,
+                deleted_by_id=deleted_by_id,
+                updated_at=deleted_at,
+            )
         )
         return bool(getattr(result, "rowcount", 0))
+
+    def update_content(
+        self,
+        comment_id: UUID,
+        *,
+        content: str,
+        edited_at: datetime,
+    ) -> CommentRecord | None:
+        self.session.execute(
+            update(schema.Comment)
+            .where(schema.Comment.id == comment_id, schema.Comment.deleted_at.is_(None))
+            .values(
+                content=content,
+                edited_at=edited_at,
+                updated_at=edited_at,
+            )
+        )
+        return self.get_by_id(comment_id, include_deleted=False)
 
     def increment_post_comment_count(self, post_id: UUID) -> None:
         self.session.execute(
@@ -256,7 +309,9 @@ class SqlAlchemyCommentRepository(CommentRepository):
                 schema.Comment.content.label("content"),
                 schema.Comment.created_at.label("created_at"),
                 schema.Comment.updated_at.label("updated_at"),
+                schema.Comment.edited_at.label("edited_at"),
                 schema.Comment.deleted_at.label("deleted_at"),
+                schema.Comment.deleted_by_id.label("deleted_by_id"),
                 schema.User.id.label("user_id"),
                 schema.User.name.label("user_name"),
                 schema.User.avatar_url.label("user_avatar_url"),
@@ -272,7 +327,23 @@ class SqlAlchemyCommentRepository(CommentRepository):
             )
         )
         if not include_deleted:
-            statement = statement.where(schema.Comment.deleted_at.is_(None))
+            statement = statement.where(
+                schema.Comment.deleted_at.is_(None),
+                or_(
+                    and_(
+                        schema.Comment.post_id.is_not(None),
+                        schema.Post.deleted_at.is_(None),
+                    ),
+                    and_(
+                        schema.Comment.lost_pet_id.is_not(None),
+                        schema.LostPet.deleted_at.is_(None),
+                    ),
+                    and_(
+                        schema.Comment.adoption_post_id.is_not(None),
+                        schema.AdoptionPost.deleted_at.is_(None),
+                    ),
+                ),
+            )
         return statement
 
     def _post_statement(self, *, viewer_user_id: UUID | None, include_deleted: bool):
@@ -384,7 +455,9 @@ class SqlAlchemyCommentRepository(CommentRepository):
             content=row["content"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            edited_at=row["edited_at"],
             deleted_at=row["deleted_at"],
+            deleted_by_id=row["deleted_by_id"],
             user=(
                 CommentUserSummary(
                     id=user_id,

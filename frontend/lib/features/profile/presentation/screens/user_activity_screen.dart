@@ -10,11 +10,13 @@ import '../../../feed/presentation/screens/feed_screen.dart';
 
 final userPostsProvider = FutureProvider.autoDispose
     .family<ApiPage<PostSummary>, String>((ref, userId) async {
+  ref.watch(postMutationRevisionProvider);
   return ref.watch(mushukistanApiProvider).listUserPosts(userId, limit: 50);
 });
 
 final userCommentsProvider = FutureProvider.autoDispose
     .family<ApiPage<CommentData>, String>((ref, userId) async {
+  ref.watch(postMutationRevisionProvider);
   return ref.watch(mushukistanApiProvider).listUserComments(userId, limit: 50);
 });
 

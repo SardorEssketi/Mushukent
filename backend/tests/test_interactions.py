@@ -15,6 +15,7 @@ from app.core.container import AppContainer
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 from app.features.cats.domain.models import CatStatus
+from app.features.comments.application.service import comment_edit_window_is_open
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.main import app
@@ -84,7 +85,6 @@ def _create_user_with_token(
             AuthenticatedPrincipal(
                 user_id=user.id,
                 role=Role.MODERATOR if is_moderator else Role.USER,
-                email=user.email,
             )
         )
         return user, token
@@ -455,10 +455,7 @@ def test_create_comment_and_validation_behaviour(
         },
     )
     assert nested_reply_response.status_code == 201
-    assert (
-        nested_reply_response.json()["data"]["parent_comment_id"]
-        == reply_payload["id"]
-    )
+    assert nested_reply_response.json()["data"]["parent_comment_id"] == reply_payload["id"]
 
     blank_response = client.post(
         f"/api/v1/posts/{post_id}/comments",
@@ -621,6 +618,8 @@ def test_comment_delete_by_author_and_moderator(
 
     with interactions_runtime.db_session_manager.session_scope() as session:
         post = session.get(schema.Post, post_id)
+        author_deleted_comment = session.get(schema.Comment, comment_id)
+        moderator_deleted_comment = session.get(schema.Comment, second_comment_id)
         comments = session.execute(
             select(schema.Comment).where(
                 schema.Comment.post_id == post_id,
@@ -630,6 +629,199 @@ def test_comment_delete_by_author_and_moderator(
         assert post is not None
         assert post.comment_count == 0
         assert comments == []
+        assert author_deleted_comment is not None
+        assert author_deleted_comment.deleted_by_id == author.id
+        assert moderator_deleted_comment is not None
+        assert moderator_deleted_comment.deleted_by_id == _moderator.id
+
+
+def test_comment_owner_edit_window_noop_and_immutable_fields(
+    client: TestClient,
+    interactions_runtime,
+) -> None:
+    author, author_token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="comment-edit-author@example.com",
+    )
+    cat = _create_cat(interactions_runtime.db_session_manager, creator_id=author.id)
+    post_id = _create_post(
+        interactions_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+    )
+    comment_id = _create_comment(
+        interactions_runtime.db_session_manager,
+        post_id=post_id,
+        user_id=author.id,
+        content="Original",
+        created_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+
+    edited = client.patch(
+        f"/api/v1/comments/{comment_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Updated"},
+    )
+    assert edited.status_code == 200
+    edited_payload = edited.json()["data"]
+    assert edited_payload["content"] == "Updated"
+    assert edited_payload["edited_at"] is not None
+    assert edited_payload["edit_until"] is not None
+
+    no_op_id = _create_comment(
+        interactions_runtime.db_session_manager,
+        post_id=post_id,
+        user_id=author.id,
+        content="Unchanged",
+    )
+    untouched = client.patch(
+        f"/api/v1/comments/{no_op_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Unchanged"},
+    )
+    assert untouched.status_code == 200
+    assert untouched.json()["data"]["edited_at"] is None
+
+    no_op = client.patch(
+        f"/api/v1/comments/{comment_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Updated"},
+    )
+    assert no_op.status_code == 200
+    assert no_op.json()["data"]["edited_at"] == edited_payload["edited_at"]
+
+    immutable = client.patch(
+        f"/api/v1/comments/{comment_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Another", "user_id": str(author.id)},
+    )
+    assert immutable.status_code == 422
+
+    with interactions_runtime.db_session_manager.session_scope() as session:
+        comment = session.get(schema.Comment, comment_id)
+        assert comment is not None
+        assert comment.content == "Updated"
+        assert comment.edited_at is not None
+
+
+def test_comment_edit_window_has_an_exclusive_30_minute_boundary() -> None:
+    created_at = datetime(2026, 9, 20, 10, 0, tzinfo=UTC)
+
+    assert comment_edit_window_is_open(
+        created_at=created_at,
+        current_time=created_at + timedelta(minutes=29, seconds=59),
+        edit_window_minutes=30,
+    )
+    assert not comment_edit_window_is_open(
+        created_at=created_at,
+        current_time=created_at + timedelta(minutes=30),
+        edit_window_minutes=30,
+    )
+    assert not comment_edit_window_is_open(
+        created_at=created_at,
+        current_time=created_at + timedelta(minutes=30, seconds=1),
+        edit_window_minutes=30,
+    )
+
+
+def test_comment_edit_boundary_and_authorization(
+    client: TestClient,
+    interactions_runtime,
+) -> None:
+    author, author_token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="comment-window-author@example.com",
+    )
+    other, other_token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="comment-window-other@example.com",
+    )
+    _moderator, moderator_token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="comment-window-moderator@example.com",
+        is_moderator=True,
+    )
+    cat = _create_cat(interactions_runtime.db_session_manager, creator_id=author.id)
+    post_id = _create_post(
+        interactions_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+    )
+    active_id = _create_comment(
+        interactions_runtime.db_session_manager,
+        post_id=post_id,
+        user_id=author.id,
+        content="Still editable",
+        created_at=datetime.now(UTC) - timedelta(minutes=29, seconds=59),
+    )
+    expired_id = _create_comment(
+        interactions_runtime.db_session_manager,
+        post_id=post_id,
+        user_id=author.id,
+        content="Too old",
+        created_at=datetime.now(UTC) - timedelta(minutes=30, seconds=1),
+    )
+
+    assert (
+        client.patch(
+            f"/api/v1/comments/{active_id}",
+            headers={"Authorization": f"Bearer {author_token}"},
+            json={"content": "Changed before boundary"},
+        ).status_code
+        == 200
+    )
+    expired = client.patch(
+        f"/api/v1/comments/{expired_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Too late"},
+    )
+    assert expired.status_code == 403
+    assert expired.json()["error"]["code"] == "COMMENT_EDIT_WINDOW_EXPIRED"
+
+    other_edit = client.patch(
+        f"/api/v1/comments/{active_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+        json={"content": "IDOR"},
+    )
+    assert other_edit.status_code == 403
+    moderator_edit = client.patch(
+        f"/api/v1/comments/{active_id}",
+        headers={"Authorization": f"Bearer {moderator_token}"},
+        json={"content": "Moderator cannot edit"},
+    )
+    assert moderator_edit.status_code == 403
+    unauthenticated = client.patch(
+        f"/api/v1/comments/{active_id}",
+        json={"content": "No token"},
+    )
+    assert unauthenticated.status_code == 401
+    unauthenticated_delete = client.delete(f"/api/v1/comments/{active_id}")
+    assert unauthenticated_delete.status_code == 401
+
+    assert (
+        client.delete(
+            f"/api/v1/comments/{expired_id}",
+            headers={"Authorization": f"Bearer {author_token}"},
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            f"/api/v1/comments/{active_id}",
+            headers={"Authorization": f"Bearer {moderator_token}"},
+        ).status_code
+        == 204
+    )
+    deleted_edit = client.patch(
+        f"/api/v1/comments/{active_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Deleted"},
+    )
+    assert deleted_edit.status_code == 404
 
 
 def test_inaccessible_or_deleted_post_comment_behavior(
@@ -667,6 +859,14 @@ def test_inaccessible_or_deleted_post_comment_behavior(
     )
     assert private_list.status_code == 404
 
+    comment_before_delete = client.post(
+        f"/api/v1/posts/{private_post_id}/comments",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Comment before parent removal"},
+    )
+    assert comment_before_delete.status_code == 201
+    comment_id = comment_before_delete.json()["data"]["id"]
+
     delete_post = client.delete(
         f"/api/v1/posts/{private_post_id}",
         headers={"Authorization": f"Bearer {author_token}"},
@@ -679,3 +879,106 @@ def test_inaccessible_or_deleted_post_comment_behavior(
         json={"content": "After delete"},
     )
     assert deleted_comment.status_code == 404
+
+    deleted_list = client.get(
+        f"/api/v1/posts/{private_post_id}/comments",
+        headers={"Authorization": f"Bearer {author_token}"},
+    )
+    assert deleted_list.status_code == 404
+
+    deleted_parent_edit = client.patch(
+        f"/api/v1/comments/{comment_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Should not update"},
+    )
+    assert deleted_parent_edit.status_code == 404
+
+    deleted_parent_delete = client.delete(
+        f"/api/v1/comments/{comment_id}",
+        headers={"Authorization": f"Bearer {author_token}"},
+    )
+    assert deleted_parent_delete.status_code == 404
+
+    deleted_parent_activity = client.get(
+        f"/api/v1/users/{author.id}/comments",
+        headers={"Authorization": f"Bearer {author_token}"},
+    )
+    assert deleted_parent_activity.status_code == 200
+    assert deleted_parent_activity.json()["data"]["items"] == []
+
+    deleted_parent_report = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={
+            "target_type": "comment",
+            "target_id": comment_id,
+            "reason": "No longer reportable",
+        },
+    )
+    assert deleted_parent_report.status_code == 404
+
+
+def test_comment_deletion_preserves_replies_without_exposing_deleted_content(
+    client: TestClient,
+    interactions_runtime,
+) -> None:
+    author, author_token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="comment-thread-author@example.com",
+    )
+    replier, replier_token = _create_user_with_token(
+        interactions_runtime.db_session_manager,
+        interactions_runtime.token_service,
+        email="comment-thread-replier@example.com",
+    )
+    cat = _create_cat(interactions_runtime.db_session_manager, creator_id=author.id)
+    post_id = _create_post(
+        interactions_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+    )
+    parent_response = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {author_token}"},
+        json={"content": "Parent content that must disappear"},
+    )
+    assert parent_response.status_code == 201
+    parent_id = parent_response.json()["data"]["id"]
+    reply_response = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {replier_token}"},
+        json={"content": "Active reply", "parent_comment_id": parent_id},
+    )
+    assert reply_response.status_code == 201
+    reply_id = reply_response.json()["data"]["id"]
+
+    assert (
+        client.delete(
+            f"/api/v1/comments/{parent_id}",
+            headers={"Authorization": f"Bearer {author_token}"},
+        ).status_code
+        == 204
+    )
+    comments = client.get(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {replier_token}"},
+    )
+    assert comments.status_code == 200
+    items = comments.json()["data"]["items"]
+    assert [item["id"] for item in items] == [reply_id]
+    assert items[0]["parent_comment_id"] == parent_id
+    assert all(item["content"] != "Parent content that must disappear" for item in items)
+
+    reply_to_deleted = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {replier_token}"},
+        json={"content": "Must not attach", "parent_comment_id": parent_id},
+    )
+    assert reply_to_deleted.status_code == 404
+    deleted_report = client.post(
+        "/api/v1/reports",
+        headers={"Authorization": f"Bearer {replier_token}"},
+        json={"target_type": "comment", "target_id": parent_id, "reason": "Removed"},
+    )
+    assert deleted_report.status_code == 404

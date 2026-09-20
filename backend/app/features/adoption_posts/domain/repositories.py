@@ -15,6 +15,8 @@ class AdoptionPostRepository(Protocol):
 
     def get_by_id(self, adoption_post_id: UUID) -> AdoptionPostRecord | None: ...
 
+    def get_by_ids(self, adoption_post_ids: list[UUID]) -> list[AdoptionPostRecord]: ...
+
     def list_public(
         self,
         *,

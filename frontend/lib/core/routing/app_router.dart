@@ -21,8 +21,10 @@ import '../../features/lost_pets/presentation/screens/lost_pet_detail_screen.dar
 import '../../features/map/presentation/screens/map_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_report_detail_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_reports_screen.dart';
+import '../../features/moderation/presentation/screens/post_history_screen.dart';
 import '../../features/moderation/presentation/screens/report_content_screen.dart';
 import '../../features/posts/presentation/screens/post_detail_screen.dart';
+import '../../features/posts/presentation/screens/post_edit_screen.dart';
 import '../../features/profile/presentation/screens/adoption_help_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/about_account_screen.dart';
@@ -61,7 +63,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           location.startsWith('/leaderboards') ||
           location.startsWith('/profile') ||
           location.startsWith('/report') ||
-          location.startsWith('/moderation');
+          location.startsWith('/moderation') ||
+          location.endsWith('/edit');
 
       switch (authState.phase) {
         case AuthPhase.initial:
@@ -316,6 +319,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             PostDetailScreen(postId: state.pathParameters['postId'] ?? ''),
       ),
       GoRoute(
+        path: '/posts/:postId/edit',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            PostEditScreen(postId: state.pathParameters['postId'] ?? ''),
+      ),
+      GoRoute(
         path: '/lost-pets/:lostPetId',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => LostPetDetailScreen(
@@ -349,6 +358,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => ModerationReportDetailScreen(
           reportId: state.pathParameters['reportId'] ?? '',
         ),
+      ),
+      GoRoute(
+        path: '/moderation/posts/:postId/history',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) =>
+            PostHistoryScreen(postId: state.pathParameters['postId'] ?? ''),
       ),
     ],
   );

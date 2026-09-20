@@ -19,13 +19,28 @@ from app.features.posts.application.schemas import (
     GenericListResponse,
     PostCreateJSONRequest,
     PostCreateMultipartRequest,
+    PostHistoryEntryResponse,
     PostListItem,
     PostResponse,
+    PostUpdateJSONRequest,
+    PostUpdateMultipartRequest,
+    to_post_history_response,
     to_post_page_response,
     to_post_response,
 )
-from app.features.posts.domain.models import CatObservationStats, PostDetailRecord, PostSortOrder
-from app.features.posts.domain.repositories import PostCreateDraft, PostPhotoDraft, PostRepository
+from app.features.posts.domain.models import (
+    CatObservationStats,
+    PostDetailRecord,
+    PostSortOrder,
+    post_history_snapshot,
+    post_history_snapshot_from_values,
+)
+from app.features.posts.domain.repositories import (
+    PostCreateDraft,
+    PostPhotoDraft,
+    PostRepository,
+    PostUpdateDraft,
+)
 from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
@@ -222,6 +237,7 @@ class PostsService:
                 post_id,
                 include_deleted=True,
                 viewer_user_id=user.id,
+                for_update=True,
             )
             if current is None:
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")
@@ -246,6 +262,14 @@ class PostsService:
             if not deleted:
                 return
 
+            post_repository.add_history(
+                post_id=post_id,
+                actor_id=user.id,
+                action="deleted",
+                before=post_history_snapshot(current),
+                after={"deleted": True},
+            )
+
             stats = post_repository.recalculate_cat_stats(current.cat_id)
             cat = cat_repository.get_by_id(current.cat.id)
             if cat is None:
@@ -257,6 +281,160 @@ class PostsService:
                 actor_id=str(user.id),
                 moderator=user.is_moderator,
             )
+
+    def update_post(
+        self,
+        post_id: UUID,
+        user: AuthUser,
+        payload: PostUpdateJSONRequest | PostUpdateMultipartRequest,
+        *,
+        photos: list[tuple[bytes, str | None, str | None]] | None = None,
+    ) -> PostResponse:
+        """Update only mutable observation fields and atomically record its version."""
+        photo_payloads = list(photos or [])
+        if len(photo_payloads) > 5:
+            raise api_error(
+                400,
+                "INVALID_PAYLOAD",
+                "Observation posts can include up to 5 photos.",
+            )
+
+        uploaded_keys: list[str] = []
+        replacement_photos: list[PostPhotoDraft] | None = None
+        try:
+            if photo_payloads:
+                # Reject an IDOR before doing externally billed storage work. The
+                # post is checked again under a row lock in the mutation transaction.
+                with self.db_session_manager.session_scope() as session:
+                    existing = self.post_repository_factory(session).get_by_id(
+                        post_id,
+                        include_deleted=True,
+                        viewer_user_id=user.id,
+                    )
+                    self._require_editable_owner(existing, user)
+
+                replacement_photos = []
+                for index, (content, content_type, filename) in enumerate(photo_payloads):
+                    photo_id = uuid4()
+                    photo_url, thumb_url, keys = self._upload_post_photo(
+                        entity_id=photo_id,
+                        content=content,
+                        content_type=content_type,
+                        filename=filename,
+                    )
+                    uploaded_keys.extend(keys)
+                    replacement_photos.append(
+                        PostPhotoDraft(
+                            id=photo_id,
+                            photo_url=photo_url,
+                            thumb_url=thumb_url,
+                            position=index,
+                        )
+                    )
+            with self.db_session_manager.session_scope() as session:
+                post_repository = self.post_repository_factory(session)
+                current = post_repository.get_by_id(
+                    post_id,
+                    include_deleted=True,
+                    viewer_user_id=user.id,
+                    for_update=True,
+                )
+                self._require_editable_owner(current, user)
+                assert current is not None
+
+                before = post_history_snapshot(current)
+                location = (
+                    payload.location if "location" in payload.model_fields_set else current.location
+                )
+                draft = PostUpdateDraft(
+                    description=(
+                        (payload.description.strip() if payload.description else None)
+                        if "description" in payload.model_fields_set
+                        else current.description
+                    ),
+                    location_latitude=location.latitude if location is not None else None,
+                    location_longitude=location.longitude if location is not None else None,
+                    status=(
+                        payload.status if "status" in payload.model_fields_set else current.status
+                    ),
+                    is_public=(
+                        payload.is_public
+                        if "is_public" in payload.model_fields_set
+                        else current.is_public
+                    ),
+                    photos=replacement_photos,
+                )
+                proposed = post_history_snapshot_from_values(
+                    description=draft.description,
+                    status=draft.status.value if draft.status is not None else None,
+                    location_latitude=draft.location_latitude,
+                    location_longitude=draft.location_longitude,
+                    is_public=draft.is_public,
+                    photo_urls=(
+                        [photo.photo_url for photo in draft.photos]
+                        if draft.photos is not None
+                        else current.photo_urls
+                    ),
+                )
+                if before == proposed:
+                    return to_post_response(current)
+
+                updated = post_repository.update(post_id, draft)
+                after = post_history_snapshot(updated)
+                post_repository.add_history(
+                    post_id=post_id,
+                    actor_id=user.id,
+                    action="edited",
+                    before=before,
+                    after=after,
+                )
+                audited = post_repository.get_by_id(
+                    post_id,
+                    include_deleted=False,
+                    viewer_user_id=user.id,
+                )
+                if audited is None:
+                    raise RuntimeError("Updated post could not be loaded after audit write.")
+                return to_post_response(audited)
+        except StorageValidationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
+        except StorageConfigurationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(
+                500,
+                "STORAGE_NOT_CONFIGURED",
+                "Image storage is not configured.",
+            ) from exc
+        except StorageOperationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(502, "IMAGE_UPLOAD_FAILED", "Image upload failed.") from exc
+        except Exception:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise
+
+    def get_post_history(
+        self,
+        post_id: UUID,
+        *,
+        current_user: AuthUser,
+    ) -> list[PostHistoryEntryResponse]:
+        if not current_user.is_moderator:
+            raise api_error(
+                403,
+                "FORBIDDEN",
+                "You do not have permission to perform this action.",
+            )
+        with self.db_session_manager.session_scope() as session:
+            post_repository = self.post_repository_factory(session)
+            post = post_repository.get_by_id(
+                post_id,
+                include_deleted=True,
+                viewer_user_id=current_user.id,
+            )
+            if post is None:
+                raise api_error(404, "POST_NOT_FOUND", "Post not found.")
+            return to_post_history_response(post_repository.list_history(post_id))
 
     def list_posts_by_user(
         self,
@@ -398,6 +576,17 @@ class PostsService:
         cat.total_contributors = stats.total_contributors
         cat.total_likes = stats.total_likes
         cat_repository.save(cat)
+
+    @staticmethod
+    def _require_editable_owner(post: PostDetailRecord | None, user: AuthUser) -> None:
+        if post is None or post.deleted_at is not None:
+            raise api_error(404, "POST_NOT_FOUND", "Post not found.")
+        if post.user_id != user.id:
+            raise api_error(
+                403,
+                "FORBIDDEN",
+                "You do not have permission to perform this action.",
+            )
 
     def _validate_photo_inputs(
         self,

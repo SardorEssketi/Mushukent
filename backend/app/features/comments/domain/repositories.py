@@ -41,6 +41,8 @@ class CommentRepository(Protocol):
 
     def create(self, draft: CommentCreateDraft) -> CommentRecord: ...
 
+    def database_now(self) -> datetime: ...
+
     def get_by_id(
         self,
         comment_id: UUID,
@@ -86,7 +88,21 @@ class CommentRepository(Protocol):
         include_private: bool,
     ) -> CommentPage: ...
 
-    def mark_deleted(self, comment_id: UUID, *, deleted_at: datetime) -> bool: ...
+    def mark_deleted(
+        self,
+        comment_id: UUID,
+        *,
+        deleted_at: datetime,
+        deleted_by_id: UUID,
+    ) -> bool: ...
+
+    def update_content(
+        self,
+        comment_id: UUID,
+        *,
+        content: str,
+        edited_at: datetime,
+    ) -> CommentRecord | None: ...
 
     def increment_post_comment_count(self, post_id: UUID) -> None: ...
 

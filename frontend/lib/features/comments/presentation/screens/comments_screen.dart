@@ -6,6 +6,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../auth/application/auth_controller.dart';
 
 final commentsProvider = FutureProvider.autoDispose
     .family<ApiPage<CommentData>, String>((ref, postId) async {
@@ -30,11 +31,13 @@ class PostCommentsSection extends ConsumerStatefulWidget {
     required this.postId,
     this.padding = const EdgeInsets.all(24),
     this.showCardChrome = false,
+    this.now,
   });
 
   final String postId;
   final EdgeInsetsGeometry padding;
   final bool showCardChrome;
+  final DateTime? now;
 
   @override
   ConsumerState<PostCommentsSection> createState() =>
@@ -90,6 +93,8 @@ class _PostCommentsSectionState extends ConsumerState<PostCommentsSection> {
   Widget build(BuildContext context) {
     final commentsAsync = ref.watch(commentsProvider(widget.postId));
     final strings = ref.watch(appStringsProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final api = ref.read(mushukistanApiProvider);
     return _CommentsContent(
       commentsAsync: commentsAsync,
       strings: strings,
@@ -100,6 +105,12 @@ class _PostCommentsSectionState extends ConsumerState<PostCommentsSection> {
           .createComment(widget.postId, content,
               parentCommentId: parentCommentId),
       onRefresh: () => ref.invalidate(commentsProvider(widget.postId)),
+      onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
+      currentUserId: currentUser?.id,
+      isModerator: currentUser?.isModerator == true,
+      onEdit: api.updateComment,
+      onDelete: api.deleteComment,
+      now: widget.now,
       controller: _controller,
       submitting: _submitting,
       error: _error,
@@ -125,6 +136,8 @@ class _LostPetCommentsSectionState
   Widget build(BuildContext context) {
     final commentsAsync = ref.watch(lostPetCommentsProvider(widget.lostPetId));
     final strings = ref.watch(appStringsProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final api = ref.read(mushukistanApiProvider);
     return _CommentsContent(
       commentsAsync: commentsAsync,
       strings: strings,
@@ -138,6 +151,12 @@ class _LostPetCommentsSectionState
               ),
       onRefresh: () =>
           ref.invalidate(lostPetCommentsProvider(widget.lostPetId)),
+      onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
+      currentUserId: currentUser?.id,
+      isModerator: currentUser?.isModerator == true,
+      onEdit: api.updateComment,
+      onDelete: api.deleteComment,
+      now: null,
       controller: _controller,
       submitting: _submitting,
       error: _error,
@@ -164,6 +183,8 @@ class _AdoptionPostCommentsSectionState
     final commentsAsync =
         ref.watch(adoptionPostCommentsProvider(widget.adoptionPostId));
     final strings = ref.watch(appStringsProvider);
+    final currentUser = ref.watch(currentUserProvider);
+    final api = ref.read(mushukistanApiProvider);
     return _CommentsContent(
       commentsAsync: commentsAsync,
       strings: strings,
@@ -177,6 +198,12 @@ class _AdoptionPostCommentsSectionState
               ),
       onRefresh: () =>
           ref.invalidate(adoptionPostCommentsProvider(widget.adoptionPostId)),
+      onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
+      currentUserId: currentUser?.id,
+      isModerator: currentUser?.isModerator == true,
+      onEdit: api.updateComment,
+      onDelete: api.deleteComment,
+      now: null,
       controller: _controller,
       submitting: _submitting,
       error: _error,
@@ -194,6 +221,12 @@ class _CommentsContent extends StatefulWidget {
     required this.showCardChrome,
     required this.onSubmit,
     required this.onRefresh,
+    required this.onMutation,
+    required this.currentUserId,
+    required this.isModerator,
+    required this.onEdit,
+    required this.onDelete,
+    required this.now,
     required this.controller,
     required this.submitting,
     required this.error,
@@ -207,6 +240,12 @@ class _CommentsContent extends StatefulWidget {
   final bool showCardChrome;
   final Future<void> Function(String content, String? parentCommentId) onSubmit;
   final VoidCallback onRefresh;
+  final VoidCallback onMutation;
+  final String? currentUserId;
+  final bool isModerator;
+  final Future<CommentData> Function(String commentId, String content) onEdit;
+  final Future<void> Function(String commentId) onDelete;
+  final DateTime? now;
   final TextEditingController controller;
   final bool submitting;
   final String? error;
@@ -219,6 +258,112 @@ class _CommentsContent extends StatefulWidget {
 
 class _CommentsContentState extends State<_CommentsContent> {
   CommentData? _replyingTo;
+  final Map<String, CommentData> _updatedComments = <String, CommentData>{};
+  final Set<String> _removedCommentIds = <String>{};
+  final Set<String> _expiredEditCommentIds = <String>{};
+  String? _busyCommentId;
+
+  bool _canEdit(CommentData comment) {
+    if (widget.currentUserId == null ||
+        comment.user?.id != widget.currentUserId ||
+        _expiredEditCommentIds.contains(comment.id)) {
+      return false;
+    }
+    return isCommentEditable(comment, now: widget.now);
+  }
+
+  bool _canDelete(CommentData comment) {
+    return widget.currentUserId != null &&
+        (comment.user?.id == widget.currentUserId || widget.isModerator);
+  }
+
+  void _showSuccess(String message) {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _editComment(CommentData comment) async {
+    final editedContent = await showDialog<String>(
+      context: context,
+      builder: (_) => _CommentEditDialog(
+        initialContent: comment.content,
+        strings: widget.strings,
+      ),
+    );
+    if (!mounted || editedContent == null || editedContent == comment.content) {
+      return;
+    }
+
+    setState(() => _busyCommentId = comment.id);
+    widget.setError(null);
+    try {
+      final updated = await widget.onEdit(comment.id, editedContent);
+      if (!mounted) return;
+      setState(() => _updatedComments[comment.id] = updated);
+      widget.onRefresh();
+      widget.onMutation();
+      _showSuccess(widget.strings.commentUpdated);
+    } catch (error) {
+      if (error is MushukistanApiException &&
+          error.code == 'COMMENT_EDIT_WINDOW_EXPIRED' &&
+          mounted) {
+        setState(() => _expiredEditCommentIds.add(comment.id));
+      }
+      widget.setError(
+        error is MushukistanApiException
+            ? error.userMessage
+            : widget.strings.couldNotSaveChanges,
+      );
+    } finally {
+      if (mounted) setState(() => _busyCommentId = null);
+    }
+  }
+
+  Future<void> _deleteComment(CommentData comment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(widget.strings.deleteCommentTitle),
+        content: Text(widget.strings.deleteCommentMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(widget.strings.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(widget.strings.delete),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || confirmed != true) return;
+
+    setState(() => _busyCommentId = comment.id);
+    widget.setError(null);
+    try {
+      await widget.onDelete(comment.id);
+      if (!mounted) return;
+      setState(() {
+        _removedCommentIds.add(comment.id);
+        if (_replyingTo?.id == comment.id) _replyingTo = null;
+      });
+      widget.onRefresh();
+      widget.onMutation();
+      _showSuccess(widget.strings.commentDeleted);
+    } catch (error) {
+      widget.setError(
+        error is MushukistanApiException
+            ? error.userMessage
+            : widget.strings.couldNotSaveChanges,
+      );
+    } finally {
+      if (mounted) setState(() => _busyCommentId = null);
+    }
+  }
 
   Future<void> _submit() async {
     final content = widget.controller.text.trim();
@@ -233,6 +378,8 @@ class _CommentsContentState extends State<_CommentsContent> {
       await widget.onSubmit(content, parentCommentId);
       widget.controller.clear();
       widget.onRefresh();
+      widget.onMutation();
+      _showSuccess(widget.strings.commentPosted);
       if (mounted) {
         setState(() {
           _replyingTo = null;
@@ -253,7 +400,11 @@ class _CommentsContentState extends State<_CommentsContent> {
   Widget build(BuildContext context) {
     return widget.commentsAsync.when(
       data: (page) {
-        final roots = _buildCommentTree(page.items);
+        final visibleComments = page.items
+            .where((comment) => !_removedCommentIds.contains(comment.id))
+            .map((comment) => _updatedComments[comment.id] ?? comment)
+            .toList(growable: false);
+        final roots = _buildCommentTree(visibleComments);
         final content = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -270,7 +421,7 @@ class _CommentsContentState extends State<_CommentsContent> {
                 ),
                 const Spacer(),
                 Text(
-                  '${page.items.length}',
+                  '${visibleComments.length}',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
@@ -359,7 +510,7 @@ class _CommentsContentState extends State<_CommentsContent> {
               ),
             ],
             const SizedBox(height: 24),
-            if (page.items.isEmpty)
+            if (visibleComments.isEmpty)
               AppStatePanel(
                 icon: Icons.chat_bubble_outline,
                 title: widget.strings.noCommentsYet,
@@ -370,6 +521,13 @@ class _CommentsContentState extends State<_CommentsContent> {
                   node: root,
                   depth: 0,
                   strings: widget.strings,
+                  currentUserId: widget.currentUserId,
+                  isModerator: widget.isModerator,
+                  canEdit: _canEdit,
+                  canDelete: _canDelete,
+                  isBusy: (comment) => _busyCommentId == comment.id,
+                  onEdit: _editComment,
+                  onDelete: _deleteComment,
                   onReply: (comment) {
                     setState(() {
                       _replyingTo = comment;
@@ -411,17 +569,90 @@ class _CommentsContentState extends State<_CommentsContent> {
   }
 }
 
+class _CommentEditDialog extends StatefulWidget {
+  const _CommentEditDialog({
+    required this.initialContent,
+    required this.strings,
+  });
+
+  final String initialContent;
+  final AppStrings strings;
+
+  @override
+  State<_CommentEditDialog> createState() => _CommentEditDialogState();
+}
+
+class _CommentEditDialogState extends State<_CommentEditDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialContent);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.strings.editComment),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: 1,
+        maxLines: 6,
+        maxLength: 1000,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(widget.strings.cancel),
+        ),
+        FilledButton(
+          onPressed: () {
+            final value = _controller.text.trim();
+            if (value.isNotEmpty) {
+              Navigator.of(context).pop(value);
+            }
+          },
+          child: Text(widget.strings.saveChanges),
+        ),
+      ],
+    );
+  }
+}
+
 class _CommentThread extends StatelessWidget {
   const _CommentThread({
     required this.node,
     required this.depth,
     required this.strings,
+    required this.currentUserId,
+    required this.isModerator,
+    required this.canEdit,
+    required this.canDelete,
+    required this.isBusy,
+    required this.onEdit,
+    required this.onDelete,
     required this.onReply,
   });
 
   final _CommentTreeNode node;
   final int depth;
   final AppStrings strings;
+  final String? currentUserId;
+  final bool isModerator;
+  final bool Function(CommentData comment) canEdit;
+  final bool Function(CommentData comment) canDelete;
+  final bool Function(CommentData comment) isBusy;
+  final Future<void> Function(CommentData comment) onEdit;
+  final Future<void> Function(CommentData comment) onDelete;
   final ValueChanged<CommentData> onReply;
 
   @override
@@ -435,6 +666,13 @@ class _CommentThread extends StatelessWidget {
           _CommentBubble(
             comment: node.comment,
             strings: strings,
+            currentUserId: currentUserId,
+            isModerator: isModerator,
+            canEdit: canEdit(node.comment),
+            canDelete: canDelete(node.comment),
+            busy: isBusy(node.comment),
+            onEdit: () => onEdit(node.comment),
+            onDelete: () => onDelete(node.comment),
             onReply: () => onReply(node.comment),
           ),
           ...node.children.map(
@@ -442,6 +680,13 @@ class _CommentThread extends StatelessWidget {
               node: child,
               depth: depth + 1,
               strings: strings,
+              currentUserId: currentUserId,
+              isModerator: isModerator,
+              canEdit: canEdit,
+              canDelete: canDelete,
+              isBusy: isBusy,
+              onEdit: onEdit,
+              onDelete: onDelete,
               onReply: onReply,
             ),
           ),
@@ -455,11 +700,25 @@ class _CommentBubble extends StatelessWidget {
   const _CommentBubble({
     required this.comment,
     required this.strings,
+    required this.currentUserId,
+    required this.isModerator,
+    required this.canEdit,
+    required this.canDelete,
+    required this.busy,
+    required this.onEdit,
+    required this.onDelete,
     required this.onReply,
   });
 
   final CommentData comment;
   final AppStrings strings;
+  final String? currentUserId;
+  final bool isModerator;
+  final bool canEdit;
+  final bool canDelete;
+  final bool busy;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
   final VoidCallback onReply;
 
   @override
@@ -508,7 +767,7 @@ class _CommentBubble extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _formatDate(comment.createdAt),
+                          '${_formatDate(comment.createdAt)}${comment.editedAt == null ? '' : ' · ${strings.edited}'}',
                           softWrap: true,
                           style:
                               Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -520,6 +779,40 @@ class _CommentBubble extends StatelessWidget {
                   ),
                 ),
               ),
+              if (canEdit || canDelete)
+                PopupMenuButton<String>(
+                  enabled: !busy,
+                  tooltip: strings.editComment,
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit();
+                    if (value == 'delete') onDelete();
+                  },
+                  itemBuilder: (context) => [
+                    if (canEdit)
+                      PopupMenuItem<String>(
+                        value: 'edit',
+                        child: Text(strings.editComment),
+                      ),
+                    if (canDelete)
+                      PopupMenuItem<String>(
+                        value: 'delete',
+                        child: Text(
+                          isModerator && comment.user?.id != currentUserId
+                              ? strings.deleteCommentAsModerator
+                              : strings.deleteComment,
+                        ),
+                      ),
+                  ],
+                  icon: busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.more_vert, size: 20),
+                )
+              else
+                const SizedBox(width: 48),
               IconButton(
                 tooltip: strings.report,
                 onPressed: () => context.push(
@@ -593,6 +886,12 @@ String _avatarInitial(String value) {
     return '?';
   }
   return trimmed.substring(0, 1).toUpperCase();
+}
+
+bool isCommentEditable(CommentData comment, {DateTime? now}) {
+  final editUntil =
+      comment.editUntil ?? comment.createdAt.add(const Duration(minutes: 30));
+  return (now ?? DateTime.now()).toUtc().isBefore(editUntil.toUtc());
 }
 
 String _formatDate(DateTime dateTime) {

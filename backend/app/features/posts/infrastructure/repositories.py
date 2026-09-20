@@ -17,11 +17,17 @@ from app.features.posts.domain.models import (
     PostAuthorSummary,
     PostCatSummary,
     PostDetailRecord,
+    PostHistoryAction,
+    PostHistoryRecord,
     PostPage,
     PostRecord,
     PostSortOrder,
 )
-from app.features.posts.domain.repositories import PostCreateDraft, PostRepository
+from app.features.posts.domain.repositories import (
+    PostCreateDraft,
+    PostRepository,
+    PostUpdateDraft,
+)
 from app.infrastructure.db.models import schema
 
 
@@ -72,12 +78,15 @@ class SqlAlchemyPostRepository(PostRepository):
         *,
         include_deleted: bool = False,
         viewer_user_id: UUID | None = None,
+        for_update: bool = False,
     ) -> PostDetailRecord | None:
         statement = self._base_statement(
             viewer_user_id=viewer_user_id,
             include_deleted=include_deleted,
         )
         statement = statement.where(schema.Post.id == post_id)
+        if for_update:
+            statement = statement.with_for_update(of=schema.Post)
         row = self.session.execute(statement).mappings().first()
         if row is None:
             return None
@@ -101,7 +110,7 @@ class SqlAlchemyPostRepository(PostRepository):
         ).where(schema.Post.user_id == user_id)
         statement = self._apply_cursor(statement, cursor, sort, limit)
         rows = self.session.execute(statement).mappings().all()
-        items = [self._row_to_record(row) for row in rows[:limit]]
+        items = self._rows_to_records(rows[:limit])
         next_cursor = (
             self._encode_cursor(rows[limit - 1]["created_at"], rows[limit - 1]["post_id"])
             if len(rows) > limit
@@ -127,7 +136,7 @@ class SqlAlchemyPostRepository(PostRepository):
         ).where(schema.Post.cat_id == cat_id)
         statement = self._apply_cursor(statement, cursor, sort, limit)
         rows = self.session.execute(statement).mappings().all()
-        items = [self._row_to_record(row) for row in rows[:limit]]
+        items = self._rows_to_records(rows[:limit])
         next_cursor = (
             self._encode_cursor(rows[limit - 1]["created_at"], rows[limit - 1]["post_id"])
             if len(rows) > limit
@@ -189,7 +198,7 @@ class SqlAlchemyPostRepository(PostRepository):
         rows = self.session.execute(statement).mappings().all()
         has_next_page = len(rows) > limit
         rows = rows[:limit]
-        items = [self._row_to_record(row) for row in rows]
+        items = self._rows_to_records(rows)
         next_cursor = (
             self._build_feed_cursor(filter_name, rows[limit - 1]) if has_next_page else None
         )
@@ -202,6 +211,108 @@ class SqlAlchemyPostRepository(PostRepository):
             .values(deleted_at=deleted_at)
         )
         return bool(getattr(result, "rowcount", 0))
+
+    def update(self, post_id: UUID, draft: PostUpdateDraft) -> PostDetailRecord:
+        values: dict[str, object] = {
+            "description": draft.description,
+            "status": draft.status,
+            "is_public": draft.is_public,
+            "location": (
+                WKTElement(
+                    f"POINT({draft.location_longitude} {draft.location_latitude})",
+                    srid=4326,
+                )
+                if draft.location_latitude is not None and draft.location_longitude is not None
+                else None
+            ),
+            "updated_at": func.now(),
+        }
+        self.session.execute(
+            update(schema.Post)
+            .where(schema.Post.id == post_id, schema.Post.deleted_at.is_(None))
+            .values(**values)
+        )
+        if draft.photos is not None:
+            self.session.execute(
+                schema.PostPhoto.__table__.delete().where(schema.PostPhoto.post_id == post_id)
+            )
+            self.session.add_all(
+                [
+                    schema.PostPhoto(
+                        id=photo.id,
+                        post_id=post_id,
+                        photo_url=photo.photo_url,
+                        thumb_url=photo.thumb_url,
+                        position=photo.position,
+                    )
+                    for photo in draft.photos
+                ]
+            )
+            first_photo = draft.photos[0]
+            self.session.execute(
+                update(schema.Post)
+                .where(schema.Post.id == post_id, schema.Post.deleted_at.is_(None))
+                .values(photo_url=first_photo.photo_url, thumb_url=first_photo.thumb_url)
+            )
+        self.session.flush()
+        updated = self.get_by_id(post_id, include_deleted=False)
+        if updated is None:
+            raise RuntimeError("Updated post could not be loaded.")
+        return updated
+
+    def add_history(
+        self,
+        *,
+        post_id: UUID,
+        actor_id: UUID | None,
+        action: str,
+        before: dict[str, object],
+        after: dict[str, object],
+    ) -> None:
+        self.session.add(
+            schema.PostHistory(
+                post_id=post_id,
+                actor_id=actor_id,
+                action=action,
+                before=before,
+                after=after,
+            )
+        )
+        self.session.flush()
+
+    def list_history(self, post_id: UUID) -> list[PostHistoryRecord]:
+        rows = (
+            self.session.execute(
+                select(
+                    schema.PostHistory.id,
+                    schema.PostHistory.post_id,
+                    schema.PostHistory.actor_id,
+                    schema.PostHistory.action,
+                    schema.PostHistory.before,
+                    schema.PostHistory.after,
+                    schema.PostHistory.created_at,
+                    schema.User.name.label("actor_name"),
+                )
+                .outerjoin(schema.User, schema.User.id == schema.PostHistory.actor_id)
+                .where(schema.PostHistory.post_id == post_id)
+                .order_by(schema.PostHistory.created_at.desc(), schema.PostHistory.id.desc())
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            PostHistoryRecord(
+                id=row["id"],
+                post_id=row["post_id"],
+                actor_id=row["actor_id"],
+                actor_name=row["actor_name"],
+                action=PostHistoryAction(row["action"]),
+                before=dict(row["before"]),
+                after=dict(row["after"]),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
 
     def recalculate_cat_stats(self, cat_id: UUID) -> CatObservationStats:
         statement = select(
@@ -249,6 +360,12 @@ class SqlAlchemyPostRepository(PostRepository):
             if viewer_user_id is not None
             else literal(False)
         )
+        is_edited = exists(
+            select(1).where(
+                schema.PostHistory.post_id == schema.Post.id,
+                schema.PostHistory.action == PostHistoryAction.EDITED.value,
+            )
+        )
         statement = (
             select(
                 schema.Post.id.label("post_id"),
@@ -277,6 +394,7 @@ class SqlAlchemyPostRepository(PostRepository):
                 schema.User.name.label("author_name"),
                 schema.User.avatar_url.label("author_avatar_url"),
                 liked_by_me.label("is_liked_by_me"),
+                is_edited.label("is_edited"),
             )
             .select_from(schema.Post)
             .join(schema.Cat, schema.Post.cat_id == schema.Cat.id)
@@ -530,10 +648,24 @@ class SqlAlchemyPostRepository(PostRepository):
     def _row_to_detail(self, row: Any) -> PostDetailRecord:
         return PostDetailRecord(**self._row_to_dict(row))
 
-    def _row_to_record(self, row: Any) -> PostRecord:
-        return PostRecord(**self._row_to_dict(row))
+    def _rows_to_records(self, rows: list[Any]) -> list[PostRecord]:
+        photo_urls_by_post_id = self._photo_urls_for_posts([row["post_id"] for row in rows])
+        return [
+            PostRecord(
+                **self._row_to_dict(
+                    row,
+                    photo_urls=(photo_urls_by_post_id.get(row["post_id"]) or [row["photo_url"]]),
+                )
+            )
+            for row in rows
+        ]
 
-    def _row_to_dict(self, row: Any) -> dict[str, Any]:
+    def _row_to_dict(
+        self,
+        row: Any,
+        *,
+        photo_urls: list[str] | None = None,
+    ) -> dict[str, Any]:
         mapping = row
         post_status = mapping["post_status"]
         cat_status = mapping["cat_status"]
@@ -544,7 +676,11 @@ class SqlAlchemyPostRepository(PostRepository):
             "user_id": mapping["post_user_id"],
             "photo_url": mapping["photo_url"],
             "thumb_url": mapping["thumb_url"],
-            "photo_urls": self._photo_urls_for_post(mapping["post_id"], mapping["photo_url"]),
+            "photo_urls": (
+                photo_urls
+                if photo_urls
+                else self._photo_urls_for_post(mapping["post_id"], mapping["photo_url"])
+            ),
             "description": mapping["description"],
             "location": (
                 GeoPoint(
@@ -562,6 +698,7 @@ class SqlAlchemyPostRepository(PostRepository):
             "updated_at": mapping["updated_at"],
             "deleted_at": mapping["deleted_at"],
             "is_liked_by_me": bool(mapping["is_liked_by_me"]),
+            "is_edited": bool(mapping["is_edited"]),
             "author": (
                 PostAuthorSummary(
                     id=author_id,
@@ -594,3 +731,24 @@ class SqlAlchemyPostRepository(PostRepository):
         )
         urls = [url for url in rows if url]
         return urls or [fallback_photo_url]
+
+    def _photo_urls_for_posts(self, post_ids: list[UUID]) -> dict[UUID, list[str]]:
+        if not post_ids:
+            return {}
+        rows = self.session.execute(
+            select(
+                schema.PostPhoto.post_id,
+                schema.PostPhoto.photo_url,
+            )
+            .where(schema.PostPhoto.post_id.in_(post_ids))
+            .order_by(
+                schema.PostPhoto.post_id.asc(),
+                schema.PostPhoto.position.asc(),
+                schema.PostPhoto.id.asc(),
+            )
+        ).all()
+        photo_urls_by_post_id: dict[UUID, list[str]] = {}
+        for post_id, photo_url in rows:
+            if photo_url:
+                photo_urls_by_post_id.setdefault(post_id, []).append(photo_url)
+        return photo_urls_by_post_id

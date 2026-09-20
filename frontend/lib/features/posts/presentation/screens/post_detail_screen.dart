@@ -10,10 +10,13 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
+import '../../../auth/application/auth_controller.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../../profile/presentation/screens/user_activity_screen.dart';
 
 final postDetailProvider =
     FutureProvider.autoDispose.family<PostDetail, String>((ref, postId) async {
+  ref.watch(postMutationRevisionProvider);
   return ref.watch(mushukistanApiProvider).getPost(postId);
 });
 
@@ -30,6 +33,75 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   bool _submittingLike = false;
   bool? _likedOverride;
   int? _likeCountOverride;
+
+  Future<void> _handlePostAction({
+    required _PostAction action,
+    required PostDetail post,
+    required bool isOwner,
+    required bool isModerator,
+    required AppStrings strings,
+  }) async {
+    if (action == _PostAction.edit) {
+      await context.push<bool>('/posts/${post.id}/edit');
+      if (mounted) {
+        ref.invalidate(postDetailProvider(widget.postId));
+      }
+      return;
+    }
+    if (action == _PostAction.history) {
+      await context.push('/moderation/posts/${post.id}/history');
+      return;
+    }
+
+    final deletingAsModerator = !isOwner && isModerator;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          deletingAsModerator
+              ? strings.removePostAsModerator
+              : strings.deletePost,
+        ),
+        content: Text(strings.deleteCommentMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(strings.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    try {
+      if (deletingAsModerator) {
+        await ref.read(mushukistanApiProvider).deleteModerationPost(post.id);
+      } else {
+        await ref.read(mushukistanApiProvider).deleteObservation(post.id);
+      }
+      ref.read(postMutationRevisionProvider.notifier).state++;
+      ref.invalidate(feedPostsProvider);
+      ref.invalidate(profileMeProvider);
+      final userId = ref.read(currentUserProvider)?.id;
+      if (userId != null) {
+        ref.invalidate(userPostsProvider(userId));
+      }
+      if (mounted) {
+        context.pop(true);
+      }
+    } on MushukistanApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.userMessage)),
+        );
+      }
+    }
+  }
 
   Future<void> _toggleLike(PostDetail post) async {
     if (_submittingLike) {
@@ -111,6 +183,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     final ref = this.ref;
     final postAsync = ref.watch(postDetailProvider(widget.postId));
     final strings = ref.watch(appStringsProvider);
+    final currentUser = ref.watch(currentUserProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.observation)),
@@ -124,6 +197,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           final author = post.author;
           final authorId = author?.id;
           final authorName = author?.name ?? strings.anonymous;
+          final isOwner = authorId != null && authorId == currentUser?.id;
+          final isModerator = currentUser?.isModerator == true;
+          final isEdited = post.isEdited;
           final statusTag =
               _postStatusLabel(post.status ?? post.cat.status, strings);
           return ListView(
@@ -195,7 +271,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${strings.published}: ${_formatDate(post.createdAt)}',
+                                      '${strings.published}: ${_formatDate(post.createdAt)}${isEdited ? ' • ${strings.edited}' : ''}',
                                       softWrap: true,
                                       style: Theme.of(context)
                                           .textTheme
@@ -218,6 +294,55 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (isOwner || isModerator) ...[
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    if (isOwner)
+                      OutlinedButton.icon(
+                        onPressed: () => _handlePostAction(
+                          action: _PostAction.edit,
+                          post: post,
+                          isOwner: isOwner,
+                          isModerator: isModerator,
+                          strings: strings,
+                        ),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: Text(strings.editObservation),
+                      ),
+                    OutlinedButton.icon(
+                      onPressed: () => _handlePostAction(
+                        action: _PostAction.delete,
+                        post: post,
+                        isOwner: isOwner,
+                        isModerator: isModerator,
+                        strings: strings,
+                      ),
+                      icon: const Icon(Icons.delete_outline),
+                      label: Text(isOwner
+                          ? strings.deletePost
+                          : strings.removePostAsModerator),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                    if (isModerator)
+                      OutlinedButton.icon(
+                        onPressed: () => _handlePostAction(
+                          action: _PostAction.history,
+                          post: post,
+                          isOwner: isOwner,
+                          isModerator: isModerator,
+                          strings: strings,
+                        ),
+                        icon: const Icon(Icons.history),
+                        label: Text(strings.postHistory),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -265,6 +390,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     );
   }
 }
+
+enum _PostAction { edit, delete, history }
 
 class _AuthorLink extends StatelessWidget {
   const _AuthorLink({

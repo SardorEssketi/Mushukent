@@ -17,6 +17,7 @@ from app.infrastructure.storage.images import (
     sanitize_original_filename,
 )
 from app.infrastructure.storage.keys import MediaKeyFactory, MediaKind, MediaVariant
+from app.infrastructure.storage.local import LocalFileObjectStorage
 from app.infrastructure.storage.r2 import R2ObjectStorage, R2StorageConfig
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
 
@@ -43,6 +44,8 @@ def _make_png(*, size: tuple[int, int] = (48, 48), alpha: bool = False) -> bytes
 
 
 class MemoryObjectStorage:
+    bucket_name = "mushukistan-media"
+
     def __init__(self, *, fail_on_upload: int | None = None) -> None:
         self.fail_on_upload = fail_on_upload
         self.upload_calls = 0
@@ -221,6 +224,70 @@ def test_deletion_is_idempotent() -> None:
     service.delete_object("missing/object.jpg")
 
     assert storage.deleted_keys == ["missing/object.jpg", "missing/object.jpg"]
+
+
+def test_media_cleanup_ignores_external_and_traversal_urls() -> None:
+    storage = MemoryObjectStorage()
+    service = MediaStorageService(storage=storage)
+
+    service.delete_media_url("https://evil.example/posts/original/guessed.jpg")
+    service.delete_media_url("https://media.example/posts/%2e%2e/guessed.jpg")
+    service.delete_media_url("posts/../../guessed.jpg")
+
+    assert storage.deleted_keys == []
+
+
+def test_media_cleanup_accepts_owned_public_url() -> None:
+    storage = MemoryObjectStorage()
+    service = MediaStorageService(storage=storage)
+
+    service.delete_media_url("https://media.example/posts/original/owned.jpg")
+
+    assert storage.deleted_keys == ["posts/original/owned.jpg"]
+
+
+@pytest.mark.parametrize(
+    "unsafe_key",
+    [
+        "../outside.jpg",
+        "posts/../../outside.jpg",
+        "posts/%2e%2e/%2e%2e/outside.jpg",
+        "posts\\..\\..\\outside.jpg",
+        "/absolute/outside.jpg",
+        "C:/absolute/outside.jpg",
+    ],
+)
+def test_local_storage_rejects_paths_outside_media_root(tmp_path, unsafe_key: str) -> None:
+    storage = LocalFileObjectStorage(tmp_path / "media")
+
+    with pytest.raises(StorageOperationError):
+        storage.upload(
+            key=unsafe_key,
+            content=b"payload",
+            content_type="image/jpeg",
+        )
+
+    with pytest.raises(StorageOperationError):
+        storage.exists(unsafe_key)
+
+    with pytest.raises(StorageOperationError):
+        storage.delete(unsafe_key)
+
+
+def test_local_storage_allows_normal_generated_key(tmp_path) -> None:
+    storage = LocalFileObjectStorage(tmp_path / "media")
+    key = "posts/original/2026/09/20/post_uuid.jpg"
+
+    stored = storage.upload(
+        key=key,
+        content=b"payload",
+        content_type="image/jpeg",
+    )
+
+    assert stored.url.endswith(key)
+    assert storage.exists(key) is True
+    storage.delete(key)
+    assert storage.exists(key) is False
 
 
 def test_r2_adapter_with_stubbed_client() -> None:

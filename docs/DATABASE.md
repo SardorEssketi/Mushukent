@@ -28,7 +28,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 Naming conventions
 ------------------
-- Tables: plural, snake_case (users, cats, posts, comments, likes, reports, leaderboard_cache, places, place_category_links, lost_pets, lost_pet_photos, adoption_posts, adoption_post_photos, user_blocks).
+- Tables: plural, snake_case (users, cats, posts, post_history, comments, likes, reports, leaderboard_cache, places, place_category_links, lost_pets, lost_pet_photos, adoption_posts, adoption_post_photos, user_blocks).
 - Columns: snake_case.
 - Primary keys: id (UUID) using gen_random_uuid() as default value.
 - Timestamps: created_at (TIMESTAMP WITH TIME ZONE), updated_at, deleted_at (nullable).
@@ -40,6 +40,7 @@ High-level ER summary
 - cats 1 --- * posts
 - posts 1 --- * comments
 - posts 1 --- * post_photos
+- posts 1 --- * post_history (immutable editable-field versions and deletion audit events)
 - posts * --- * likes (through likes table)
 - users * --- * reports (reporter -> report target)
 - places are independent map points used for pet shops, veterinary clinics and shelters
@@ -111,7 +112,7 @@ CREATE TABLE posts (
     photo_url TEXT NOT NULL,
     thumb_url TEXT NULL,
     -- store both geometry and lat/lon to simplify some client queries and debugging
-    location GEOMETRY(POINT, 4326) NOT NULL,
+    location GEOMETRY(POINT, 4326) NULL,
     latitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_Y(location::geometry)) STORED,
     longitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_X(location::geometry)) STORED,
     description TEXT NULL,
@@ -140,6 +141,23 @@ CREATE TABLE post_photos (
 );
 CREATE INDEX idx_post_photos_post_id_position ON post_photos (post_id, position);
 
+-- Durable post edit/deletion audit history. Normal post deletion is soft, so
+-- these records remain available to moderators for appeals and review.
+-- Account deletion retains event metadata but redacts content snapshots and
+-- clears the deleted account's actor link.
+CREATE TABLE post_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    actor_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    action TEXT NOT NULL CHECK (action IN ('edited', 'deleted')),
+    before JSONB NOT NULL,
+    after JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_post_history_post_id_created_at
+    ON post_history (post_id, created_at);
+CREATE INDEX idx_post_history_actor_id ON post_history (actor_id);
+
 -- Comments
 CREATE TABLE comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -151,13 +169,22 @@ CREATE TABLE comments (
     content TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at TIMESTAMPTZ NULL
+    edited_at TIMESTAMPTZ NULL,
+    deleted_at TIMESTAMPTZ NULL,
+    deleted_by_id UUID REFERENCES users(id) ON DELETE SET NULL
 );
 CREATE INDEX idx_comments_post_id ON comments (post_id);
 CREATE INDEX idx_comments_lost_pet_id ON comments (lost_pet_id);
 CREATE INDEX idx_comments_adoption_post_id ON comments (adoption_post_id);
 CREATE INDEX idx_comments_parent_comment_id ON comments (parent_comment_id);
 CREATE INDEX idx_comments_user_id ON comments (user_id);
+CREATE INDEX idx_comments_deleted_by_id ON comments (deleted_by_id);
+
+Comment edits are limited by the backend `COMMENT_EDIT_WINDOW_MINUTES`
+setting (default 30 minutes) and record the real change in `edited_at`.
+Comments remain soft-deleted so threaded replies and moderation references are
+not broken; `deleted_by_id` records the owner or moderator who performed the
+deletion while the account remains available.
 
 -- Likes: ensure unique (user + post) to prevent duplicate likes
 CREATE TABLE likes (
@@ -318,7 +345,7 @@ CREATE INDEX idx_adoption_post_photos_post_id_position ON adoption_post_photos (
 Important constraints, indexes and rationale
 ------------------------------------------
 - Use geometry(Point, 4326) and GIST indexes for all geospatial queries (nearby posts/cats). Use ST_DWithin for distance searches when querying in meters (note: ST_DWithin with geography is meter-accurate; if using geometry keep in mind the units).
-- Posts.location is required. We also store latitude/longitude as generated columns for convenience.
+- Posts.location is nullable for locationless observations. When present, generated latitude/longitude columns support geospatial reads.
 - New observations create an unnamed `unknown` cat record automatically; the client does not perform nearby-cat matching.
 - Unique constraint (post_id, user_id) in likes enforces single-like policy.
 - Soft-delete: queries should include WHERE deleted_at IS NULL where appropriate; consider adding partial indexes to speed up active-only queries. Example:

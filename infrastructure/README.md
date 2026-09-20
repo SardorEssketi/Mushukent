@@ -54,7 +54,7 @@ Required production settings:
 - Resend HTTP API settings: `RESEND_API_KEY` and
   `RESEND_FROM_EMAIL=noreply@mushukistan.uz` or another verified sender
 - complete Cloudflare R2 settings: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-  `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and optionally `R2_PUBLIC_BASE_URL`
+  `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PUBLIC_BASE_URL`
 - `GOOGLE_OAUTH_CLIENT_ID` when Google sign-in is enabled
 
 ### Production environment variables
@@ -88,12 +88,13 @@ Required production settings:
 | `RATE_LIMIT_UPLOAD_PER_MINUTE` | Yes | No | Upload limit, currently `10`. | Security policy. |
 | `RATE_LIMIT_BACKEND` | Yes | No | `memory` for single-node MVP. | Deployment architecture. |
 | `RATE_LIMIT_REDIS_URL` | No | Yes | Leave blank until Redis-backed limiter exists. | Future Redis provisioning. |
+| `COMMENT_EDIT_WINDOW_MINUTES` | Yes | No | Owner edit window in minutes; defaults to `30`. | Comment authorization policy. |
 | `GOOGLE_OAUTH_CLIENT_ID` | Required if Google sign-in is enabled | No | OAuth client ID accepted by backend. | Google Cloud Console. |
 | `R2_ACCOUNT_ID` | Yes | No | Cloudflare account ID. | Cloudflare dashboard. |
 | `R2_ACCESS_KEY_ID` | Yes | Yes | R2 access key ID. | Cloudflare R2 API token. |
 | `R2_SECRET_ACCESS_KEY` | Yes | Yes | R2 secret access key. | Cloudflare R2 API token. |
 | `R2_BUCKET` | Yes | No | Production media bucket name. | Cloudflare R2 bucket. |
-| `R2_PUBLIC_BASE_URL` | Recommended | No | Public media domain/base URL. | Cloudflare R2 custom domain or public URL. |
+| `R2_PUBLIC_BASE_URL` | Yes | No | Client-readable public media domain/base URL. | Cloudflare R2 custom domain or public URL. |
 | `MEDIA_STORAGE_ROOT` | No for production | No | Local media root. Compose sets `/app/.data/media`; production should use R2. | Local/dev only. |
 
 ### Android release signing

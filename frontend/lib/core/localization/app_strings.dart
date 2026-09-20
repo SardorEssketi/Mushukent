@@ -233,6 +233,203 @@ class AppStrings {
     };
   }
 
+  String get editObservation {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuvni tahrirlash',
+      _RussianStrings() => 'Редактировать наблюдение',
+      _ => 'Edit observation',
+    };
+  }
+
+  String get replacePhotos {
+    return switch (this) {
+      _UzbekStrings() => 'Rasmlarni almashtirish',
+      _RussianStrings() => 'Заменить фотографии',
+      _ => 'Replace photos',
+    };
+  }
+
+  String get removeLocation {
+    return switch (this) {
+      _UzbekStrings() => 'Joylashuvni olib tashlash',
+      _RussianStrings() => 'Удалить местоположение',
+      _ => 'Remove location',
+    };
+  }
+
+  String get updateLocationFromDevice {
+    return switch (this) {
+      _UzbekStrings() => 'Joriy joylashuvdan foydalanish',
+      _RussianStrings() => 'Использовать текущее местоположение',
+      _ => 'Use current location',
+    };
+  }
+
+  String get deletePost {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuvni o‘chirish',
+      _RussianStrings() => 'Удалить наблюдение',
+      _ => 'Delete observation',
+    };
+  }
+
+  String get removePostAsModerator {
+    return switch (this) {
+      _UzbekStrings() => 'Moderator sifatida olib tashlash',
+      _RussianStrings() => 'Удалить как модератор',
+      _ => 'Remove as moderator',
+    };
+  }
+
+  String get postHistory {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuv tarixi',
+      _RussianStrings() => 'История наблюдения',
+      _ => 'Observation history',
+    };
+  }
+
+  String get moderatorOnlyHistory {
+    return switch (this) {
+      _UzbekStrings() => 'Kuzatuv tarixi faqat moderatorlar uchun mavjud.',
+      _RussianStrings() => 'История наблюдения доступна только модераторам.',
+      _ => 'Observation history is available only to moderators.',
+    };
+  }
+
+  String get historyRemoved {
+    return switch (this) {
+      _UzbekStrings() => 'Olib tashlangan',
+      _RussianStrings() => 'Удалено',
+      _ => 'Removed',
+    };
+  }
+
+  String get historyDeletedMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Post yashirib o‘chirildi; oldingi versiya quyida saqlangan.',
+      _RussianStrings() =>
+        'Публикация удалена программно; предыдущая версия сохранена ниже.',
+      _ => 'The post was soft-deleted; the preceding version is retained below.',
+    };
+  }
+
+  String get previousVersion {
+    return switch (this) {
+      _UzbekStrings() => 'Oldingi versiya',
+      _RussianStrings() => 'Предыдущая версия',
+      _ => 'Previous version',
+    };
+  }
+
+  String get before {
+    return switch (this) {
+      _UzbekStrings() => 'Oldin',
+      _RussianStrings() => 'До',
+      _ => 'Before',
+    };
+  }
+
+  String get after {
+    return switch (this) {
+      _UzbekStrings() => 'Keyin',
+      _RussianStrings() => 'После',
+      _ => 'After',
+    };
+  }
+
+  String get noValue {
+    return switch (this) {
+      _UzbekStrings() => 'Yo‘q',
+      _RussianStrings() => 'Нет',
+      _ => 'None',
+    };
+  }
+
+  String get noPhotos {
+    return switch (this) {
+      _UzbekStrings() => 'Rasmlar yo‘q',
+      _RussianStrings() => 'Нет фотографий',
+      _ => 'No photos',
+    };
+  }
+
+  String get edited {
+    return switch (this) {
+      _UzbekStrings() => 'Tahrirlangan',
+      _RussianStrings() => 'Отредактировано',
+      _ => 'Edited',
+    };
+  }
+
+  String get commentPosted {
+    return switch (this) {
+      _UzbekStrings() => 'Izoh yuborildi',
+      _RussianStrings() =>
+        '\u{41a}\u{43e}\u{43c}\u{43c}\u{435}\u{43d}\u{442}\u{430}\u{440}\u{438}\u{439} \u{43e}\u{43f}\u{443}\u{431}\u{43b}\u{438}\u{43a}\u{43e}\u{432}\u{430}\u{43d}',
+      _ => 'Comment posted',
+    };
+  }
+
+  String get commentUpdated {
+    return switch (this) {
+      _UzbekStrings() => 'Izoh yangilandi',
+      _RussianStrings() =>
+        '\u{41a}\u{43e}\u{43c}\u{43c}\u{435}\u{43d}\u{442}\u{430}\u{440}\u{438}\u{439} \u{43e}\u{431}\u{43d}\u{43e}\u{432}\u{43b}\u{435}\u{43d}',
+      _ => 'Comment updated',
+    };
+  }
+
+  String get commentDeleted {
+    return switch (this) {
+      _UzbekStrings() => 'Izoh o‘chirildi',
+      _RussianStrings() =>
+        '\u{41a}\u{43e}\u{43c}\u{43c}\u{435}\u{43d}\u{442}\u{430}\u{440}\u{438}\u{439} \u{443}\u{434}\u{430}\u{43b}\u{435}\u{43d}',
+      _ => 'Comment deleted',
+    };
+  }
+
+  String get editComment {
+    return switch (this) {
+      _UzbekStrings() => 'Izohni tahrirlash',
+      _RussianStrings() => 'Редактировать комментарий',
+      _ => 'Edit comment',
+    };
+  }
+
+  String get deleteComment {
+    return switch (this) {
+      _UzbekStrings() => 'Izohni o‘chirish',
+      _RussianStrings() => 'Удалить комментарий',
+      _ => 'Delete comment',
+    };
+  }
+
+  String get deleteCommentAsModerator {
+    return switch (this) {
+      _UzbekStrings() => 'Moderator sifatida izohni o‘chirish',
+      _RussianStrings() => 'Удалить комментарий как модератор',
+      _ => 'Delete as moderator',
+    };
+  }
+
+  String get deleteCommentTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Izoh o‘chirilsinmi?',
+      _RussianStrings() => 'Удалить комментарий?',
+      _ => 'Delete comment?',
+    };
+  }
+
+  String get deleteCommentMessage {
+    return switch (this) {
+      _UzbekStrings() => 'Bu amalni bekor qilib bo‘lmaydi.',
+      _RussianStrings() => 'Это действие нельзя отменить.',
+      _ => 'This action cannot be undone.',
+    };
+  }
+
   String get nameRequired {
     return switch (this) {
       _UzbekStrings() => 'Ism kiritilishi kerak.',

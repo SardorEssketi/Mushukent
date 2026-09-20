@@ -133,6 +133,24 @@ class FakeApiClient implements MushukistanApiClient {
   }
 
   @override
+  Future<T> patchMultipart<T>(
+    String path, {
+    required FormData formData,
+    Map<String, dynamic>? queryParameters,
+    required T Function(Object? json) decoder,
+    bool authenticated = true,
+  }) {
+    return _handle<T>(
+      'PATCH',
+      path,
+      body: formData,
+      queryParameters: queryParameters,
+      decoder: decoder,
+      authenticated: authenticated,
+    );
+  }
+
+  @override
   Future<void> delete(
     String path, {
     Map<String, dynamic>? queryParameters,

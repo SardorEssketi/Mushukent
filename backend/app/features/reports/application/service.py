@@ -12,7 +12,7 @@ from app.features.auth.domain.models import AuthUser
 from app.features.cats.domain.repositories import CatRepository
 from app.features.comments.domain.repositories import CommentRepository
 from app.features.lost_pets.domain.repositories import LostPetRepository
-from app.features.posts.domain.models import PostDetailRecord
+from app.features.posts.domain.models import PostDetailRecord, post_history_snapshot
 from app.features.posts.domain.repositories import PostRepository
 from app.features.reports.application.schemas import (
     GenericListResponse,
@@ -240,12 +240,22 @@ class ReportsService:
                 raise api_error(400, "INVALID_PAYLOAD", "Action does not match report target.")
             post_repository = self.post_repository_factory(session)
             post = post_repository.get_by_id(
-                target_id, include_deleted=True, viewer_user_id=user.id
+                target_id,
+                include_deleted=True,
+                viewer_user_id=user.id,
+                for_update=True,
             )
             if post is not None and post.deleted_at is None:
                 if post_repository.mark_deleted(
                     target_id, deleted_at=datetime.now(UTC), deleted_by=user.id
                 ):
+                    post_repository.add_history(
+                        post_id=target_id,
+                        actor_id=user.id,
+                        action="deleted",
+                        before=post_history_snapshot(post),
+                        after={"deleted": True},
+                    )
                     stats = post_repository.recalculate_cat_stats(post.cat_id)
                     cat_repository = self.cat_repository_factory(session)
                     cat = cat_repository.get_by_id(post.cat.id)
@@ -262,9 +272,17 @@ class ReportsService:
             if target_type != ReportTargetType.COMMENT:
                 raise api_error(400, "INVALID_PAYLOAD", "Action does not match report target.")
             comment_repository = self.comment_repository_factory(session)
-            current = comment_repository.get_by_id(target_id, include_deleted=True)
+            current = comment_repository.get_by_id(
+                target_id,
+                include_deleted=True,
+                for_update=True,
+            )
             if current is not None and current.deleted_at is None:
-                if comment_repository.mark_deleted(target_id, deleted_at=datetime.now(UTC)):
+                if comment_repository.mark_deleted(
+                    target_id,
+                    deleted_at=comment_repository.database_now(),
+                    deleted_by_id=user.id,
+                ):
                     if current.post_id is not None:
                         post_repository = self.post_repository_factory(session)
                         post = post_repository.get_by_id(
@@ -374,7 +392,9 @@ class ReportsService:
                     if allow_missing:
                         return None
                     raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
-                if not allow_missing and not self._can_view_post(post, user):
+                if not allow_missing and (
+                    post.deleted_at is not None or not self._can_view_post(post, user)
+                ):
                     raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
                 subtitle = f"post:{comment.post_id}"
                 is_public = post.is_public

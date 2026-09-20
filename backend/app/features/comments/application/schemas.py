@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Generic, TypeVar
 from uuid import UUID
 
@@ -40,6 +40,18 @@ class CommentCreate(BaseModel):
         return self
 
 
+class CommentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    content: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def _validate_content(self) -> "CommentUpdate":
+        if not self.content.strip():
+            raise ValueError("Comment content must not be blank.")
+        return self
+
+
 class CommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +63,8 @@ class CommentResponse(BaseModel):
     user: CommentUser | None = None
     content: str
     created_at: datetime
+    edited_at: datetime | None = None
+    edit_until: datetime
 
 
 class CommentListQuery(BaseModel):
@@ -61,13 +75,39 @@ class CommentListQuery(BaseModel):
     order: CommentOrder = CommentOrder.ASC
 
 
-def to_comment_response(comment: CommentRecord) -> CommentResponse:
-    return CommentResponse.model_validate(comment, from_attributes=True)
+def to_comment_response(
+    comment: CommentRecord,
+    *,
+    edit_window_minutes: int,
+) -> CommentResponse:
+    return CommentResponse(
+        id=comment.id,
+        post_id=comment.post_id,
+        lost_pet_id=comment.lost_pet_id,
+        adoption_post_id=comment.adoption_post_id,
+        parent_comment_id=comment.parent_comment_id,
+        user=(
+            CommentUser.model_validate(comment.user, from_attributes=True)
+            if comment.user is not None
+            else None
+        ),
+        content=comment.content,
+        created_at=comment.created_at,
+        edited_at=comment.edited_at,
+        edit_until=comment.created_at + timedelta(minutes=edit_window_minutes),
+    )
 
 
-def to_comment_page_response(page: CommentPage) -> GenericListResponse[CommentResponse]:
+def to_comment_page_response(
+    page: CommentPage,
+    *,
+    edit_window_minutes: int,
+) -> GenericListResponse[CommentResponse]:
     return GenericListResponse[CommentResponse](
-        items=[CommentResponse.model_validate(item, from_attributes=True) for item in page.items],
+        items=[
+            to_comment_response(item, edit_window_minutes=edit_window_minutes)
+            for item in page.items
+        ],
         next_cursor=page.next_cursor,
         limit=page.limit,
     )

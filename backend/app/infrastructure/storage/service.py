@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from urllib.parse import urlparse
+from pathlib import PurePosixPath
+from urllib.parse import unquote, urlparse
 from uuid import UUID
 
 from structlog import get_logger
@@ -62,9 +63,7 @@ class MediaStorageService:
                 canonical_kind = (
                     MediaKind.LOST_PET
                     if purpose == UploadPurpose.LOST_PET
-                    else MediaKind.ADOPTION
-                    if purpose == UploadPurpose.ADOPTION
-                    else MediaKind.POST
+                    else MediaKind.ADOPTION if purpose == UploadPurpose.ADOPTION else MediaKind.POST
                 )
                 canonical_variant = MediaVariant.ORIGINAL
                 thumbnail_variant = MediaVariant.THUMBNAIL
@@ -130,10 +129,24 @@ class MediaStorageService:
         if not url:
             return None
         parsed = urlparse(url)
+        expected_public_url = urlparse(self.storage.public_url("ownership-probe"))
+        if parsed.scheme and (
+            parsed.scheme.casefold() != expected_public_url.scheme.casefold()
+            or parsed.netloc.casefold() != expected_public_url.netloc.casefold()
+        ):
+            return None
+
         path = parsed.path if parsed.scheme else url
+        for _ in range(3):
+            decoded_path = unquote(path)
+            if decoded_path == path:
+                break
+            path = decoded_path
+        path = path.replace("\\", "/")
         marker = f"/{self.storage.bucket_name}/"
         if marker in path:
-            return path.split(marker, 1)[1].lstrip("/")
+            key = path.split(marker, 1)[1].lstrip("/")
+            return self._validated_media_key(key)
         known_prefixes = (
             "posts/",
             "users/avatars/",
@@ -144,8 +157,15 @@ class MediaStorageService:
         normalized = path.lstrip("/")
         for prefix in known_prefixes:
             if normalized.startswith(prefix):
-                return normalized
+                return self._validated_media_key(normalized)
         return None
+
+    @staticmethod
+    def _validated_media_key(key: str) -> str | None:
+        parts = PurePosixPath(key).parts
+        if not parts or any(part in {"", ".", ".."} for part in parts):
+            return None
+        return "/".join(parts)
 
     def _upload_variant(
         self,

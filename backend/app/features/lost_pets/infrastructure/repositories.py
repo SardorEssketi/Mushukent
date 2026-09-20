@@ -70,6 +70,20 @@ class SqlAlchemyLostPetRepository:
         )
         return self._model_to_record(item) if item is not None else None
 
+    def get_by_ids(self, lost_pet_ids: list[UUID]) -> list[LostPetRecord]:
+        if not lost_pet_ids:
+            return []
+        items = self.session.scalars(
+            select(schema.LostPet)
+            .options(selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author))
+            .where(
+                schema.LostPet.id.in_(lost_pet_ids),
+                schema.LostPet.deleted_at.is_(None),
+                schema.LostPet.is_public.is_(True),
+            )
+        ).all()
+        return [self._model_to_record(item) for item in items]
+
     def list_public(
         self,
         *,

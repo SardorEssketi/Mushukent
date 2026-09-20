@@ -86,7 +86,6 @@ def _create_user_with_token(
             AuthenticatedPrincipal(
                 user_id=user.id,
                 role=Role.MODERATOR if is_moderator else Role.USER,
-                email=user.email,
             )
         )
         return user, token
@@ -169,8 +168,10 @@ def _create_post(
 def _create_comment(
     db_session_manager: DatabaseSessionManager,
     *,
-    post_id: UUID,
     user_id: UUID,
+    post_id: UUID | None = None,
+    lost_pet_id: UUID | None = None,
+    adoption_post_id: UUID | None = None,
     content: str = "Helpful comment",
     created_at: datetime | None = None,
     deleted_at: datetime | None = None,
@@ -179,6 +180,8 @@ def _create_comment(
     with db_session_manager.session_scope() as session:
         comment = schema.Comment(
             post_id=post_id,
+            lost_pet_id=lost_pet_id,
+            adoption_post_id=adoption_post_id,
             user_id=user_id,
             content=content,
             created_at=created_at,
@@ -223,8 +226,7 @@ def _create_place(
         )
         if categories is not None:
             place.category_links = [
-                schema.PlaceCategoryLink(category=place_category)
-                for place_category in categories
+                schema.PlaceCategoryLink(category=place_category) for place_category in categories
             ]
         session.add(place)
         session.flush()
@@ -260,6 +262,41 @@ def _create_adoption_post(
         session.add(adoption_post)
         session.flush()
         return adoption_post.id
+
+
+def _create_lost_pet(
+    db_session_manager: DatabaseSessionManager,
+    *,
+    user_id: UUID,
+    pet_name: str = "Mittens",
+    latitude: float = 41.3,
+    longitude: float = 69.25,
+    created_at: datetime | None = None,
+):
+    created_at = created_at or datetime.now(UTC)
+    with db_session_manager.session_scope() as session:
+        lost_pet = schema.LostPet(
+            user_id=user_id,
+            pet_name=pet_name,
+            owner_phone_number="+998 90 123 45 67",
+            owner_phone_publication_consent=True,
+            last_seen_location=WKTElement(f"POINT({longitude} {latitude})", srid=4326),
+            additional_info="Please help find this pet.",
+            is_resolved=False,
+            is_public=True,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        lost_pet.photos = [
+            schema.LostPetPhoto(
+                photo_url="https://example.com/lost-pet.jpg",
+                thumb_url="https://example.com/lost-pet-thumb.jpg",
+                position=0,
+            )
+        ]
+        session.add(lost_pet)
+        session.flush()
+        return lost_pet.id
 
 
 def test_anonymous_recent_feed_hides_private_deleted_and_unavailable_posts(
@@ -374,6 +411,120 @@ def test_recent_feed_includes_adoption_posts(client: TestClient, feed_runtime) -
     assert [item["id"] for item in items[:2]] == [str(adoption_post_id), str(post_id)]
     assert items[0]["item_type"] == "adoption"
     assert "last_seen_location" not in items[0]
+
+
+def test_recent_mixed_feed_cursor_paginates_without_duplicates_or_skips(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    author, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-mixed-pagination@example.com",
+    )
+    cat = _create_cat(feed_runtime.db_session_manager, creator_id=author.id)
+    newest_time = datetime.now(UTC) - timedelta(minutes=1)
+    older_time = newest_time - timedelta(minutes=1)
+
+    newest_observation = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        created_at=newest_time,
+    )
+    newest_lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        created_at=newest_time,
+    )
+    newest_adoption = _create_adoption_post(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        created_at=newest_time,
+    )
+    older_observation = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        created_at=older_time,
+    )
+    older_lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        created_at=older_time,
+    )
+    older_adoption = _create_adoption_post(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        created_at=older_time,
+    )
+
+    seen_ids: list[str] = []
+    cursor = None
+    for _ in range(3):
+        params = {"filter": "recent", "limit": 2}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = client.get("/api/v1/feed", params=params)
+        assert response.status_code == 200
+        payload = response.json()["data"]
+        seen_ids.extend(item["id"] for item in payload["items"])
+        cursor = payload["next_cursor"]
+
+    assert seen_ids == [
+        str(newest_observation),
+        str(newest_lost_pet),
+        str(newest_adoption),
+        str(older_observation),
+        str(older_lost_pet),
+        str(older_adoption),
+    ]
+    assert len(seen_ids) == len(set(seen_ids))
+    assert cursor is None
+
+
+def test_nearby_mixed_feed_orders_globally_and_excludes_adoption(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    author, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-nearby-mixed@example.com",
+    )
+    cat = _create_cat(feed_runtime.db_session_manager, creator_id=author.id)
+    observation = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        latitude=41.3002,
+        longitude=69.25,
+    )
+    lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        latitude=41.3001,
+        longitude=69.25,
+    )
+    adoption = _create_adoption_post(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+    )
+
+    response = client.get(
+        "/api/v1/feed",
+        params={
+            "filter": "nearby",
+            "lat": 41.3,
+            "lon": 69.25,
+            "radius_meters": 500,
+        },
+    )
+
+    assert response.status_code == 200
+    ids = [item["id"] for item in response.json()["data"]["items"]]
+    assert ids.index(str(lost_pet)) < ids.index(str(observation))
+    assert str(adoption) not in ids
 
 
 def test_adoption_feed_filter_returns_only_adoption_posts(
@@ -704,6 +855,43 @@ def test_public_user_comments_respect_activity_privacy(client: TestClient, feed_
     assert items[0]["post_id"] == str(post_id)
 
 
+def test_public_user_comments_include_lost_pet_and_adoption_activity(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    author, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="public-pet-comments@example.com",
+        allow_public_activity_view=True,
+    )
+    lost_pet_id = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+    )
+    adoption_post_id = _create_adoption_post(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+    )
+    lost_comment_id = _create_comment(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        lost_pet_id=lost_pet_id,
+    )
+    adoption_comment_id = _create_comment(
+        feed_runtime.db_session_manager,
+        user_id=author.id,
+        adoption_post_id=adoption_post_id,
+    )
+
+    response = client.get(f"/api/v1/users/{author.id}/comments")
+
+    assert response.status_code == 200
+    items = response.json()["data"]["items"]
+    ids = {item["id"] for item in items}
+    assert ids == {str(lost_comment_id), str(adoption_comment_id)}
+
+
 def test_feed_nearby_query_and_visibility(client: TestClient, feed_runtime) -> None:
     author, token = _create_user_with_token(
         feed_runtime.db_session_manager,
@@ -798,7 +986,7 @@ def test_map_nearby_and_bbox_response_shape(client: TestClient, feed_runtime) ->
         feed_runtime.db_session_manager,
         cat_id=stale.id,
         user_id=user.id,
-        created_at=datetime.now(UTC) - timedelta(days=4),
+        created_at=datetime.now(UTC) - timedelta(days=11),
     )
 
     nearby = client.get(

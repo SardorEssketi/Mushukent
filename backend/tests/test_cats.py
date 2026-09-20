@@ -45,6 +45,8 @@ def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
 
 @dataclass(slots=True)
 class FakeObjectStorage(ObjectStorage):
+    bucket_name = "mushukistan-media"
+
     bucket_name: str = "fake-bucket"
     objects: dict[str, StoredObject] = field(default_factory=dict)
     deleted_keys: list[str] = field(default_factory=list)
@@ -136,7 +138,6 @@ def _create_user_with_token(
             AuthenticatedPrincipal(
                 user_id=user.id,
                 role=Role.MODERATOR if is_moderator else Role.USER,
-                email=user.email,
             )
         )
         return user, token
@@ -379,7 +380,7 @@ def test_allowed_and_forbidden_updates(client: TestClient, cats_runtime) -> None
 
 
 def test_postgis_nearby_query_and_index_usage(client: TestClient, cats_runtime) -> None:
-    _user, token = _create_user_with_token(
+    user, token = _create_user_with_token(
         cats_runtime.db_session_manager,
         cats_runtime.token_service,
         email="geo-cat@example.com",
@@ -401,6 +402,24 @@ def test_postgis_nearby_query_and_index_usage(client: TestClient, cats_runtime) 
             },
         )
         cat_ids.append(UUID(response.json()["data"]["id"]))
+
+    with cats_runtime.db_session_manager.session_scope() as session:
+        session.add_all(
+            [
+                schema.Post(
+                    cat_id=cat_id,
+                    user_id=user.id,
+                    photo_url=f"https://example.com/{cat_id}.jpg",
+                    location=WKTElement(
+                        f"POINT({longitude} {latitude})",
+                        srid=4326,
+                    ),
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                )
+                for cat_id, (latitude, longitude) in zip(cat_ids, coordinates, strict=True)
+            ]
+        )
 
     nearby = client.get(
         "/api/v1/cats",

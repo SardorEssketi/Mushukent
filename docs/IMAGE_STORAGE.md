@@ -110,6 +110,7 @@ Operational note:
 --------------------------------
 - Strip EXIF metadata by default to reduce unintended location/device leaks.
 - Sanitize file names and path construction server-side.
+- Resolve local-storage keys canonically and reject any key or decoded URL that escapes the configured media root.
 - Enforce authentication for upload endpoints.
 - Apply strict rate limiting on upload routes.
 - Avoid public directory listing.
@@ -136,6 +137,7 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 - Standard post soft-delete does not guarantee immediate media removal.
 - Account deletion attempts best-effort cleanup for profile, post, lost-pet, and adoption/rehoming media URLs associated with the deleted account.
 - Best-effort cleanup may skip a URL if object storage is not configured, if the URL cannot be mapped to a known storage key, or if the storage provider rejects the delete request.
+- Cleanup accepts absolute URLs only when their origin matches the configured storage public base URL. Encoded traversal and foreign origins are never converted to object keys.
 - Database URL references for hidden/anonymized account-owned content are cleared or replaced with deleted placeholders where required by response contracts.
 - Periodic manual cleanup may remove orphaned media.
 
@@ -143,6 +145,10 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 - Keep active content while the account or content remains active.
 - The verified repository does not define a guaranteed automatic media deletion period for all retained or orphaned media.
 - Do not publish a retention period until production cleanup scheduling and backup retention are verified.
+
+10.5 Production URL contract
+- Production R2 storage requires `R2_PUBLIC_BASE_URL` in addition to account, bucket, and credentials.
+- Stored media URLs are built from that explicit public/CDN base. Production must not rely on ambiguous direct bucket accessibility.
 
 11. Failure Handling
 -------------------

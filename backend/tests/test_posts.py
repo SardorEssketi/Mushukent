@@ -39,6 +39,8 @@ def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
 
 @dataclass(slots=True)
 class FakeObjectStorage(ObjectStorage):
+    bucket_name = "mushukistan-media"
+
     bucket_name: str = "fake-bucket"
     objects: dict[str, StoredObject] = field(default_factory=dict)
     deleted_keys: list[str] = field(default_factory=list)
@@ -128,7 +130,6 @@ def _create_user_with_token(
             AuthenticatedPrincipal(
                 user_id=user.id,
                 role=Role.MODERATOR if is_moderator else Role.USER,
-                email=user.email,
             )
         )
         return user, token
@@ -276,7 +277,7 @@ def test_authenticated_post_creation_with_existing_cat_and_image_upload(
     assert "user_id" not in payload
     assert "cat_id" not in payload
     assert "deleted_at" not in payload
-    assert "is_public" not in payload
+    assert payload["is_public"] is True
 
     with posts_runtime.db_session_manager.session_scope() as session:
         stored_post = session.scalar(select(schema.Post).where(schema.Post.cat_id == cat.id))
@@ -360,9 +361,7 @@ def test_create_observation_without_cat_creates_unknown_cat(
     with posts_runtime.db_session_manager.session_scope() as session:
         stored_cat = session.get(schema.Cat, cat_id)
         stored_post = session.scalar(
-            select(schema.Post).where(
-                schema.Post.description == "Observation without cat matching"
-            )
+            select(schema.Post).where(schema.Post.description == "Observation without cat matching")
         )
         assert stored_cat is not None
         assert stored_cat.name is None
@@ -493,7 +492,7 @@ def test_post_detail_retrieval_and_private_field_boundary(
     assert "user_id" not in payload
     assert "cat_id" not in payload
     assert "deleted_at" not in payload
-    assert "is_public" not in payload
+    assert payload["is_public"] is True
 
 
 def test_cat_association_validation(
@@ -602,6 +601,13 @@ def test_private_post_visibility_and_soft_delete_behavior(
     )
     assert deleted_detail_response.status_code == 404
 
+    edit_deleted_response = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"description": "Cannot revive a deleted observation"},
+    )
+    assert edit_deleted_response.status_code == 404
+
 
 def test_listing_by_cat_and_author_paginates_stably(
     client: TestClient,
@@ -701,3 +707,318 @@ def test_cleanup_and_rollback_on_database_failure_after_upload(
         assert post_count is None
         assert stored_cat is not None
         assert stored_cat.total_observations == 0
+
+
+def test_owner_can_edit_post_and_moderator_can_read_history(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-editor@example.com",
+    )
+    other, other_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="other-editor@example.com",
+    )
+    _, moderator_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-history-moderator@example.com",
+        is_moderator=True,
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id)
+    post_id = _create_post(
+        posts_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=owner.id,
+        description="Original observation",
+    )
+
+    unauthenticated = client.patch(f"/api/v1/posts/{post_id}", json={"description": "No"})
+    assert unauthenticated.status_code == 401
+
+    forbidden = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+        json={"description": "Trying an IDOR edit"},
+    )
+    assert forbidden.status_code == 403
+
+    forbidden_upload = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {other_token}"},
+        files=[("photos", ("idor.jpg", _jpeg_bytes(), "image/jpeg"))],
+    )
+    assert forbidden_upload.status_code == 403
+    assert posts_runtime.fake_storage.objects == {}
+
+    arbitrary_media = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"photo_url": "https://storage.example/posts/someone-elses-photo.jpg"},
+    )
+    assert arbitrary_media.status_code == 422
+
+    liked = client.post(
+        f"/api/v1/posts/{post_id}/likes",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert liked.status_code == 200
+    before_edit = client.get(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert before_edit.status_code == 200
+    assert before_edit.json()["data"]["is_edited"] is False
+
+    edited = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={
+            "description": "Updated observation",
+            "status": "healthy",
+            "location": {"latitude": 41.31, "longitude": 69.26},
+            "is_public": False,
+        },
+    )
+    assert edited.status_code == 200, edited.text
+    payload = edited.json()["data"]
+    assert payload["description"] == "Updated observation"
+    assert payload["status"] == "healthy"
+    assert payload["location"] == {
+        "latitude": pytest.approx(41.31),
+        "longitude": pytest.approx(69.26),
+    }
+    assert payload["is_public"] is False
+    assert payload["is_edited"] is True
+    assert payload["updated_at"] is not None
+
+    normal_history = client.get(
+        f"/api/v1/moderation/posts/{post_id}/history",
+        headers={"Authorization": f"Bearer {other_token}"},
+    )
+    assert normal_history.status_code == 403
+
+    moderator_history = client.get(
+        f"/api/v1/moderation/posts/{post_id}/history",
+        headers={"Authorization": f"Bearer {moderator_token}"},
+    )
+    assert moderator_history.status_code == 200, moderator_history.text
+    history = moderator_history.json()["data"]
+    assert len(history) == 1
+    assert history[0]["action"] == "edited"
+    assert history[0]["actor_id"] == str(owner.id)
+    assert history[0]["before"]["description"] == "Original observation"
+    assert history[0]["after"]["description"] == "Updated observation"
+    assert history[0]["before"]["status"] == "unknown"
+    assert history[0]["after"]["status"] == "healthy"
+    assert history[0]["before"]["is_public"] is True
+    assert history[0]["after"]["is_public"] is False
+
+
+def test_post_edit_and_history_write_are_atomic(
+    client: TestClient,
+    posts_runtime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-atomic-history@example.com",
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id)
+    post_id = _create_post(
+        posts_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=owner.id,
+        description="Original atomic version",
+    )
+
+    def fail_history_write(*args, **kwargs) -> None:
+        raise RuntimeError("simulated history failure")
+
+    monkeypatch.setattr(SqlAlchemyPostRepository, "add_history", fail_history_write)
+
+    response = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"description": "Must be rolled back"},
+    )
+    assert response.status_code == 500
+
+    with posts_runtime.db_session_manager.session_scope() as session:
+        stored = session.get(schema.Post, post_id)
+        assert stored is not None
+        assert stored.description == "Original atomic version"
+        assert (
+            session.scalars(
+                select(schema.PostHistory).where(schema.PostHistory.post_id == post_id)
+            ).all()
+            == []
+        )
+
+
+def test_post_edit_history_is_chronological_and_ignores_noop_updates(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-history-owner@example.com",
+    )
+    _, moderator_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-history-reader@example.com",
+        is_moderator=True,
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id)
+    post_id = _create_post(
+        posts_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=owner.id,
+        description="First version",
+    )
+
+    noop = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        json={"description": "First version"},
+    )
+    assert noop.status_code == 200
+
+    for description in ("Second version", "Third version"):
+        response = client.patch(
+            f"/api/v1/posts/{post_id}",
+            headers={"Authorization": f"Bearer {owner_token}"},
+            json={"description": description},
+        )
+        assert response.status_code == 200
+
+    history = client.get(
+        f"/api/v1/moderation/posts/{post_id}/history",
+        headers={"Authorization": f"Bearer {moderator_token}"},
+    ).json()["data"]
+    assert len(history) == 2
+    assert history[0]["before"]["description"] == "Second version"
+    assert history[0]["after"]["description"] == "Third version"
+    assert history[1]["before"]["description"] == "First version"
+    assert history[1]["after"]["description"] == "Second version"
+
+
+def test_owner_can_replace_post_photos_and_history_preserves_versions(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-photo-editor@example.com",
+    )
+    _, moderator_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-photo-history@example.com",
+        is_moderator=True,
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id)
+    post_id = _create_post(
+        posts_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=owner.id,
+        photo_url="https://example.com/original.jpg",
+        thumb_url="https://example.com/original-thumb.jpg",
+    )
+
+    updated = client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {owner_token}"},
+        files=[
+            ("photos", ("replacement-one.jpg", _jpeg_bytes(), "image/jpeg")),
+            ("photos", ("replacement-two.jpg", _jpeg_bytes((0, 255, 0)), "image/jpeg")),
+        ],
+    )
+    assert updated.status_code == 200, updated.text
+    payload = updated.json()["data"]
+    assert len(payload["photo_urls"]) == 2
+    assert all(url.startswith("https://storage.example/posts/") for url in payload["photo_urls"])
+
+    history = client.get(
+        f"/api/v1/moderation/posts/{post_id}/history",
+        headers={"Authorization": f"Bearer {moderator_token}"},
+    ).json()["data"]
+    assert history[0]["before"]["photo_urls"] == ["https://example.com/original.jpg"]
+    assert history[0]["after"]["photo_urls"] == payload["photo_urls"]
+
+
+def test_post_delete_authorization_and_moderator_audit(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-delete-owner@example.com",
+    )
+    _, other_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-delete-other@example.com",
+    )
+    moderator, moderator_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="post-delete-moderator@example.com",
+        is_moderator=True,
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id)
+    own_post_id = _create_post(
+        posts_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=owner.id,
+    )
+    other_post_id = _create_post(
+        posts_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=owner.id,
+        description="For moderator deletion",
+    )
+
+    assert client.delete(f"/api/v1/posts/{own_post_id}").status_code == 401
+    assert (
+        client.delete(
+            f"/api/v1/posts/{own_post_id}",
+            headers={"Authorization": f"Bearer {other_token}"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.delete(
+            f"/api/v1/posts/{own_post_id}",
+            headers={"Authorization": f"Bearer {owner_token}"},
+        ).status_code
+        == 204
+    )
+    assert (
+        client.delete(
+            f"/api/v1/moderation/posts/{other_post_id}",
+            headers={"Authorization": f"Bearer {moderator_token}"},
+        ).status_code
+        == 204
+    )
+
+    history = client.get(
+        f"/api/v1/moderation/posts/{other_post_id}/history",
+        headers={"Authorization": f"Bearer {moderator_token}"},
+    ).json()["data"]
+    assert len(history) == 1
+    assert history[0]["action"] == "deleted"
+    assert history[0]["actor_id"] == str(moderator.id)
+
+    with posts_runtime.db_session_manager.session_scope() as session:
+        post = session.get(schema.Post, other_post_id)
+        assert post is not None and post.deleted_at is not None

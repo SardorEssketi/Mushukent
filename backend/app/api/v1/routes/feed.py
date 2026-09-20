@@ -37,6 +37,7 @@ def _validation_details(errors: Sequence[object]) -> list[dict[str, Any]]:
 )
 def read_feed(
     filter_by: str = Query(default="recent", alias="filter"),
+    popular_period: str = Query(default="all"),
     latitude: float | None = Query(default=None, alias="lat"),
     longitude: float | None = Query(default=None, alias="lon"),
     radius_meters: int | None = Query(default=None),
@@ -49,6 +50,7 @@ def read_feed(
         query = FeedQuery.model_validate(
             {
                 "filter": filter_by,
+                "popular_period": popular_period,
                 "lat": latitude,
                 "lon": longitude,
                 "radius_meters": radius_meters,

@@ -411,6 +411,97 @@ def test_google_verifier_rejects_unconfigured_audience(
     assert excinfo.value.detail["error"]["code"] == "INVALID_GOOGLE_TOKEN"
 
 
+def test_google_verifier_rejects_malformed_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _test_settings(monkeypatch)
+    verifier = GoogleOAuthIdTokenVerifier(settings)
+
+    with pytest.raises(HTTPException) as excinfo:
+        verifier.verify("not-a-jwt")
+
+    assert excinfo.value.status_code == 401
+    assert excinfo.value.detail["error"]["code"] == "INVALID_GOOGLE_TOKEN"
+
+
+def test_google_verifier_rejects_invalid_signature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _test_settings(monkeypatch)
+    verifier = GoogleOAuthIdTokenVerifier(settings)
+    monkeypatch.setattr(
+        token_module.jwt,
+        "get_unverified_header",
+        lambda _: {"alg": "RS256", "kid": "kid"},
+    )
+    monkeypatch.setattr(verifier, "_google_public_key", lambda _: "public-key")
+
+    def reject_signature(*_, **__):
+        raise token_module.JWTError("invalid signature")
+
+    monkeypatch.setattr(token_module.jwt, "decode", reject_signature)
+
+    with pytest.raises(HTTPException) as excinfo:
+        verifier.verify("invalid-signature-token")
+
+    assert excinfo.value.status_code == 401
+    assert excinfo.value.detail["error"]["code"] == "INVALID_GOOGLE_TOKEN"
+
+
+def test_google_verifier_returns_controlled_error_when_jwks_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _test_settings(monkeypatch)
+    verifier = GoogleOAuthIdTokenVerifier(settings)
+    monkeypatch.setattr(
+        token_module.jwt,
+        "get_unverified_header",
+        lambda _: {"alg": "RS256", "kid": "kid"},
+    )
+
+    def unavailable(*_, **__):
+        raise OSError("network unavailable")
+
+    monkeypatch.setattr(token_module, "urlopen", unavailable)
+
+    with pytest.raises(HTTPException) as excinfo:
+        verifier.verify("google-id-token")
+
+    assert excinfo.value.status_code == 503
+    assert excinfo.value.detail["error"]["code"] == "GOOGLE_AUTH_UNAVAILABLE"
+
+
+def test_google_verifier_rejects_unverified_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _test_settings(monkeypatch)
+    verifier = GoogleOAuthIdTokenVerifier(settings)
+    monkeypatch.setattr(
+        token_module.jwt,
+        "get_unverified_header",
+        lambda _: {"alg": "RS256", "kid": "kid"},
+    )
+    monkeypatch.setattr(verifier, "_google_public_key", lambda _: "public-key")
+    monkeypatch.setattr(
+        token_module.jwt,
+        "decode",
+        lambda *_, **__: {
+            "iss": "https://accounts.google.com",
+            "aud": "google-client-id",
+            "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
+            "email": "unverified@example.com",
+            "sub": "google-subject",
+            "email_verified": False,
+        },
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        verifier.verify("google-id-token")
+
+    assert excinfo.value.status_code == 401
+    assert excinfo.value.detail["error"]["code"] == "INVALID_GOOGLE_TOKEN"
+
+
 def test_google_service_rejects_new_user_without_legal_acceptance(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

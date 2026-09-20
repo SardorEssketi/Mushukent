@@ -7,3 +7,16 @@ services:
       APP_ENV: development
       APP_DEBUG: "true"
       ENABLE_API_DOCS: "true"
+      # Never allow the ignored root .env to route local uploads or email to
+      # production services. Development uses the mounted local media volume
+      # and returns verification tokens in API responses.
+      R2_ACCOUNT_ID: ""
+      R2_ACCESS_KEY_ID: ""
+      R2_SECRET_ACCESS_KEY: ""
+      R2_PUBLIC_BASE_URL: ""
+      RESEND_API_KEY: ""
+      RATE_LIMIT_ENABLED: "false"
+
+  nginx:
+    volumes:
+      - ./infrastructure/nginx/local.conf:/etc/nginx/conf.d/default.conf:ro

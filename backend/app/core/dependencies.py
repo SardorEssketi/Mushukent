@@ -153,6 +153,7 @@ def get_likes_service(request: Request) -> LikesService:
 def get_comments_service(request: Request) -> CommentsService:
     container = get_container(request)
     return CommentsService(
+        settings=container.settings,
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyCommentRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,

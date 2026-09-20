@@ -202,6 +202,8 @@ class AuthService(AuthenticationService):
         claims = self.google_token_verifier.verify(id_token)
         if not claims.email:
             raise api_error(400, "GOOGLE_EMAIL_MISSING", "Google token is missing an email claim.")
+        if not claims.email_verified:
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
         normalized_email = self._normalize_email(claims.email)
 

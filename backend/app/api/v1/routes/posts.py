@@ -20,6 +20,8 @@ from app.features.posts.application.schemas import (
     PostCreateJSONRequest,
     PostCreateMultipartRequest,
     PostResponse,
+    PostUpdateJSONRequest,
+    PostUpdateMultipartRequest,
 )
 from app.features.posts.application.service import PostsService
 
@@ -144,6 +146,30 @@ def _parse_multipart_payload(data: dict[str, Any]) -> PostCreateMultipartRequest
         ) from exc
 
 
+def _parse_update_json_payload(data: dict[str, Any]) -> PostUpdateJSONRequest:
+    try:
+        return PostUpdateJSONRequest.model_validate(data)
+    except ValidationError as exc:
+        raise api_error(
+            422,
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            details=_validation_details(exc.errors()),
+        ) from exc
+
+
+def _parse_update_multipart_payload(data: dict[str, Any]) -> PostUpdateMultipartRequest:
+    try:
+        return PostUpdateMultipartRequest.model_validate(data)
+    except ValidationError as exc:
+        raise api_error(
+            422,
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            details=_validation_details(exc.errors()),
+        ) from exc
+
+
 @router.post(
     "",
     response_model=ApiSuccess[PostResponse],
@@ -180,6 +206,32 @@ def read_post(
     posts_service: PostsService = Depends(get_posts_service),
 ) -> ApiSuccess[PostResponse]:
     return ApiSuccess(data=posts_service.get_post(post_id, current_user=current_user))
+
+
+@router.patch(
+    "/{post_id}",
+    response_model=ApiSuccess[PostResponse],
+    response_model_exclude_none=True,
+)
+async def update_post(
+    post_id: UUID,
+    request: Request,
+    current_user: AuthUser = Depends(get_current_active_user),
+    posts_service: PostsService = Depends(get_posts_service),
+) -> ApiSuccess[PostResponse]:
+    data, uploads, is_json = await _parse_post_request(request)
+    payload = _parse_update_json_payload(data) if is_json else _parse_update_multipart_payload(data)
+    photo_payloads = [
+        (await upload.read(), upload.content_type, upload.filename) for upload in uploads
+    ]
+    return ApiSuccess(
+        data=posts_service.update_post(
+            post_id,
+            current_user,
+            payload,
+            photos=photo_payloads,
+        )
+    )
 
 
 @router.delete(

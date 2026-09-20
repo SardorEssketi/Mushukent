@@ -486,7 +486,7 @@ Bottom navigation with 5 tabs:
 - Color contrast follows Material accessibility guidance.
 - Provide text alternatives for icons.
 - Support dynamic text scaling without layout breakage.
-- MVP language: English (additional locales post-MVP).
+- MVP languages: English, Russian, and Uzbek (EN / RU / UZ).
 
 9. Performance UX Targets
 -------------------------

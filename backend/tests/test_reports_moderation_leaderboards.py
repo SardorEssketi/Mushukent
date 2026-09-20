@@ -270,7 +270,7 @@ def test_create_report_and_reject_spoofed_reporter(
             "target_type": "post",
             "target_id": str(post.id),
             "reason": "Contains graphic content",
-            "metadata": {"source": "camera"},
+            "metadata": {"client_context": "camera"},
         },
     )
     assert response.status_code == 201, response.text
@@ -536,7 +536,7 @@ def test_moderation_report_listing_resolution_and_delete_post(
     client: TestClient,
     reports_runtime,
 ):
-    _moderator, mod_token = _create_user(
+    moderator, mod_token = _create_user(
         reports_runtime.db_session_manager,
         reports_runtime.token_service,
         user_id=UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
@@ -651,6 +651,11 @@ def test_moderation_report_listing_resolution_and_delete_post(
         stored_comment = session.get(schema.Comment, comment.id)
         stored_user = session.get(schema.User, reporter.id)
         assert stored_post is not None and stored_post.deleted_at is not None
+        assert len(stored_post.history) == 1
+        assert stored_post.history[0].action == "deleted"
+        assert stored_post.history[0].actor_id == moderator.id
+        assert stored_post.history[0].before["description"] == "Observation"
+        assert stored_post.history[0].after == {"deleted": True}
         assert stored_comment is not None and stored_comment.deleted_at is None
         assert stored_user is not None and stored_user.is_active is True
 

@@ -11,12 +11,14 @@ from uuid import UUID
 
 from jose import jwk, jwt
 from jose.exceptions import JWTError
+from structlog import get_logger
 
 from app.core.auth import AccessTokenService, AuthenticatedPrincipal, GoogleIdTokenClaims, Role
 from app.core.config import Settings
 from app.core.security import api_error
 
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -272,7 +274,10 @@ class GoogleOAuthIdTokenVerifier:
         if not allowed_audiences:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
-        header = jwt.get_unverified_header(id_token)
+        try:
+            header = jwt.get_unverified_header(id_token)
+        except (JWTError, TypeError, ValueError) as exc:
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.") from exc
         if header.get("alg") != "RS256":
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
@@ -290,8 +295,18 @@ class GoogleOAuthIdTokenVerifier:
                     "leeway": self.settings.jwt_clock_skew_seconds,
                 },
             )
-        except JWTError as exc:
+        except (JWTError, TypeError, ValueError) as exc:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.") from exc
+        except Exception as exc:  # pragma: no cover - provider/library failure safety net
+            logger.warning(
+                "google_token_verification_unavailable",
+                error_type=type(exc).__name__,
+            )
+            raise api_error(
+                503,
+                "GOOGLE_AUTH_UNAVAILABLE",
+                "Google authentication is temporarily unavailable.",
+            ) from exc
 
         issuer = str(payload.get("iss", ""))
         if issuer not in GOOGLE_ISSUERS:
@@ -303,6 +318,8 @@ class GoogleOAuthIdTokenVerifier:
 
         exp = payload.get("exp")
         if not isinstance(exp, (int, float)):
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+        if payload.get("email_verified") is not True:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
         return GoogleIdTokenClaims(
@@ -323,7 +340,18 @@ class GoogleOAuthIdTokenVerifier:
         jwks = self._jwks
         for key in jwks.keys:
             if key.get("kid") == kid:
-                return jwk.construct(key, algorithm="RS256").to_pem().decode("utf-8")
+                try:
+                    return jwk.construct(key, algorithm="RS256").to_pem().decode("utf-8")
+                except Exception as exc:
+                    logger.warning(
+                        "google_jwk_invalid",
+                        error_type=type(exc).__name__,
+                    )
+                    raise api_error(
+                        503,
+                        "GOOGLE_AUTH_UNAVAILABLE",
+                        "Google authentication is temporarily unavailable.",
+                    ) from exc
 
         raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
@@ -340,13 +368,29 @@ class GoogleOAuthIdTokenVerifier:
         if self._jwks_cache is not None:
             return self._jwks_cache
 
-        with urlopen(
-            "https://www.googleapis.com/oauth2/v3/certs",
-            context=ssl.create_default_context(),
-            timeout=10,
-        ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        try:
+            with urlopen(
+                "https://www.googleapis.com/oauth2/v3/certs",
+                context=ssl.create_default_context(),
+                timeout=10,
+            ) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            keys = payload.get("keys")
+            if not isinstance(keys, list) or not keys:
+                raise ValueError("Google JWKS response did not contain keys.")
+            if not all(isinstance(key, dict) for key in keys):
+                raise ValueError("Google JWKS response contained an invalid key.")
+        except Exception as exc:
+            logger.warning(
+                "google_jwks_fetch_failed",
+                error_type=type(exc).__name__,
+            )
+            raise api_error(
+                503,
+                "GOOGLE_AUTH_UNAVAILABLE",
+                "Google authentication is temporarily unavailable.",
+            ) from exc
 
-        jwks = _GoogleJwkSet(keys=list(payload.get("keys", [])))
+        jwks = _GoogleJwkSet(keys=keys)
         self._jwks_cache = jwks
         return jwks

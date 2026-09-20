@@ -108,6 +108,7 @@ Startup/session restore:
   - `iss` is Google issuer,
   - `aud` matches one configured Google OAuth client ID,
   - token not expired,
+  - `email_verified` is true,
   - email exists in token payload.
 - Upsert user:
   - for new users, require `accept_terms=true` and `accept_privacy=true`;
@@ -211,10 +212,9 @@ This document aligns to these endpoint families in `API.md`:
 
 11. Out of Scope for MVP
 ------------------------
-- Refresh tokens
 - Password reset via email
 - MFA
-- Token revocation blacklist
+- Access-token revocation blacklist (refresh-session revocation is implemented)
 - Single sign-on beyond Google
 - Production email delivery provider implementation details
 

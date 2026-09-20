@@ -1,4 +1,5 @@
 from functools import lru_cache
+from ipaddress import IPv4Network, IPv6Network, ip_network
 from typing import Self
 
 from pydantic import Field, model_validator
@@ -57,6 +58,24 @@ class Settings(BaseSettings):
     rate_limit_upload_per_minute: int = Field(default=10, alias="RATE_LIMIT_UPLOAD_PER_MINUTE")
     rate_limit_backend: str = Field(default="memory", alias="RATE_LIMIT_BACKEND")
     rate_limit_redis_url: str = Field(default="", alias="RATE_LIMIT_REDIS_URL")
+    trusted_proxy_cidrs_value: str = Field(
+        default="127.0.0.1/32,::1/128,172.16.0.0/12",
+        alias="TRUSTED_PROXY_CIDRS",
+    )
+
+    @property
+    def trusted_proxy_cidrs(self) -> list[IPv4Network | IPv6Network]:
+        return [
+            ip_network(value.strip(), strict=False)
+            for value in self.trusted_proxy_cidrs_value.split(",")
+            if value.strip()
+        ]
+
+    comment_edit_window_minutes: int = Field(
+        default=30,
+        ge=1,
+        alias="COMMENT_EDIT_WINDOW_MINUTES",
+    )
 
     google_oauth_client_id: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_ID")
 
@@ -108,6 +127,10 @@ class Settings(BaseSettings):
             errors.append("RESEND_FROM_EMAIL must be set to a verified sender address.")
         if not self.google_oauth_client_ids:
             errors.append("GOOGLE_OAUTH_CLIENT_ID must be set for production Google sign-in.")
+        if not all((self.r2_account_id, self.r2_access_key_id, self.r2_secret_access_key)):
+            errors.append("Complete Cloudflare R2 credentials are required in production.")
+        if not self.r2_public_base_url:
+            errors.append("R2_PUBLIC_BASE_URL must be set to a client-readable media origin.")
         if errors:
             raise ValueError("Invalid production configuration: " + " ".join(errors))
         return self

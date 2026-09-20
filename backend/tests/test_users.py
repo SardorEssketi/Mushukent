@@ -197,7 +197,7 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
     assert payload["email"] == "update-profile@example.com"
     assert payload["name"] == "Updated Name"
     assert payload["bio"] == "Updated bio"
-    assert payload["phone_number"] == "+998 90 123 45 67"
+    assert payload["phone_number"] == "+998 90 123 4567"
     assert payload["avatar_url"] == "https://example.com/new-avatar.jpg"
 
     with users_runtime.db_session_manager.session_scope() as session:
@@ -206,7 +206,7 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
         assert updated.email == "update-profile@example.com"
         assert updated.name == "Updated Name"
         assert updated.bio == "Updated bio"
-        assert updated.phone_number == "+998 90 123 45 67"
+        assert updated.phone_number == "+998 90 123 4567"
         assert updated.avatar_url == "https://example.com/new-avatar.jpg"
         assert updated.is_active is True
 
@@ -220,6 +220,15 @@ def test_delete_me_deactivates_account_and_rejects_token(
         users_runtime.token_service,
         email="delete-me@example.com",
     )
+    with users_runtime.db_session_manager.session_scope() as session:
+        refresh_session = schema.AuthRefreshSession(
+            user_id=user.id,
+            token_hash="delete-me-refresh-token-hash",
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+        )
+        session.add(refresh_session)
+        session.flush()
+        refresh_session_id = refresh_session.id
 
     response = client.delete(
         "/api/v1/users/me",
@@ -232,6 +241,9 @@ def test_delete_me_deactivates_account_and_rejects_token(
         deleted = session.scalar(select(schema.User).where(schema.User.id == user.id))
         assert deleted is not None
         assert deleted.is_active is False
+        revoked_session = session.get(schema.AuthRefreshSession, refresh_session_id)
+        assert revoked_session is not None
+        assert revoked_session.revoked_at is not None
 
     me_response = client.get(
         "/api/v1/users/me",
@@ -271,8 +283,46 @@ def test_delete_me_cleans_user_references_and_counters(
             location=WKTElement("POINT(69.2500 41.3000)", srid=4326),
             like_count=2,
         )
-        session.add(liked_post)
+        owned_post = schema.Post(
+            cat_id=cat.id,
+            user_id=user.id,
+            photo_url="https://example.com/current-owned.jpg",
+            description="Current sensitive description",
+            location=WKTElement("POINT(69.2600 41.3100)", srid=4326),
+        )
+        session.add_all([liked_post, owned_post])
         session.flush()
+
+        owned_history = schema.PostHistory(
+            post_id=owned_post.id,
+            actor_id=user.id,
+            action="edited",
+            before={
+                "description": "Old sensitive description",
+                "status": "unknown",
+                "location": {"latitude": 41.3, "longitude": 69.25},
+                "is_public": True,
+                "photo_urls": ["https://example.com/historical-owned.jpg"],
+            },
+            after={
+                "description": "Current sensitive description",
+                "status": "unknown",
+                "location": {"latitude": 41.31, "longitude": 69.26},
+                "is_public": True,
+                "photo_urls": ["https://example.com/current-owned.jpg"],
+            },
+        )
+        moderator_history = schema.PostHistory(
+            post_id=liked_post.id,
+            actor_id=user.id,
+            action="deleted",
+            before={"description": "Other user's post"},
+            after={"deleted": True},
+        )
+        session.add_all([owned_history, moderator_history])
+        session.flush()
+        owned_history_id = owned_history.id
+        moderator_history_id = moderator_history.id
 
         session.add_all(
             [
@@ -314,6 +364,21 @@ def test_delete_me_cleans_user_references_and_counters(
             select(schema.Like).where(schema.Like.post_id == liked_post.id)
         ).all()
         assert [like.user_id for like in remaining_likes] == [unaffected_user.id]
+
+        redacted_history = session.get(schema.PostHistory, owned_history_id)
+        assert redacted_history is not None
+        assert redacted_history.actor_id is None
+        assert redacted_history.before["description"] is None
+        assert redacted_history.before["location"] is None
+        assert redacted_history.before["photo_urls"] == []
+        assert redacted_history.after["description"] is None
+        assert redacted_history.after["location"] is None
+        assert redacted_history.after["photo_urls"] == []
+
+        anonymized_actor_history = session.get(schema.PostHistory, moderator_history_id)
+        assert anonymized_actor_history is not None
+        assert anonymized_actor_history.actor_id is None
+        assert anonymized_actor_history.before["description"] == "Other user's post"
 
         assert (
             session.scalar(

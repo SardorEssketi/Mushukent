@@ -29,7 +29,9 @@ class CommentRecord:
     content: str
     created_at: datetime
     updated_at: datetime
+    edited_at: datetime | None
     deleted_at: datetime | None
+    deleted_by_id: UUID | None
     user: CommentUserSummary | None
 
 

@@ -16,6 +16,7 @@ def test_metadata_discovers_all_mvp_tables() -> None:
         "cats",
         "posts",
         "post_photos",
+        "post_history",
         "comments",
         "likes",
         "lost_pet_photos",
@@ -37,6 +38,7 @@ def test_table_definitions_match_database_contract() -> None:
     cats = schema.Cat.__table__
     posts = schema.Post.__table__
     post_photos = schema.PostPhoto.__table__
+    post_history = schema.PostHistory.__table__
     comments = schema.Comment.__table__
     adoption_posts = schema.AdoptionPost.__table__
     likes = schema.Like.__table__
@@ -71,6 +73,9 @@ def test_table_definitions_match_database_contract() -> None:
     assert posts.c.updated_at.type.timezone is True
     assert posts.c.deleted_at.type.timezone is True
     assert post_photos.c.created_at.type.timezone is True
+    assert isinstance(post_history.c.before.type, JSONB)
+    assert isinstance(post_history.c.after.type, JSONB)
+    assert post_history.c.created_at.type.timezone is True
 
     assert comments.c.post_id.nullable is True
     assert comments.c.lost_pet_id.nullable is True
@@ -112,6 +117,9 @@ def test_constraints_and_indexes_match_mvp_rules() -> None:
     post_photo_constraints = {
         constraint.name for constraint in schema.PostPhoto.__table__.constraints
     }
+    post_history_constraints = {
+        constraint.name for constraint in schema.PostHistory.__table__.constraints
+    }
     comment_constraints = {constraint.name for constraint in schema.Comment.__table__.constraints}
     lost_pet_constraints = {constraint.name for constraint in schema.LostPet.__table__.constraints}
     adoption_post_constraints = {
@@ -132,6 +140,7 @@ def test_constraints_and_indexes_match_mvp_rules() -> None:
         "ck_posts_comment_count_non_negative",
     } <= post_constraints
     assert "ck_post_photos_post_photo_position_non_negative" in post_photo_constraints
+    assert "ck_post_history_post_history_action_valid" in post_history_constraints
     assert "ck_comments_comments_exactly_one_target" in comment_constraints
     assert "ck_lost_pets_lost_pets_comment_count_non_negative" in lost_pet_constraints
     assert (
@@ -153,9 +162,13 @@ def test_constraints_and_indexes_match_mvp_rules() -> None:
     }
     assert "idx_post_photos_post_id_position" in post_photo_indexes
 
-    comment_indexes = {
-        index.name for index in schema.Base.metadata.tables["comments"].indexes
+    post_history_indexes = {
+        index.name for index in schema.Base.metadata.tables["post_history"].indexes
     }
+    assert "idx_post_history_post_id_created_at" in post_history_indexes
+    assert "idx_post_history_actor_id" in post_history_indexes
+
+    comment_indexes = {index.name for index in schema.Base.metadata.tables["comments"].indexes}
     assert "idx_comments_parent_comment_id" in comment_indexes
 
     active_index = next(

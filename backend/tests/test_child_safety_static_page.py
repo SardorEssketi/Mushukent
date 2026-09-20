@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHILD_SAFETY_PAGE = REPO_ROOT / "frontend" / "web" / "child-safety" / "index.html"
 NGINX_CONF = REPO_ROOT / "infrastructure" / "nginx" / "default.conf"

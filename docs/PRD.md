@@ -214,19 +214,12 @@ Users without a profile phone number may view adoption posts, but must add a pho
 Profile phone numbers used for adoption contact shall use the Uzbekistan format `+998 XX XXX XXXX`. Invalid or non-Uzbek phone numbers shall be rejected with a clear validation message.
 
 Adoption posts shall include a Contact Owner action that initiates a phone call to the stored owner phone number.
-Cat Page
+Cat Records
 
-Each cat page shall display:
-
-cover photo;
-name;
-status;
-first observation;
-latest observation;
-total observations;
-total contributors;
-total likes;
-observation history.
+Dedicated cat profile pages are not required for MVP. Cat records remain
+internal grouping entities used for observation links, map markers, status,
+and aggregate counters. Observation details remain accessible from Feed and
+Map flows.
 Posts
 
 Each observation shall contain:
@@ -234,7 +227,7 @@ Each observation shall contain:
 image;
 author;
 timestamp;
-location;
+optional location;
 description;
 comments;
 likes.

@@ -38,6 +38,10 @@ def _production_settings(**overrides: object) -> Settings:
         "RESEND_API_KEY": "re_test_key",
         "RESEND_FROM_EMAIL": "noreply@mushukistan.uz",
         "GOOGLE_OAUTH_CLIENT_ID": "web-client.apps.googleusercontent.com",
+        "R2_ACCOUNT_ID": "test-account",
+        "R2_ACCESS_KEY_ID": "test-access-key",
+        "R2_SECRET_ACCESS_KEY": "test-secret-key",
+        "R2_PUBLIC_BASE_URL": "https://media.mushukistan.uz",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

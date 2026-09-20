@@ -13,6 +13,9 @@ final mushukistanApiProvider = Provider<MushukistanApi>((ref) {
   );
 });
 
+/// A lightweight invalidation signal shared by every post surface.
+final postMutationRevisionProvider = StateProvider<int>((ref) => 0);
+
 class MushukistanApi {
   MushukistanApi({required MushukistanApiClient client}) : _client = client;
 
@@ -305,6 +308,18 @@ class MushukistanApi {
     );
   }
 
+  Future<CommentData> updateComment(String commentId, String content) {
+    return _client.patchJson<CommentData>(
+      'comments/$commentId',
+      body: <String, Object?>{'content': content},
+      decoder: (json) => CommentData.fromJson(json),
+    );
+  }
+
+  Future<void> deleteComment(String commentId) {
+    return _client.delete('comments/$commentId');
+  }
+
   Future<ApiPage<CommentData>> listLostPetComments(
     String lostPetId, {
     int limit = 20,
@@ -454,6 +469,15 @@ class MushukistanApi {
     return _client.delete('moderation/posts/$postId');
   }
 
+  Future<List<PostHistoryEntry>> getPostHistory(String postId) {
+    return _client.get<List<PostHistoryEntry>>(
+      'moderation/posts/$postId/history',
+      decoder: (json) => _readList(json)
+          .map(PostHistoryEntry.fromJson)
+          .toList(growable: false),
+    );
+  }
+
   Future<UserProfileData> updateMe({
     String? name,
     String? bio,
@@ -545,6 +569,56 @@ class MushukistanApi {
       formData: formData,
       decoder: (json) => PostDetail.fromJson(json),
     );
+  }
+
+  Future<PostDetail> updateObservation({
+    required String postId,
+    required String? description,
+    required GeoPoint? location,
+    required bool isPublic,
+    String? status,
+    List<ObservationPhotoUpload>? replacementPhotos,
+  }) {
+    final body = <String, Object?>{
+      'description':
+          description?.trim().isEmpty == true ? null : description?.trim(),
+      'location': location?.toJson(),
+      'is_public': isPublic,
+      if (status != null) 'status': status,
+    };
+    if (replacementPhotos == null) {
+      return _client.patchJson<PostDetail>(
+        'posts/$postId',
+        body: body,
+        decoder: (json) => PostDetail.fromJson(json),
+      );
+    }
+    final formData = FormData.fromMap(
+      <String, dynamic>{
+        'description': description?.trim() ?? '',
+        'location': jsonEncode(location?.toJson()),
+        'is_public': isPublic,
+        if (status != null) 'status': status,
+        'photos': replacementPhotos
+            .map(
+              (photo) => MultipartFile.fromBytes(
+                photo.bytes,
+                filename: photo.filename,
+                contentType: MediaType.parse(photo.contentType),
+              ),
+            )
+            .toList(growable: false),
+      },
+    );
+    return _client.patchMultipart<PostDetail>(
+      'posts/$postId',
+      formData: formData,
+      decoder: (json) => PostDetail.fromJson(json),
+    );
+  }
+
+  Future<void> deleteObservation(String postId) {
+    return _client.delete('posts/$postId');
   }
 
   Future<LostPetData> createLostPet({
@@ -925,11 +999,18 @@ class PostDetail extends PostSummary {
     required super.likeCount,
     required super.commentCount,
     required super.isLikedByMe,
+    this.updatedAt,
+    this.isPublic = true,
+    this.isEdited = false,
     super.author,
     super.thumbUrl,
     super.description,
     super.status,
   });
+
+  final DateTime? updatedAt;
+  final bool isPublic;
+  final bool isEdited;
 
   factory PostDetail.fromJson(Object? json) {
     final map = _readMap(json);
@@ -948,6 +1029,47 @@ class PostDetail extends PostSummary {
       likeCount: summary.likeCount,
       commentCount: summary.commentCount,
       isLikedByMe: summary.isLikedByMe,
+      updatedAt: map['updated_at'] == null
+          ? summary.createdAt
+          : _readDateTime(map['updated_at']),
+      isPublic: _readBoolOrNull(map['is_public']) ?? true,
+      isEdited: _readBoolOrNull(map['is_edited']) ?? false,
+    );
+  }
+}
+
+class PostHistoryEntry {
+  const PostHistoryEntry({
+    required this.id,
+    required this.postId,
+    required this.action,
+    required this.before,
+    required this.after,
+    required this.createdAt,
+    this.actorId,
+    this.actorName,
+  });
+
+  final String id;
+  final String postId;
+  final String action;
+  final Map<String, Object?> before;
+  final Map<String, Object?> after;
+  final DateTime createdAt;
+  final String? actorId;
+  final String? actorName;
+
+  factory PostHistoryEntry.fromJson(Object? json) {
+    final map = _readMap(json);
+    return PostHistoryEntry(
+      id: _readString(map['id']),
+      postId: _readString(map['post_id']),
+      action: _readString(map['action']),
+      before: _readMap(map['before']),
+      after: _readMap(map['after']),
+      createdAt: _readDateTime(map['created_at']),
+      actorId: _readStringOrNull(map['actor_id']),
+      actorName: _readStringOrNull(map['actor_name']),
     );
   }
 }
@@ -1209,6 +1331,8 @@ class CommentData {
     this.lostPetId,
     this.adoptionPostId,
     this.parentCommentId,
+    this.editedAt,
+    this.editUntil,
   });
 
   final String id;
@@ -1219,6 +1343,26 @@ class CommentData {
   final CommentUserData? user;
   final String content;
   final DateTime createdAt;
+  final DateTime? editedAt;
+  final DateTime? editUntil;
+
+  CommentData copyWith({
+    String? content,
+    DateTime? editedAt,
+  }) {
+    return CommentData(
+      id: id,
+      postId: postId,
+      lostPetId: lostPetId,
+      adoptionPostId: adoptionPostId,
+      parentCommentId: parentCommentId,
+      user: user,
+      content: content ?? this.content,
+      createdAt: createdAt,
+      editedAt: editedAt ?? this.editedAt,
+      editUntil: editUntil,
+    );
+  }
 
   factory CommentData.fromJson(Object? json) {
     final map = _readMap(json);
@@ -1231,6 +1375,8 @@ class CommentData {
       user: map['user'] == null ? null : CommentUserData.fromJson(map['user']),
       content: _readString(map['content']),
       createdAt: _readDateTime(map['created_at']),
+      editedAt: _readDateTimeOrNull(map['edited_at']),
+      editUntil: _readDateTimeOrNull(map['edit_until']),
     );
   }
 }

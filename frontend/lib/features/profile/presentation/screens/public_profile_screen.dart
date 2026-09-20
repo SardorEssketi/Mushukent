@@ -21,6 +21,7 @@ class PublicProfileBundle {
 final publicProfileProvider =
     FutureProvider.autoDispose.family<PublicProfileBundle?, String>(
   (ref, userId) async {
+    ref.watch(postMutationRevisionProvider);
     final api = ref.watch(mushukistanApiProvider);
     final profile = await api.getPublicProfile(userId);
     ApiPage<PostSummary> posts;

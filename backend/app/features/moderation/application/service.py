@@ -4,6 +4,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.features.auth.domain.models import AuthUser
+from app.features.posts.application.schemas import PostHistoryEntryResponse
 from app.features.posts.application.service import PostsService
 from app.features.reports.application.schemas import (
     GenericListResponse,
@@ -55,3 +56,14 @@ class ModerationService:
 
     def delete_post(self, post_id: UUID, *, current_user: AuthUser) -> None:
         self.posts_service_factory().delete_post(post_id, current_user)
+
+    def get_post_history(
+        self,
+        post_id: UUID,
+        *,
+        current_user: AuthUser,
+    ) -> list[PostHistoryEntryResponse]:
+        return self.posts_service_factory().get_post_history(
+            post_id,
+            current_user=current_user,
+        )

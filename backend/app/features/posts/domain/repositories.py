@@ -9,6 +9,7 @@ from app.features.cats.domain.models import CatStatus
 from app.features.posts.domain.models import (
     CatObservationStats,
     PostDetailRecord,
+    PostHistoryRecord,
     PostPage,
     PostSortOrder,
 )
@@ -37,6 +38,16 @@ class PostCreateDraft:
     is_public: bool
 
 
+@dataclass(slots=True)
+class PostUpdateDraft:
+    description: str | None
+    location_latitude: float | None
+    location_longitude: float | None
+    status: CatStatus | None
+    is_public: bool
+    photos: list[PostPhotoDraft] | None = None
+
+
 class PostRepository(Protocol):
     def create(self, draft: PostCreateDraft) -> PostDetailRecord: ...
 
@@ -46,6 +57,7 @@ class PostRepository(Protocol):
         *,
         include_deleted: bool = False,
         viewer_user_id: UUID | None = None,
+        for_update: bool = False,
     ) -> PostDetailRecord | None: ...
 
     def list_for_user(
@@ -79,5 +91,19 @@ class PostRepository(Protocol):
         deleted_at: datetime,
         deleted_by: UUID | None,
     ) -> bool: ...
+
+    def update(self, post_id: UUID, draft: PostUpdateDraft) -> PostDetailRecord: ...
+
+    def add_history(
+        self,
+        *,
+        post_id: UUID,
+        actor_id: UUID | None,
+        action: str,
+        before: dict[str, object],
+        after: dict[str, object],
+    ) -> None: ...
+
+    def list_history(self, post_id: UUID) -> list[PostHistoryRecord]: ...
 
     def recalculate_cat_stats(self, cat_id: UUID) -> CatObservationStats: ...
