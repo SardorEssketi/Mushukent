@@ -6,9 +6,11 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/language_controller.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
+import '../../../auth/application/auth_controller.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
@@ -37,6 +39,9 @@ final feedPostsProvider =
   final api = ref.watch(mushukistanApiProvider);
   final mode = ref.watch(feedModeProvider);
   final popularPeriod = ref.watch(feedPopularPeriodProvider);
+  final includeViewerContext = ref.watch(
+    authControllerProvider.select((state) => state.isAuthenticated),
+  );
   if (mode == 'lost_pets') {
     return api.listLostPets(limit: 30);
   }
@@ -47,6 +52,7 @@ final feedPostsProvider =
     filter: mode,
     popularPeriod: mode == 'popular' ? popularPeriod : null,
     limit: 30,
+    includeViewerContext: includeViewerContext,
   );
 });
 
@@ -59,10 +65,20 @@ class FeedScreen extends ConsumerWidget {
     final popularPeriod = ref.watch(feedPopularPeriodProvider);
     final postsAsync = ref.watch(feedPostsProvider);
     final strings = ref.watch(appStringsProvider);
+    final isAuthenticated = ref.watch(
+      authControllerProvider.select((state) => state.isAuthenticated),
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(strings.feed),
+        actions: [
+          if (!isAuthenticated)
+            TextButton(
+              onPressed: () => context.push('/login'),
+              child: Text(strings.login),
+            ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -770,6 +786,10 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
 
   Future<void> _toggleLike() async {
     if (_submittingLike) {
+      return;
+    }
+    if (!ref.read(authControllerProvider).isAuthenticated) {
+      requestAuthentication(context);
       return;
     }
 

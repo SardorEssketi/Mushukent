@@ -1,12 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
+import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
+import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 
 import '../../support/fakes.dart';
 
 void main() {
+  testWidgets('backend failure keeps the public feed shell and retry action',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'feed', (_) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.network,
+        code: 'NETWORK_ERROR',
+        message: 'Backend unavailable.',
+      );
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          mushukistanApiProvider.overrideWithValue(
+            MushukistanApi(client: apiClient),
+          ),
+          authRepositoryProvider.overrideWithValue(
+            FakeAuthRepository(
+              restoreResult: const SessionRestoreMissing(),
+            ),
+          ),
+          googleIdentityTokenProvider.overrideWithValue(
+            FakeGoogleIdentityTokenProvider(),
+          ),
+        ],
+        child: const MaterialApp(home: FeedScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(AppBar, 'Feed'), findsOneWidget);
+    expect(find.text('Could not load this section'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
+  });
+
   testWidgets('feed post cards omit the publication date', (tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;

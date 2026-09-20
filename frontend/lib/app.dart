@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/localization/l10n.dart';
 import 'core/localization/language_controller.dart';
 import 'core/routing/app_router.dart';
+import 'core/startup/startup_log.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/auth/application/auth_controller.dart';
@@ -22,6 +23,7 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp> {
   @override
   void initState() {
     super.initState();
+    logStartupStage('Flutter application mounted');
     unawaited(
       loadSavedThemeMode().then((mode) {
         if (mounted) {

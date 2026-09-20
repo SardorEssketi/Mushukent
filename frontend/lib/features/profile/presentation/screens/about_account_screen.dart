@@ -43,7 +43,7 @@ class _AboutAccountScreenState extends ConsumerState<AboutAccountScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(strings.accountDeleted)),
         );
-        context.go('/login');
+        context.go('/feed');
       }
     } catch (_) {
       if (mounted) {

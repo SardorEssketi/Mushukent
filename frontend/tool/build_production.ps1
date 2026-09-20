@@ -58,6 +58,12 @@ try {
         if (-not $bootstrapContents.Contains('"useLocalCanvasKit":true')) {
             throw 'Production web artifact is not configured to load CanvasKit locally.'
         }
+        if (-not $bootstrapContents.Contains('retireLegacyFlutterServiceWorker')) {
+            throw 'Production web artifact is missing legacy service-worker cleanup.'
+        }
+        if (-not $bootstrapContents.Contains('flutter-first-frame')) {
+            throw 'Production web artifact is missing first-frame startup handling.'
+        }
         if ($webContents.Contains('http://localhost') -or
             $webContents.Contains('http://10.0.2.2')) {
             throw 'Production web artifact contains a development API host.'

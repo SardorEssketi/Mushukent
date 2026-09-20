@@ -4,11 +4,14 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app.dart';
 import 'core/config/app_environment.dart';
+import 'core/startup/startup_log.dart';
 
 void main() {
-  usePathUrlStrategy();
+  logStartupStage('Dart entry reached');
   try {
+    usePathUrlStrategy();
     final environment = AppEnvironment.fromBuildEnvironment();
+    logStartupStage('Configuration initialized');
     runApp(
       ProviderScope(
         overrides: [
@@ -17,27 +20,43 @@ void main() {
         child: const MushukistanApp(),
       ),
     );
-  } on AppEnvironmentConfiguration catch (error) {
-    runApp(_ConfigurationErrorApp(message: error.message));
+    _logFirstFrame();
+  } on AppEnvironmentConfiguration catch (error, stackTrace) {
+    logStartupFailure('Fatal configuration failure', error, stackTrace);
+    runApp(const StartupFailureApp.configuration());
+    _logFirstFrame();
+  } on Object catch (error, stackTrace) {
+    logStartupFailure('Fatal synchronous startup failure', error, stackTrace);
+    runApp(const StartupFailureApp.unexpected());
+    _logFirstFrame();
   }
 }
 
-class _ConfigurationErrorApp extends StatelessWidget {
-  const _ConfigurationErrorApp({required this.message});
+void _logFirstFrame() {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    logStartupStage('First Flutter frame');
+  });
+}
+
+class StartupFailureApp extends StatelessWidget {
+  const StartupFailureApp.configuration({super.key})
+      : message = 'This Mushukistan release is not configured correctly.';
+
+  const StartupFailureApp.unexpected({super.key})
+      : message = 'Mushukistan could not start. Please try again.';
 
   final String message;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mushukistan configuration error',
+      title: 'Mushukistan startup error',
       home: Scaffold(
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text(
-              'This Mushukistan release is not configured correctly.\n\n'
-              '$message',
+              message,
               textAlign: TextAlign.center,
             ),
           ),

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/localization/language_controller.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../application/auth_controller.dart';
 import '../../domain/auth_models.dart';
 import '../widgets/google_sign_in_entry_button.dart';
@@ -94,10 +95,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     final strings = ref.watch(appStringsProvider);
-    final isLoading = authState.phase == AuthPhase.authenticating;
+    final isLoading = authState.isBusy;
     final pendingGoogleIdToken = authState.pendingGoogleIdToken;
     final requiresGoogleLegalAcceptance =
         authState.requiresGoogleLegalAcceptance;
+    final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.createAccount)),
@@ -318,9 +320,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       onPressed: isLoading
                           ? null
                           : () {
-                              context.go('/login');
+                              context.go(
+                                authEntryLocation('/login', redirect),
+                              );
                             },
-                      child: const Text('Already have an account? Sign in'),
+                      child: Text(strings.alreadyHaveAccount),
                     ),
                   ],
                 ),

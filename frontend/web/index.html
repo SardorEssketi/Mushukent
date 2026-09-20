@@ -31,16 +31,117 @@
 
   <title>Mushukistan</title>
   <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #f7f7fb;
+      color: #202124;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #flutter-startup {
+      box-sizing: border-box;
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .startup-card {
+      width: min(100%, 360px);
+      text-align: center;
+    }
+
+    .startup-mark {
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 18px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      background: #5b55d6;
+      color: white;
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .startup-title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .startup-status {
+      margin: 10px 0 0;
+      color: #65666b;
+      line-height: 1.45;
+    }
+
+    .startup-progress {
+      width: 32px;
+      height: 32px;
+      box-sizing: border-box;
+      margin: 22px auto 0;
+      border: 3px solid #deddf7;
+      border-top-color: #5b55d6;
+      border-radius: 50%;
+      animation: startup-spin 0.9s linear infinite;
+    }
+
+    .startup-recovery {
+      visibility: hidden;
+      margin-top: 20px;
+      animation: startup-reveal 0s 20s forwards;
+    }
+
+    .startup-failed .startup-progress {
+      display: none;
+    }
+
+    .startup-failed .startup-recovery {
+      visibility: visible;
+      animation: none;
+    }
+
+    .startup-retry {
+      display: inline-block;
+      padding: 10px 18px;
+      border-radius: 999px;
+      background: #5b55d6;
+      color: white;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    @keyframes startup-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes startup-reveal {
+      to { visibility: visible; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #121217; color: #f4f2fa; }
+      .startup-status { color: #b9b6c1; }
+      .startup-progress { border-color: #37334f; border-top-color: #a9a4ff; }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async></script>
+  <div id="flutter-startup" role="status" aria-live="polite">
+    <div class="startup-card">
+      <div class="startup-mark" aria-hidden="true">M</div>
+      <h1 class="startup-title">Mushukistan</h1>
+      <p id="flutter-startup-status" class="startup-status">Loading Mushukistan…</p>
+      <div class="startup-progress" aria-hidden="true"></div>
+      <div class="startup-recovery">
+        <p class="startup-status">This is taking longer than expected.</p>
+        <a class="startup-retry" href="">Try again</a>
+      </div>
+    </div>
+  </div>
+  <script src="flutter_bootstrap.js" defer></script>
 </body>
 </html>

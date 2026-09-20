@@ -6,6 +6,7 @@ import '../../../core/config/app_environment.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/token_store_provider.dart';
+import '../../../core/startup/startup_log.dart';
 import '../domain/auth_models.dart';
 import '../domain/auth_repository.dart';
 import '../infrastructure/auth_repository_impl.dart';
@@ -168,17 +169,20 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _performRestoreSession() async {
+    logStartupStage('Authentication restore started');
     state = AuthState.restoring();
     late final SessionRestoreResult result;
     try {
       result = await _withRestoreTimeout(_repository.restoreSession());
     } on TimeoutException {
+      logStartupStage('Authentication restore timed out; continuing as guest');
       state = AuthState.failure(
         message: 'Session check timed out. Please try again.',
         retryable: true,
       );
       return;
     } catch (_) {
+      logStartupStage('Authentication restore failed; continuing as guest');
       state = AuthState.failure(
         message: 'Session check failed.',
         retryable: true,
@@ -187,15 +191,20 @@ class AuthController extends StateNotifier<AuthState> {
     }
     switch (result) {
       case SessionRestoreMissing():
+        logStartupStage('Authentication restore completed: guest');
         state = AuthState.unauthenticated();
         break;
       case SessionRestoreInvalid(:final message):
+        logStartupStage('Authentication restore cleared invalid session');
         state = AuthState.unauthenticated(message: message);
         break;
       case SessionRestoreFailure(:final message, :final retryable):
+        logStartupStage(
+            'Authentication restore unavailable; guest UI remains available');
         state = AuthState.failure(message: message, retryable: retryable);
         break;
       case SessionRestoreSuccess(:final session):
+        logStartupStage('Authentication restore completed: authenticated');
         state = AuthState.authenticated(session.user);
         break;
     }

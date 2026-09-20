@@ -10,16 +10,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:mushukistan_frontend/app.dart';
+import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
+import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
+
+import 'support/fakes.dart';
 
 void main() {
   testWidgets('app boots', (WidgetTester tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MushukistanApp(),
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(
+            FakeAuthRepository(
+              restoreResult: const SessionRestoreMissing(),
+            ),
+          ),
+          googleIdentityTokenProvider.overrideWithValue(
+            FakeGoogleIdentityTokenProvider(),
+          ),
+        ],
+        child: const MushukistanApp(),
       ),
     );
 
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.byType(ProviderScope), findsOneWidget);
     expect(find.byType(Scaffold), findsWidgets);

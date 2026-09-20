@@ -10,6 +10,7 @@ import '../../features/add_observation/presentation/screens/add_observation_loca
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
 import '../../features/add_observation/presentation/screens/publish_success_screen.dart';
 import '../../features/auth/presentation/screens/auth_gate_screen.dart';
+import '../../features/auth/presentation/screens/auth_required_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/verify_email_screen.dart';
@@ -33,7 +34,9 @@ import '../../features/profile/presentation/screens/public_profile_screen.dart';
 import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
 import '../network/mushukistan_api.dart';
+import '../startup/startup_log.dart';
 import '../widgets/app_shell_scaffold.dart';
+import 'auth_navigation.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _mapNavigatorKey = GlobalKey<NavigatorState>();
@@ -49,61 +52,54 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authControllerProvider);
       final location = state.uri.path;
 
-      if (location == '/') {
-        return '/auth-gate';
+      if (location == '/' || location == '/auth-gate') {
+        return '/feed';
       }
 
-      final isAuthRoute = location == '/auth-gate' ||
-          location == '/login' ||
+      final isAuthEntryRoute = location == '/login' ||
           location == '/register' ||
-          location == '/verify-email';
-      final isProtectedRoute = location == '/map' ||
-          location.startsWith('/feed') ||
-          location.startsWith('/add') ||
-          location.startsWith('/leaderboards') ||
+          location == '/auth-required';
+      final isModeratorRoute = location.startsWith('/moderation');
+      final isProtectedRoute = location.startsWith('/add') ||
           location.startsWith('/profile') ||
-          location.startsWith('/report') ||
-          location.startsWith('/moderation') ||
-          location.endsWith('/edit');
+          location == '/report' ||
+          (location.startsWith('/posts/') && location.endsWith('/edit'));
+
+      if (isModeratorRoute) {
+        if (!authState.isAuthenticated) {
+          return authenticationRequiredLocation(state.uri);
+        }
+        if (authState.user?.isModerator != true) {
+          return '/profile';
+        }
+        return null;
+      }
+
+      if (isProtectedRoute && !authState.isAuthenticated) {
+        if (authState.phase == AuthPhase.verificationRequired) {
+          return '/verify-email';
+        }
+        return authenticationRequiredLocation(state.uri);
+      }
 
       switch (authState.phase) {
         case AuthPhase.initial:
         case AuthPhase.restoring:
-          return location == '/auth-gate' || location == '/verify-email'
-              ? null
-              : '/auth-gate';
         case AuthPhase.failure:
-          if (isProtectedRoute) {
-            return '/auth-gate';
-          }
-          return null;
         case AuthPhase.unauthenticated:
-          if (location == '/auth-gate') {
-            return '/register';
-          }
-          if (isProtectedRoute) {
-            return '/register';
-          }
-          return null;
-        case AuthPhase.verificationRequired:
-          if (location == '/auth-gate' ||
-              location == '/login' ||
-              location == '/register') {
-            return '/verify-email';
-          }
-          if (isProtectedRoute) {
-            return '/verify-email';
-          }
-          return null;
         case AuthPhase.authenticating:
           return null;
-        case AuthPhase.authenticated:
-          if (isAuthRoute) {
-            return '/feed';
+        case AuthPhase.verificationRequired:
+          if (isAuthEntryRoute) {
+            return '/verify-email';
           }
-          if (location.startsWith('/moderation') &&
-              authState.user?.isModerator != true) {
-            return '/profile';
+          return null;
+        case AuthPhase.authenticated:
+          if (isAuthEntryRoute || location == '/verify-email') {
+            return validatedPostAuthRedirect(
+                  state.uri.queryParameters['redirect'],
+                ) ??
+                '/feed';
           }
           return null;
       }
@@ -118,6 +114,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth-gate',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AuthGateScreen(),
+      ),
+      GoRoute(
+        path: '/auth-required',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => AuthRequiredScreen(
+          redirect: validatedPostAuthRedirect(
+            state.uri.queryParameters['redirect'],
+          ),
+        ),
       ),
       GoRoute(
         path: '/login',
@@ -367,6 +372,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+
+  logStartupStage('Router ready');
 
   ref.listen<AuthState>(authControllerProvider, (_, __) {
     router.refresh();

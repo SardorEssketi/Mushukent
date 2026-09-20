@@ -42,9 +42,10 @@ Bottom navigation with 5 tabs:
 4. Navigation Flows
 -------------------
 4.1 First Launch Flow
-- App opens -> Auth Gate
-- If no valid token/session -> Register screen
-- If valid token -> Feed tab
+- App opens -> Feed tab while session restoration runs independently.
+- If no valid token/session -> remain in the public product as a guest.
+- If valid token -> restore authenticated account state without an auth/feed redirect chain.
+- Guests are asked to sign in only when they choose an identity-dependent action.
 
 4.2 Authenticated Main Flow
 - Default landing tab: Feed
@@ -64,18 +65,19 @@ Bottom navigation with 5 tabs:
 
 5. Screen Specifications
 ------------------------
-5.1 Auth Gate Screen
-- Purpose: decide whether to route to authenticated app or auth screens.
+5.1 Startup and Authentication Requirement Screens
+- Purpose: keep public browsing available while session restoration runs and explain authentication only when an action requires identity.
 - Layout:
-  - centered app logo/name,
-  - loading indicator while token check runs.
+  - the web shell shows a minimal loading surface until Flutter renders its first frame;
+  - an action-level authentication screen offers Sign in, Create account, and Continue browsing.
 - Interaction:
-  - none except automatic route decision.
+  - public routes remain usable without waiting for session restoration;
+  - after successful authentication, return to the intended protected route when safe.
 - Edge cases:
   - expired access token with refresh/session token -> silently refresh before routing.
-  - invalid refresh/session token -> clear auth state and route to Register.
-  - transient refresh failure -> show retryable startup error.
-  - corrupted local auth state -> fallback to Register.
+  - invalid refresh/session token -> clear auth state and continue as guest.
+  - transient refresh failure -> public screens remain available.
+  - corrupted or unavailable browser storage -> recover as guest; do not leave a blank page.
 
 5.2 Login Screen
 - Purpose: authenticate existing users.

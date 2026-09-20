@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
@@ -17,7 +18,13 @@ import '../../../profile/presentation/screens/user_activity_screen.dart';
 final postDetailProvider =
     FutureProvider.autoDispose.family<PostDetail, String>((ref, postId) async {
   ref.watch(postMutationRevisionProvider);
-  return ref.watch(mushukistanApiProvider).getPost(postId);
+  final includeViewerContext = ref.watch(
+    authControllerProvider.select((state) => state.isAuthenticated),
+  );
+  return ref.watch(mushukistanApiProvider).getPost(
+        postId,
+        includeViewerContext: includeViewerContext,
+      );
 });
 
 class PostDetailScreen extends ConsumerStatefulWidget {
@@ -105,6 +112,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
 
   Future<void> _toggleLike(PostDetail post) async {
     if (_submittingLike) {
+      return;
+    }
+    if (!ref.read(authControllerProvider).isAuthenticated) {
+      requestAuthentication(context);
       return;
     }
 

@@ -7,17 +7,32 @@ import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
+import '../../../auth/application/auth_controller.dart';
 
 final userPostsProvider = FutureProvider.autoDispose
     .family<ApiPage<PostSummary>, String>((ref, userId) async {
   ref.watch(postMutationRevisionProvider);
-  return ref.watch(mushukistanApiProvider).listUserPosts(userId, limit: 50);
+  final includeViewerContext = ref.watch(
+    authControllerProvider.select((state) => state.isAuthenticated),
+  );
+  return ref.watch(mushukistanApiProvider).listUserPosts(
+        userId,
+        limit: 50,
+        includeViewerContext: includeViewerContext,
+      );
 });
 
 final userCommentsProvider = FutureProvider.autoDispose
     .family<ApiPage<CommentData>, String>((ref, userId) async {
   ref.watch(postMutationRevisionProvider);
-  return ref.watch(mushukistanApiProvider).listUserComments(userId, limit: 50);
+  final includeViewerContext = ref.watch(
+    authControllerProvider.select((state) => state.isAuthenticated),
+  );
+  return ref.watch(mushukistanApiProvider).listUserComments(
+        userId,
+        limit: 50,
+        includeViewerContext: includeViewerContext,
+      );
 });
 
 class UserPostsScreen extends ConsumerWidget {

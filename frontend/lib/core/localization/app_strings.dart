@@ -311,7 +311,8 @@ class AppStrings {
         'Post yashirib o‘chirildi; oldingi versiya quyida saqlangan.',
       _RussianStrings() =>
         'Публикация удалена программно; предыдущая версия сохранена ниже.',
-      _ => 'The post was soft-deleted; the preceding version is retained below.',
+      _ =>
+        'The post was soft-deleted; the preceding version is retained below.',
     };
   }
 
@@ -1638,8 +1639,10 @@ class AppStrings {
 
   String get locationOutsideMap {
     return switch (this) {
-      _UzbekStrings() => 'Joylashuvingiz Toshkent xaritasi hududidan tashqarida.',
-      _RussianStrings() => 'Ваше местоположение находится за пределами карты Ташкента.',
+      _UzbekStrings() =>
+        'Joylashuvingiz Toshkent xaritasi hududidan tashqarida.',
+      _RussianStrings() =>
+        'Ваше местоположение находится за пределами карты Ташкента.',
       _ => 'Your location is outside the Tashkent map area.',
     };
   }
@@ -2572,6 +2575,33 @@ class AppStrings {
 
   String viewComments(int count) {
     return '$viewCommentsPrefix$count$viewCommentsSuffix';
+  }
+
+  String get signInRequiredTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Hisob kerak',
+      _RussianStrings() => 'Требуется аккаунт',
+      _ => 'Account required',
+    };
+  }
+
+  String get signInRequiredMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Ko‘rishni hisobsiz davom ettirishingiz mumkin. Bu amal uchun tizimga kiring.',
+      _RussianStrings() =>
+        'Просматривать можно без аккаунта. Для этого действия нужно войти.',
+      _ =>
+        'You can keep browsing without an account. Sign in to complete this action.',
+    };
+  }
+
+  String get continueBrowsing {
+    return switch (this) {
+      _UzbekStrings() => 'Ko‘rishni davom ettirish',
+      _RussianStrings() => 'Продолжить просмотр',
+      _ => 'Continue browsing',
+    };
   }
 
   static AppStrings forLanguage(AppLanguage language) {

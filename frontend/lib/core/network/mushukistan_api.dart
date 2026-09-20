@@ -83,9 +83,11 @@ class MushukistanApi {
     int? radiusMeters,
     int limit = 20,
     String? cursor,
+    bool includeViewerContext = true,
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'feed',
+      authenticated: includeViewerContext,
       queryParameters: <String, dynamic>{
         'filter': filter,
         if (popularPeriod != null) 'popular_period': popularPeriod,
@@ -102,9 +104,13 @@ class MushukistanApi {
     );
   }
 
-  Future<PostDetail> getPost(String postId) {
+  Future<PostDetail> getPost(
+    String postId, {
+    bool includeViewerContext = true,
+  }) {
     return _client.get<PostDetail>(
       'posts/$postId',
+      authenticated: includeViewerContext,
       decoder: (json) => PostDetail.fromJson(json),
     );
   }
@@ -174,9 +180,11 @@ class MushukistanApi {
     int limit = 20,
     String? cursor,
     String sort = 'latest',
+    bool includeViewerContext = true,
   }) {
     return _client.get<ApiPage<PostSummary>>(
       'users/$userId/posts',
+      authenticated: includeViewerContext,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'sort': sort,
@@ -194,9 +202,11 @@ class MushukistanApi {
     int limit = 20,
     String? cursor,
     String sort = 'latest',
+    bool includeViewerContext = true,
   }) {
     return _client.get<ApiPage<PostSummary>>(
       'cats/$catId/posts',
+      authenticated: includeViewerContext,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'sort': sort,
@@ -249,7 +259,13 @@ class MushukistanApi {
     String? cursor,
     String sort = 'latest',
   }) {
-    return listUserPosts(userId, limit: limit, cursor: cursor, sort: sort);
+    return listUserPosts(
+      userId,
+      limit: limit,
+      cursor: cursor,
+      sort: sort,
+      includeViewerContext: false,
+    );
   }
 
   Future<ApiPage<CommentData>> listComments(
@@ -278,9 +294,11 @@ class MushukistanApi {
     int limit = 20,
     String? cursor,
     String order = 'desc',
+    bool includeViewerContext = true,
   }) {
     return _client.get<ApiPage<CommentData>>(
       'users/$userId/comments',
+      authenticated: includeViewerContext,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,

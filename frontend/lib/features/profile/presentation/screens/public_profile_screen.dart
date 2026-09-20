@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../auth/application/auth_controller.dart';
 
 class PublicProfileBundle {
   const PublicProfileBundle({
@@ -214,6 +216,10 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
   }
 
   Future<void> _blockProfile(String profileId, AppStrings strings) async {
+    if (!ref.read(authControllerProvider).isAuthenticated) {
+      requestAuthentication(context);
+      return;
+    }
     final confirmed = await _confirmBlock(context, strings);
     if (!confirmed || !mounted) {
       return;

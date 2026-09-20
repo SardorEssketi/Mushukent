@@ -337,6 +337,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
             cat.id,
             limit: 1,
             sort: 'latest',
+            includeViewerContext: false,
           );
       if (!mounted) {
         return;

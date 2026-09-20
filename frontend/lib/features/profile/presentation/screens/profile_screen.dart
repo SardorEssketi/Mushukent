@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -54,7 +52,10 @@ class ProfileScreen extends ConsumerWidget {
                   }
                   final confirmed = await _confirmLogout(context, strings);
                   if (confirmed) {
-                    unawaited(controller.logout());
+                    await controller.logout();
+                    if (context.mounted) {
+                      context.go('/feed');
+                    }
                   }
               }
             },

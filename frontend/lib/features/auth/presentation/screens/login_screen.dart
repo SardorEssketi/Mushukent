@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../application/auth_controller.dart';
@@ -76,10 +77,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     final strings = ref.watch(appStringsProvider);
-    final isLoading = authState.phase == AuthPhase.authenticating;
+    final isLoading = authState.isBusy;
     final pendingGoogleIdToken = authState.pendingGoogleIdToken;
     final requiresGoogleLegalAcceptance =
         authState.requiresGoogleLegalAcceptance;
+    final redirect = GoRouterState.of(context).uri.queryParameters['redirect'];
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.welcomeBack)),
@@ -268,11 +270,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: isLoading
                             ? null
                             : () {
-                                context.go('/register');
+                                context.go(
+                                  authEntryLocation('/register', redirect),
+                                );
                               },
-                        child: const Text(
-                          "Don't have an account? Create an account",
-                        ),
+                        child: Text(strings.createAnAccount),
                       ),
                     ],
                   ),

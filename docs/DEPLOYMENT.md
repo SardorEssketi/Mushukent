@@ -81,8 +81,19 @@ Google configuration and could switch CanvasKit back to its remote CDN. The
 on the Mushukistan origin, which is required for reliable Safari/WebKit startup.
 Inspect the final `frontend/build/web/main.dart.js` for the production API URL
 and configured client ID, confirm `frontend/build/web/flutter_bootstrap.js`
-contains `"useLocalCanvasKit":true`, and reject localhost/emulator URLs before
-deployment.
+contains `"useLocalCanvasKit":true`, the pre-Flutter first-frame/failure hooks,
+and legacy Flutter service-worker retirement, and reject localhost/emulator
+URLs before deployment. Mushukistan does not provide offline mode, and the web
+bootstrap does not register a new service worker. The retirement step removes
+service workers left by older Flutter builds and reloads once if an old worker
+still controls the page.
+
+The application shell and its non-hashed executable files form one release
+unit. Nginx sends `no-store` for `index.html`, `flutter_bootstrap.js`,
+`main.dart.js`, and `version.json`, and requires revalidation for JavaScript,
+JSON, WebAssembly, and local CanvasKit files. Any Cloudflare cache rule must
+honor or be at least as strict as these origin headers for those paths. Do not
+add an edge rule that caches HTML or `main.dart.js` across releases.
 
 ## Database backup and migration gate
 
@@ -110,8 +121,11 @@ On the production VPS, before any migration or container replacement:
 Use the existing production Compose project and Nginx/TLS setup. Preserve the
 active `.env`, named PostgreSQL/media volumes, `/etc/letsencrypt`, R2 settings,
 and domains. Copy only the reviewed release source and the single final
-`frontend/build/web` artifact into the release directory, preserve its `.env`,
-then run:
+`frontend/build/web` artifact into a new versioned release directory, preserve
+its `.env`, and validate the complete artifact before switching the active
+Compose project to that directory. Never rebuild or copy individual web files
+inside the directory currently bind-mounted by Nginx: doing so can expose a
+mixed shell, Dart bundle, and renderer asset set. Then run from the new release:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet

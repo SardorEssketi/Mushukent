@@ -40,6 +40,7 @@ ProviderContainer _containerWithRepo(
       return <String, Object?>{
         'items': <Object?>[
           <String, Object?>{
+            'item_type': 'observation',
             'id': 'post-1',
             'cat': <String, Object?>{
               'id': 'cat-1',
@@ -61,6 +62,7 @@ ProviderContainer _containerWithRepo(
             'created_at': '2026-07-01T10:00:00.000Z',
             'like_count': 3,
             'comment_count': 1,
+            'is_liked_by_me': false,
           },
         ],
         'next_cursor': null,
@@ -90,6 +92,42 @@ ProviderContainer _containerWithRepo(
         'limit': 20,
       };
     };
+  });
+  fakeApiClient.handlers.putIfAbsent('GET posts/post-1', () {
+    return (_) => <String, Object?>{
+          'id': 'post-1',
+          'cat': <String, Object?>{
+            'id': 'cat-1',
+            'name': 'Mushu',
+            'status': 'healthy',
+            'cover_photo_url': null,
+          },
+          'author': <String, Object?>{
+            'id': '11111111-1111-4111-8111-111111111111',
+            'name': 'Sardor',
+            'avatar_url': null,
+          },
+          'photo_url': 'https://example.com/cat.jpg',
+          'photo_urls': <String>['https://example.com/cat.jpg'],
+          'thumb_url': 'https://example.com/cat-thumb.jpg',
+          'description': 'Spotted near the park.',
+          'location': <String, Object?>{
+            'latitude': 41.2995,
+            'longitude': 69.2401,
+          },
+          'created_at': '2026-07-01T10:00:00.000Z',
+          'like_count': 3,
+          'comment_count': 0,
+          'is_liked_by_me': false,
+          'is_public': true,
+        };
+  });
+  fakeApiClient.handlers.putIfAbsent('GET posts/post-1/comments', () {
+    return (_) => <String, Object?>{
+          'items': <Object?>[],
+          'next_cursor': null,
+          'limit': 20,
+        };
   });
   fakeApiClient.handlers.putIfAbsent('GET users/me', () {
     return (_) {
@@ -134,13 +172,163 @@ Future<void> _pumpApp(WidgetTester tester, ProviderContainer container) async {
   await tester.pump();
 }
 
-Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
-  await tester.tap(finder);
-  await tester.pumpAndSettle();
-}
-
 void main() {
+  testWidgets('fresh guest opens the public feed', (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    expect(
+        container
+            .read(appRouterProvider)
+            .routeInformationProvider
+            .value
+            .uri
+            .path,
+        '/feed');
+    expect(find.textContaining('Mushu'), findsWidgets);
+    expect(find.text('Account required'), findsNothing);
+  });
+
+  testWidgets('guest public routes do not redirect to authentication',
+      (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+    const publicPaths = <String>[
+      '/feed',
+      '/map',
+      '/leaderboards',
+      '/posts/post-1',
+      '/lost-pets/lost-1',
+      '/adoption-posts/adoption-1',
+      '/users/user-1',
+      '/users/user-1/observations',
+      '/users/user-1/comments',
+    ];
+
+    for (final path in publicPaths) {
+      router.go(path);
+      await tester.pump();
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        path,
+        reason: '$path must remain public',
+      );
+    }
+  });
+
+  testWidgets('invalid and unavailable session restoration leave guest UI',
+      (tester) async {
+    for (final result in <SessionRestoreResult>[
+      const SessionRestoreInvalid(message: 'Session expired.'),
+      const SessionRestoreFailure(message: 'Backend unavailable.'),
+    ]) {
+      final container = _containerWithRepo(
+        FakeAuthRepository(restoreResult: result),
+      );
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      expect(
+        container
+            .read(appRouterProvider)
+            .routeInformationProvider
+            .value
+            .uri
+            .path,
+        '/feed',
+      );
+      expect(find.textContaining('Mushu'), findsWidgets);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('guest like action requests authentication', (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Like'));
+    await tester.pumpAndSettle();
+    expect(find.text('Account required'), findsOneWidget);
+  });
+
+  testWidgets('guest protected routes preserve their post-login destination',
+      (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
+    );
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+
+    for (final path in <String>[
+      '/add',
+      '/add/lost-pet',
+      '/add/adoption',
+      '/profile',
+      '/report?type=post&id=post-1',
+      '/posts/post-1/edit',
+      '/moderation/reports',
+    ]) {
+      router.go(path);
+      await tester.pumpAndSettle();
+      final uri = router.routeInformationProvider.value.uri;
+      expect(uri.path, '/auth-required');
+      expect(uri.queryParameters['redirect'], path);
+      expect(find.text('Account required'), findsOneWidget);
+    }
+  });
+
+  testWidgets('successful login returns to the intended protected action',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+      loginResult: AuthSession.restored(
+        accessToken: 'token-123',
+        user: testUser(),
+      ),
+    );
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+    router.go('/add/lost-pet');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).last, 'password1');
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+
+    expect(router.routeInformationProvider.value.uri.path, '/add/lost-pet');
+    expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+  });
+
   testWidgets('unauthenticated users are redirected away from protected routes',
       (tester) async {
     final container = _containerWithRepo(
@@ -154,7 +342,8 @@ void main() {
     router.go('/profile');
     await tester.pumpAndSettle();
 
-    expect(find.text('Join Mushukistan'), findsOneWidget);
+    expect(find.text('Account required'), findsOneWidget);
+    expect(find.text('Continue browsing'), findsOneWidget);
   });
 
   testWidgets('authenticated users are redirected away from login',
@@ -223,7 +412,7 @@ void main() {
     expect(find.widgetWithText(AppBar, 'Moderation reports'), findsOneWidget);
   });
 
-  testWidgets('restoration state stays on the gate until it resolves',
+  testWidgets('public feed remains available while restoration resolves',
       (tester) async {
     final repo = FakeAuthRepository();
     repo.restoreCompleter = Completer<SessionRestoreResult>();
@@ -232,13 +421,19 @@ void main() {
 
     await _pumpApp(tester, container);
 
-    expect(find.text('Restoring session...'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
     expect(find.text('Join Mushukistan'), findsNothing);
 
     repo.restoreCompleter!.complete(const SessionRestoreMissing());
     await tester.pumpAndSettle();
 
-    expect(find.text('Join Mushukistan'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -269,7 +464,10 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pump();
 
-    expect(find.text('Restoring session...'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
     expect(find.text('Join Mushukistan'), findsNothing);
     expect(find.text('Welcome back'), findsNothing);
     expect(apiClient.calls.where((call) => call.path == 'auth/refresh'),
@@ -308,7 +506,8 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
-    await _tapVisible(tester, find.text('Already have an account? Sign in'));
+    container.read(appRouterProvider).go('/login');
+    await tester.pumpAndSettle();
 
     await tester.enterText(
         find.byType(TextFormField).first, 'user@example.com');
@@ -347,7 +546,8 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
-    await _tapVisible(tester, find.text('Already have an account? Sign in'));
+    container.read(appRouterProvider).go('/login');
+    await tester.pumpAndSettle();
 
     await tester.enterText(
         find.byType(TextFormField).first, 'user@example.com');
@@ -370,7 +570,8 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
-    await _tapVisible(tester, find.text('Already have an account? Sign in'));
+    container.read(appRouterProvider).go('/login');
+    await tester.pumpAndSettle();
 
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
@@ -396,11 +597,12 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
-    expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Join Mushukistan'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsNothing);
+    expect(find.text('Join Mushukistan'), findsNothing);
     expect(find.text('Google sign-in is unavailable.'), findsNothing);
 
-    await _tapVisible(tester, find.text('Already have an account? Sign in'));
+    container.read(appRouterProvider).go('/login');
+    await tester.pumpAndSettle();
 
     expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
@@ -432,6 +634,9 @@ void main() {
     addTearDown(container.dispose);
 
     await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    container.read(appRouterProvider).go('/login');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Continue with Google'));
@@ -474,6 +679,9 @@ void main() {
     await _pumpApp(tester, container);
     await tester.pumpAndSettle();
 
+    container.read(appRouterProvider).go('/login');
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('Continue with Google'));
     await tester.pumpAndSettle();
 
@@ -486,8 +694,8 @@ void main() {
     expect(google.calls, 1);
 
     repo.loginError = null;
-    final termsCheckbox = find.byType(Checkbox).at(2);
-    final privacyCheckbox = find.byType(Checkbox).at(3);
+    final termsCheckbox = find.byType(Checkbox).at(0);
+    final privacyCheckbox = find.byType(Checkbox).at(1);
     await tester.ensureVisible(termsCheckbox);
     await tester.tap(termsCheckbox);
     await tester.ensureVisible(privacyCheckbox);
@@ -517,6 +725,9 @@ void main() {
     addTearDown(container.dispose);
 
     await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+
+    container.read(appRouterProvider).go('/register');
     await tester.pumpAndSettle();
 
     expect(find.text('Join Mushukistan'), findsOneWidget);
@@ -633,7 +844,10 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Logout'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Join Mushukistan'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
     expect(repo.logoutCalled, isTrue);
   });
 }

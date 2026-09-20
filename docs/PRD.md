@@ -114,6 +114,13 @@ As a community member, I want to comment on observations and interact with other
 9. Functional Requirements
 Authentication
 
+Browsing is public. Registration or sign-in is required only when identity is
+needed. Guests can browse the mixed feed, map and public markers, public post
+details, lost-pet and adoption details, place information, leaderboards, and
+public user profiles/activity permitted by privacy settings. Creating content,
+liking, commenting, reporting, editing/deleting content, account settings, and
+moderation remain authenticated actions.
+
 Users shall be able to:
 
 register using email;

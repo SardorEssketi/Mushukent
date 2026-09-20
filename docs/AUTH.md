@@ -88,10 +88,13 @@ MVP constraints:
 - Re-authentication is required only when the refresh/session token is expired, revoked, invalid, or the account is disabled/deleted.
 
 Startup/session restore:
-- valid access token -> enter the app.
-- expired access token with valid refresh session -> silently refresh, persist renewed credentials, then enter the app.
-- invalid/revoked/expired refresh session -> clear local auth state and route to Registration.
-- transient network/server failure during refresh -> preserve local auth state and show retry.
+- public product UI renders independently of session restoration.
+- valid access token -> restore the authenticated account without blocking public navigation.
+- expired access token with valid refresh session -> silently refresh and persist renewed credentials.
+- invalid/revoked/expired refresh session -> clear local auth state and continue as a guest.
+- transient network/server failure during refresh -> keep public browsing available; protected actions can offer retry/sign-in.
+- browsing public feed, map, public content details, places, leaderboards, and permitted public profiles does not require authentication.
+- creating or changing content, liking, commenting, reporting, account routes, and moderation require authentication at the point of action.
 
 5. Google OAuth Flow (Detailed)
 -------------------------------

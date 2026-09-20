@@ -1,16 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
+import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/screens/auth_required_screen.dart';
 import 'package:mushukistan_frontend/features/comments/presentation/screens/comments_screen.dart';
 
 import '../../support/fakes.dart';
 
 void main() {
   group('comment mutation feedback', () {
+    testWidgets('guest comment action requests authentication', (tester) async {
+      final client = _client();
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (context, state) => const Scaffold(
+              body: PostCommentsSection(postId: 'post-1'),
+            ),
+          ),
+          GoRoute(
+            path: '/auth-required',
+            builder: (context, state) => AuthRequiredScreen(
+              redirect: state.uri.queryParameters['redirect'],
+            ),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            mushukistanApiProvider.overrideWithValue(
+              MushukistanApi(client: client),
+            ),
+            commentsProvider('post-1').overrideWith(
+              (ref) async => const ApiPage<CommentData>(items: [], limit: 20),
+            ),
+            authRepositoryProvider.overrideWithValue(
+              FakeAuthRepository(
+                restoreResult: const SessionRestoreMissing(),
+              ),
+            ),
+            googleIdentityTokenProvider.overrideWithValue(
+              FakeGoogleIdentityTokenProvider(),
+            ),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(TextField));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Account required'), findsOneWidget);
+      expect(client.calls, isEmpty);
+    });
+
     testWidgets('successful create shows one posted message', (tester) async {
       final client = _client();
       client.setHandler('POST', 'posts/post-1/comments', (_) {
@@ -124,6 +177,19 @@ Future<void> _pumpComments(
           (ref) async => ApiPage<CommentData>(items: items, limit: 20),
         ),
         currentUserProvider.overrideWithValue(_user()),
+        authControllerProvider.overrideWith(
+          (ref) => AuthController(
+            FakeAuthRepository(
+              restoreResult: SessionRestoreSuccess(
+                AuthSession.restored(
+                  accessToken: 'test-token',
+                  user: _user(),
+                ),
+              ),
+            ),
+            FakeGoogleIdentityTokenProvider(),
+          ),
+        ),
       ],
       child: MaterialApp(
         home: Scaffold(

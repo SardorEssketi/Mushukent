@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
 
@@ -94,6 +95,9 @@ class _PostCommentsSectionState extends ConsumerState<PostCommentsSection> {
     final commentsAsync = ref.watch(commentsProvider(widget.postId));
     final strings = ref.watch(appStringsProvider);
     final currentUser = ref.watch(currentUserProvider);
+    final isAuthenticated = ref.watch(
+      authControllerProvider.select((state) => state.isAuthenticated),
+    );
     final api = ref.read(mushukistanApiProvider);
     return _CommentsContent(
       commentsAsync: commentsAsync,
@@ -108,6 +112,8 @@ class _PostCommentsSectionState extends ConsumerState<PostCommentsSection> {
       onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
       currentUserId: currentUser?.id,
       isModerator: currentUser?.isModerator == true,
+      isAuthenticated: isAuthenticated,
+      onAuthenticationRequired: () => requestAuthentication(context),
       onEdit: api.updateComment,
       onDelete: api.deleteComment,
       now: widget.now,
@@ -137,6 +143,9 @@ class _LostPetCommentsSectionState
     final commentsAsync = ref.watch(lostPetCommentsProvider(widget.lostPetId));
     final strings = ref.watch(appStringsProvider);
     final currentUser = ref.watch(currentUserProvider);
+    final isAuthenticated = ref.watch(
+      authControllerProvider.select((state) => state.isAuthenticated),
+    );
     final api = ref.read(mushukistanApiProvider);
     return _CommentsContent(
       commentsAsync: commentsAsync,
@@ -154,6 +163,8 @@ class _LostPetCommentsSectionState
       onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
       currentUserId: currentUser?.id,
       isModerator: currentUser?.isModerator == true,
+      isAuthenticated: isAuthenticated,
+      onAuthenticationRequired: () => requestAuthentication(context),
       onEdit: api.updateComment,
       onDelete: api.deleteComment,
       now: null,
@@ -184,6 +195,9 @@ class _AdoptionPostCommentsSectionState
         ref.watch(adoptionPostCommentsProvider(widget.adoptionPostId));
     final strings = ref.watch(appStringsProvider);
     final currentUser = ref.watch(currentUserProvider);
+    final isAuthenticated = ref.watch(
+      authControllerProvider.select((state) => state.isAuthenticated),
+    );
     final api = ref.read(mushukistanApiProvider);
     return _CommentsContent(
       commentsAsync: commentsAsync,
@@ -201,6 +215,8 @@ class _AdoptionPostCommentsSectionState
       onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
       currentUserId: currentUser?.id,
       isModerator: currentUser?.isModerator == true,
+      isAuthenticated: isAuthenticated,
+      onAuthenticationRequired: () => requestAuthentication(context),
       onEdit: api.updateComment,
       onDelete: api.deleteComment,
       now: null,
@@ -224,6 +240,8 @@ class _CommentsContent extends StatefulWidget {
     required this.onMutation,
     required this.currentUserId,
     required this.isModerator,
+    required this.isAuthenticated,
+    required this.onAuthenticationRequired,
     required this.onEdit,
     required this.onDelete,
     required this.now,
@@ -243,6 +261,8 @@ class _CommentsContent extends StatefulWidget {
   final VoidCallback onMutation;
   final String? currentUserId;
   final bool isModerator;
+  final bool isAuthenticated;
+  final VoidCallback onAuthenticationRequired;
   final Future<CommentData> Function(String commentId, String content) onEdit;
   final Future<void> Function(String commentId) onDelete;
   final DateTime? now;
@@ -366,6 +386,10 @@ class _CommentsContentState extends State<_CommentsContent> {
   }
 
   Future<void> _submit() async {
+    if (!widget.isAuthenticated) {
+      widget.onAuthenticationRequired();
+      return;
+    }
     final content = widget.controller.text.trim();
     if (content.isEmpty || widget.submitting) {
       return;
@@ -473,6 +497,10 @@ class _CommentsContentState extends State<_CommentsContent> {
                       ),
                     TextField(
                       controller: widget.controller,
+                      readOnly: !widget.isAuthenticated,
+                      onTap: widget.isAuthenticated
+                          ? null
+                          : widget.onAuthenticationRequired,
                       minLines: 1,
                       maxLines: 5,
                       maxLength: 1000,
@@ -529,6 +557,10 @@ class _CommentsContentState extends State<_CommentsContent> {
                   onEdit: _editComment,
                   onDelete: _deleteComment,
                   onReply: (comment) {
+                    if (!widget.isAuthenticated) {
+                      widget.onAuthenticationRequired();
+                      return;
+                    }
                     setState(() {
                       _replyingTo = comment;
                     });
