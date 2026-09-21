@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/media/image_picker_options.dart';
+import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/validation/phone_numbers.dart';
@@ -27,6 +29,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _bioController = TextEditingController();
   bool _initialised = false;
   bool _saving = false;
+  bool _pickingAvatar = false;
   String? _error;
   Uint8List? _avatarBytes;
   String? _avatarFilename;
@@ -158,36 +161,85 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _pickAvatarFromGallery() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-      withData: true,
-    );
-    final file = result?.files.singleOrNull;
-    final bytes = file?.bytes;
-    if (file == null || bytes == null) {
+    if (_pickingAvatar) {
       return;
     }
     setState(() {
-      _avatarBytes = bytes;
-      _avatarFilename = file.name;
-      _avatarContentType = _contentTypeFor(file.extension, file.name);
+      _pickingAvatar = true;
+      _error = null;
     });
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result == null) {
+        return;
+      }
+      final prepared = await preparePlatformFilesForUpload(
+        result.files,
+        limit: 1,
+      );
+      if (prepared.isEmpty || !mounted) {
+        return;
+      }
+      final avatar = prepared.single;
+      setState(() {
+        _avatarBytes = avatar.bytes;
+        _avatarFilename = avatar.filename;
+        _avatarContentType = avatar.contentType;
+      });
+    } catch (error) {
+      logPhotoPipelineFailure('avatar_gallery_picker', error);
+      if (mounted) {
+        setState(() {
+          _error = ref.read(appStringsProvider).couldNotPreparePhoto;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _pickingAvatar = false);
+      }
+    }
   }
 
   Future<void> _pickAvatarFromCamera() async {
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      imageQuality: 90,
-    );
-    if (image == null) {
+    if (_pickingAvatar) {
       return;
     }
-    final bytes = await image.readAsBytes();
     setState(() {
-      _avatarBytes = bytes;
-      _avatarFilename = image.name;
-      _avatarContentType = image.mimeType ?? _contentTypeFor(null, image.name);
+      _pickingAvatar = true;
+      _error = null;
     });
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: pickerImageQuality,
+      );
+      if (image == null) {
+        return;
+      }
+      final avatar = await preparePickedXFileForUpload(image);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _avatarBytes = avatar.bytes;
+        _avatarFilename = avatar.filename;
+        _avatarContentType = avatar.contentType;
+      });
+    } catch (error) {
+      logPhotoPipelineFailure('avatar_camera_picker', error);
+      if (mounted) {
+        setState(() {
+          _error = ref.read(appStringsProvider).couldNotPreparePhoto;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _pickingAvatar = false);
+      }
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -329,20 +381,6 @@ class _ErrorPanel extends StatelessWidget {
       ),
     );
   }
-}
-
-String _contentTypeFor(String? extension, String filename) {
-  final ext = (extension ?? '').toLowerCase();
-  if (ext == 'png') {
-    return 'image/png';
-  }
-  if (ext == 'jpg' || ext == 'jpeg') {
-    return 'image/jpeg';
-  }
-  if (filename.toLowerCase().endsWith('.png')) {
-    return 'image/png';
-  }
-  return 'image/jpeg';
 }
 
 String _initials(String name, String email) {

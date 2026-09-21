@@ -14,6 +14,14 @@ class PreparedImageUpload {
   final String contentType;
 }
 
+enum ImagePreparationFailure { unsupportedFormat, invalidImage, tooLarge }
+
+class ImagePreparationException implements Exception {
+  const ImagePreparationException(this.failure);
+
+  final ImagePreparationFailure failure;
+}
+
 const int maxUploadImageBytes = 10 * 1024 * 1024;
 const int targetUploadImageBytes = 8 * 1024 * 1024;
 const int uploadImageLongestSide = 1920;
@@ -23,12 +31,15 @@ Future<PreparedImageUpload> prepareImageForUpload({
   required String filename,
 }) async {
   return Future(() {
+    if (!_isSupportedImage(bytes)) {
+      throw const ImagePreparationException(
+        ImagePreparationFailure.unsupportedFormat,
+      );
+    }
     final decoded = image.decodeImage(bytes);
     if (decoded == null) {
-      return PreparedImageUpload(
-        bytes: bytes,
-        filename: filename,
-        contentType: _contentTypeForFilename(filename),
+      throw const ImagePreparationException(
+        ImagePreparationFailure.invalidImage,
       );
     }
 
@@ -54,12 +65,34 @@ Future<PreparedImageUpload> prepareImageForUpload({
       }
     }
 
+    if (encoded.length > maxUploadImageBytes) {
+      throw const ImagePreparationException(ImagePreparationFailure.tooLarge);
+    }
+
     return PreparedImageUpload(
       bytes: encoded,
       filename: _jpegFilename(filename),
       contentType: 'image/jpeg',
     );
   });
+}
+
+bool _isSupportedImage(Uint8List bytes) {
+  if (bytes.length >= 3 &&
+      bytes[0] == 0xff &&
+      bytes[1] == 0xd8 &&
+      bytes[2] == 0xff) {
+    return true;
+  }
+  return bytes.length >= 8 &&
+      bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4e &&
+      bytes[3] == 0x47 &&
+      bytes[4] == 0x0d &&
+      bytes[5] == 0x0a &&
+      bytes[6] == 0x1a &&
+      bytes[7] == 0x0a;
 }
 
 image.Image _resizeToLongestSide(image.Image source, int longestSide) {
@@ -86,12 +119,4 @@ String _jpegFilename(String filename) {
     return '$trimmed.jpg';
   }
   return '${trimmed.substring(0, dotIndex)}.jpg';
-}
-
-String _contentTypeForFilename(String filename) {
-  final lower = filename.toLowerCase();
-  if (lower.endsWith('.png')) {
-    return 'image/png';
-  }
-  return 'image/jpeg';
 }

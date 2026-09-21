@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
-import '../../../../core/media/image_upload_preprocessor.dart';
+import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
@@ -38,6 +37,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   final List<LostPetPhotoUpload> _photos = [];
   GeoPoint? _selectedLocation;
   bool _isSubmitting = false;
+  bool _isPickingPhotos = false;
   bool _phonePublicationConsent = false;
   String? _error;
 
@@ -49,37 +49,51 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   }
 
   Future<void> _pickPhotos() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-      withData: true,
-      allowMultiple: true,
-    );
-    if (result == null) {
+    if (_isPickingPhotos) {
       return;
     }
-    final uploads = <LostPetPhotoUpload>[];
-    final availableSlots = 5 - _photos.length;
-    for (final file in result.files
-        .where((file) => file.bytes != null)
-        .take(availableSlots)) {
-      final prepared = await prepareImageForUpload(
-        bytes: file.bytes as Uint8List,
-        filename: file.name,
-      );
-      uploads.add(
-        LostPetPhotoUpload(
-          bytes: prepared.bytes,
-          filename: prepared.filename,
-          contentType: prepared.contentType,
-        ),
-      );
-    }
-    if (!mounted) {
-      return;
-    }
+    final strings = ref.read(appStringsProvider);
     setState(() {
-      _photos.addAll(uploads);
+      _isPickingPhotos = true;
+      _error = null;
     });
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.image,
+        withData: true,
+        allowMultiple: true,
+      );
+      if (result == null) {
+        return;
+      }
+      final preparedPhotos = await preparePlatformFilesForUpload(
+        result.files,
+        limit: 5 - _photos.length,
+      );
+      final uploads = preparedPhotos
+          .map(
+            (prepared) => LostPetPhotoUpload(
+              bytes: prepared.bytes,
+              filename: prepared.filename,
+              contentType: prepared.contentType,
+            ),
+          )
+          .toList(growable: false);
+      if (mounted) {
+        setState(() {
+          _photos.addAll(uploads);
+        });
+      }
+    } catch (error) {
+      logPhotoPipelineFailure('lost_pet_gallery_picker', error);
+      if (mounted) {
+        setState(() => _error = strings.couldNotPreparePhoto);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPickingPhotos = false);
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -213,9 +227,10 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                       ],
                     ),
                   OutlinedButton.icon(
-                    onPressed: _isSubmitting || _photos.length >= 5
-                        ? null
-                        : _pickPhotos,
+                    onPressed:
+                        _isSubmitting || _isPickingPhotos || _photos.length >= 5
+                            ? null
+                            : _pickPhotos,
                     icon: const Icon(Icons.add_photo_alternate_outlined),
                     label: Text('${strings.addPhotos} (${_photos.length}/5)'),
                   ),

@@ -49,5 +49,6 @@ void main() {
       ),
     );
     expect(nginx, contains('add_header Content-Security-Policy'));
+    expect(nginx, contains("connect-src 'self' blob:"));
   });
 }

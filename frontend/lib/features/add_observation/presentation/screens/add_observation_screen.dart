@@ -6,7 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/localization/app_strings.dart';
-import '../../../../core/media/image_upload_preprocessor.dart';
+import '../../../../core/media/image_picker_options.dart';
+import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
@@ -50,14 +51,26 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     }
     final strings = ref.read(appStringsProvider);
     final controller = ref.read(addObservationControllerProvider.notifier);
-    final images = await ImagePicker().pickMultiImage(
-      imageQuality: 90,
-      limit: 5,
-    );
+    late final List<XFile> images;
+    try {
+      images = await ImagePicker().pickMultiImage(
+        imageQuality: pickerImageQuality,
+        limit: 5,
+      );
+    } catch (error) {
+      logPhotoPipelineFailure('observation_gallery_picker', error);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+        );
+      }
+      return;
+    }
     if (images.isEmpty) {
       return;
     }
     if (!context.mounted) {
+      releasePickedXFiles(images);
       return;
     }
     await _preparePickedImages(
@@ -80,20 +93,16 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
       _preparingPhotos = true;
     });
     try {
-      final photos = <ObservationPhotoUpload>[];
-      for (final image in images) {
-        final prepared = await prepareImageForUpload(
-          bytes: await image.readAsBytes(),
-          filename: image.name,
-        );
-        photos.add(
-          ObservationPhotoUpload(
-            bytes: prepared.bytes,
-            filename: prepared.filename,
-            contentType: prepared.contentType,
-          ),
-        );
-      }
+      final preparedPhotos = await preparePickedXFilesForUpload(images);
+      final photos = preparedPhotos
+          .map(
+            (prepared) => ObservationPhotoUpload(
+              bytes: prepared.bytes,
+              filename: prepared.filename,
+              contentType: prepared.contentType,
+            ),
+          )
+          .toList(growable: false);
       controller.reset(kind: kind);
       controller.setPhotos(photos);
       if (context.mounted) {
@@ -104,7 +113,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(strings.couldNotPreparePhoto(error))),
+        SnackBar(content: Text(strings.couldNotPreparePhoto)),
       );
     } finally {
       if (mounted) {
@@ -123,18 +132,30 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     if (_preparingPhotos) {
       return;
     }
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      imageQuality: 90,
-    );
+    final strings = ref.read(appStringsProvider);
+    late final XFile? image;
+    try {
+      image = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: pickerImageQuality,
+      );
+    } catch (error) {
+      logPhotoPipelineFailure('observation_camera_picker', error);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+        );
+      }
+      return;
+    }
     if (image == null) {
       return;
     }
     if (!context.mounted) {
+      releasePickedXFiles([image]);
       return;
     }
     final controller = ref.read(addObservationControllerProvider.notifier);
-    final strings = ref.read(appStringsProvider);
     await _preparePickedImages(
       context,
       controller,

@@ -5,7 +5,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
-import '../../../../core/media/image_upload_preprocessor.dart';
+import '../../../../core/media/image_picker_options.dart';
+import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
@@ -55,34 +56,47 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
     if (_pickingPhotos) {
       return;
     }
-    final images =
-        await ImagePicker().pickMultiImage(imageQuality: 90, limit: 5);
-    if (images.isEmpty || !mounted) {
+    late final List<XFile> images;
+    try {
+      images = await ImagePicker().pickMultiImage(
+        imageQuality: pickerImageQuality,
+        limit: 5,
+      );
+    } catch (error) {
+      logPhotoPipelineFailure('post_edit_gallery_picker', error);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+        );
+      }
+      return;
+    }
+    if (images.isEmpty) {
+      return;
+    }
+    if (!mounted) {
+      releasePickedXFiles(images);
       return;
     }
     setState(() => _pickingPhotos = true);
     try {
-      final uploads = <ObservationPhotoUpload>[];
-      for (final image in images.take(5)) {
-        final prepared = await prepareImageForUpload(
-          bytes: await image.readAsBytes(),
-          filename: image.name,
-        );
-        uploads.add(
-          ObservationPhotoUpload(
-            bytes: prepared.bytes,
-            filename: prepared.filename,
-            contentType: prepared.contentType,
-          ),
-        );
-      }
+      final preparedPhotos = await preparePickedXFilesForUpload(images);
+      final uploads = preparedPhotos
+          .map(
+            (prepared) => ObservationPhotoUpload(
+              bytes: prepared.bytes,
+              filename: prepared.filename,
+              contentType: prepared.contentType,
+            ),
+          )
+          .toList(growable: false);
       if (mounted) {
         setState(() => _replacementPhotos = uploads);
       }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotPreparePhoto(error))),
+          SnackBar(content: Text(strings.couldNotPreparePhoto)),
         );
       }
     } finally {

@@ -15,16 +15,20 @@ This document defines the canonical image upload and storage design for MVP. It 
 2. MVP Upload Flow
 ------------------
 2.1 Observation Image Flow (synchronous)
-1. Client sends multipart request to backend endpoint (`POST /api/v1/posts`) with image file and metadata.
-2. Backend validates authentication and request payload.
-3. Backend validates file type, size, and decodability.
-4. Backend strips EXIF metadata and normalizes orientation.
-5. Backend generates:
+1. Flutter materializes a selected JPEG/PNG into memory immediately. On Web, picker-provided
+   `blob:` URLs are temporary transport handles only: the client reads the bytes first and then
+   revokes the URL. Drafts, previews, retries, and multipart uploads retain bytes, never Blob URLs
+   or filesystem paths.
+2. Client sends a multipart request to backend endpoint (`POST /api/v1/posts`) with image bytes and metadata.
+3. Backend validates authentication and request payload.
+4. Backend validates file type, size, and decodability.
+5. Backend strips EXIF metadata and normalizes orientation.
+6. Backend generates:
    - canonical image (compressed),
    - thumbnail image.
-6. Backend uploads both files to Cloudflare R2.
-7. Backend stores returned URLs in PostgreSQL (`posts.photo_url`, `posts.thumb_url`).
-8. Backend commits transaction and returns created post response.
+7. Backend uploads both files to Cloudflare R2.
+8. Backend stores returned URLs in PostgreSQL (`posts.photo_url`, `posts.thumb_url`).
+9. Backend commits transaction and returns created post response.
 
 2.2 Avatar Upload Flow (MVP)
 - Same validation and sanitation rules as observation upload.
@@ -152,6 +156,10 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 
 11. Failure Handling
 -------------------
+- Browser CSP must permit `blob:` in `connect-src` while Flutter materializes picker-backed
+  `XFile` data. The temporary URL is revoked immediately after the read succeeds or fails.
+- Picker/decoding failures are logged by stage and exception type without image bytes, local
+  paths, tokens, or personal data. Users receive a localized retry/reselect message.
 - If upload to R2 fails: return 502/503 with `IMAGE_UPLOAD_FAILED` and do not commit DB post row.
 - If DB write fails after upload: attempt best-effort object cleanup and return 500.
 - All failures logged with request id and user id (without sensitive payload).

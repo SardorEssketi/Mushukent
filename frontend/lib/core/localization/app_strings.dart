@@ -953,11 +953,13 @@ class AppStrings {
     };
   }
 
-  String couldNotPreparePhoto(Object error) {
+  String get couldNotPreparePhoto {
     return switch (this) {
-      _UzbekStrings() => 'Rasmni tayyorlab boʻlmadi: $error',
-      _RussianStrings() => 'Не удалось подготовить фото: $error',
-      _ => 'Could not prepare photo: $error',
+      _UzbekStrings() =>
+        'Rasmni tayyorlab boʻlmadi. Boshqa JPEG yoki PNG rasmni tanlang.',
+      _RussianStrings() =>
+        'Не удалось подготовить фото. Выберите другое изображение JPEG или PNG.',
+      _ => 'Could not prepare the photo. Choose another JPEG or PNG image.',
     };
   }
 
