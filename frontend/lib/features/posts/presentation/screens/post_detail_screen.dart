@@ -211,8 +211,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           final isOwner = authorId != null && authorId == currentUser?.id;
           final isModerator = currentUser?.isModerator == true;
           final isEdited = post.isEdited;
-          final statusTag =
-              _postStatusLabel(post.status ?? post.cat.status, strings);
+          final kindBadge =
+              post.kind == 'needs_help' ? strings.needsHelp : null;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -239,9 +239,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                                       Theme.of(context).textTheme.headlineSmall,
                                 ),
                               ),
-                              if (statusTag != null) ...[
+                              if (kindBadge != null) ...[
                                 const SizedBox(width: 8),
-                                _StatusBadge(label: statusTag),
+                                _StatusBadge(label: kindBadge),
                               ],
                             ],
                           ),
@@ -571,15 +571,6 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-String? _postStatusLabel(String status, AppStrings strings) {
-  return switch (status) {
-    'healthy' => strings.healthy,
-    'needs_help' => strings.needsHelp,
-    'feed' => strings.feedStatus,
-    _ => null,
-  };
 }
 
 class _StatCard extends StatelessWidget {

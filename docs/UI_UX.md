@@ -194,7 +194,8 @@ Bottom navigation with 5 tabs:
 - Purpose: start observation creation process.
 - Layout:
 - The Add tab still lets the user choose a post type. The cat-observation quick action opens the camera/gallery chooser directly.
-- Cat observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
+- Observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
+- Needs help: follows the observation flow with a required current or manually marked location.
 - Lost Pet: creates a lost pet post shown in the feed.
 - Interactions:
 - permission prompts for camera/gallery.
@@ -236,7 +237,7 @@ Bottom navigation with 5 tabs:
 - The backend creates an unnamed `Unknown` cat record automatically for each observation. The user is not asked to search for, select, or name a cat during this flow.
 - Validation:
   - image required,
-  - location optional.
+- location optional for Observation and required for Needs help.
 - Edge cases:
 - GPS unavailable for current-location flow -> show error and retry or allow manual map placement / skip location.
 - observations without explicit location do not create map markers.
@@ -267,7 +268,7 @@ Bottom navigation with 5 tabs:
   - distance (if nearby),
   - like count next to the like icon and comment count next to the comment icon,
   - long descriptions show a compact preview with a `Read more` control and expand inline,
-  - all visible tags appear next to the cat/pet name; `Unknown` is not displayed as a tag,
+  - Needs help observations have a calm, distinct kind badge; observation posts have no tags,
   - quick like action.
 - Interactions:
   - tap card -> Post Detail

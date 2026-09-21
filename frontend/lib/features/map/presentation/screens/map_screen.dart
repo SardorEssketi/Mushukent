@@ -422,7 +422,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 width: 44,
                 height: 44,
                 child: _CatMarker(
-                  status: cat.status,
+                  needsHelp: cat.latestPostKind == 'needs_help',
                   onTap: () => unawaited(_openLatestCatPost(cat)),
                 ),
               ),
@@ -871,28 +871,17 @@ class _FocusedLostPetMarker extends StatelessWidget {
 
 class _CatMarker extends StatelessWidget {
   const _CatMarker({
-    required this.status,
+    required this.needsHelp,
     required this.onTap,
   });
 
-  final String status;
+  final bool needsHelp;
   final VoidCallback onTap;
 
   Color _color(BuildContext context) {
-    switch (status) {
-      case 'healthy':
-        return AppPalette.found;
-      case 'injured':
-        return AppPalette.terracotta;
-      case 'needs_help':
-        return Theme.of(context).colorScheme.error;
-      case 'adopted':
-        return AppPalette.adoption;
-      case 'feed':
-        return AppPalette.sage;
-      default:
-        return Theme.of(context).colorScheme.secondary;
-    }
+    return needsHelp
+        ? Theme.of(context).colorScheme.tertiary
+        : Theme.of(context).colorScheme.secondary;
   }
 
   @override

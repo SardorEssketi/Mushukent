@@ -14,6 +14,7 @@ class AddObservationState {
   const AddObservationState({
     this.photos = const [],
     this.location,
+    this.kind = 'observation',
     this.description = '',
     this.isPublic = true,
     this.submitting = false,
@@ -23,6 +24,7 @@ class AddObservationState {
 
   final List<ObservationPhotoUpload> photos;
   final GeoPoint? location;
+  final String kind;
   final String description;
   final bool isPublic;
   final bool submitting;
@@ -34,12 +36,14 @@ class AddObservationState {
   bool get hasDraft =>
       photos.isNotEmpty ||
       location != null ||
+      kind != 'observation' ||
       description.trim().isNotEmpty ||
       !isPublic;
 
   AddObservationState copyWith({
     List<ObservationPhotoUpload>? photos,
     GeoPoint? location,
+    String? kind,
     bool clearLocation = false,
     String? description,
     bool? isPublic,
@@ -50,6 +54,7 @@ class AddObservationState {
     return AddObservationState(
       photos: photos ?? this.photos,
       location: clearLocation ? null : location ?? this.location,
+      kind: kind ?? this.kind,
       description: description ?? this.description,
       isPublic: isPublic ?? this.isPublic,
       submitting: submitting ?? this.submitting,
@@ -90,6 +95,10 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     state = state.copyWith(clearLocation: true, errorMessage: null);
   }
 
+  void setKind(String kind) {
+    state = state.copyWith(kind: kind, errorMessage: null);
+  }
+
   void setDescription(String description) {
     state = state.copyWith(description: description);
   }
@@ -103,12 +112,16 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     if (state.photos.isEmpty) {
       throw StateError('Missing observation data.');
     }
+    if (state.kind == 'needs_help' && location == null) {
+      throw StateError('Needs-help observations require a location.');
+    }
 
     state = state.copyWith(submitting: true, errorMessage: null);
     try {
       final post = await _api.createObservation(
         photos: state.photos,
         location: location,
+        kind: state.kind,
         description:
             state.description.trim().isEmpty ? null : state.description.trim(),
         isPublic: state.isPublic,
@@ -129,7 +142,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     }
   }
 
-  void reset() {
-    state = const AddObservationState();
+  void reset({String kind = 'observation'}) {
+    state = AddObservationState(kind: kind);
   }
 }

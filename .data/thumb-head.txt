@@ -1,0 +1,16 @@
+HTTP/1.1 200 OK
+Date: Fri, 14 Aug 2026 00:09:43 GMT
+Content-Type: image/jpeg
+Content-Length: 23077
+Connection: keep-alive
+Cache-Control: public, max-age=31536000, immutable
+ETag: "045a0970dd5bf23fda7570ad63ba192f"
+Last-Modified: Thu, 13 Aug 2026 23:52:11 GMT
+Accept-Ranges: bytes
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+Server: cloudflare
+cf-cache-status: MISS
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=TTIPNnzoSxFuU5RrruqudAPuKewxgTC7G5j36GbYujdDd7XPRpAjA12hz6%2Fph3XZ1DWOyK97LRxeFdQ4yuJmYtPxyJ%2B2jcRBvxE8nWS8272Gzt%2BfH%2Bi0EKeYd70kZQeQ8HqBvVlojw%3D%3D"}]}
+CF-RAY: a2abbb774e56c385-WAW
+alt-svc: h3=":443"; ma=86400
+

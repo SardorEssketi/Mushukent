@@ -1,0 +1,231 @@
+AUTH.md
+
+Mushukistan Authentication and Authorization (MVP)
+
+Version: 1.0 (MVP)
+Scope: Android app + FastAPI backend only
+
+1. Purpose
+----------
+This document defines the canonical authentication and authorization design for MVP. It aligns with `PROJECT_BIBLE.md`, `PRD.md`, `ARCHITECTURE.md`, `DATABASE.md`, and `API.md`.
+
+MVP constraints:
+- No Redis, no RabbitMQ, no background workers.
+- No additional identity provider besides Google OAuth and email/password.
+- Flutter web is available for the MVP production frontend.
+
+2. Authentication Flows
+-----------------------
+2.1 Email/Password Registration
+- Client submits email, password, optional display name.
+- Backend validates payload and password policy.
+- Backend creates user record with hashed password.
+- Backend returns a verification-required response containing the email address and, in development only, a verification token for local testing.
+- Account remains inactive for password login until email verification is completed.
+
+2.2 Email/Password Login
+- Client submits email and password.
+- Backend looks up user by normalized email.
+- Backend verifies password hash.
+- Backend rejects unverified users with `EMAIL_NOT_VERIFIED`.
+- Backend issues a short-lived JWT access token and a refresh/session token.
+- Client stores both credentials using secure storage and attaches only the access token to protected requests.
+
+2.3 Email Verification
+- Client submits verification token received through email delivery.
+- Backend validates token signature, issuer, audience, expiration, and token type.
+- Backend marks the matching user as `email_verified = true`.
+- Development flow may expose the verification token in API responses and logs; production must deliver the token by email provider only.
+
+2.4 Google OAuth Login
+- Client obtains Google `id_token` using official Google Sign-In SDK.
+- Client sends `id_token` to backend.
+- Backend validates token signature, issuer (`iss`), configured audience (`aud`), and expiration (`exp`).
+- Backend finds user by email:
+  - if exists and current legal acceptance is already recorded, log user in;
+  - if exists but current legal acceptance is missing, require explicit Terms and Privacy acceptance before completing login;
+  - if not exists, create user with `password_hash = NULL` only when explicit Terms and Privacy acceptance is provided.
+- Google-authenticated users are treated as verified immediately.
+- Backend issues a short-lived JWT access token and a refresh/session token.
+
+2.5 Logout
+- Client calls `POST /auth/logout` with the current refresh token when available, then deletes local credentials.
+- Backend revokes the matching refresh session, or all active refresh sessions for the authenticated user when no token is provided.
+- Access-token blacklist remains out of MVP scope.
+
+3. JWT Strategy
+---------------
+3.1 Token Types
+- Access token: Bearer JWT.
+- Refresh/session token: opaque random token stored hashed server-side.
+
+3.2 Signing
+- Algorithm: HS256 for MVP simplicity.
+- Signing secret stored in environment variable and never committed.
+- Future: rotate to RS256 with key rotation when infra matures.
+
+3.3 Required Claims
+- `sub`: user UUID
+- `exp`: expiration timestamp (UTC)
+- `iat`: issued-at timestamp
+- `nbf`: not-before timestamp
+- `iss`: token issuer (backend service name)
+- `aud`: token audience (`mushukistan-mobile`)
+- `role`: `user` or `moderator`
+
+3.4 Validation Rules
+- Reject tokens with invalid signature.
+- Reject expired tokens (`exp` in past).
+- Reject tokens with invalid `iss` or `aud`.
+- Reject tokens for deactivated users (`is_active = false`).
+
+4. Token Lifetime
+-----------------
+- Access token lifetime: 60 minutes.
+- Refresh/session lifetime: 30 days.
+- Refresh uses sliding renewal and keeps the refresh token stable for MVP to avoid accidental sign-outs from stale tabs or clients.
+- Clock skew tolerance: 60 seconds.
+- Re-authentication is required only when the refresh/session token is expired, revoked, invalid, or the account is disabled/deleted.
+
+Startup/session restore:
+- valid access token -> enter the app.
+- expired access token with valid refresh session -> silently refresh, persist renewed credentials, then enter the app.
+- invalid/revoked/expired refresh session -> clear local auth state and route to Registration.
+- transient network/server failure during refresh -> preserve local auth state and show retry.
+
+5. Google OAuth Flow (Detailed)
+-------------------------------
+5.1 Client Steps
+- User taps "Continue with Google".
+- Android app obtains Google ID token.
+- App sends `id_token` to `POST /api/v1/auth/google`.
+- If the backend returns `LEGAL_ACCEPTANCE_REQUIRED`, the app shows explicit Terms of Service and Privacy Policy consent controls and resubmits the same Google ID token with `accept_terms=true` and `accept_privacy=true`.
+- The app must not silently accept legal documents or require the user to choose their Google account twice.
+
+5.2 Backend Steps
+- Verify token with Google public keys.
+- Validate:
+  - `iss` is Google issuer,
+  - `aud` matches one configured Google OAuth client ID,
+  - token not expired,
+  - email exists in token payload.
+- Upsert user:
+  - for new users, require `accept_terms=true` and `accept_privacy=true`;
+  - record current Terms and Privacy versions and a backend-owned acceptance timestamp when legal acceptance is provided;
+  - set `email_verified = true` (for Google-authenticated emails);
+  - update `last_login_at`.
+- Issue local JWT access token.
+
+5.3 Error Handling
+- Invalid token -> 401 `INVALID_GOOGLE_TOKEN`.
+- Missing email claim -> 400 `GOOGLE_EMAIL_MISSING`.
+- Missing required legal acceptance -> 422 `LEGAL_ACCEPTANCE_REQUIRED`.
+- Disabled user -> 403 `ACCOUNT_DISABLED`.
+
+6. User Roles and Permissions
+-----------------------------
+6.1 Roles (MVP)
+- `user`: standard account.
+- `moderator`: can process reports and remove violating content.
+
+6.2 Permission Matrix
+- `user` permissions:
+  - create/update own profile;
+  - create posts/cats/comments/likes;
+  - delete own comments/posts;
+  - report content.
+- `moderator` permissions:
+  - all user permissions;
+  - view moderation queue;
+  - resolve/dismiss reports;
+  - soft-delete violating posts/comments;
+  - suspend users (set `is_active = false`) if required.
+
+6.3 Authorization Rules
+- Ownership check for user-managed content.
+- Role check for moderation endpoints.
+- Return 403 `FORBIDDEN` when user lacks permission.
+- Auth session responses and `GET /users/me` expose `is_moderator` so the client can show moderator navigation. This is a discoverability hint only; every moderation endpoint still enforces the server-side role check.
+
+7. Password Hashing
+-------------------
+7.1 Algorithm
+- Preferred: Argon2id.
+- Acceptable fallback: bcrypt (cost factor >= 12).
+
+7.2 Rules
+- Never store plaintext password.
+- Never log password or hash.
+- Use constant-time compare via hashing library.
+- Enforce max password length (128 chars) to prevent abuse.
+
+7.3 Password Policy (MVP)
+- Minimum length: 8
+- Maximum length: 128
+- No complexity hard-fail beyond length for MVP (to reduce registration friction), but UI should recommend strong passwords.
+
+8. Account Lifecycle
+--------------------
+8.1 Creation
+- Via email/password or Google OAuth.
+
+8.2 Active State
+- `is_active = true` means login allowed.
+- `is_active = false` means authentication denied with 403 `ACCOUNT_DISABLED`.
+- `email_verified = false` means password login is denied with 401 `EMAIL_NOT_VERIFIED`.
+- Google-created users are created or updated with `email_verified = true`.
+
+8.3 Profile Updates
+- User can update display name, bio, avatar URL.
+
+8.4 Suspension (Moderator)
+- Moderator can suspend account for abuse.
+- Suspended users cannot authenticate or create content.
+
+8.5 Deletion
+- Account deletion is available from Settings -> About account -> Delete account.
+- The backend anonymizes and deactivates the account instead of hard-deleting the `users` row.
+- Login is disabled by setting `is_active = false`; existing access tokens are rejected on subsequent protected requests because the account is inactive.
+- Authentication credentials and profile personal data are removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data.
+- User-owned posts, comments, lost-pet posts, and adoption/rehoming posts are hidden and anonymized.
+- User likes, user block rows, and affected leaderboard cache entries are removed.
+- Shared domain records such as cats may remain when they no longer identify the deleted user; user attribution is cleared where possible.
+- Some anonymized operational and moderation records may remain for service integrity, moderation, safety, abuse prevention, or legal compliance.
+
+9. Security Controls Specific to Auth
+-------------------------------------
+- Rate limit auth endpoints (10 req/min per IP).
+- Generic login error messages to avoid account enumeration.
+- Use HTTPS in production only.
+- Rotate JWT signing secret manually when needed.
+
+10. API Alignment
+-----------------
+This document aligns to these endpoint families in `API.md`:
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/resend-verification`
+- `POST /api/v1/auth/verify-email`
+- `POST /api/v1/auth/google`
+- `POST /api/v1/auth/logout`
+
+11. Out of Scope for MVP
+------------------------
+- Refresh tokens
+- Password reset via email
+- MFA
+- Token revocation blacklist
+- Single sign-on beyond Google
+- Production email delivery provider implementation details
+
+12. Future Evolution (Post-MVP)
+-------------------------------
+- Add password reset flow.
+- Add MFA for moderators.
+- Add audit table for auth events.
+- Move to asymmetric JWT signing and automated key rotation.
+
+Change Log
+----------
+- 2026-07-23: Initial MVP auth architecture document.
+

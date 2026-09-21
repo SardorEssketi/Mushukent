@@ -25,6 +25,7 @@ from app.features.posts.domain.models import (
     PostCatSummary,
     PostDetailRecord,
 )
+from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 
 
@@ -356,6 +357,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
                 schema.Post.photo_url.label("photo_url"),
                 schema.Post.thumb_url.label("thumb_url"),
                 schema.Post.description.label("description"),
+                schema.Post.kind.label("post_kind"),
                 schema.Post.status.label("post_status"),
                 schema.Post.is_public.label("is_public"),
                 schema.Post.like_count.label("like_count"),
@@ -481,6 +483,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
             thumb_url=row["thumb_url"],
             photo_urls=[row["photo_url"]],
             description=row["description"],
+            kind=PostKind(row["post_kind"]),
             location=(
                 GeoPoint(
                     latitude=float(row["latitude"]),

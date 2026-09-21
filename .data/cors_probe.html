@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<pre id="out">running</pre>
+<script>
+const url = "https://media.mushukistan.uz/posts/thumbs/2026/08/13/post_f0a7025c-e6ff-434d-8ecc-aeac6deefe92_20260813T235211Z_60e6e120_thumb.jpg";
+const out = document.getElementById("out");
+const lines = [];
+const log = (line) => {
+  lines.push(line);
+  out.textContent = lines.join("\n");
+};
+
+const normalImage = new Image();
+normalImage.onload = () => log("normal img: loaded");
+normalImage.onerror = () => log("normal img: error");
+normalImage.src = url;
+
+const corsImage = new Image();
+corsImage.crossOrigin = "anonymous";
+corsImage.onload = () => log("crossOrigin img: loaded");
+corsImage.onerror = () => log("crossOrigin img: error");
+corsImage.src = url;
+
+fetch(url, { mode: "cors" })
+  .then((response) => log(`fetch cors: ${response.status} ${response.type}`))
+  .catch((error) => log(`fetch cors error: ${error.name}: ${error.message}`));
+
+fetch(url, { mode: "no-cors" })
+  .then((response) => log(`fetch no-cors: ${response.status} ${response.type}`))
+  .catch((error) => log(`fetch no-cors error: ${error.name}: ${error.message}`));
+</script>

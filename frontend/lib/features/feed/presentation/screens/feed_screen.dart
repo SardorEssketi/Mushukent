@@ -875,8 +875,8 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     final authorName = author?.name ?? strings.anonymous;
     final description = widget.post.description?.trim();
     final catName = widget.post.cat.name ?? strings.unnamedCat;
-    final statusTag =
-        _postStatusLabel(widget.post.status ?? widget.post.cat.status);
+    final kindBadge =
+        widget.post.kind == 'needs_help' ? strings.needsHelp : null;
     final authorProfileTap =
         authorId == null ? null : () => context.push('/users/$authorId');
 
@@ -970,9 +970,9 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                   _CatNameLine(
                     label: strings.catNameLabel,
                     name: catName,
-                    trailing: statusTag == null
+                    trailing: kindBadge == null
                         ? null
-                        : _StatusBadge(label: statusTag),
+                        : _StatusBadge(label: kindBadge),
                   ),
                   if (description != null && description.isNotEmpty) ...[
                     const SizedBox(height: 6),
@@ -1309,15 +1309,6 @@ class _StatusBadge extends StatelessWidget {
       ),
     );
   }
-}
-
-String? _postStatusLabel(String status) {
-  return switch (status) {
-    'healthy' => 'Healthy',
-    'needs_help' => 'Needs help',
-    'feed' => 'Feed',
-    _ => null,
-  };
 }
 
 class _EmptyFeed extends StatelessWidget {

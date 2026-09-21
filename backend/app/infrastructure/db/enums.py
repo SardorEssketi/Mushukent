@@ -12,6 +12,13 @@ class CatStatus(StrEnum):
     FEED = "feed"
 
 
+class PostKind(StrEnum):
+    """The user-facing purpose of an observation post."""
+
+    OBSERVATION = "observation"
+    NEEDS_HELP = "needs_help"
+
+
 class ReportTargetType(StrEnum):
     POST = "post"
     COMMENT = "comment"

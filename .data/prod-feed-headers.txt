@@ -1,0 +1,12 @@
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Fri, 14 Aug 2026 00:09:14 GMT
+Content-Type: application/json
+Content-Length: 904
+Connection: keep-alive
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: no-referrer
+Content-Security-Policy: default-src 'none'; frame-ancestors 'none';
+

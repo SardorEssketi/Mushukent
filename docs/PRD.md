@@ -154,6 +154,9 @@ Available filters:
 Nearby Cats
 Recently Seen
 Needs Help
+
+Needs help is an explicit observation kind, not a tag or cat-status inference. It requires a
+photo, description, and location so the community can identify where assistance is needed.
 Recently Added
 Pet Shops
 Veterinary Clinics

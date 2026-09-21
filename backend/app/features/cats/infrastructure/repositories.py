@@ -23,6 +23,7 @@ from app.features.cats.domain.models import (
     PostListItem,
 )
 from app.features.cats.domain.repositories import CatListPage, CatRepository, PostListPage
+from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 
 
@@ -59,6 +60,20 @@ def _decode_cursor(cursor: str | None) -> dict[str, Any] | None:
 class SqlAlchemyCatRepository(CatRepository):
     def __init__(self, session: Session) -> None:
         self.session = session
+
+    @staticmethod
+    def _latest_public_post_kind_expression():
+        return (
+            select(schema.Post.kind)
+            .where(
+                schema.Post.cat_id == schema.Cat.id,
+                schema.Post.deleted_at.is_(None),
+                schema.Post.is_public.is_(True),
+            )
+            .order_by(schema.Post.created_at.desc(), schema.Post.id.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
 
     def create(self, *, cat: CatRecord) -> CatRecord:
         model = schema.Cat(
@@ -152,6 +167,7 @@ class SqlAlchemyCatRepository(CatRepository):
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
     ) -> CatListPage:
+        latest_public_post_kind = self._latest_public_post_kind_expression()
         statement = select(
             schema.Cat.id,
             schema.Cat.name,
@@ -162,6 +178,7 @@ class SqlAlchemyCatRepository(CatRepository):
             schema.Cat.last_seen_at,
             schema.Cat.total_observations,
             schema.Cat.created_at,
+            latest_public_post_kind.label("latest_post_kind"),
         ).where(
             schema.Cat.deleted_at.is_(None),
             schema.Cat.is_active.is_(True),
@@ -238,7 +255,13 @@ class SqlAlchemyCatRepository(CatRepository):
                 )
                 statement = statement.order_by(sort_key_expr.desc(), schema.Cat.id.asc())
             elif filter_by == CatListFilter.NEEDS_HELP:
-                statement = statement.where(schema.Cat.status == schema.CatStatus.NEEDS_HELP)
+                needs_help_post_exists = select(1).where(
+                    schema.Post.cat_id == schema.Cat.id,
+                    schema.Post.deleted_at.is_(None),
+                    schema.Post.is_public.is_(True),
+                    schema.Post.kind == schema.PostKind.NEEDS_HELP,
+                )
+                statement = statement.where(needs_help_post_exists.exists())
                 sort_key_expr = func.coalesce(schema.Cat.last_seen_at, schema.Cat.created_at)
                 statement = statement.order_by(sort_key_expr.desc(), schema.Cat.id.asc())
             else:
@@ -280,6 +303,7 @@ class SqlAlchemyCatRepository(CatRepository):
                 schema.Post.photo_url,
                 schema.Post.thumb_url,
                 schema.Post.description,
+                schema.Post.kind,
                 schema.Post.created_at,
                 schema.Post.like_count,
                 schema.Post.comment_count,
@@ -364,6 +388,7 @@ class SqlAlchemyCatRepository(CatRepository):
         )
 
     def _record_select_statement(self):
+        latest_public_post_kind = self._latest_public_post_kind_expression()
         return select(
             schema.Cat.id,
             schema.Cat.name,
@@ -383,6 +408,7 @@ class SqlAlchemyCatRepository(CatRepository):
             schema.Cat.is_active,
             schema.Cat.merged_into,
             schema.Cat.deleted_at,
+            latest_public_post_kind.label("latest_post_kind"),
         )
 
     def _to_record_row(self, row: Any) -> CatRecord:
@@ -398,6 +424,9 @@ class SqlAlchemyCatRepository(CatRepository):
             first_seen_at=row.first_seen_at,
             last_seen_at=row.last_seen_at,
             total_observations=int(row.total_observations or 0),
+            latest_post_kind=(
+                PostKind(row.latest_post_kind) if row.latest_post_kind is not None else None
+            ),
             total_contributors=int(row.total_contributors or 0),
             total_likes=int(row.total_likes or 0),
             created_at=row.created_at,
@@ -445,6 +474,7 @@ class SqlAlchemyCatRepository(CatRepository):
             photo_url=row.photo_url,
             thumb_url=row.thumb_url,
             description=row.description,
+            kind=PostKind(row.kind),
             location=(
                 GeoPoint(latitude=float(row.latitude), longitude=float(row.longitude))
                 if row.latitude is not None and row.longitude is not None

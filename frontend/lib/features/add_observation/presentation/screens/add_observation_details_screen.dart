@@ -19,6 +19,7 @@ class AddObservationDetailsScreen extends ConsumerWidget {
     final state = ref.watch(addObservationControllerProvider);
     final controller = ref.read(addObservationControllerProvider.notifier);
     final strings = ref.watch(appStringsProvider);
+    final needsHelp = state.kind == 'needs_help';
 
     if (!state.hasPhoto) {
       return Scaffold(
@@ -30,20 +31,27 @@ class AddObservationDetailsScreen extends ConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.catObservation)),
+      appBar: AppBar(
+          title: Text(needsHelp ? strings.needsHelp : strings.catObservation)),
       body: AppContentWidth(
         maxWidth: AppWidths.readable,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
             AppBadge(
-              label: state.hasLocation
-                  ? strings.locatedObservation
-                  : strings.feedOnlyPost,
-              icon: state.hasLocation
-                  ? Icons.location_on_outlined
-                  : Icons.dynamic_feed_outlined,
-              color: Theme.of(context).colorScheme.primary,
+              label: needsHelp
+                  ? strings.needsHelp
+                  : state.hasLocation
+                      ? strings.locatedObservation
+                      : strings.feedOnlyPost,
+              icon: needsHelp
+                  ? Icons.volunteer_activism_outlined
+                  : state.hasLocation
+                      ? Icons.location_on_outlined
+                      : Icons.dynamic_feed_outlined,
+              color: needsHelp
+                  ? Theme.of(context).colorScheme.tertiary
+                  : Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: AppSpacing.md),
             Align(
@@ -64,11 +72,11 @@ class AddObservationDetailsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
-              strings.catObservation,
+              needsHelp ? strings.needsHelp : strings.catObservation,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppSpacing.xl),
-            if (!state.hasLocation)
+            if (!state.hasLocation && !needsHelp)
               AppCard(
                 child: Text(
                   strings.feedOnlyObservationHelp,
@@ -116,7 +124,11 @@ class AddObservationDetailsScreen extends ConsumerWidget {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(strings.publishObservation),
+                  : Text(
+                      needsHelp
+                          ? strings.publishNeedsHelp
+                          : strings.publishObservation,
+                    ),
             ),
           ],
         ),

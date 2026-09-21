@@ -15,6 +15,7 @@ from app.features.cats.domain.models import (
     GeoPoint,
     PostListItem,
 )
+from app.infrastructure.db.enums import PostKind
 
 T = TypeVar("T")
 
@@ -37,6 +38,7 @@ class CatListItem(BaseModel):
     canonical_location: GeoPoint | None = None
     last_seen_at: datetime | None = None
     total_observations: int = 0
+    latest_post_kind: PostKind | None = None
     distance_meters: float | None = None
 
 
@@ -70,6 +72,7 @@ class PostListItemResponse(BaseModel):
     photo_url: str
     thumb_url: str | None = None
     description: str | None = None
+    kind: PostKind
     location: GeoPoint | None = None
     created_at: datetime
     like_count: int = 0

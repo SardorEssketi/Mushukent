@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="How to delete a Mushukistan account and what happens to account data.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Delete your Mushukistan account</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ee;
+      --surface: #ffffff;
+      --text: #1f2933;
+      --muted: #52606d;
+      --brand: #1f7a5c;
+      --border: #d9e2ec;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .wrap {
+      width: min(860px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 72px;
+    }
+
+    .mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+    }
+
+    .brand {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    main {
+      padding: 42px 0 56px;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: clamp(32px, 5vw, 44px);
+      line-height: 1.1;
+    }
+
+    h2 {
+      margin: 34px 0 10px;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ol,
+    ul {
+      padding-left: 24px;
+      margin: 0 0 18px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .form {
+      display: grid;
+      gap: 12px;
+      margin: 14px 0 22px;
+    }
+
+    label {
+      font-weight: 700;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font: inherit;
+      padding: 12px 14px;
+    }
+
+    button {
+      width: fit-content;
+      border: 0;
+      border-radius: 8px;
+      background: var(--brand);
+      color: #ffffff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+      padding: 12px 18px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .danger {
+      background: #b42318;
+    }
+
+    .status {
+      border-left: 4px solid var(--brand);
+      background: #eef8f3;
+      margin: 0 0 20px;
+      padding: 12px 14px;
+    }
+
+    .status.error {
+      border-left-color: #b42318;
+      background: #fff1f0;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    a {
+      color: var(--brand);
+      font-weight: 700;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 0;
+      color: var(--muted);
+      background: var(--surface);
+    }
+
+    @media (max-width: 560px) {
+      .wrap {
+        width: min(100% - 24px, 860px);
+      }
+
+      main {
+        padding-top: 28px;
+      }
+
+      .panel {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap topbar">
+      <img class="mark" src="/icons/Icon-192.png" alt="">
+      <div class="brand">Mushukistan</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <h1>Delete your Mushukistan account</h1>
+      <p class="muted">This page explains how account deletion works for the Mushukistan app.</p>
+
+      <h2>How to delete your account</h2>
+      <ol>
+        <li>Open Mushukistan.</li>
+        <li>Go to Settings.</li>
+        <li>Open About account.</li>
+        <li>Select Delete account.</li>
+        <li>Confirm account deletion.</li>
+      </ol>
+
+      <h2>Request deletion from this website</h2>
+      <div id="request-status" class="status" hidden></div>
+      <form id="request-form" class="form">
+        <label for="account-email">Mushukistan account email</label>
+        <input id="account-email" name="email" type="email" autocomplete="email" required>
+        <button type="submit">Send confirmation link</button>
+      </form>
+      <p class="muted">Submitting this form does not immediately delete your account. If an active account exists for the email address, Mushukistan sends a time-limited confirmation link to that email. This page does not reveal whether an account exists.</p>
+
+      <section id="confirm-section" hidden>
+        <h2>Confirm account deletion</h2>
+        <div id="confirm-status" class="status" hidden></div>
+        <p>Account deletion is irreversible. Confirming will deactivate and anonymize the account, disable login, remove authentication and profile personal data, and apply the deletion behavior described below.</p>
+        <button id="confirm-button" class="danger" type="button">Confirm account deletion</button>
+      </section>
+
+      <h2>What is removed</h2>
+      <p>When account deletion is confirmed, Mushukistan deactivates and anonymizes the account. Login is disabled and authentication credentials are removed.</p>
+      <ul>
+        <li>Email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data are removed from the account.</li>
+        <li>The user's likes are removed.</li>
+        <li>Blocking records involving the deleted account are removed.</li>
+        <li>Affected leaderboard cache entries are removed.</li>
+        <li>User-owned posts, comments, lost-pet posts, and adoption/rehoming posts are hidden and anonymized.</li>
+        <li>Copied contact details are cleared from lost-pet and adoption/rehoming posts.</li>
+        <li>Mushukistan attempts best-effort cleanup of uploaded profile, post, lost-pet, and adoption/rehoming media associated with the account.</li>
+      </ul>
+
+      <h2>What may remain</h2>
+      <p>Some non-public or anonymized records may remain where they are needed for service integrity, moderation, safety, abuse prevention, or legal compliance. This can include anonymized content records, cat records, content locations attached to retained records, timestamps, moderation/report records, and a non-personal internal tombstone identifier for the deleted account.</p>
+      <p>Mushukistan does not claim a guaranteed automatic deletion period for all retained records.</p>
+
+      <h2>If you cannot access the app</h2>
+      <p>Use the website form above to request a confirmation link by email. The account is not deleted until the confirmation link is opened and account deletion is explicitly confirmed.</p>
+
+      <p>Read the <a href="/privacy">Privacy Policy</a> for more information.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">Mushukistan</div>
+  </footer>
+  <script src="/delete-account/delete-account.js"></script>
+</body>
+</html>

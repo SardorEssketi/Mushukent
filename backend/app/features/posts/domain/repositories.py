@@ -13,6 +13,7 @@ from app.features.posts.domain.models import (
     PostPage,
     PostSortOrder,
 )
+from app.infrastructure.db.enums import PostKind
 
 
 @dataclass(slots=True)
@@ -32,6 +33,7 @@ class PostCreateDraft:
     thumb_url: str | None
     photos: list[PostPhotoDraft]
     description: str | None
+    kind: PostKind
     location_latitude: float | None
     location_longitude: float | None
     status: CatStatus | None
@@ -41,6 +43,7 @@ class PostCreateDraft:
 @dataclass(slots=True)
 class PostUpdateDraft:
     description: str | None
+    kind: PostKind
     location_latitude: float | None
     location_longitude: float | None
     status: CatStatus | None

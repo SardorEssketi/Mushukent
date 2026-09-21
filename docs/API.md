@@ -441,7 +441,8 @@ Feature: Posts (Observations)
   - photo/photos (one to five files) required OR photo_url string
      - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional for the current observation flow
      - description string (max 2000)
-     - status (cat_status)
+     - kind (`observation` or `needs_help`, defaults to `observation`)
+     - status (cat_status, independent metadata when supplied)
      - location / latitude and longitude (optional; when supplied, both coordinates must be valid)
      - is_public boolean
   b) application/json (if photo already hosted): same fields but photo_url required
@@ -452,12 +453,13 @@ Feature: Posts (Observations)
   - If new_cat provided, validate per CatCreate
   - If neither cat_id nor new_cat is provided, create an unnamed cat with status `unknown` automatically
   - latitude in [-90,90], longitude in [-180,180]
-  - location may be omitted for a locationless observation
+  - location may be omitted for a normal observation; it is required when `kind` is `needs_help`
   - photo file: content-type image/jpeg|image/png, size<=10MB
 - Pydantic models: PostCreateMultipart (for docs), PostCreateJSON
 - Example request (JSON variant):
   {
     "photo_url":"https://r2.example/buckets/abc.jpg",
+    "kind":"observation",
     "description":"Saw this kitty near the market",
     "location": {"latitude":41.3, "longitude":69.2},
     "is_public": true
@@ -472,6 +474,7 @@ Feature: Posts (Observations)
       "thumb_url":"https://r2/...",
       "photo_urls":["https://r2..."],
       "description":"Saw this kitty...",
+      "kind":"observation",
       "location": {"latitude":41.3, "longitude":69.2},
       "created_at":"2026-07-23T...",
       "like_count":0,
@@ -501,6 +504,7 @@ Feature: Posts (Observations)
       "photo_url":"...",
       "thumb_url":"...",
       "description":"...",
+      "kind":"observation",
       "location": {"latitude":41.3,"longitude":69.2},
       "created_at":"...",
       "like_count": 5,
@@ -515,7 +519,7 @@ Feature: Posts (Observations)
 - Purpose: update an observation owned by the authenticated user.
 - Auth: Bearer required.
 - Authorization: owner only; moderators do not receive an edit override.
-- Mutable fields: description (max 2000), status, location, is_public, and a complete replacement set of 1-5 photos. Cat association, author, counters, creation timestamp, and deletion metadata are immutable.
+- Mutable fields: description (max 2000), kind, status, location, is_public, and a complete replacement set of 1-5 photos. Switching to `needs_help` requires location. Cat association, author, counters, creation timestamp, and deletion metadata are immutable.
 - Request: JSON for text/location/visibility changes, or multipart with 1-5 validated image uploads when replacing photos. Update requests do not accept arbitrary `photo_url` values.
 - Response: PostResponse, including `updated_at`, `is_public`, and history-derived `is_edited`.
 - Side effects: a changed update writes an atomic `post_history` version record. No-op updates do not create history.
@@ -568,6 +572,7 @@ Feature: Feed
   - nearby: geolocated observation and lost-pet items, ordered by distance asc, then created_at desc, item-type rank desc, and UUID desc; adoption items have no location and are excluded
 - Response: GenericListResponse[FeedListItem]
 - Observation items include `is_liked_by_me`, which is `true` only when the request includes a valid authenticated user token and that user has liked the post.
+- Observation items expose `kind` directly. `needs_help` remains in the observation feed stream and has no ranking boost.
 - Example response:
   {
     "success": true,

@@ -39,6 +39,29 @@ void main() {
       expect(client.calls.single.method, 'PATCH');
     });
 
+    test('sends and parses the explicit observation kind', () async {
+      final client = FakeApiClient();
+      final api = MushukistanApi(client: client);
+      client.setHandler('PATCH', 'posts/post-1', (call) {
+        expect((call.body as Map<String, Object?>)['kind'], 'needs_help');
+        return {
+          ..._postPayload(description: 'Needs help', isPublic: true),
+          'kind': 'needs_help',
+          'location': {'latitude': 41.31, 'longitude': 69.28},
+        };
+      });
+
+      final post = await api.updateObservation(
+        postId: 'post-1',
+        description: 'Needs help',
+        location: const GeoPoint(latitude: 41.31, longitude: 69.28),
+        isPublic: true,
+        kind: 'needs_help',
+      );
+
+      expect(post.kind, 'needs_help');
+    });
+
     test('parses moderator post history snapshots', () async {
       final client = FakeApiClient();
       final api = MushukistanApi(client: client);

@@ -6,6 +6,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from app.features.cats.domain.models import CatStatus, GeoPoint
+from app.infrastructure.db.enums import PostKind
 
 
 class PostSortOrder(StrEnum):
@@ -45,6 +46,7 @@ class PostRecord:
     thumb_url: str | None
     photo_urls: list[str]
     description: str | None
+    kind: PostKind
     location: GeoPoint | None
     status: CatStatus | None
     is_public: bool
@@ -97,6 +99,7 @@ def post_history_snapshot(post: PostDetailRecord) -> dict[str, object]:
     location = post.location
     return post_history_snapshot_from_values(
         description=post.description,
+        kind=post.kind.value,
         status=post.status.value if post.status is not None else None,
         location_latitude=location.latitude if location is not None else None,
         location_longitude=location.longitude if location is not None else None,
@@ -108,6 +111,7 @@ def post_history_snapshot(post: PostDetailRecord) -> dict[str, object]:
 def post_history_snapshot_from_values(
     *,
     description: str | None,
+    kind: str,
     status: str | None,
     location_latitude: float | None,
     location_longitude: float | None,
@@ -116,6 +120,7 @@ def post_history_snapshot_from_values(
 ) -> dict[str, object]:
     return {
         "description": description,
+        "kind": kind,
         "status": status,
         "location": (
             {"latitude": location_latitude, "longitude": location_longitude}

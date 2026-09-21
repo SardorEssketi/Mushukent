@@ -28,6 +28,7 @@ from app.features.posts.domain.repositories import (
     PostRepository,
     PostUpdateDraft,
 )
+from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 
 
@@ -43,6 +44,7 @@ class SqlAlchemyPostRepository(PostRepository):
             photo_url=draft.photo_url,
             thumb_url=draft.thumb_url,
             description=draft.description,
+            kind=draft.kind,
             location=(
                 WKTElement(
                     f"POINT({draft.location_longitude} {draft.location_latitude})",
@@ -170,13 +172,16 @@ class SqlAlchemyPostRepository(PostRepository):
         elif filter_name == "popular":
             statement = self._apply_popular_period(statement, popular_period)
             statement = self._apply_popular_feed(statement, cursor, limit)
-        elif filter_name in {"injured", "needs_help"}:
-            status = (
-                schema.CatStatus.INJURED
-                if filter_name == "injured"
-                else schema.CatStatus.NEEDS_HELP
+        elif filter_name == "injured":
+            statement = statement.where(schema.Cat.status == schema.CatStatus.INJURED)
+            statement = self._apply_recent_feed(
+                statement,
+                cursor,
+                limit,
+                cursor_filter=filter_name,
             )
-            statement = statement.where(schema.Cat.status == status)
+        elif filter_name == "needs_help":
+            statement = statement.where(schema.Post.kind == schema.PostKind.NEEDS_HELP)
             statement = self._apply_recent_feed(
                 statement,
                 cursor,
@@ -215,6 +220,7 @@ class SqlAlchemyPostRepository(PostRepository):
     def update(self, post_id: UUID, draft: PostUpdateDraft) -> PostDetailRecord:
         values: dict[str, object] = {
             "description": draft.description,
+            "kind": draft.kind,
             "status": draft.status,
             "is_public": draft.is_public,
             "location": (
@@ -374,6 +380,7 @@ class SqlAlchemyPostRepository(PostRepository):
                 schema.Post.photo_url.label("photo_url"),
                 schema.Post.thumb_url.label("thumb_url"),
                 schema.Post.description.label("description"),
+                schema.Post.kind.label("post_kind"),
                 schema.Post.status.label("post_status"),
                 schema.Post.is_public.label("is_public"),
                 schema.Post.like_count.label("like_count"),
@@ -682,6 +689,7 @@ class SqlAlchemyPostRepository(PostRepository):
                 else self._photo_urls_for_post(mapping["post_id"], mapping["photo_url"])
             ),
             "description": mapping["description"],
+            "kind": PostKind(mapping["post_kind"]),
             "location": (
                 GeoPoint(
                     latitude=float(mapping["latitude"]),

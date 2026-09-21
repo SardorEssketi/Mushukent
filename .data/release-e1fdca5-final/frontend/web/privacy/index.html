@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Mushukistan Privacy Policy.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <title>Mushukistan Privacy Policy</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ee;
+      --surface: #ffffff;
+      --text: #1f2933;
+      --muted: #52606d;
+      --brand: #1f7a5c;
+      --border: #d9e2ec;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.6;
+    }
+
+    header,
+    footer {
+      background: var(--surface);
+      border-color: var(--border);
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 24px 0;
+      color: var(--muted);
+    }
+
+    .wrap {
+      width: min(900px, calc(100% - 32px));
+      margin: 0 auto;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 72px;
+    }
+
+    .mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+    }
+
+    .brand {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    main {
+      padding: 42px 0 56px;
+    }
+
+    article {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: clamp(32px, 5vw, 44px);
+      line-height: 1.1;
+    }
+
+    h2 {
+      margin: 34px 0 10px;
+      font-size: 22px;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul {
+      margin: 0 0 18px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    a {
+      color: var(--brand);
+      font-weight: 700;
+    }
+
+    @media (max-width: 560px) {
+      .wrap {
+        width: min(100% - 24px, 900px);
+      }
+
+      main {
+        padding-top: 28px;
+      }
+
+      article {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap topbar">
+      <img class="mark" src="/icons/Icon-192.png" alt="">
+      <div class="brand">Mushukistan</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <article>
+      <h1>Privacy Policy</h1>
+      <p class="muted">Version: 2026-08-21</p>
+      <p>This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.</p>
+
+      <h2>Who is responsible for your data</h2>
+      <p>Mushukistan is operated by Sardor Muxtorov, an individual developer.</p>
+      <p>Data controller: Sardor Muxtorov</p>
+      <p>Privacy contact: sardor.datascience@gmail.com</p>
+
+      <h2>Data Mushukistan collects</h2>
+      <p>Mushukistan collects only the data needed to operate a social map for street cats in Tashkent.</p>
+      <ul>
+        <li>Account data, including email address, password hash for password accounts, Google Sign-In email/name when Google Sign-In is used, registration time, last login time, preferred language, and accepted legal-document version.</li>
+        <li>Profile data, including name, avatar URL, phone number, Telegram username, bio, and public activity visibility preference.</li>
+        <li>User content, including cat sightings, cat photos, cat profile information, descriptions, comments, likes, reports, lost-pet posts, and adoption/rehoming posts.</li>
+        <li>Location data, including current location when used for nearby search, observation location, cat canonical location, place-search location, and lost-pet last-seen location.</li>
+        <li>Contact data published by the user when explicit publication consent is given for lost-pet or adoption/rehoming posts.</li>
+        <li>Technical and security data used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.</li>
+      </ul>
+
+      <h2>Photos and media</h2>
+      <p>Photos are validated, resized, compressed, thumbnailed, and processed without preserving EXIF metadata. This reduces unintended location and device metadata exposure.</p>
+      <p>Binary image files are stored in Cloudflare R2 when configured, or in local media storage during development. PostgreSQL stores media URLs.</p>
+      <p>When an account is deleted, Mushukistan attempts best-effort cleanup of uploaded profile, post, lost-pet, and adoption/rehoming media associated with that account. Media cleanup can fail if storage is unavailable, if a URL cannot be mapped to a stored object, or if the storage provider rejects the deletion request.</p>
+
+      <h2>How Mushukistan uses data</h2>
+      <ul>
+        <li>Create and manage accounts.</li>
+        <li>Authenticate users and verify email addresses.</li>
+        <li>Publish and display user content.</li>
+        <li>Show nearby cats, places, and map content.</li>
+        <li>Operate lost-pet and adoption/rehoming contact features.</li>
+        <li>Enable comments, likes, reports, moderation, and account settings.</li>
+        <li>Prevent abuse, rate-limit requests, and secure the service.</li>
+        <li>Comply with legal obligations and enforce policies.</li>
+      </ul>
+
+      <h2>Public information</h2>
+      <p>Some information may be visible to other users or visitors, depending on the feature and account settings. Public information may include cat sightings, photos, descriptions, locations, cat profile information, comments, public profile summaries, lost-pet photos, lost-pet last-seen locations, and contact details when the user explicitly consented to publish them.</p>
+      <p>Do not publish another person's private information, photo, phone number, address, or location unless you have permission.</p>
+
+      <h2>Third-party services</h2>
+      <ul>
+        <li>DigitalOcean for hosting and database infrastructure.</li>
+        <li>Cloudflare R2 for uploaded media and object metadata when configured.</li>
+        <li>Google when a user chooses Google Sign-In.</li>
+        <li>OpenStreetMap for map tiles and map/place data.</li>
+      </ul>
+      <p>Email provider: not configured in the verified repository.</p>
+      <p>Backup provider: not configured in the verified repository.</p>
+      <p>Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, push notifications, or AI features in the verified repository.</p>
+
+      <h2>Cookies and browser storage</h2>
+      <p>The Android app does not use cookies.</p>
+      <p>The web app does not intentionally set advertising, analytics, or tracking cookies. The web app may use browser storage through the Flutter secure storage integration to keep the user's access token for authentication.</p>
+
+      <h2>Account deletion and retention</h2>
+      <p>Users can delete their Mushukistan account directly inside the app: Settings -> About account -> Delete account.</p>
+      <p>Users who cannot access the app can start account deletion from <a href="/delete-account">https://mushukistan.uz/delete-account</a>. The website asks for the account email address and, if an active account exists, sends a time-limited confirmation link to that email address. The website does not reveal whether the submitted email address has an account. The account is deleted only after the confirmation link is opened and deletion is explicitly confirmed.</p>
+      <p>When account deletion is confirmed, Mushukistan deactivates and anonymizes the account. Login is disabled, authentication credentials are removed, and profile personal information is removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data.</p>
+      <p>Mushukistan also removes the user's likes, removes account-related blocking records, removes affected leaderboard cache entries, hides and anonymizes user-owned posts, comments, lost-pet posts, and adoption/rehoming posts, clears copied contact details from lost-pet and adoption/rehoming posts, and removes the user as creator/reporter/handler where possible.</p>
+      <p>Some non-public or anonymized records may remain after account deletion where they are needed for service integrity, moderation, safety, abuse prevention, or legal compliance. For example, Mushukistan may retain anonymized content records, cat records, content locations attached to retained records, timestamps, moderation/report records, and a non-personal internal tombstone identifier for the deleted account. These retained records are not intended to identify the deleted user and the deleted account is not publicly accessible or usable for authentication.</p>
+      <p>The verified repository does not define a guaranteed automatic deletion period for all retained records.</p>
+      <p>Backups are not configured in the verified repository. If backups are enabled later, backup retention and deletion schedules must be documented before production release.</p>
+
+      <h2>Your rights and choices</h2>
+      <p>Users may request access, correction, deletion, restriction, objection, portability, and withdrawal of consent where applicable by contacting sardor.datascience@gmail.com.</p>
+      <p>Users can manage some profile and privacy settings inside the app, including public activity visibility and account deletion.</p>
+
+      <h2>International processing</h2>
+      <p>Data may be processed outside the user's country by service providers such as DigitalOcean, Cloudflare, Google, and OpenStreetMap. Mushukistan should use provider data-processing terms or data-processing agreements where available.</p>
+
+      <h2>Security</h2>
+      <p>Mushukistan uses authentication, rate limiting, image validation, EXIF stripping, structured storage, and access controls to protect the service and user data. No system can be guaranteed completely secure.</p>
+
+      <h2>Changes to this Privacy Policy</h2>
+      <p>Mushukistan may update this Privacy Policy when the service, legal requirements, or operational practices change. If changes are material, Mushukistan should provide notice in the app or require renewed acceptance where appropriate.</p>
+      <p><a href="/delete-account">Account deletion information</a></p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="wrap">Mushukistan</div>
+  </footer>
+</body>
+</html>

@@ -9,6 +9,7 @@ from app.infrastructure.db.models.schema import (
     User,
     cat_status_enum,
     leaderboard_type_enum,
+    post_kind_enum,
     report_status_enum,
     report_target_type_enum,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "Report",
     "User",
     "cat_status_enum",
+    "post_kind_enum",
     "leaderboard_type_enum",
     "report_status_enum",
     "report_target_type_enum",

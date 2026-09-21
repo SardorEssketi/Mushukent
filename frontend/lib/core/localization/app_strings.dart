@@ -869,8 +869,42 @@ class AppStrings {
         'Mushuk rasmlarini qoʻshing, kerak boʻlsa joylashuvni belgilang va yordam kerak mushuklarni ko‘rsating.',
       _RussianStrings() =>
         'Добавьте фото кошки, при необходимости укажите место и отметьте кошек, которым нужна помощь.',
-      _ =>
-        'Add cat photos, attach a location if useful, and tag cats that need help.',
+      _ => 'Add cat photos and optionally attach a location.',
+    };
+  }
+
+  String get needsHelpCreateSubtitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Yordam kerak bo‘lgan mushukni joylashuvi bilan ulashing.',
+      _RussianStrings() =>
+        'Опубликуйте кошку, которой нужна помощь, с местоположением.',
+      _ => 'Share a cat that needs assistance, with its location.',
+    };
+  }
+
+  String get needsHelpLocationRequired {
+    return switch (this) {
+      _UzbekStrings() => 'Yordam kerak posti uchun joylashuv kerak.',
+      _RussianStrings() => 'Для поста «Нужна помощь» требуется местоположение.',
+      _ => 'A location is required for a Needs help post.',
+    };
+  }
+
+  String get needsHelpLocationHelp {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Odamlar mushukni topa olishi uchun joylashuvni tasdiqlang.',
+      _RussianStrings() => 'Подтвердите место, чтобы люди могли найти кошку.',
+      _ => 'Confirm the location so people can find the cat.',
+    };
+  }
+
+  String get publishNeedsHelp {
+    return switch (this) {
+      _UzbekStrings() => 'Yordam kerak postini joylash',
+      _RussianStrings() => 'Опубликовать «Нужна помощь»',
+      _ => 'Publish Needs help',
     };
   }
 
@@ -1859,7 +1893,7 @@ class AppStrings {
       _RussianStrings() =>
         'Делитесь наблюдениями, отмечайте кошек, которым нужна помощь, ищите потерянных питомцев, пристраивайте кошек и находите полезные места рядом.',
       _ =>
-        'Share sightings, tag observations as Needs help for cats in need, search for lost pets, rehome cats, and discover useful places nearby.',
+        'Share sightings, create Needs help posts, search for lost pets, rehome cats, and discover useful places nearby.',
     };
   }
 

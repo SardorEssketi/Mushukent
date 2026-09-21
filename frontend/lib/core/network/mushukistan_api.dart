@@ -561,6 +561,7 @@ class MushukistanApi {
   Future<PostDetail> createObservation({
     required List<ObservationPhotoUpload> photos,
     GeoPoint? location,
+    String kind = 'observation',
     String? description,
     bool isPublic = true,
   }) {
@@ -576,6 +577,7 @@ class MushukistanApi {
             )
             .toList(growable: false),
         if (location != null) 'location': jsonEncode(location.toJson()),
+        'kind': kind,
         'is_public': isPublic,
         if (description != null && description.trim().isNotEmpty)
           'description': description.trim(),
@@ -594,6 +596,7 @@ class MushukistanApi {
     required String? description,
     required GeoPoint? location,
     required bool isPublic,
+    String? kind,
     String? status,
     List<ObservationPhotoUpload>? replacementPhotos,
   }) {
@@ -602,6 +605,7 @@ class MushukistanApi {
           description?.trim().isEmpty == true ? null : description?.trim(),
       'location': location?.toJson(),
       'is_public': isPublic,
+      if (kind != null) 'kind': kind,
       if (status != null) 'status': status,
     };
     if (replacementPhotos == null) {
@@ -616,6 +620,7 @@ class MushukistanApi {
         'description': description?.trim() ?? '',
         'location': jsonEncode(location?.toJson()),
         'is_public': isPublic,
+        if (kind != null) 'kind': kind,
         if (status != null) 'status': status,
         'photos': replacementPhotos
             .map(
@@ -783,6 +788,7 @@ class CatSummary {
     this.coverPhotoUrl,
     this.canonicalLocation,
     this.lastSeenAt,
+    this.latestPostKind,
     this.distanceMeters,
   });
 
@@ -792,6 +798,7 @@ class CatSummary {
   final String? coverPhotoUrl;
   final GeoPoint? canonicalLocation;
   final DateTime? lastSeenAt;
+  final String? latestPostKind;
   final int totalObservations;
   final double? distanceMeters;
 
@@ -804,6 +811,7 @@ class CatSummary {
       coverPhotoUrl: _readStringOrNull(map['cover_photo_url']),
       canonicalLocation: _readNullableGeoPoint(map['canonical_location']),
       lastSeenAt: _readDateTimeOrNull(map['last_seen_at']),
+      latestPostKind: _readStringOrNull(map['latest_post_kind']),
       totalObservations: _readInt(map['total_observations']),
       distanceMeters: _readDoubleOrNull(map['distance_meters']),
     );
@@ -956,6 +964,7 @@ class PostSummary extends FeedItem {
     required this.likeCount,
     required this.commentCount,
     required this.isLikedByMe,
+    this.kind = 'observation',
     this.author,
     this.thumbUrl,
     this.description,
@@ -979,6 +988,7 @@ class PostSummary extends FeedItem {
   final int likeCount;
   final int commentCount;
   final bool isLikedByMe;
+  final String kind;
 
   factory PostSummary.fromJson(Object? json) {
     final map = _readMap(json);
@@ -996,6 +1006,7 @@ class PostSummary extends FeedItem {
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
       thumbUrl: _readStringOrNull(map['thumb_url']),
       description: _readStringOrNull(map['description']),
+      kind: _readStringOrNull(map['kind']) ?? 'observation',
       status: _readStringOrNull(map['status']),
       location: _readNullableGeoPoint(map['location']),
       createdAt: _readDateTime(map['created_at']),
@@ -1023,6 +1034,7 @@ class PostDetail extends PostSummary {
     super.author,
     super.thumbUrl,
     super.description,
+    super.kind,
     super.status,
   });
 
@@ -1041,6 +1053,7 @@ class PostDetail extends PostSummary {
       photoUrls: summary.photoUrls,
       thumbUrl: summary.thumbUrl,
       description: summary.description,
+      kind: summary.kind,
       status: summary.status,
       location: summary.location,
       createdAt: summary.createdAt,

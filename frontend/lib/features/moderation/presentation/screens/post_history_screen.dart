@@ -185,6 +185,7 @@ class _SnapshotValue extends StatelessWidget {
 String _labelFor(String key, AppStrings strings) {
   return switch (key) {
     'description' => strings.descriptionLabel,
+    'kind' => strings.addObservation,
     'status' => strings.catStatus,
     'location' => strings.location,
     'is_public' => strings.visibility,

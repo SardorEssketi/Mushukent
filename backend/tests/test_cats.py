@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -25,6 +25,7 @@ from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 from app.features.cats.application.schemas import CatCreateRequest
 from app.features.cats.application.service import CatsService
 from app.features.cats.infrastructure.repositories import SqlAlchemyCatRepository
+from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.infrastructure.storage.service import MediaStorageService
@@ -189,6 +190,70 @@ def _insert_cat_with_posts(
                 schema.Comment(post_id=second_post.id, user_id=user_id, content="Cute cat"),
             ]
         )
+
+
+def test_record_latest_post_kind_uses_latest_visible_post(
+    db_session_manager: DatabaseSessionManager,
+) -> None:
+    recorded_at = datetime.now(UTC)
+    observation_cat_id = uuid4()
+    needs_help_cat_id = uuid4()
+    postless_cat_id = uuid4()
+
+    with db_session_manager.session_scope() as session:
+        session.add_all(
+            [
+                schema.Cat(id=observation_cat_id, status=schema.CatStatus.UNKNOWN),
+                schema.Cat(id=needs_help_cat_id, status=schema.CatStatus.UNKNOWN),
+                schema.Cat(id=postless_cat_id, status=schema.CatStatus.UNKNOWN),
+            ]
+        )
+        session.add_all(
+            [
+                schema.Post(
+                    cat_id=observation_cat_id,
+                    photo_url="https://example.com/observation-earlier.jpg",
+                    kind=PostKind.NEEDS_HELP,
+                    created_at=recorded_at - timedelta(minutes=2),
+                    updated_at=recorded_at - timedelta(minutes=2),
+                ),
+                schema.Post(
+                    cat_id=observation_cat_id,
+                    photo_url="https://example.com/observation-latest.jpg",
+                    kind=PostKind.OBSERVATION,
+                    created_at=recorded_at - timedelta(minutes=1),
+                    updated_at=recorded_at - timedelta(minutes=1),
+                ),
+                schema.Post(
+                    cat_id=needs_help_cat_id,
+                    photo_url="https://example.com/help-earlier.jpg",
+                    kind=PostKind.OBSERVATION,
+                    created_at=recorded_at - timedelta(minutes=2),
+                    updated_at=recorded_at - timedelta(minutes=2),
+                ),
+                schema.Post(
+                    cat_id=needs_help_cat_id,
+                    photo_url="https://example.com/help-latest.jpg",
+                    kind=PostKind.NEEDS_HELP,
+                    location=WKTElement("POINT(69.25 41.3)", srid=4326),
+                    created_at=recorded_at - timedelta(minutes=1),
+                    updated_at=recorded_at - timedelta(minutes=1),
+                ),
+            ]
+        )
+
+    with db_session_manager.session_scope() as session:
+        repository = SqlAlchemyCatRepository(session)
+        observation_cat = repository.get_by_id(observation_cat_id)
+        needs_help_cat = repository.get_by_id(needs_help_cat_id)
+        postless_cat = repository.get_by_id(postless_cat_id)
+
+    assert observation_cat is not None
+    assert observation_cat.latest_post_kind == PostKind.OBSERVATION
+    assert needs_help_cat is not None
+    assert needs_help_cat.latest_post_kind == PostKind.NEEDS_HELP
+    assert postless_cat is not None
+    assert postless_cat.latest_post_kind is None
 
 
 def test_authenticated_cat_creation(client: TestClient, cats_runtime) -> None:

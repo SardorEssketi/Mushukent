@@ -5,6 +5,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from app.infrastructure.db.enums import PostKind
+
 
 class CatStatus(StrEnum):
     HEALTHY = "healthy"
@@ -42,6 +44,7 @@ class CatSummary:
     canonical_location: GeoPoint | None
     last_seen_at: datetime | None
     total_observations: int = 0
+    latest_post_kind: PostKind | None = None
     distance_meters: float | None = None
     created_at: datetime | None = None
 
@@ -75,6 +78,7 @@ class PostListItem:
     photo_url: str
     thumb_url: str | None
     description: str | None
+    kind: PostKind
     location: GeoPoint | None
     created_at: datetime
     like_count: int = 0

@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Fri, 14 Aug 2026 00:30:13 GMT
+Content-Type: application/javascript
+Content-Length: 4341723
+Last-Modified: Thu, 13 Aug 2026 22:47:15 GMT
+Connection: keep-alive
+ETag: "6a7e4973-423fdb"
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://www.gstatic.com https://fonts.gstatic.com https://tile.openstreetmap.org https://api.mushukistan.uz https://media.mushukistan.uz https://accounts.google.com; frame-src https://accounts.google.com; frame-ancestors 'none';
+Accept-Ranges: bytes
+

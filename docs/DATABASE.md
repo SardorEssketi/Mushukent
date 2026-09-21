@@ -105,6 +105,7 @@ CREATE INDEX cats_canonical_location_gist ON cats USING GIST (canonical_location
 CREATE INDEX idx_cats_created_at ON cats (created_at);
 
 -- Posts (observations)
+CREATE TYPE post_kind AS ENUM ('observation', 'needs_help');
 CREATE TABLE posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     cat_id UUID REFERENCES cats(id) ON DELETE CASCADE,
@@ -116,6 +117,7 @@ CREATE TABLE posts (
     latitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_Y(location::geometry)) STORED,
     longitude DOUBLE PRECISION GENERATED ALWAYS AS (ST_X(location::geometry)) STORED,
     description TEXT NULL,
+    kind post_kind NOT NULL DEFAULT 'observation', -- explicit observation purpose
     status cat_status NULL, -- observation may indicate perceived cat status at time of sighting
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -130,6 +132,7 @@ CREATE INDEX posts_location_gist ON posts USING GIST (location);
 CREATE INDEX idx_posts_created_at ON posts (created_at DESC);
 CREATE INDEX idx_posts_user_id ON posts (user_id);
 CREATE INDEX idx_posts_cat_id ON posts (cat_id);
+CREATE INDEX idx_posts_kind ON posts (kind);
 
 CREATE TABLE post_photos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -346,6 +349,10 @@ Important constraints, indexes and rationale
 ------------------------------------------
 - Use geometry(Point, 4326) and GIST indexes for all geospatial queries (nearby posts/cats). Use ST_DWithin for distance searches when querying in meters (note: ST_DWithin with geography is meter-accurate; if using geometry keep in mind the units).
 - Posts.location is nullable for locationless observations. When present, generated latitude/longitude columns support geospatial reads.
+- `posts.kind` is the user-facing observation purpose: `observation` or `needs_help`. A
+  needs-help post requires location; a normal observation follows the normal optional-location
+  policy. This is independent of cat-status metadata.
+- Observation posts do not have tags or tag relations.
 - New observations create an unnamed `unknown` cat record automatically; the client does not perform nearby-cat matching.
 - Unique constraint (post_id, user_id) in likes enforces single-like policy.
 - Soft-delete: queries should include WHERE deleted_at IS NULL where appropriate; consider adding partial indexes to speed up active-only queries. Example:

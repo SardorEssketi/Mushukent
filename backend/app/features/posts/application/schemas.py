@@ -15,6 +15,7 @@ from app.features.posts.domain.models import (
     PostRecord,
     PostSortOrder,
 )
+from app.infrastructure.db.enums import PostKind
 
 T = TypeVar("T")
 
@@ -55,6 +56,7 @@ class PostListItem(BaseModel):
     thumb_url: str | None = None
     photo_urls: list[str] = Field(default_factory=list)
     description: str | None = None
+    kind: PostKind = PostKind.OBSERVATION
     status: CatStatus | None = None
     location: GeoPoint | None = None
     created_at: datetime
@@ -105,6 +107,7 @@ class _PostCreateBase(BaseModel):
     cat_id: UUID | None = None
     new_cat: PostNewCat | None = None
     description: str | None = Field(default=None, max_length=2000)
+    kind: PostKind = PostKind.OBSERVATION
     status: CatStatus | None = None
     location: GeoPoint | None = None
     is_public: bool = True
@@ -114,6 +117,8 @@ class _PostCreateBase(BaseModel):
     def _validate_payload(self) -> "_PostCreateBase":
         if self.cat_id is not None and self.new_cat is not None:
             raise ValueError("Provide either cat_id or new_cat, not both.")
+        if self.kind == PostKind.NEEDS_HELP and self.location is None:
+            raise ValueError("Location is required for needs-help observations.")
         return self
 
     @field_validator("location")
@@ -147,6 +152,7 @@ class _PostUpdateBase(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     description: str | None = Field(default=None, max_length=2000)
+    kind: PostKind | None = None
     status: CatStatus | None = None
     location: GeoPoint | None = None
     is_public: bool | None = None

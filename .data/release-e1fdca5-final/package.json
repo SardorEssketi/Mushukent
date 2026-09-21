@@ -1,0 +1,24 @@
+{
+  "name": "mushukent",
+  "version": "1.0.0",
+  "description": "Tashkent-focused app for cat owners and the wider cat community, with maps, cat records, lost-pet alerts, adoption posts, community tools, and moderation.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SardorEssketi/Mushukent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/SardorEssketi/Mushukent/issues"
+  },
+  "homepage": "https://github.com/SardorEssketi/Mushukent#readme"
+}

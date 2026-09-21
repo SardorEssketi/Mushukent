@@ -27,6 +27,7 @@ from app.infrastructure.db.enums import (
     LeaderboardType,
     PlaceCategory,
     PlaceSource,
+    PostKind,
     ReportStatus,
     ReportTargetType,
 )
@@ -45,6 +46,12 @@ cat_status_enum = ENUM(
     CatStatus.UNKNOWN.value,
     CatStatus.FEED.value,
     name="cat_status",
+)
+
+post_kind_enum = ENUM(
+    PostKind.OBSERVATION.value,
+    PostKind.NEEDS_HELP.value,
+    name="post_kind",
 )
 
 report_target_type_enum = ENUM(
@@ -305,6 +312,11 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         Computed("ST_X(location::geometry)", persisted=True),
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kind: Mapped[PostKind] = mapped_column(
+        post_kind_enum,
+        nullable=False,
+        server_default=text("'observation'"),
+    )
     status: Mapped[CatStatus | None] = mapped_column(cat_status_enum, nullable=True)
     is_public: Mapped[bool] = mapped_column(
         Boolean,
@@ -353,6 +365,7 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         ),
         Index("idx_posts_user_id", "user_id"),
         Index("idx_posts_cat_id", "cat_id"),
+        Index("idx_posts_kind", "kind"),
     )
 
 

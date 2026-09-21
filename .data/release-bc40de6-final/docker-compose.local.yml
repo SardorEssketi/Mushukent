@@ -1,0 +1,9 @@
+services:
+  backend:
+    # Keep the ignored root .env from putting the local API in production mode.
+    # Authentication remains enabled; development mode only relaxes local CORS
+    # and exposes verification tokens for testing without an email provider.
+    environment:
+      APP_ENV: development
+      APP_DEBUG: "true"
+      ENABLE_API_DOCS: "true"

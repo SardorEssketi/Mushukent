@@ -18,6 +18,7 @@ def test_like_repository_maps_locationless_post() -> None:
         "photo_url": "https://example.com/post.jpg",
         "thumb_url": None,
         "description": "Locationless observation",
+        "post_kind": "observation",
         "post_status": "unknown",
         "is_public": True,
         "like_count": 0,
@@ -42,4 +43,5 @@ def test_like_repository_maps_locationless_post() -> None:
     record = SqlAlchemyLikeRepository(session=None)._row_to_post_detail(row)  # type: ignore[arg-type]
 
     assert record.id == post_id
+    assert record.kind.value == "observation"
     assert record.location is None

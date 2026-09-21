@@ -72,12 +72,15 @@ class _AddObservationLocationScreenState
           GeoPoint(
             latitude: selectedPoint.latitude,
             longitude: selectedPoint.longitude,
-        ),
-      );
+          ),
+        );
     context.go('/add/details');
   }
 
   void _skipLocation() {
+    if (ref.read(addObservationControllerProvider).kind == 'needs_help') {
+      return;
+    }
     ref.read(addObservationControllerProvider.notifier).clearLocation();
     context.go('/add/details');
   }
@@ -108,9 +111,12 @@ class _AddObservationLocationScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(addObservationControllerProvider);
     final strings = ref.watch(appStringsProvider);
+    final needsHelp = state.kind == 'needs_help';
     if (!state.hasPhoto) {
       return Scaffold(
-        appBar: AppBar(title: Text(strings.observationLocation)),
+        appBar: AppBar(
+            title: Text(
+                needsHelp ? strings.needsHelp : strings.observationLocation)),
         body: AppStatePanel(
           icon: Icons.photo_library_outlined,
           title: strings.choosePhotoFirst,
@@ -123,19 +129,25 @@ class _AddObservationLocationScreenState
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.observationLocation)),
+      appBar: AppBar(
+          title: Text(
+              needsHelp ? strings.needsHelp : strings.observationLocation)),
       body: AppContentWidth(
         maxWidth: AppWidths.readable,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
             Text(
-              strings.attachLocationQuestion,
+              needsHelp
+                  ? strings.needsHelpLocationRequired
+                  : strings.attachLocationQuestion,
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              strings.attachLocationHelp,
+              needsHelp
+                  ? strings.needsHelpLocationHelp
+                  : strings.attachLocationHelp,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -163,11 +175,12 @@ class _AddObservationLocationScreenState
               label: Text(strings.markOnMap),
             ),
             const SizedBox(height: AppSpacing.md),
-            TextButton.icon(
-              onPressed: _skipLocation,
-              icon: const Icon(Icons.location_off_outlined),
-              label: Text(strings.continueWithoutLocation),
-            ),
+            if (!needsHelp)
+              TextButton.icon(
+                onPressed: _skipLocation,
+                icon: const Icon(Icons.location_off_outlined),
+                label: Text(strings.continueWithoutLocation),
+              ),
             if (_showMapPicker) ...[
               const SizedBox(height: AppSpacing.xl),
               _LocationPickerMap(

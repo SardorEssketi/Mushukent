@@ -32,7 +32,9 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     if (widget.observationOnly) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          unawaited(_openObservationPhotoSource(context, ref));
+          unawaited(
+            _openObservationPhotoSource(context, ref, kind: 'observation'),
+          );
         }
       });
     }
@@ -41,6 +43,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
   Future<void> _chooseGalleryPhoto(
     BuildContext context,
     WidgetRef ref,
+    String kind,
   ) async {
     if (_preparingPhotos) {
       return;
@@ -62,6 +65,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
       controller,
       images.take(5).toList(growable: false),
       strings,
+      kind,
     );
   }
 
@@ -70,6 +74,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     AddObservationController controller,
     List<XFile> images,
     AppStrings strings,
+    String kind,
   ) async {
     setState(() {
       _preparingPhotos = true;
@@ -89,7 +94,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
           ),
         );
       }
-      controller.reset();
+      controller.reset(kind: kind);
       controller.setPhotos(photos);
       if (context.mounted) {
         context.go('/add/location');
@@ -113,6 +118,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
   Future<void> _takePhoto(
     BuildContext context,
     WidgetRef ref,
+    String kind,
   ) async {
     if (_preparingPhotos) {
       return;
@@ -134,6 +140,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
       controller,
       [image],
       strings,
+      kind,
     );
   }
 
@@ -208,11 +215,35 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               minVerticalPadding: AppSpacing.md,
               leading: const Icon(Icons.add_a_photo_outlined),
               title: Text(strings.catObservation),
-              subtitle: Text(strings.catObservationSubtitle),
+              subtitle: Text(strings.catObservationAddSubtitle),
               trailing: const Icon(Icons.chevron_right),
               onTap: _preparingPhotos
                   ? null
-                  : () => unawaited(_openObservationPhotoSource(context, ref)),
+                  : () => unawaited(
+                        _openObservationPhotoSource(
+                          context,
+                          ref,
+                          kind: 'observation',
+                        ),
+                      ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              minVerticalPadding: AppSpacing.md,
+              leading: const Icon(Icons.volunteer_activism_outlined),
+              title: Text(strings.needsHelp),
+              subtitle: Text(strings.needsHelpCreateSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _preparingPhotos
+                  ? null
+                  : () => unawaited(
+                        _openObservationPhotoSource(
+                          context,
+                          ref,
+                          kind: 'needs_help',
+                        ),
+                      ),
             ),
             const Divider(height: 1),
             ListTile(
@@ -292,8 +323,9 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
 
   Future<void> _openObservationPhotoSource(
     BuildContext context,
-    WidgetRef ref,
-  ) async {
+    WidgetRef ref, {
+    required String kind,
+  }) async {
     final strings = ref.read(appStringsProvider);
     final source = await showModalBottomSheet<_ObservationPhotoSource>(
       context: context,
@@ -342,10 +374,10 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     }
     switch (source) {
       case _ObservationPhotoSource.gallery:
-        await _chooseGalleryPhoto(context, ref);
+        await _chooseGalleryPhoto(context, ref, kind);
         break;
       case _ObservationPhotoSource.camera:
-        await _takePhoto(context, ref);
+        await _takePhoto(context, ref, kind);
         break;
     }
     if (widget.observationOnly &&

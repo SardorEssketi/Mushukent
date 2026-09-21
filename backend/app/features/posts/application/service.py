@@ -42,6 +42,7 @@ from app.features.posts.domain.repositories import (
     PostUpdateDraft,
 )
 from app.features.users.domain.repositories import UserProfileRepository
+from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
 
@@ -181,6 +182,7 @@ class PostsService:
                         thumb_url=thumb_url,
                         photos=photo_drafts,
                         description=payload.description.strip() if payload.description else None,
+                        kind=payload.kind,
                         location_latitude=location.latitude if location is not None else None,
                         location_longitude=location.longitude if location is not None else None,
                         status=payload.status
@@ -267,7 +269,7 @@ class PostsService:
                 actor_id=user.id,
                 action="deleted",
                 before=post_history_snapshot(current),
-                after={"deleted": True},
+                after={"deleted": True, "kind": current.kind.value},
             )
 
             stats = post_repository.recalculate_cat_stats(current.cat_id)
@@ -346,12 +348,21 @@ class PostsService:
                 location = (
                     payload.location if "location" in payload.model_fields_set else current.location
                 )
+                kind = payload.kind if "kind" in payload.model_fields_set else current.kind
+                if kind == PostKind.NEEDS_HELP and location is None:
+                    raise api_error(
+                        422,
+                        "VALIDATION_ERROR",
+                        "Location is required for needs-help observations.",
+                        details={"location": ["required_for_needs_help"]},
+                    )
                 draft = PostUpdateDraft(
                     description=(
                         (payload.description.strip() if payload.description else None)
                         if "description" in payload.model_fields_set
                         else current.description
                     ),
+                    kind=kind,
                     location_latitude=location.latitude if location is not None else None,
                     location_longitude=location.longitude if location is not None else None,
                     status=(
@@ -366,6 +377,7 @@ class PostsService:
                 )
                 proposed = post_history_snapshot_from_values(
                     description=draft.description,
+                    kind=draft.kind.value,
                     status=draft.status.value if draft.status is not None else None,
                     location_latitude=draft.location_latitude,
                     location_longitude=draft.location_longitude,

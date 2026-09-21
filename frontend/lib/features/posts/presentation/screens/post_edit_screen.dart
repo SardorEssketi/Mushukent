@@ -15,14 +15,6 @@ import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../profile/presentation/screens/user_activity_screen.dart';
 import 'post_detail_screen.dart';
 
-const _editablePostStatuses = <String>{
-  'unknown',
-  'healthy',
-  'injured',
-  'needs_help',
-  'adopted',
-};
-
 class PostEditScreen extends ConsumerStatefulWidget {
   const PostEditScreen({super.key, required this.postId});
 
@@ -39,7 +31,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
   bool _pickingPhotos = false;
   bool _isPublic = true;
   GeoPoint? _location;
-  String? _status;
+  String _kind = 'observation';
   List<ObservationPhotoUpload>? _replacementPhotos;
 
   @override
@@ -56,7 +48,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
     _descriptionController.text = post.description ?? '';
     _isPublic = post.isPublic;
     _location = post.location;
-    _status = _editablePostStatuses.contains(post.status) ? post.status : null;
+    _kind = post.kind;
   }
 
   Future<void> _replacePhotos(AppStrings strings) async {
@@ -138,6 +130,12 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
     if (_saving) {
       return;
     }
+    if (_kind == 'needs_help' && _location == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.needsHelpLocationRequired)),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       await ref.read(mushukistanApiProvider).updateObservation(
@@ -145,7 +143,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
             description: _descriptionController.text,
             location: _location,
             isPublic: _isPublic,
-            status: _status,
+            kind: _kind,
             replacementPhotos: _replacementPhotos,
           );
       ref.read(postMutationRevisionProvider.notifier).state++;
@@ -224,35 +222,23 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 DropdownButtonFormField<String>(
-                  initialValue: _status,
+                  initialValue: _kind,
                   isExpanded: true,
-                  decoration: InputDecoration(labelText: strings.catStatus),
-                  hint: Text(strings.unknown),
+                  decoration:
+                      InputDecoration(labelText: strings.addObservation),
                   items: [
                     DropdownMenuItem(
-                      value: 'unknown',
-                      child: Text(strings.unknown),
-                    ),
-                    DropdownMenuItem(
-                      value: 'healthy',
-                      child: Text(strings.healthy),
-                    ),
-                    DropdownMenuItem(
-                      value: 'injured',
-                      child: Text(strings.injured),
+                      value: 'observation',
+                      child: Text(strings.catObservation),
                     ),
                     DropdownMenuItem(
                       value: 'needs_help',
                       child: Text(strings.needsHelp),
                     ),
-                    DropdownMenuItem(
-                      value: 'adopted',
-                      child: Text(strings.adoption),
-                    ),
                   ],
                   onChanged: _saving
                       ? null
-                      : (value) => setState(() => _status = value),
+                      : (value) => setState(() => _kind = value ?? _kind),
                 ),
                 const Divider(),
                 ListTile(
@@ -281,7 +267,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _saving ? null : () => _useCurrentLocation(strings),
                 ),
-                if (_location != null)
+                if (_location != null && _kind != 'needs_help')
                   TextButton.icon(
                     onPressed:
                         _saving ? null : () => setState(() => _location = null),

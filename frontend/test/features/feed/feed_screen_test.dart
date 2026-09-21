@@ -82,6 +82,36 @@ void main() {
     expect(find.byType(FeedPostCard), findsOneWidget);
   });
 
+  testWidgets('feed card distinguishes a needs-help observation by kind',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final post = PostSummary(
+      id: 'post-help',
+      cat: const PostCatData(id: 'cat-1', status: 'unknown', name: 'Milo'),
+      photoUrl: 'https://example.com/cat.jpg',
+      photoUrls: const ['https://example.com/cat.jpg'],
+      location: const GeoPoint(latitude: 41.31, longitude: 69.28),
+      createdAt: DateTime.utc(2026, 9, 21),
+      likeCount: 0,
+      commentCount: 0,
+      isLikedByMe: false,
+      kind: 'needs_help',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(home: FeedPostCard(post: post, onTap: () {})),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Needs help'), findsOneWidget);
+  });
+
   testWidgets('mobile feed hides Recent and toggles filters', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
