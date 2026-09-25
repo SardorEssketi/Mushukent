@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.uploads import read_image_uploads, run_upload_processing
 from app.core.dependencies import get_current_active_user, get_lost_pets_service
 from app.core.security import api_error
 from app.features.auth.application.schemas import ApiSuccess
@@ -14,6 +15,7 @@ from app.features.auth.domain.models import AuthUser
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
     LostPetListItem,
+    LostPetMapListItem,
     LostPetResponse,
 )
 from app.features.lost_pets.application.service import LostPetsService
@@ -72,9 +74,10 @@ async def create_lost_pet(
         additional_info,
         owner_phone_publication_consent,
     )
-    photo_payloads = [(await photo.read(), photo.content_type, photo.filename) for photo in photos]
+    photo_payloads = await read_image_uploads(photos, purpose="lost_pet_create")
     return ApiSuccess(
-        data=lost_pets_service.create_lost_pet(
+        data=await run_upload_processing(
+            lost_pets_service.create_lost_pet,
             current_user,
             payload,
             photos=photo_payloads,
@@ -93,6 +96,7 @@ def list_lost_pets(
     latitude: float | None = Query(default=None, alias="lat"),
     longitude: float | None = Query(default=None, alias="lon"),
     radius_meters: int | None = Query(default=None, ge=1, le=5000),
+    bbox: str | None = Query(default=None),
     valid_for_map: bool = Query(default=False),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[GenericListResponse[LostPetListItem]]:
@@ -103,9 +107,23 @@ def list_lost_pets(
             latitude=latitude,
             longitude=longitude,
             radius_meters=radius_meters,
+            bbox=bbox,
             valid_for_map=valid_for_map,
         )
     )
+
+
+@router.get(
+    "/map",
+    response_model=ApiSuccess[GenericListResponse[LostPetMapListItem]],
+    response_model_exclude_none=True,
+)
+def list_lost_pet_map_markers(
+    bbox: str = Query(...),
+    limit: int = Query(default=100, ge=1, le=100),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[GenericListResponse[LostPetMapListItem]]:
+    return ApiSuccess(data=lost_pets_service.list_map_markers(limit=limit, bbox=bbox))
 
 
 @router.get(

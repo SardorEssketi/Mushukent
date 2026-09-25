@@ -6,8 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
-import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 
 final lostPetDetailProvider =
@@ -20,8 +20,12 @@ class LostPetDetailScreen extends ConsumerWidget {
 
   final String lostPetId;
 
-  Future<void> _contactOwner(String phoneNumber) async {
-    await launchUrl(Uri(scheme: 'tel', path: dialablePhoneNumber(phoneNumber)));
+  Future<void> _contactOwner(
+    BuildContext context,
+    AppStrings strings,
+    String phoneNumber,
+  ) {
+    return launchPublicPhone(context, phone: phoneNumber, strings: strings);
   }
 
   Future<void> _openTelegram(String username) async {
@@ -76,7 +80,11 @@ class LostPetDetailScreen extends ConsumerWidget {
                 icon: Icons.phone_outlined,
                 title: strings.ownerPhone,
                 subtitle: lostPet.ownerPhoneNumber,
-                onTap: () => _contactOwner(lostPet.ownerPhoneNumber),
+                onTap: () => _contactOwner(
+                  context,
+                  strings,
+                  lostPet.ownerPhoneNumber,
+                ),
               ),
               if (lostPet.ownerTelegramUsername != null) ...[
                 const SizedBox(height: 10),

@@ -9,6 +9,11 @@ from structlog import get_logger
 
 from app.core.phone import UzbekPhoneNumberError, normalize_uzbek_phone_number
 from app.core.security import api_error
+from app.core.storage import (
+    StorageConfigurationError,
+    StorageOperationError,
+    StorageValidationError,
+)
 from app.features.auth.domain.models import AuthUser
 from app.features.auth.infrastructure.email import AccountDeletionConfirmationSender
 from app.features.auth.infrastructure.tokens import JoseAccountDeletionTokenService
@@ -366,23 +371,50 @@ class UsersService:
         if self.media_storage_service is None:
             raise api_error(500, "STORAGE_NOT_CONFIGURED", "Image storage is not configured.")
 
-        media = self.media_storage_service.upload_image(
-            purpose=UploadPurpose.USER_AVATAR,
-            entity_id=user.id,
-            content=content,
-            content_type=content_type,
-            original_filename=filename,
-        )
+        try:
+            media = self.media_storage_service.upload_image(
+                purpose=UploadPurpose.USER_AVATAR,
+                entity_id=user.id,
+                content=content,
+                content_type=content_type,
+                original_filename=filename,
+            )
+        except StorageValidationError as exc:
+            raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
+        except StorageConfigurationError as exc:
+            raise api_error(
+                500,
+                "STORAGE_NOT_CONFIGURED",
+                "Image storage is not configured.",
+            ) from exc
+        except StorageOperationError as exc:
+            raise api_error(502, "IMAGE_UPLOAD_FAILED", "Image upload failed.") from exc
 
-        with self.db_session_manager.session_scope() as session:
-            repository = self.repository_factory(session)
-            current = repository.get_by_id(user.id)
-            if current is None or not current.is_active:
-                raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
+        previous_avatar_url: str | None = None
+        try:
+            with self.db_session_manager.session_scope() as session:
+                repository = self.repository_factory(session)
+                current = repository.get_by_id(user.id)
+                if current is None or not current.is_active:
+                    raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
 
-            current.avatar_url = media.canonical.url
-            updated = repository.save(current)
-            return self._build_self_profile(repository, updated)
+                previous_avatar_url = current.avatar_url
+                current.avatar_url = media.canonical.url
+                updated = repository.save(current)
+                profile = self._build_self_profile(repository, updated)
+        except Exception:
+            try:
+                self.media_storage_service.delete_object(media.canonical.key)
+            except Exception:  # pragma: no cover - best-effort cleanup
+                logger.warning("avatar_upload_cleanup_failed", key=media.canonical.key)
+            raise
+
+        if previous_avatar_url and previous_avatar_url != media.canonical.url:
+            try:
+                self.media_storage_service.delete_media_url(previous_avatar_url)
+            except Exception:  # pragma: no cover - best-effort cleanup
+                logger.warning("previous_avatar_cleanup_failed", user_id=str(user.id))
+        return profile
 
     def block_user(self, user: AuthUser, blocked_user_id: UUID) -> None:
         if user.id == blocked_user_id:

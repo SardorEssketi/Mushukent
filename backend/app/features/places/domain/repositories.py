@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 from app.features.places.domain.models import PlaceCategory, PlaceSummary
 
@@ -14,6 +15,8 @@ class PlaceListPage:
 
 
 class PlaceRepository(Protocol):
+    def get_place(self, place_id: UUID) -> PlaceSummary | None: ...
+
     def list_places(
         self,
         *,
@@ -23,4 +26,5 @@ class PlaceRepository(Protocol):
         longitude: float | None = None,
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
+        map_only: bool = False,
     ) -> PlaceListPage: ...

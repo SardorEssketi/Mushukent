@@ -7,6 +7,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/media/image_picker_options.dart';
 import '../../../../core/media/selected_image_pipeline.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
@@ -60,13 +61,15 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
     try {
       images = await ImagePicker().pickMultiImage(
         imageQuality: pickerImageQuality,
+        maxWidth: pickerMaxWidth,
+        maxHeight: pickerMaxHeight,
         limit: 5,
       );
     } catch (error) {
       logPhotoPipelineFailure('post_edit_gallery_picker', error);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+          SnackBar(content: Text(selectedImageErrorMessage(strings, error))),
         );
       }
       return;
@@ -96,7 +99,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+          SnackBar(content: Text(selectedImageErrorMessage(strings, error))),
         );
       }
     } finally {
@@ -173,6 +176,12 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
           SnackBar(content: Text(strings.changesSaved)),
         );
         context.pop(true);
+      }
+    } on MushukistanApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(photoUploadErrorMessage(strings, error))),
+        );
       }
     } catch (_) {
       if (mounted) {

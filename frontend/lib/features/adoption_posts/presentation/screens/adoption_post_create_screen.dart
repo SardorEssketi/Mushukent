@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/media/image_picker_options.dart';
 import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -48,16 +49,17 @@ class _AdoptionPostCreateScreenState
       _error = null;
     });
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.image,
-        withData: true,
-        allowMultiple: true,
+      final files = await ImagePicker().pickMultiImage(
+        imageQuality: pickerImageQuality,
+        maxWidth: pickerMaxWidth,
+        maxHeight: pickerMaxHeight,
+        limit: 5 - _photos.length,
       );
-      if (result == null) {
+      if (files.isEmpty) {
         return;
       }
-      final preparedPhotos = await preparePlatformFilesForUpload(
-        result.files,
+      final preparedPhotos = await preparePickedXFilesForUpload(
+        files,
         limit: 5 - _photos.length,
       );
       final uploads = preparedPhotos
@@ -77,7 +79,7 @@ class _AdoptionPostCreateScreenState
     } catch (error) {
       logPhotoPipelineFailure('adoption_gallery_picker', error);
       if (mounted) {
-        setState(() => _error = strings.couldNotPreparePhoto);
+        setState(() => _error = selectedImageErrorMessage(strings, error));
       }
     } finally {
       if (mounted) {
@@ -126,7 +128,7 @@ class _AdoptionPostCreateScreenState
     } on MushukistanApiException catch (error) {
       if (mounted) {
         setState(() {
-          _error = error.userMessage;
+          _error = photoUploadErrorMessage(strings, error);
         });
       }
     } catch (_) {

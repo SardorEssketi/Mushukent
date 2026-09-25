@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from geoalchemy2 import Geography
 from sqlalchemy import cast, func, or_, select
@@ -25,16 +26,27 @@ class SqlAlchemyPlaceRepository(PlaceRepository):
         longitude: float | None = None,
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
+        map_only: bool = False,
     ) -> PlaceListPage:
-        statement = (
-            select(
-                schema.Place,
+        if map_only:
+            statement = select(
+                schema.Place.id,
+                schema.Place.name,
+                schema.Place.category,
+                schema.Place.source,
                 func.ST_X(schema.Place.location).label("longitude"),
                 func.ST_Y(schema.Place.location).label("latitude"),
+            ).where(schema.Place.is_active.is_(True))
+        else:
+            statement = (
+                select(
+                    schema.Place,
+                    func.ST_X(schema.Place.location).label("longitude"),
+                    func.ST_Y(schema.Place.location).label("latitude"),
+                )
+                .options(selectinload(schema.Place.category_links))
+                .where(schema.Place.is_active.is_(True))
             )
-            .options(selectinload(schema.Place.category_links))
-            .where(schema.Place.is_active.is_(True))
-        )
 
         if categories:
             db_categories = [schema.PlaceCategory(category.value) for category in categories]
@@ -78,10 +90,26 @@ class SqlAlchemyPlaceRepository(PlaceRepository):
 
         rows = self.session.execute(statement.limit(limit)).all()
         return PlaceListPage(
-            items=[self._to_summary_row(row) for row in rows],
+            items=[
+                self._to_map_summary_row(row) if map_only else self._to_summary_row(row)
+                for row in rows
+            ],
             next_cursor=None,
             limit=limit,
         )
+
+    def get_place(self, place_id: UUID) -> PlaceSummary | None:
+        statement = (
+            select(
+                schema.Place,
+                func.ST_X(schema.Place.location).label("longitude"),
+                func.ST_Y(schema.Place.location).label("latitude"),
+            )
+            .options(selectinload(schema.Place.category_links))
+            .where(schema.Place.id == place_id, schema.Place.is_active.is_(True))
+        )
+        row = self.session.execute(statement).first()
+        return self._to_summary_row(row) if row is not None else None
 
     def _to_summary_row(self, row: Any) -> PlaceSummary:
         place = row[0]
@@ -110,6 +138,19 @@ class SqlAlchemyPlaceRepository(PlaceRepository):
             source=PlaceSource(place.source),
             source_id=place.source_id,
             verified_at=place.verified_at,
+            distance_meters=getattr(row, "distance_meters", None),
+        )
+
+    @staticmethod
+    def _to_map_summary_row(row: Any) -> PlaceSummary:
+        category = PlaceCategory(row.category)
+        return PlaceSummary(
+            id=row.id,
+            name=row.name,
+            category=category,
+            categories=[category],
+            location=GeoPoint(latitude=float(row.latitude), longitude=float(row.longitude)),
+            source=PlaceSource(row.source),
             distance_meters=getattr(row, "distance_meters", None),
         )
 

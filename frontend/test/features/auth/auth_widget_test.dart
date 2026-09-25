@@ -739,7 +739,7 @@ void main() {
     await tester.tap(find.byType(Checkbox).at(0));
     await tester.tap(find.byType(Checkbox).at(1));
     await tester.pump();
-    final registerButton = find.widgetWithText(FilledButton, 'Create account');
+    final registerButton = find.widgetWithText(FilledButton, 'Register');
     await tester.ensureVisible(registerButton);
     await tester.tap(registerButton);
     await tester.pump();

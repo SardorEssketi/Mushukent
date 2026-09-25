@@ -14,6 +14,18 @@ Future<void> settle() async {
   await Future<void>.delayed(Duration.zero);
 }
 
+class _DelayedGoogleIdentityTokenProvider
+    implements GoogleIdentityTokenProvider {
+  final first = Completer<String>();
+  int calls = 0;
+
+  @override
+  Future<String> authenticate() {
+    calls += 1;
+    return calls == 1 ? first.future : Future.value('test-id-token');
+  }
+}
+
 void main() {
   test('startup without token becomes unauthenticated', () async {
     final controller = AuthController(
@@ -273,6 +285,32 @@ void main() {
     expect(repo.lastGoogleAcceptTerms, isFalse);
     expect(repo.lastGoogleAcceptPrivacy, isFalse);
     expect(google.calls, 1);
+  });
+
+  test('repeated Google taps start once and login works after logout',
+      () async {
+    final repo = FakeAuthRepository(
+      loginResult: AuthSession.restored(
+        accessToken: 'test-access-token',
+        user: testUser(email: 'google-user@example.com'),
+      ),
+    );
+    final google = _DelayedGoogleIdentityTokenProvider();
+    final controller = AuthController(repo, google);
+    await settle();
+
+    final first = controller.loginWithGoogle();
+    await controller.loginWithGoogle();
+    expect(google.calls, 1);
+    google.first.complete('test-id-token');
+    await first;
+    expect(controller.state.phase, AuthPhase.authenticated);
+
+    await controller.logout();
+    expect(controller.state.phase, AuthPhase.unauthenticated);
+    await controller.loginWithGoogle();
+    expect(google.calls, 2);
+    expect(controller.state.phase, AuthPhase.authenticated);
   });
 
   test('google legal acceptance retry reuses the existing id token', () async {

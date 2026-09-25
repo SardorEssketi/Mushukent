@@ -12,11 +12,17 @@ class AuthUserRepository(Protocol):
 
     def get_by_email(self, email: str) -> AuthUser | None: ...
 
+    def get_by_google_subject(self, subject: str) -> AuthUser | None: ...
+
+    def get_by_id_for_update(self, user_id: UUID) -> AuthUser | None: ...
+
     def create(
         self,
         *,
         email: str,
         password_hash: str | None,
+        google_subject: str | None = None,
+        legacy_google_unbound: bool = False,
         name: str | None = None,
         preferred_language: str = "en",
         email_verified: bool = False,

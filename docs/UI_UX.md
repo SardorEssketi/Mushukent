@@ -347,7 +347,7 @@ Bottom navigation with 5 tabs:
   - stats: observations, likes received, comments count
   - list: My Observations
   - app bar actions, in order: Donate to author, Edit Profile, Settings, Logout
-  - donation dialog shows the support card number from the welcome message as selectable text
+  - donation dialog identifies Sardor Muxtorov as the recipient and shows the support card number from the welcome message as selectable text
   - actions: Adoption help, Settings, Logout
   - if moderator: Moderator Tools entry
 - Interactions:

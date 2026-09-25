@@ -284,6 +284,7 @@ class AuthController extends StateNotifier<AuthState> {
     bool acceptTerms = false,
     bool acceptPrivacy = false,
   }) async {
+    if (state.isBusy) return;
     state = AuthState.authenticating();
     var idToken = '';
     try {

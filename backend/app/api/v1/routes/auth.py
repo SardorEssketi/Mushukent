@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Body, Depends, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
+from structlog import get_logger
 
 from app.core.dependencies import (
     get_auth_service,
@@ -10,11 +11,15 @@ from app.features.auth.application.schemas import (
     AuthLoginRequest,
     AuthRegisterRequest,
     AuthRegisterResponse,
+    ChangePasswordRequest,
+    ConnectGoogleRequest,
     GoogleLoginRequest,
     LogoutRequest,
     RefreshTokenRequest,
     ResendVerificationRequest,
     ResendVerificationResponse,
+    SetPasswordRequest,
+    SignInMethods,
     UserPublic,
     VerificationTokenData,
     VerifyEmailData,
@@ -24,6 +29,47 @@ from app.features.auth.application.schemas import (
 from app.features.auth.application.service import AuthService
 
 router = APIRouter(prefix="/auth")
+logger = get_logger(__name__)
+
+
+@router.get("/methods", response_model=ApiSuccess[SignInMethods])
+def sign_in_methods(
+    user=Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> ApiSuccess[SignInMethods]:
+    return ApiSuccess(data=SignInMethods(**auth_service.get_sign_in_methods(user.id)))
+
+
+@router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT)
+def set_password(
+    payload: SetPasswordRequest,
+    user=Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Response:
+    auth_service.set_password(user.id, payload.new_password, payload.confirm_password)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_password(
+    payload: ChangePasswordRequest,
+    user=Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Response:
+    auth_service.change_password(
+        user.id, payload.current_password, payload.new_password, payload.confirm_password
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/connect-google", status_code=status.HTTP_204_NO_CONTENT)
+def connect_google(
+    payload: ConnectGoogleRequest,
+    user=Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> Response:
+    auth_service.connect_google(user.id, payload.id_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -86,11 +132,22 @@ def login_with_google(
     payload: GoogleLoginRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> ApiSuccess[AuthLoginData]:
-    result = auth_service.authenticate_with_google_id_token(
-        payload.id_token,
-        accept_terms=payload.accept_terms,
-        accept_privacy=payload.accept_privacy,
-    )
+    try:
+        result = auth_service.authenticate_with_google_id_token(
+            payload.id_token,
+            accept_terms=payload.accept_terms,
+            accept_privacy=payload.accept_privacy,
+        )
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        error = detail.get("error") if isinstance(detail.get("error"), dict) else {}
+        logger.info(
+            "google_auth_rejected",
+            provider="google",
+            status_code=exc.status_code,
+            error_code=error.get("code", "UNCLASSIFIED"),
+        )
+        raise
     return ApiSuccess(
         data=AuthLoginData(
             access_token=result.access_token,

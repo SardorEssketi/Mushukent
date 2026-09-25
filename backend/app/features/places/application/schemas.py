@@ -43,6 +43,10 @@ class PlaceListItem(BaseModel):
     distance_meters: float | None = None
 
 
+class PlaceDetailResponse(PlaceListItem):
+    pass
+
+
 class PlaceListQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -51,6 +55,7 @@ class PlaceListQuery(BaseModel):
     longitude: float | None = Field(default=None, ge=-180, le=180)
     radius_meters: int | None = Field(default=None, ge=1)
     bbox: str | None = None
+    map_only: bool = False
     limit: int = Field(default=100, ge=1, le=200)
 
     @model_validator(mode="after")
@@ -68,6 +73,30 @@ def to_place_list_response(
 ) -> GenericListResponse[PlaceListItem]:
     return GenericListResponse[PlaceListItem](
         items=[PlaceListItem.model_validate(item, from_attributes=True) for item in items],
+        next_cursor=next_cursor,
+        limit=limit,
+    )
+
+
+def to_place_map_response(
+    items: list[PlaceSummary],
+    *,
+    next_cursor: str | None,
+    limit: int,
+) -> GenericListResponse[PlaceListItem]:
+    return GenericListResponse[PlaceListItem](
+        items=[
+            PlaceListItem(
+                id=item.id,
+                name=item.name,
+                category=item.category,
+                categories=item.categories,
+                location=item.location,
+                source=item.source,
+                distance_meters=item.distance_meters,
+            )
+            for item in items
+        ],
         next_cursor=next_cursor,
         limit=limit,
     )

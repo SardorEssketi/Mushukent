@@ -2,6 +2,26 @@ const uzbekPhoneFormat = '+998 XX XXX XXXX';
 const invalidUzbekPhoneMessage =
     'Use Uzbekistan phone format: +998 XX XXX XXXX.';
 
+String? normalizeDialablePhoneNumber(String? value) {
+  final trimmed = value?.trim() ?? '';
+  if (trimmed.isEmpty || RegExp(r'[A-Za-z]').hasMatch(trimmed)) {
+    return null;
+  }
+
+  final hasInternationalPrefix = trimmed.startsWith('+');
+  final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+  if (digits.length < 5 || digits.length > 15) {
+    return null;
+  }
+
+  return hasInternationalPrefix ? '+$digits' : digits;
+}
+
+Uri? publicPhoneUri(String? value) {
+  final dialable = normalizeDialablePhoneNumber(value);
+  return dialable == null ? null : Uri(scheme: 'tel', path: dialable);
+}
+
 String? normalizeUzbekPhoneNumber(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty) {

@@ -8,7 +8,7 @@ import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 
 final leaderboardTypeProvider = StateProvider<String>((ref) => 'most_active');
-final leaderboardPeriodProvider = StateProvider<String>((ref) => 'week');
+final leaderboardPeriodProvider = StateProvider<String>((ref) => 'month');
 
 final leaderboardProvider =
     FutureProvider.autoDispose<List<LeaderboardEntryData>>((ref) async {

@@ -47,6 +47,21 @@ class LostPetPage:
 
 
 @dataclass(slots=True)
+class LostPetMapMarker:
+    id: UUID
+    pet_name: str
+    last_seen_location: GeoPoint
+    is_resolved: bool
+    created_at: datetime
+
+
+@dataclass(slots=True)
+class LostPetMapPage:
+    items: list[LostPetMapMarker]
+    limit: int
+
+
+@dataclass(slots=True)
 class LostPetPhotoDraft:
     id: UUID
     photo_url: str

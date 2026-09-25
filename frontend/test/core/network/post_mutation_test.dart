@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/comments/presentation/screens/comments_screen.dart';
@@ -7,6 +10,44 @@ import '../../support/fakes.dart';
 
 void main() {
   group('post mutations', () {
+    test('constructs one multipart part per selected observation photo',
+        () async {
+      final client = FakeApiClient();
+      final api = MushukistanApi(client: client);
+      client.setHandler('POST', 'posts', (call) {
+        final formData = call.body! as FormData;
+        final photos = formData.files
+            .where((entry) => entry.key == 'photos')
+            .map((entry) => entry.value)
+            .toList(growable: false);
+        expect(photos, hasLength(2));
+        expect(photos.map((photo) => photo.filename), <String>[
+          'first cat.jpg',
+          'второй кот.jpg',
+        ]);
+        return _postPayload(description: 'Two photos', isPublic: true);
+      });
+
+      final post = await api.createObservation(
+        photos: <ObservationPhotoUpload>[
+          ObservationPhotoUpload(
+            bytes: Uint8List.fromList(<int>[1, 2, 3]),
+            filename: 'first cat.jpg',
+            contentType: 'image/jpeg',
+          ),
+          ObservationPhotoUpload(
+            bytes: Uint8List.fromList(<int>[4, 5, 6]),
+            filename: 'второй кот.jpg',
+            contentType: 'image/jpeg',
+          ),
+        ],
+        description: 'Two photos',
+      );
+
+      expect(post.photoUrls, hasLength(1));
+      expect(client.calls, hasLength(1));
+    });
+
     test('updates mutable fields through the owner post endpoint', () async {
       final client = FakeApiClient();
       final api = MushukistanApi(client: client);

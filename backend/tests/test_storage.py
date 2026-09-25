@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import boto3
 import pytest
+from botocore.exceptions import EndpointConnectionError
 from botocore.stub import Stubber
 from PIL import Image
 
@@ -130,6 +131,28 @@ def test_invalid_file_signature_rejected() -> None:
             b"not-an-image",
             content_type="image/jpeg",
             original_filename="avatar.jpg",
+        )
+
+
+@pytest.mark.parametrize(
+    ("content", "content_type", "filename"),
+    [
+        (b"RIFF0000WEBP", "image/webp", "cat.webp"),
+        (b"\x00\x00\x00\x18ftypheic", "image/heic", "cat.heic"),
+    ],
+)
+def test_webp_and_heic_are_rejected_cleanly(
+    content: bytes,
+    content_type: str,
+    filename: str,
+) -> None:
+    processor = ImageProcessor()
+
+    with pytest.raises(StorageValidationError):
+        processor.validate_upload(
+            content,
+            content_type=content_type,
+            original_filename=filename,
         )
 
 
@@ -274,6 +297,37 @@ def test_local_storage_rejects_paths_outside_media_root(tmp_path, unsafe_key: st
         storage.delete(unsafe_key)
 
 
+def test_pixel_limit_rejects_image_before_full_decode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    processor = ImageProcessor()
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+    content = _make_png(size=(11, 10))
+
+    with pytest.raises(StorageValidationError, match="dimensions are too large"):
+        processor.validate_upload(
+            content,
+            content_type="image/png",
+            original_filename="large dimensions.png",
+        )
+
+
+def test_unicode_and_space_filename_is_accepted_but_not_used_as_object_key() -> None:
+    storage = MemoryObjectStorage()
+    service = MediaStorageService(storage=storage)
+
+    result = service.upload_image(
+        purpose=UploadPurpose.USER_AVATAR,
+        entity_id=uuid4(),
+        content=_make_jpeg(),
+        content_type="image/jpeg",
+        original_filename="мой кот.jpg",
+    )
+
+    assert "мой кот" not in result.canonical.key
+    assert result.canonical.key.startswith("users/avatars/")
+
+
 def test_local_storage_allows_normal_generated_key(tmp_path) -> None:
     storage = LocalFileObjectStorage(tmp_path / "media")
     key = "posts/original/2026/09/20/post_uuid.jpg"
@@ -364,7 +418,71 @@ def test_r2_adapter_with_stubbed_client() -> None:
             is True
         )
         storage.delete("users/avatars/2026/07/24/avatar_uuid_20260724T120000Z_deadbeef.jpg")
-        storage.delete("users/avatars/2026/07/24/avatar_uuid_20260724T120000Z_deadbeef.jpg")
+
+
+def test_r2_transport_failure_is_normalized() -> None:
+    class FailingClient:
+        def put_object(self, **_kwargs):
+            raise EndpointConnectionError(endpoint_url="https://r2.example.invalid")
+
+    storage = R2ObjectStorage(
+        R2StorageConfig(
+            account_id="account",
+            access_key_id="access",
+            secret_access_key="secret",
+            bucket="mushukistan-media",
+            public_base_url="https://media.example.com",
+        ),
+        client=FailingClient(),
+    )
+
+    with pytest.raises(StorageOperationError, match="Cloudflare R2"):
+        storage.upload(
+            key="users/avatars/test.jpg",
+            content=b"payload",
+            content_type="image/jpeg",
+        )
+
+
+def test_r2_put_object_client_error_is_normalized() -> None:
+    client = boto3.client(
+        "s3",
+        endpoint_url="https://1234567890.r2.cloudflarestorage.com",
+        aws_access_key_id="access",
+        aws_secret_access_key="secret",
+        region_name="auto",
+    )
+    stubber = Stubber(client)
+    stubber.add_client_error(
+        "put_object",
+        service_error_code="AccessDenied",
+        service_message="denied",
+        expected_params={
+            "Bucket": "mushukistan-media",
+            "Key": "users/avatars/test.jpg",
+            "Body": b"payload",
+            "ContentType": "image/jpeg",
+            "Metadata": {},
+            "CacheControl": None,
+        },
+    )
+    storage = R2ObjectStorage(
+        R2StorageConfig(
+            account_id="1234567890",
+            access_key_id="access",
+            secret_access_key="secret",
+            bucket="mushukistan-media",
+            public_base_url="https://media.example.com",
+        ),
+        client=client,
+    )
+
+    with stubber, pytest.raises(StorageOperationError, match="Cloudflare R2"):
+        storage.upload(
+            key="users/avatars/test.jpg",
+            content=b"payload",
+            content_type="image/jpeg",
+        )
 
 
 @pytest.mark.integration
@@ -385,6 +503,7 @@ def test_optional_live_r2_smoke() -> None:
     storage = R2ObjectStorage(config)
     key = f"tests/smoke/{uuid4().hex}/smoke.png"
     content = _make_png(size=(8, 8))
+    assert storage.exists(key) is False
 
     try:
         uploaded = storage.upload(
@@ -396,5 +515,9 @@ def test_optional_live_r2_smoke() -> None:
         )
         assert uploaded.key == key
         assert storage.exists(key) is True
+        head = storage._client.head_object(Bucket=config.bucket, Key=key)
+        assert head["ContentType"] == "image/png"
+        assert head["Metadata"] == {"purpose": "smoke", "variant": "original"}
     finally:
         storage.delete(key)
+    assert storage.exists(key) is False

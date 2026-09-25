@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/navigation/settings_changes_guard.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
@@ -48,6 +49,12 @@ class ProfileScreen extends ConsumerWidget {
               switch (action) {
                 case _ProfileAction.logout:
                   if (authState.isBusy) {
+                    return;
+                  }
+                  if (!await confirmLeavingSettings(context, ref)) {
+                    return;
+                  }
+                  if (!context.mounted) {
                     return;
                   }
                   final confirmed = await _confirmLogout(context, strings);
@@ -151,6 +158,13 @@ Future<void> _showDonationDialog(
           children: [
             Text(strings.supportCardIntro),
             const SizedBox(height: AppSpacing.md),
+            Text(
+              strings.supportRecipient,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             SelectableText(
               strings.supportCardNumber,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(

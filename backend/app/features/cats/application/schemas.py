@@ -195,6 +195,7 @@ class CatListQuery(BaseModel):
     longitude: float | None = Field(default=None, ge=-180, le=180)
     radius_meters: int | None = Field(default=None, ge=1)
     bbox: str | None = None
+    kind: PostKind | None = None
     limit: int = Field(default=20, ge=1, le=100)
     cursor: str | None = None
 

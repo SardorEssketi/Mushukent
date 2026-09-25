@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from jose import jwt
 from sqlalchemy import select
 
+from app.api.v1.routes import auth as auth_routes
 from app.core.auth import AuthenticatedPrincipal, GoogleIdTokenClaims, Role
 from app.core.config import Settings
 from app.core.container import AppContainer
@@ -45,14 +46,18 @@ def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
 
 class StubGoogleVerifier:
     def verify(self, id_token: str) -> GoogleIdTokenClaims:
-        if id_token != "google-id-token":
+        if id_token not in {"google-id-token", "google-id-token-2", "google-upper-token"}:
             raise HTTPException(status_code=401, detail="Invalid Google token.")
         return GoogleIdTokenClaims(
-            email="google-user@example.com",
+            email=(
+                "GOOGLE-USER@EXAMPLE.COM"
+                if id_token == "google-upper-token"
+                else "google-user@example.com"
+            ),
             iss="accounts.google.com",
             aud="google-client-id",
             exp=datetime.now(UTC) + timedelta(minutes=5),
-            sub="google-subject",
+            sub="other-google-subject" if id_token == "google-id-token-2" else "google-subject",
             name="Google User",
             email_verified=True,
             raw={"id_token": id_token},
@@ -76,11 +81,19 @@ class InMemoryAuthUserRepository:
     def get_by_email(self, email: str) -> AuthUser | None:
         return self.users_by_email.get(email.casefold())
 
+    def get_by_google_subject(self, subject: str) -> AuthUser | None:
+        return next((u for u in self.users_by_id.values() if u.google_subject == subject), None)
+
+    def get_by_id_for_update(self, user_id: UUID) -> AuthUser | None:
+        return self.get_by_id(user_id)
+
     def create(
         self,
         *,
         email: str,
         password_hash: str | None,
+        google_subject: str | None = None,
+        legacy_google_unbound: bool = False,
         name: str | None = None,
         preferred_language: str = "en",
         email_verified: bool = False,
@@ -93,6 +106,8 @@ class InMemoryAuthUserRepository:
             id=uuid4(),
             email=email,
             password_hash=password_hash,
+            google_subject=google_subject,
+            legacy_google_unbound=legacy_google_unbound,
             name=name,
             preferred_language=preferred_language,
             email_verified=email_verified,
@@ -380,6 +395,42 @@ def test_google_verifier_accepts_any_configured_audience(
     assert claims.email == "google-user@example.com"
 
 
+@pytest.mark.parametrize(
+    ("email", "subject", "expected_code"),
+    [
+        (None, "google-subject", "GOOGLE_EMAIL_MISSING"),
+        ("google-user@example.com", None, "INVALID_GOOGLE_TOKEN"),
+    ],
+)
+def test_google_verifier_requires_email_and_stable_subject(
+    monkeypatch: pytest.MonkeyPatch,
+    email: str | None,
+    subject: str | None,
+    expected_code: str,
+) -> None:
+    verifier = GoogleOAuthIdTokenVerifier(_test_settings(monkeypatch))
+    monkeypatch.setattr(
+        token_module.jwt, "get_unverified_header", lambda _: {"alg": "RS256", "kid": "kid"}
+    )
+    monkeypatch.setattr(verifier, "_google_public_key", lambda _: "public-key")
+    monkeypatch.setattr(
+        token_module.jwt,
+        "decode",
+        lambda *_, **__: {
+            "iss": "https://accounts.google.com",
+            "aud": "google-client-id",
+            "exp": int((datetime.now(UTC) + timedelta(minutes=5)).timestamp()),
+            "email": email,
+            "sub": subject,
+            "email_verified": True,
+        },
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        verifier.verify("google-id-token")
+    assert excinfo.value.detail["error"]["code"] == expected_code
+
+
 def test_google_verifier_rejects_unconfigured_audience(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -589,6 +640,7 @@ def test_google_service_existing_user_with_legal_acceptance_does_not_require_fla
         email="google-user@example.com",
         password_hash=None,
         name="Existing User",
+        legacy_google_unbound=True,
         email_verified=True,
         accepted_terms_version=CURRENT_TERMS_VERSION,
         accepted_privacy_version=CURRENT_PRIVACY_VERSION,
@@ -611,6 +663,7 @@ def test_google_service_existing_user_without_current_legal_acceptance_requires_
         email="google-user@example.com",
         password_hash=None,
         name="Existing User",
+        legacy_google_unbound=True,
         email_verified=True,
     )
     service = _auth_service_with_repository(monkeypatch, repository)
@@ -918,6 +971,171 @@ def test_google_login_creates_or_updates_user(client: TestClient, auth_runtime) 
         assert user.accepted_legal_at is not None
 
 
+def test_google_user_can_set_and_change_password_without_losing_google(
+    client: TestClient, auth_runtime
+) -> None:
+    _, auth_service = auth_runtime
+    google = client.post(
+        "/api/v1/auth/google",
+        json={"id_token": "google-id-token", "accept_terms": True, "accept_privacy": True},
+    )
+    assert google.status_code == 200
+    user_id = google.json()["data"]["user"]["id"]
+    headers = {"Authorization": f"Bearer {google.json()['data']['access_token']}"}
+    methods = client.get("/api/v1/auth/methods", headers=headers)
+    assert methods.json()["data"] == {"has_password": False, "google_connected": True}
+    assert "password_hash" not in str(methods.json())
+    assert (
+        client.post(
+            "/api/v1/auth/set-password",
+            json={"new_password": "Password123", "confirm_password": "Password123"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/set-password",
+            headers=headers,
+            json={"new_password": "short", "confirm_password": "short"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/set-password",
+            headers=headers,
+            json={"new_password": "Password123", "confirm_password": "WrongPass123"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/set-password",
+            headers=headers,
+            json={
+                "new_password": "Password123",
+                "confirm_password": "Password123",
+                "user_id": str(uuid4()),
+            },
+        ).status_code
+        == 422
+    )
+    result = client.post(
+        "/api/v1/auth/set-password",
+        headers=headers,
+        json={"new_password": "Password123", "confirm_password": "Password123"},
+    )
+    assert result.status_code == 204
+    assert (
+        client.post(
+            "/api/v1/auth/set-password",
+            headers=headers,
+            json={"new_password": "Password456", "confirm_password": "Password456"},
+        ).status_code
+        == 409
+    )
+    with auth_service.db_session_manager.session_scope() as session:
+        users = session.scalars(select(schema.User)).all()
+        assert len(users) == 1
+        assert users[0].password_hash != "Password123"
+        assert users[0].password_hash.startswith("$argon2")
+        assert users[0].google_subject == "google-subject"
+    password_login = client.post(
+        "/api/v1/auth/login", json={"email": "GOOGLE-USER@EXAMPLE.COM", "password": "Password123"}
+    )
+    assert password_login.status_code == 200
+    assert password_login.json()["data"]["user"]["id"] == user_id
+    google_again = client.post("/api/v1/auth/google", json={"id_token": "google-upper-token"})
+    assert google_again.status_code == 200
+    assert google_again.json()["data"]["user"]["id"] == user_id
+    assert client.get("/api/v1/auth/methods", headers=headers).json()["data"] == {
+        "has_password": True,
+        "google_connected": True,
+    }
+    assert (
+        client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={
+                "current_password": "WrongPass123",
+                "new_password": "Password456",
+                "confirm_password": "Password456",
+            },
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={
+                "current_password": "Password123",
+                "new_password": "Password456",
+                "confirm_password": "Password456",
+            },
+        ).status_code
+        == 204
+    )
+    assert (
+        client.post(
+            "/api/v1/auth/login",
+            json={"email": "google-user@example.com", "password": "Password123"},
+        ).status_code
+        == 401
+    )
+    new_login = client.post(
+        "/api/v1/auth/login", json={"email": "google-user@example.com", "password": "Password456"}
+    )
+    assert new_login.status_code == 200
+    assert new_login.json()["data"]["user"]["id"] == user_id
+    assert (
+        client.post("/api/v1/auth/google", json={"id_token": "google-id-token"}).json()["data"][
+            "user"
+        ]["id"]
+        == user_id
+    )
+
+
+def test_password_account_requires_authenticated_google_connection(
+    client: TestClient, auth_runtime
+) -> None:
+    _, auth_service = auth_runtime
+    registered = auth_service.register(
+        "google-user@example.com",
+        "Password123",
+        "Password User",
+        accept_terms=True,
+        accept_privacy=True,
+    )
+    auth_service.verify_email(registered.dev_verification_token)
+    google_attempt = client.post("/api/v1/auth/google", json={"id_token": "google-id-token"})
+    assert google_attempt.status_code == 409
+    assert google_attempt.json()["error"]["code"] == "GOOGLE_LINK_REQUIRED"
+    password_login = client.post(
+        "/api/v1/auth/login", json={"email": "google-user@example.com", "password": "Password123"}
+    )
+    assert password_login.status_code == 200
+    user_id = password_login.json()["data"]["user"]["id"]
+    headers = {"Authorization": f"Bearer {password_login.json()['data']['access_token']}"}
+    assert (
+        client.post(
+            "/api/v1/auth/connect-google", headers=headers, json={"id_token": "google-id-token"}
+        ).status_code
+        == 204
+    )
+    assert (
+        client.post("/api/v1/auth/google", json={"id_token": "google-id-token"}).json()["data"][
+            "user"
+        ]["id"]
+        == user_id
+    )
+    conflicting = client.post("/api/v1/auth/google", json={"id_token": "google-id-token-2"})
+    assert conflicting.status_code == 409
+    assert conflicting.json()["error"]["code"] == "GOOGLE_IDENTITY_CONFLICT"
+    with auth_service.db_session_manager.session_scope() as session:
+        assert len(session.scalars(select(schema.User)).all()) == 1
+
+
 def test_google_login_rejects_new_user_without_legal_acceptance(
     client: TestClient,
     auth_runtime,
@@ -939,6 +1157,31 @@ def test_google_login_rejects_new_user_without_legal_acceptance(
         assert user is None
 
 
+def test_google_failure_log_excludes_credentials(
+    client: TestClient, auth_runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    records: list[tuple[str, dict[str, object]]] = []
+
+    class RecordingLogger:
+        def info(self, event: str, **fields: object) -> None:
+            records.append((event, fields))
+
+    monkeypatch.setattr(auth_routes, "logger", RecordingLogger())
+    response = client.post("/api/v1/auth/google", json={"id_token": "google-id-token"})
+    assert response.status_code == 422
+    assert records == [
+        (
+            "google_auth_rejected",
+            {
+                "provider": "google",
+                "status_code": 422,
+                "error_code": "LEGAL_ACCEPTANCE_REQUIRED",
+            },
+        )
+    ]
+    assert "google-id-token" not in str(records)
+
+
 def test_google_login_existing_user_with_legal_acceptance_does_not_require_flags(
     client: TestClient,
     auth_runtime,
@@ -946,16 +1189,18 @@ def test_google_login_existing_user_with_legal_acceptance_does_not_require_flags
     _, auth_service = auth_runtime
     with auth_service.db_session_manager.session_scope() as session:
         repository = SqlAlchemyAuthUserRepository(session)
-        repository.create(
+        legacy = repository.create(
             email="google-user@example.com",
             password_hash=None,
             name="Existing Google User",
+            legacy_google_unbound=True,
             email_verified=True,
             is_moderator=False,
             accepted_terms_version=CURRENT_TERMS_VERSION,
             accepted_privacy_version=CURRENT_PRIVACY_VERSION,
             accepted_legal_at=datetime.now(UTC),
         )
+        legacy_id = legacy.id
 
     response = client.post(
         "/api/v1/auth/google",
@@ -966,6 +1211,56 @@ def test_google_login_existing_user_with_legal_acceptance_does_not_require_flags
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["user"]["email"] == "google-user@example.com"
+    assert payload["data"]["user"]["id"] == str(legacy_id)
+    with auth_service.db_session_manager.session_scope() as session:
+        saved = session.scalar(select(schema.User).where(schema.User.id == legacy_id))
+        assert saved.name == "Existing Google User"
+        assert saved.google_subject == "google-subject"
+        assert len(session.scalars(select(schema.User)).all()) == 1
+
+
+def test_unbound_external_legacy_account_requires_authenticated_connection(
+    client: TestClient, auth_runtime
+) -> None:
+    _, auth_service = auth_runtime
+    with auth_service.db_session_manager.session_scope() as session:
+        user = SqlAlchemyAuthUserRepository(session).create(
+            email="google-user@example.com",
+            password_hash=None,
+            name="Legacy Google User",
+            email_verified=True,
+            is_moderator=True,
+            accepted_terms_version=CURRENT_TERMS_VERSION,
+            accepted_privacy_version=CURRENT_PRIVACY_VERSION,
+            accepted_legal_at=datetime.now(UTC),
+        )
+        user_id = user.id
+
+    rejected = client.post("/api/v1/auth/google", json={"id_token": "google-id-token"})
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == "GOOGLE_LEGACY_LINK_REQUIRED"
+    with auth_service.db_session_manager.session_scope() as session:
+        saved = session.scalar(select(schema.User).where(schema.User.id == user_id))
+        assert saved.google_subject is None
+        assert len(session.scalars(select(schema.User)).all()) == 1
+
+    existing_session = auth_service.access_token_service.issue_access_token(
+        AuthenticatedPrincipal(user_id=user_id, role=Role.MODERATOR)
+    )
+    headers = {"Authorization": f"Bearer {existing_session}"}
+    assert (
+        client.post(
+            "/api/v1/auth/connect-google",
+            headers=headers,
+            json={"id_token": "google-id-token"},
+        ).status_code
+        == 204
+    )
+    linked = client.post("/api/v1/auth/google", json={"id_token": "google-id-token"})
+    assert linked.status_code == 200
+    assert linked.json()["data"]["user"]["id"] == str(user_id)
+    with auth_service.db_session_manager.session_scope() as session:
+        assert len(session.scalars(select(schema.User)).all()) == 1
 
 
 def test_google_login_existing_user_without_current_legal_acceptance_requires_flags(
@@ -979,6 +1274,7 @@ def test_google_login_existing_user_without_current_legal_acceptance_requires_fl
             email="google-user@example.com",
             password_hash=None,
             name="Existing Google User",
+            legacy_google_unbound=True,
             email_verified=True,
             is_moderator=False,
         )

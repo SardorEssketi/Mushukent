@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../localization/app_strings.dart';
+import '../navigation/settings_changes_guard.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
 
 class AppShellScaffold extends ConsumerWidget {
@@ -10,7 +11,18 @@ class AppShellScaffold extends ConsumerWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  void _selectBranch(int index) {
+  Future<void> _selectBranch(
+    BuildContext context,
+    WidgetRef ref,
+    int index,
+  ) async {
+    if (index != navigationShell.currentIndex &&
+        ref.read(settingsHasUnsavedChangesProvider)) {
+      final canLeave = await confirmLeavingSettings(context, ref);
+      if (!canLeave) {
+        return;
+      }
+    }
     navigationShell.goBranch(index);
   }
 
@@ -22,7 +34,7 @@ class AppShellScaffold extends ConsumerWidget {
       body: AuthenticatedOnboardingFlow(child: navigationShell),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
-        onDestinationSelected: _selectBranch,
+        onDestinationSelected: (index) => _selectBranch(context, ref, index),
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.home_outlined),

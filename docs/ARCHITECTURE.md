@@ -61,6 +61,14 @@ There is no separate backend integration with OpenStreetMap or any other map ren
 
 Map rendering is completely separated from the domain and API layers.
 
+Map data loading is viewport-driven: the Flutter client sends the visible
+south/west/north/east bbox after movement settles, and the backend applies
+indexed PostGIS spatial predicates before returning lightweight marker fields.
+The client keeps the previous marker set while a new viewport response is in
+flight, debounces camera changes, and ignores responses from older viewport
+requests. Dense normal observations and places use zoom-aware client clustering;
+needs-help and lost-pet markers remain in dedicated alert groups.
+
 Future migration to Yandex Maps, Google Maps, MapLibre, or any other provider must require frontend changes only.
 
 FastAPI Backend

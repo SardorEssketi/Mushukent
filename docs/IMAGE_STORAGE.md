@@ -15,13 +15,15 @@ This document defines the canonical image upload and storage design for MVP. It 
 2. MVP Upload Flow
 ------------------
 2.1 Observation Image Flow (synchronous)
-1. Flutter materializes a selected JPEG/PNG into memory immediately. On Web, picker-provided
+1. Flutter asks native pickers to resize selected camera/gallery images to a 1920 px longest side,
+   then materializes the resulting JPEG/PNG into memory. On Web, picker-provided
    `blob:` URLs are temporary transport handles only: the client reads the bytes first and then
    revokes the URL. Drafts, previews, retries, and multipart uploads retain bytes, never Blob URLs
    or filesystem paths.
 2. Client sends a multipart request to backend endpoint (`POST /api/v1/posts`) with image bytes and metadata.
 3. Backend validates authentication and request payload.
-4. Backend validates file type, size, and decodability.
+4. The API reads at most 10 MB plus one byte per file, rejects more than five files before
+   reading them, and validates file type, pixel dimensions, and decodability.
 5. Backend strips EXIF metadata and normalizes orientation.
 6. Backend generates:
    - canonical image (compressed),
@@ -45,6 +47,8 @@ Folder layout:
 - `posts/thumbs/{yyyy}/{mm}/{dd}/...`
 - `cats/covers/{yyyy}/{mm}/{dd}/...`
 - `users/avatars/{yyyy}/{mm}/{dd}/...`
+- `lost-pets/original/{yyyy}/{mm}/{dd}/...` and `lost-pets/thumbs/...`
+- `adoption/original/{yyyy}/{mm}/{dd}/...` and `adoption/thumbs/...`
 
 Rationale:
 - Keeps object paths predictable and easy to audit.
@@ -100,11 +104,21 @@ Operational note:
 -----------------------------------------
 7.1 Upload Limits
 - Max upload size per image: 10 MB.
+- Max decoded input dimensions: 25 million pixels. Native clients resize before upload;
+  oversized/decompression-bomb inputs are rejected before full server-side pixel decoding.
+- Up to five images may be submitted for observation, lost-pet, and adoption posts.
+- Reverse proxies must allow at least 55 MiB per multipart request so five valid 10 MiB files
+  plus multipart overhead are not rejected at the proxy boundary.
 - Min dimensions: 320x320 recommended (below this may be rejected if quality too low).
 
 7.2 Supported Formats
 - Input accepted: JPEG, PNG.
-- GIF, WebP, HEIC, and video formats are out of MVP scope.
+- GIF, WebP, raw HEIC/HEIF, and video formats are not accepted by the API.
+- The pinned iOS picker converts decodable HEIC/HEIF selections to JPEG; Android 9+ can
+  convert them when the configured native resize succeeds. The Web picker returns original
+  bytes, so the client asks the browser to decode HEIC/HEIF and writes a bounded JPEG only
+  when that browser supports the format. Otherwise it asks the user to export a JPEG.
+- Transparent avatar PNGs remain PNG through client preparation and server processing.
 
 7.3 Validation
 - Verify MIME type and file signature.
@@ -134,8 +148,9 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 - Created on post/profile creation and uploaded immediately.
 
 10.2 Update
-- New upload writes a new object and updates DB URL reference.
-- Old objects may remain for safety until cleanup policy runs.
+- New upload writes a new object and updates the DB URL reference.
+- If the DB write fails, the newly uploaded object is deleted best-effort.
+- After an avatar update commits, the prior owned avatar object is deleted best-effort.
 
 10.3 Deletion
 - Standard post soft-delete does not guarantee immediate media removal.
@@ -159,14 +174,29 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 - Browser CSP must permit `blob:` in `connect-src` while Flutter materializes picker-backed
   `XFile` data. The temporary URL is revoked immediately after the read succeeds or fails.
 - Picker/decoding failures are logged by stage and exception type without image bytes, local
-  paths, tokens, or personal data. Users receive a localized retry/reselect message.
+  paths, tokens, or personal data. Users receive a localized format, invalid-image, size, or
+  read-failure message. HEIC/HEIF conversion failures provide JPEG export guidance.
+- Multipart bodies are cloned before each transport attempt so access-token refresh can replay
+  them safely. Repeated taps are disabled while preparation/submission is active.
+- Ordinary API calls keep the short request timeout. Multipart uploads use a three-minute
+  send/receive timeout, while production Nginx allows 120 seconds for body transfer and 180
+  seconds for the backend response.
+- If the API hostname is Cloudflare-proxied, those origin/client windows do not override
+  Cloudflare's zone limits. Its default proxy read timeout is 125 seconds and its proxy write
+  timeout is 30 seconds; verify the actual zone configuration and upload duration before release.
+  A slow request can fail at the edge even when Nginx and Flutter would continue waiting.
 - If upload to R2 fails: return 502/503 with `IMAGE_UPLOAD_FAILED` and do not commit DB post row.
 - If DB write fails after upload: attempt best-effort object cleanup and return 500.
-- All failures logged with request id and user id (without sensitive payload).
+- Media diagnostics record purpose, byte counts, duration, and error type/reason without image
+  bytes, filenames, tokens, credentials, or private request contents.
 
 12. Performance Notes (MVP)
 ---------------------------
-- Synchronous processing keeps infrastructure simple but increases request latency.
+- Processing and R2 writes remain synchronous within each request, but upload endpoints run the
+  blocking Pillow/R2/DB work in the server thread pool so one upload does not block the ASGI event
+  loop. Each backend process admits at most two upload-processing requests concurrently to bound
+  decoded-image memory use; additional uploads wait without blocking the event loop.
+- R2 calls use bounded connect/read timeouts and standard retries for transient transport errors.
 - Use thumbnails in feed and map to reduce client bandwidth.
 - Consider CDN caching headers for media URLs.
 

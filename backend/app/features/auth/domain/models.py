@@ -10,6 +10,8 @@ class AuthUser:
     id: UUID
     email: str
     password_hash: str | None
+    google_subject: str | None = None
+    legacy_google_unbound: bool = False
     name: str | None = None
     avatar_url: str | None = None
     phone_number: str | None = None

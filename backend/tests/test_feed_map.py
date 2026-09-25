@@ -14,7 +14,7 @@ from app.core.container import AppContainer
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 from app.features.cats.domain.models import CatStatus
-from app.infrastructure.db.enums import PlaceCategory, PlaceSource
+from app.infrastructure.db.enums import PlaceCategory, PlaceSource, PostKind
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.main import app
@@ -138,6 +138,7 @@ def _create_post(
     longitude: float | None = 69.25,
     created_at: datetime | None = None,
     deleted_at: datetime | None = None,
+    kind: PostKind = PostKind.OBSERVATION,
 ):
     created_at = created_at or datetime.now(UTC)
     with db_session_manager.session_scope() as session:
@@ -153,6 +154,7 @@ def _create_post(
                 else None
             ),
             status=CatStatus.UNKNOWN,
+            kind=kind,
             is_public=is_public,
             like_count=like_count,
             comment_count=comment_count,
@@ -272,6 +274,9 @@ def _create_lost_pet(
     latitude: float = 41.3,
     longitude: float = 69.25,
     created_at: datetime | None = None,
+    is_public: bool = True,
+    is_resolved: bool = False,
+    deleted_at: datetime | None = None,
 ):
     created_at = created_at or datetime.now(UTC)
     with db_session_manager.session_scope() as session:
@@ -282,10 +287,11 @@ def _create_lost_pet(
             owner_phone_publication_consent=True,
             last_seen_location=WKTElement(f"POINT({longitude} {latitude})", srid=4326),
             additional_info="Please help find this pet.",
-            is_resolved=False,
-            is_public=True,
+            is_resolved=is_resolved,
+            is_public=is_public,
             created_at=created_at,
             updated_at=created_at,
+            deleted_at=deleted_at,
         )
         lost_pet.photos = [
             schema.LostPetPhoto(
@@ -1019,6 +1025,228 @@ def test_map_nearby_and_bbox_response_shape(client: TestClient, feed_runtime) ->
     assert str(outside.id) not in bbox_ids
 
 
+def test_map_bbox_kind_filter_includes_edges_and_excludes_hidden_content(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    user, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="map-bbox-user@example.com",
+    )
+    normal_cat = _create_cat(
+        feed_runtime.db_session_manager,
+        creator_id=user.id,
+        canonical_location=(41.2000, 69.1000),
+    )
+    latest_needs_help_cat = _create_cat(
+        feed_runtime.db_session_manager,
+        creator_id=user.id,
+        canonical_location=(41.2500, 69.2000),
+    )
+    latest_observation_cat = _create_cat(
+        feed_runtime.db_session_manager,
+        creator_id=user.id,
+        canonical_location=(41.2600, 69.2100),
+    )
+    no_public_post_cat = _create_cat(
+        feed_runtime.db_session_manager,
+        creator_id=user.id,
+        canonical_location=(41.2700, 69.2200),
+    )
+    outside_cat = _create_cat(
+        feed_runtime.db_session_manager,
+        creator_id=user.id,
+        canonical_location=(41.5000, 69.5000),
+    )
+    _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=normal_cat.id,
+        user_id=user.id,
+        latitude=41.2000,
+        longitude=69.1000,
+        kind=PostKind.OBSERVATION,
+    )
+    kind_transition_start = datetime.now(UTC) - timedelta(minutes=2)
+    _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=latest_needs_help_cat.id,
+        user_id=user.id,
+        latitude=41.2500,
+        longitude=69.2000,
+        kind=PostKind.OBSERVATION,
+        created_at=kind_transition_start,
+    )
+    _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=latest_needs_help_cat.id,
+        user_id=user.id,
+        latitude=41.2500,
+        longitude=69.2000,
+        kind=PostKind.NEEDS_HELP,
+        created_at=kind_transition_start + timedelta(seconds=1),
+    )
+    _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=latest_observation_cat.id,
+        user_id=user.id,
+        latitude=41.2600,
+        longitude=69.2100,
+        kind=PostKind.NEEDS_HELP,
+        created_at=kind_transition_start,
+    )
+    _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=latest_observation_cat.id,
+        user_id=user.id,
+        latitude=41.2600,
+        longitude=69.2100,
+        kind=PostKind.OBSERVATION,
+        created_at=kind_transition_start + timedelta(seconds=1),
+    )
+    _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=outside_cat.id,
+        user_id=user.id,
+        latitude=41.5000,
+        longitude=69.5000,
+        kind=PostKind.OBSERVATION,
+    )
+
+    bbox = "69.1,41.2,69.3,41.4"
+    observation_response = client.get(
+        "/api/v1/cats",
+        params={"filter": "recently_added", "kind": "observation", "bbox": bbox},
+    )
+    needs_help_response = client.get(
+        "/api/v1/cats",
+        params={"filter": "recently_added", "kind": "needs_help", "bbox": bbox},
+    )
+
+    assert observation_response.status_code == 200
+    assert needs_help_response.status_code == 200
+    observation_ids = {item["id"] for item in observation_response.json()["data"]["items"]}
+    needs_help_ids = {item["id"] for item in needs_help_response.json()["data"]["items"]}
+    assert str(normal_cat.id) in observation_ids
+    assert str(latest_needs_help_cat.id) not in observation_ids
+    assert str(latest_needs_help_cat.id) in needs_help_ids
+    assert str(latest_observation_cat.id) in observation_ids
+    assert str(latest_observation_cat.id) not in needs_help_ids
+    assert str(no_public_post_cat.id) not in observation_ids | needs_help_ids
+    assert str(outside_cat.id) not in observation_ids | needs_help_ids
+
+    observation_items = {item["id"]: item for item in observation_response.json()["data"]["items"]}
+    needs_help_items = {item["id"]: item for item in needs_help_response.json()["data"]["items"]}
+    assert observation_items[str(latest_observation_cat.id)]["latest_post_kind"] == "observation"
+    assert needs_help_items[str(latest_needs_help_cat.id)]["latest_post_kind"] == "needs_help"
+
+    inside_lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=user.id,
+        pet_name="Edge pet",
+        latitude=41.2,
+        longitude=69.1,
+    )
+    outside_lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=user.id,
+        pet_name="Outside pet",
+        latitude=41.5,
+        longitude=69.5,
+    )
+    hidden_lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=user.id,
+        pet_name="Hidden pet",
+        latitude=41.25,
+        longitude=69.2,
+        is_public=False,
+    )
+    deleted_lost_pet = _create_lost_pet(
+        feed_runtime.db_session_manager,
+        user_id=user.id,
+        pet_name="Deleted pet",
+        latitude=41.25,
+        longitude=69.2,
+        deleted_at=datetime.now(UTC),
+    )
+    lost_response = client.get(
+        "/api/v1/lost-pets/map",
+        params={"bbox": bbox},
+    )
+    assert lost_response.status_code == 200
+    lost_items = lost_response.json()["data"]["items"]
+    lost_ids = {item["id"] for item in lost_items}
+    assert str(inside_lost_pet) in lost_ids
+    assert str(outside_lost_pet) not in lost_ids
+    assert str(hidden_lost_pet) not in lost_ids
+    assert str(deleted_lost_pet) not in lost_ids
+    assert "owner_phone_number" not in lost_items[0]
+    assert "photo_urls" not in lost_items[0]
+
+
+def test_map_bbox_latest_kind_uses_post_id_tiebreaker(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    user, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="map-bbox-tiebreak@example.com",
+    )
+    cat = _create_cat(
+        feed_runtime.db_session_manager,
+        creator_id=user.id,
+        canonical_location=(41.2800, 69.2300),
+    )
+    created_at = datetime.now(UTC) - timedelta(minutes=1)
+    observation_id = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=user.id,
+        latitude=41.2800,
+        longitude=69.2300,
+        kind=PostKind.OBSERVATION,
+        created_at=created_at,
+    )
+    needs_help_id = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=user.id,
+        latitude=41.2800,
+        longitude=69.2300,
+        kind=PostKind.NEEDS_HELP,
+        created_at=created_at,
+    )
+    expected_kind = "needs_help" if needs_help_id > observation_id else "observation"
+    other_kind = "observation" if expected_kind == "needs_help" else "needs_help"
+
+    latest_response = client.get(
+        "/api/v1/cats",
+        params={
+            "filter": "recently_added",
+            "kind": expected_kind,
+            "bbox": "69.2,41.2,69.3,41.4",
+        },
+    )
+    other_response = client.get(
+        "/api/v1/cats",
+        params={
+            "filter": "recently_added",
+            "kind": other_kind,
+            "bbox": "69.2,41.2,69.3,41.4",
+        },
+    )
+
+    assert latest_response.status_code == 200
+    assert other_response.status_code == 200
+    latest_items = latest_response.json()["data"]["items"]
+    other_items = other_response.json()["data"]["items"]
+    latest_item = next(item for item in latest_items if item["id"] == str(cat.id))
+    assert latest_item["latest_post_kind"] == expected_kind
+    assert str(cat.id) not in {item["id"] for item in other_items}
+
+
 def test_places_endpoint_filters_categories_and_returns_phone(
     client: TestClient,
     feed_runtime,
@@ -1165,3 +1393,39 @@ def test_places_endpoint_falls_back_to_legacy_category_without_links(
     assert [item["id"] for item in items] == [str(legacy)]
     assert items[0]["category"] == "pet_shop"
     assert items[0]["categories"] == ["pet_shop"]
+
+
+def test_places_map_payload_is_compact_and_detail_is_loaded_separately(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    place_id = _create_place(
+        feed_runtime.db_session_manager,
+        name="Compact Vet",
+        category=PlaceCategory.VETERINARY,
+        latitude=41.3,
+        longitude=69.25,
+        phone="+998 90 123 45 67",
+        description="Long detail that should not be sent with map markers.",
+        source_id="node/compact",
+    )
+
+    map_response = client.get(
+        "/api/v1/places",
+        params={
+            "category": "veterinary",
+            "bbox": "69.2,41.2,69.3,41.4",
+            "map_only": "true",
+        },
+    )
+    assert map_response.status_code == 200
+    map_item = map_response.json()["data"]["items"][0]
+    assert map_item["id"] == str(place_id)
+    assert "phone" not in map_item
+    assert "description" not in map_item
+
+    detail_response = client.get(f"/api/v1/places/{place_id}")
+    assert detail_response.status_code == 200
+    detail = detail_response.json()["data"]
+    assert detail["phone"] == "+998 90 123 45 67"
+    assert detail["description"] == "Long detail that should not be sent with map markers."

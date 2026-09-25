@@ -2,6 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile, status
 
+from app.api.v1.uploads import read_image_upload, run_upload_processing
 from app.core.dependencies import (
     get_comments_service,
     get_current_active_user,
@@ -134,13 +135,17 @@ async def update_my_avatar(
     current_user: AuthUser = Depends(get_current_active_user),
     users_service: UsersService = Depends(get_users_service),
 ) -> ApiSuccess[UserProfile]:
-    content = await avatar.read()
+    content, content_type, filename = await read_image_upload(
+        avatar,
+        purpose="user_avatar",
+    )
     return ApiSuccess(
-        data=users_service.update_avatar(
+        data=await run_upload_processing(
+            users_service.update_avatar,
             current_user,
             content=content,
-            content_type=avatar.content_type,
-            filename=avatar.filename,
+            content_type=content_type,
+            filename=filename,
         )
     )
 

@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 import boto3
-from botocore.exceptions import ClientError
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.config import Settings
 from app.core.storage import (
@@ -59,6 +60,12 @@ class R2ObjectStorage(ObjectStorage):
             endpoint_url=config.endpoint_url,
             aws_access_key_id=config.access_key_id,
             aws_secret_access_key=config.secret_access_key,
+            config=Config(
+                connect_timeout=10,
+                read_timeout=30,
+                retries={"mode": "standard", "max_attempts": 3},
+                tcp_keepalive=True,
+            ),
         )
 
     @classmethod
@@ -83,7 +90,7 @@ class R2ObjectStorage(ObjectStorage):
                 Metadata=metadata or {},
                 CacheControl=cache_control,
             )
-        except ClientError as exc:
+        except (BotoCoreError, ClientError) as exc:
             raise StorageOperationError("Failed to upload object to Cloudflare R2.") from exc
 
         return StoredObject(
@@ -102,6 +109,8 @@ class R2ObjectStorage(ObjectStorage):
             if error_code in {"404", "NoSuchKey", "NotFound"}:
                 return
             raise StorageOperationError("Failed to delete object from Cloudflare R2.") from exc
+        except BotoCoreError as exc:
+            raise StorageOperationError("Failed to delete object from Cloudflare R2.") from exc
 
     def exists(self, key: str) -> bool:
         try:
@@ -111,6 +120,8 @@ class R2ObjectStorage(ObjectStorage):
             error_code = str(exc.response.get("Error", {}).get("Code", ""))
             if error_code in {"404", "NoSuchKey", "NotFound"}:
                 return False
+            raise StorageOperationError("Failed to check whether object exists.") from exc
+        except BotoCoreError as exc:
             raise StorageOperationError("Failed to check whether object exists.") from exc
 
     def public_url(self, key: str) -> str:

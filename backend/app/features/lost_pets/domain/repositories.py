@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from app.features.lost_pets.domain.models import LostPetCreateDraft, LostPetPage, LostPetRecord
+from app.features.lost_pets.domain.models import (
+    LostPetCreateDraft,
+    LostPetMapPage,
+    LostPetPage,
+    LostPetRecord,
+)
 
 
 class LostPetRepository(Protocol):
@@ -22,4 +27,12 @@ class LostPetRepository(Protocol):
         longitude: float | None = None,
         radius_meters: int | None = None,
         valid_for_map: bool = False,
+        bbox: tuple[float, float, float, float] | None = None,
     ) -> LostPetPage: ...
+
+    def list_map_markers(
+        self,
+        *,
+        limit: int,
+        bbox: tuple[float, float, float, float],
+    ) -> LostPetMapPage: ...

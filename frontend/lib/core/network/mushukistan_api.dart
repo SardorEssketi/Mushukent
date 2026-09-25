@@ -29,6 +29,7 @@ class MushukistanApi {
     String? bbox,
     int limit = 20,
     String? cursor,
+    String? kind,
   }) {
     return _client.get<ApiPage<CatSummary>>(
       'cats',
@@ -39,6 +40,7 @@ class MushukistanApi {
         if (lon != null) 'lon': lon,
         if (radiusMeters != null) 'radius_meters': radiusMeters,
         if (bbox != null) 'bbox': bbox,
+        if (kind != null) 'kind': kind,
         'limit': limit,
         if (cursor != null) 'cursor': cursor,
       },
@@ -56,6 +58,7 @@ class MushukistanApi {
     int? radiusMeters,
     String? bbox,
     int limit = 100,
+    bool mapOnly = false,
   }) {
     return _client.get<ApiPage<PlaceSummary>>(
       'places',
@@ -66,12 +69,21 @@ class MushukistanApi {
         if (lon != null) 'lon': lon,
         if (radiusMeters != null) 'radius_meters': radiusMeters,
         if (bbox != null) 'bbox': bbox,
+        if (mapOnly) 'map_only': true,
         'limit': limit,
       },
       decoder: (json) => ApiPage.fromJson(
         json,
         (item) => PlaceSummary.fromJson(item),
       ),
+    );
+  }
+
+  Future<PlaceSummary> getPlace(String placeId) {
+    return _client.get<PlaceSummary>(
+      'places/$placeId',
+      authenticated: false,
+      decoder: (json) => PlaceSummary.fromJson(json),
     );
   }
 
@@ -138,6 +150,7 @@ class MushukistanApi {
     int limit = 20,
     String? cursor,
     bool validForMap = false,
+    String? bbox,
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'lost-pets',
@@ -148,11 +161,30 @@ class MushukistanApi {
         if (radiusMeters != null) 'radius_meters': radiusMeters,
         'limit': limit,
         if (validForMap) 'valid_for_map': true,
+        if (bbox != null) 'bbox': bbox,
         if (cursor != null) 'cursor': cursor,
       },
       decoder: (json) => ApiPage.fromJson(
         json,
         (item) => LostPetData.fromJson(item),
+      ),
+    );
+  }
+
+  Future<ApiPage<LostPetMapData>> listMapLostPets({
+    required String bbox,
+    int limit = 100,
+  }) {
+    return _client.get<ApiPage<LostPetMapData>>(
+      'lost-pets/map',
+      authenticated: false,
+      queryParameters: <String, dynamic>{
+        'bbox': bbox,
+        'limit': limit,
+      },
+      decoder: (json) => ApiPage.fromJson(
+        json,
+        (item) => LostPetMapData.fromJson(item),
       ),
     );
   }
@@ -1161,6 +1193,37 @@ class LostPetData extends FeedItem {
       additionalInfo: _readStringOrNull(map['additional_info']),
       isResolved: _readBool(map['is_resolved']),
       commentCount: _readInt(map['comment_count']),
+      createdAt: _readDateTime(map['created_at']),
+    );
+  }
+}
+
+class LostPetMapData extends FeedItem {
+  const LostPetMapData({
+    required this.id,
+    required this.petName,
+    required this.lastSeenLocation,
+    required this.createdAt,
+    this.isResolved = false,
+  }) : super();
+
+  @override
+  final String id;
+  @override
+  String get itemType => 'lost_pet';
+  final String petName;
+  final GeoPoint lastSeenLocation;
+  final bool isResolved;
+  @override
+  final DateTime createdAt;
+
+  factory LostPetMapData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return LostPetMapData(
+      id: _readString(map['id']),
+      petName: _readString(map['pet_name']),
+      lastSeenLocation: GeoPoint.fromJson(map['last_seen_location']),
+      isResolved: _readBoolOrNull(map['is_resolved']) ?? false,
       createdAt: _readDateTime(map['created_at']),
     );
   }

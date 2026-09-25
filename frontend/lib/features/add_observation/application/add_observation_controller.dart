@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/network/api_error.dart';
+import '../../../core/localization/app_strings.dart';
+import '../../../core/media/selected_image_pipeline.dart';
 import '../../../core/network/mushukistan_api.dart';
 
 final addObservationControllerProvider =
@@ -107,7 +108,10 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     state = state.copyWith(isPublic: value);
   }
 
-  Future<PostDetail> submit({required String fallbackErrorMessage}) async {
+  Future<PostDetail> submit({required AppStrings strings}) async {
+    if (state.submitting) {
+      throw StateError('Observation submission is already in progress.');
+    }
     final location = state.location;
     if (state.photos.isEmpty) {
       throw StateError('Missing observation data.');
@@ -134,9 +138,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     } catch (error) {
       state = state.copyWith(
         submitting: false,
-        errorMessage: error is MushukistanApiException
-            ? error.userMessage
-            : fallbackErrorMessage,
+        errorMessage: photoUploadErrorMessage(strings, error),
       );
       rethrow;
     }

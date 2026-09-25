@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -8,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from geoalchemy2 import WKTElement
 from jose import jwt
+from PIL import Image
 from sqlalchemy import delete, select
 
 from app.core.auth import AuthenticatedPrincipal, Role
@@ -15,6 +17,7 @@ from app.core.config import Settings
 from app.core.container import AppContainer
 from app.core.dependencies import get_users_service
 from app.core.security import api_error
+from app.core.storage import StorageOperationError, StoredObject
 from app.features.auth.infrastructure.tokens import (
     JoseAccessTokenService,
     JoseAccountDeletionTokenService,
@@ -23,6 +26,7 @@ from app.features.users.application.service import UsersService
 from app.features.users.infrastructure.repositories import SqlAlchemyUserProfileRepository
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
+from app.infrastructure.storage.service import MediaStorageService
 from app.main import app
 
 
@@ -32,6 +36,53 @@ class StubAccountDeletionEmailSender:
 
     def send_confirmation_email(self, *, email: str, token: str) -> None:
         self.sent.append((email, token))
+
+
+class AvatarObjectStorage:
+    bucket_name = "mushukistan-media"
+
+    def __init__(self, *, fail_upload: bool = False) -> None:
+        self.fail_upload = fail_upload
+        self.objects: dict[str, StoredObject] = {}
+        self.deleted_keys: list[str] = []
+
+    def upload(
+        self,
+        *,
+        key: str,
+        content: bytes,
+        content_type: str,
+        metadata: dict[str, str] | None = None,
+        cache_control: str | None = None,
+    ) -> StoredObject:
+        if self.fail_upload:
+            raise StorageOperationError("storage unavailable")
+        stored = StoredObject(
+            key=key,
+            url=self.public_url(key),
+            content_type=content_type,
+            size_bytes=len(content),
+            etag="avatar-etag",
+        )
+        self.objects[key] = stored
+        return stored
+
+    def delete(self, key: str) -> None:
+        self.deleted_keys.append(key)
+        self.objects.pop(key, None)
+
+    def exists(self, key: str) -> bool:
+        return key in self.objects
+
+    def public_url(self, key: str) -> str:
+        return f"https://media.example/{key}"
+
+
+def _jpeg_bytes() -> bytes:
+    image = Image.new("RGB", (64, 64), color=(220, 20, 60))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+    return buffer.getvalue()
 
 
 def _test_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
@@ -209,6 +260,118 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
         assert updated.phone_number == "+998 90 123 4567"
         assert updated.avatar_url == "https://example.com/new-avatar.jpg"
         assert updated.is_active is True
+
+
+def test_avatar_upload_persists_generated_media_url(
+    client: TestClient,
+    users_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="avatar-upload@example.com",
+    )
+    storage = AvatarObjectStorage()
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+
+    response = client.post(
+        "/api/v1/users/me/avatar",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"avatar": ("мой кот.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+
+    assert response.status_code == 200
+    avatar_url = response.json()["data"]["avatar_url"]
+    assert avatar_url.startswith("https://media.example/users/avatars/")
+    assert len(storage.objects) == 1
+    with users_runtime.db_session_manager.session_scope() as session:
+        persisted = session.get(schema.User, user.id)
+        assert persisted is not None
+        assert persisted.avatar_url == avatar_url
+
+
+def test_avatar_storage_failure_returns_specific_error(
+    client: TestClient,
+    users_runtime,
+) -> None:
+    _, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="avatar-storage-failure@example.com",
+    )
+    storage = AvatarObjectStorage(fail_upload=True)
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+
+    response = client.post(
+        "/api/v1/users/me/avatar",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"avatar": ("avatar.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "IMAGE_UPLOAD_FAILED"
+
+
+def test_invalid_avatar_returns_validation_error(
+    client: TestClient,
+    users_runtime,
+) -> None:
+    _, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="avatar-invalid@example.com",
+    )
+    storage = AvatarObjectStorage()
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+
+    response = client.post(
+        "/api/v1/users/me/avatar",
+        headers={"Authorization": f"Bearer {token}"},
+        files={"avatar": ("avatar.jpg", b"not-an-image", "image/jpeg")},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_IMAGE"
+    assert storage.objects == {}
+
+
+def test_avatar_upload_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/users/me/avatar",
+        files={"avatar": ("avatar.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
+def test_avatar_object_is_cleaned_when_database_save_fails(
+    users_runtime,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="avatar-db-failure@example.com",
+    )
+    storage = AvatarObjectStorage()
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+
+    def fail_save(self, user):
+        raise RuntimeError("database failure")
+
+    monkeypatch.setattr(SqlAlchemyUserProfileRepository, "save", fail_save)
+
+    with TestClient(app, raise_server_exceptions=False) as no_raise_client:
+        response = no_raise_client.post(
+            "/api/v1/users/me/avatar",
+            headers={"Authorization": f"Bearer {token}"},
+            files={"avatar": ("avatar.jpg", _jpeg_bytes(), "image/jpeg")},
+        )
+
+    assert response.status_code == 500
+    assert storage.objects == {}
+    assert len(storage.deleted_keys) == 1
 
 
 def test_delete_me_deactivates_account_and_rejects_token(

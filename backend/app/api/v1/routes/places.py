@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import ValidationError
@@ -11,6 +12,7 @@ from app.core.security import api_error
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.places.application.schemas import (
     GenericListResponse,
+    PlaceDetailResponse,
     PlaceListItem,
     PlaceListQuery,
 )
@@ -47,6 +49,7 @@ def list_places(
     longitude: float | None = Query(default=None, alias="lon"),
     radius_meters: int | None = Query(default=None),
     bbox: str | None = Query(default=None),
+    map_only: bool = Query(default=False),
     limit: int = Query(default=100, ge=1, le=200),
     places_service: PlacesService = Depends(get_places_service),
 ) -> ApiSuccess[GenericListResponse[PlaceListItem]]:
@@ -58,6 +61,7 @@ def list_places(
                 "longitude": longitude,
                 "radius_meters": radius_meters,
                 "bbox": bbox,
+                "map_only": map_only,
                 "limit": limit,
             }
         )
@@ -69,3 +73,15 @@ def list_places(
             details=_validation_details(exc.errors()),
         ) from exc
     return ApiSuccess(data=places_service.list_places(query))
+
+
+@router.get(
+    "/{place_id}",
+    response_model=ApiSuccess[PlaceDetailResponse],
+    response_model_exclude_none=True,
+)
+def get_place(
+    place_id: UUID,
+    places_service: PlacesService = Depends(get_places_service),
+) -> ApiSuccess[PlaceDetailResponse]:
+    return ApiSuccess(data=places_service.get_place(place_id))

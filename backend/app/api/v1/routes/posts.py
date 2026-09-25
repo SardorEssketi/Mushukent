@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.uploads import read_image_uploads, run_upload_processing
 from app.core.dependencies import (
     get_current_active_user,
     get_optional_current_user,
@@ -183,11 +184,10 @@ async def create_post(
 ) -> ApiSuccess[PostResponse]:
     data, uploads, is_json = await _parse_post_request(request)
     payload = _parse_json_payload(data) if is_json else _parse_multipart_payload(data)
-    photo_payloads = [
-        (await upload.read(), upload.content_type, upload.filename) for upload in uploads
-    ]
+    photo_payloads = await read_image_uploads(uploads, purpose="post_create")
     return ApiSuccess(
-        data=posts_service.create_post(
+        data=await run_upload_processing(
+            posts_service.create_post,
             current_user,
             payload,
             photos=photo_payloads,
@@ -221,11 +221,10 @@ async def update_post(
 ) -> ApiSuccess[PostResponse]:
     data, uploads, is_json = await _parse_post_request(request)
     payload = _parse_update_json_payload(data) if is_json else _parse_update_multipart_payload(data)
-    photo_payloads = [
-        (await upload.read(), upload.content_type, upload.filename) for upload in uploads
-    ]
+    photo_payloads = await read_image_uploads(uploads, purpose="post_update")
     return ApiSuccess(
-        data=posts_service.update_post(
+        data=await run_upload_processing(
+            posts_service.update_post,
             post_id,
             current_user,
             payload,

@@ -61,11 +61,14 @@ class DioMushukistanApiClient implements MushukistanApiClient {
   DioMushukistanApiClient({
     required Dio dio,
     required AuthTokenStore tokenStore,
+    Duration uploadRequestTimeout = const Duration(minutes: 3),
   })  : _dio = dio,
-        _tokenStore = tokenStore;
+        _tokenStore = tokenStore,
+        _uploadRequestTimeout = uploadRequestTimeout;
 
   final Dio _dio;
   final AuthTokenStore _tokenStore;
+  final Duration _uploadRequestTimeout;
   Future<bool>? _refreshInFlight;
 
   @override
@@ -99,7 +102,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         },
       ),
     );
-    return DioMushukistanApiClient(dio: dio, tokenStore: tokenStore);
+    return DioMushukistanApiClient(
+      dio: dio,
+      tokenStore: tokenStore,
+      uploadRequestTimeout: environment.uploadRequestTimeout,
+    );
   }
 
   @override
@@ -217,15 +224,19 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     bool retriedAfterRefresh = false,
   }) async {
     try {
+      final requestBody = body is FormData ? body.clone() : body;
+      final isMultipart = body is FormData;
       final response = await _dio.request<Object?>(
         _normalizePath(path),
-        data: body,
+        data: requestBody,
         queryParameters: _normalizeQueryParameters(queryParameters),
         options: Options(
           method: method,
           responseType: ResponseType.json,
           listFormat: ListFormat.multi,
           extra: {'skipAuth': !authenticated},
+          sendTimeout: isMultipart ? _uploadRequestTimeout : null,
+          receiveTimeout: isMultipart ? _uploadRequestTimeout : null,
         ),
       );
 
@@ -279,8 +290,41 @@ class DioMushukistanApiClient implements MushukistanApiClient {
 
       return _decodePayload(decoder, normalizedPayload);
     } on DioException catch (error) {
+      if (body is FormData && _isNetworkFailure(error.type)) {
+        throw MushukistanApiException(
+          kind: ApiFailureKind.network,
+          statusCode: error.response?.statusCode,
+          code: _isTimeout(error.type)
+              ? 'PHOTO_UPLOAD_TIMEOUT'
+              : 'PHOTO_UPLOAD_NETWORK_ERROR',
+          message: _isTimeout(error.type)
+              ? 'Photo upload took too long. Check your connection and try again.'
+              : 'Photo upload failed. Check your connection and try again.',
+        );
+      }
       throw MushukistanApiException.fromDioException(error);
     }
+  }
+
+  bool _isNetworkFailure(DioExceptionType type) {
+    return switch (type) {
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.transformTimeout ||
+      DioExceptionType.cancel ||
+      DioExceptionType.connectionError ||
+      DioExceptionType.unknown =>
+        true,
+      DioExceptionType.badCertificate || DioExceptionType.badResponse => false,
+    };
+  }
+
+  bool _isTimeout(DioExceptionType type) {
+    return type == DioExceptionType.connectionTimeout ||
+        type == DioExceptionType.receiveTimeout ||
+        type == DioExceptionType.sendTimeout ||
+        type == DioExceptionType.transformTimeout;
   }
 
   bool _shouldRefreshAndRetry(

@@ -16,7 +16,9 @@ from app.features.auth.domain.models import AuthUser
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
     LostPetListItem,
+    LostPetMapListItem,
     LostPetResponse,
+    to_lost_pet_map_page_response,
     to_lost_pet_page_response,
     to_lost_pet_response,
 )
@@ -153,7 +155,9 @@ class LostPetsService:
         longitude: float | None = None,
         radius_meters: int | None = None,
         valid_for_map: bool = False,
+        bbox: str | None = None,
     ) -> GenericListResponse[LostPetListItem]:
+        parsed_bbox = self._parse_bbox(bbox)
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             try:
@@ -164,6 +168,7 @@ class LostPetsService:
                     longitude=longitude,
                     radius_meters=radius_meters,
                     valid_for_map=valid_for_map,
+                    bbox=parsed_bbox,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -173,6 +178,52 @@ class LostPetsService:
                     details={"cursor": ["invalid"]},
                 ) from exc
             return to_lost_pet_page_response(page)
+
+    def list_map_markers(
+        self,
+        *,
+        limit: int,
+        bbox: str,
+    ) -> GenericListResponse[LostPetMapListItem]:
+        parsed_bbox = self._parse_bbox(bbox)
+        if parsed_bbox is None:
+            raise api_error(422, "VALIDATION_ERROR", "Map markers require a bounding box.")
+        with self.db_session_manager.session_scope() as session:
+            page = self.repository_factory(session).list_map_markers(
+                limit=limit,
+                bbox=parsed_bbox,
+            )
+            return to_lost_pet_map_page_response(page)
+
+    @staticmethod
+    def _parse_bbox(bbox: str | None) -> tuple[float, float, float, float] | None:
+        if bbox is None:
+            return None
+        parts = [part.strip() for part in bbox.split(",") if part.strip()]
+        if len(parts) != 4:
+            raise api_error(
+                422, "VALIDATION_ERROR", "Validation failed.", details={"bbox": ["invalid"]}
+            )
+        try:
+            min_lon, min_lat, max_lon, max_lat = (float(part) for part in parts)
+        except ValueError as exc:
+            raise api_error(
+                422, "VALIDATION_ERROR", "Validation failed.", details={"bbox": ["invalid"]}
+            ) from exc
+        if not (
+            -180 <= min_lon <= 180
+            and -180 <= max_lon <= 180
+            and -90 <= min_lat <= 90
+            and -90 <= max_lat <= 90
+        ):
+            raise api_error(
+                422, "VALIDATION_ERROR", "Validation failed.", details={"bbox": ["out_of_range"]}
+            )
+        if min_lon >= max_lon or min_lat >= max_lat:
+            raise api_error(
+                422, "VALIDATION_ERROR", "Validation failed.", details={"bbox": ["invalid_bounds"]}
+            )
+        return (min_lon, min_lat, max_lon, max_lat)
 
     def _upload_photo(
         self,

@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.features.cats.domain.models import GeoPoint
 from app.features.lost_pets.domain.models import (
     LostPetCreateDraft,
+    LostPetMapMarker,
+    LostPetMapPage,
     LostPetPage,
     LostPetPhotoRecord,
     LostPetRecord,
@@ -93,6 +95,7 @@ class SqlAlchemyLostPetRepository:
         longitude: float | None = None,
         radius_meters: int | None = None,
         valid_for_map: bool = False,
+        bbox: tuple[float, float, float, float] | None = None,
     ) -> LostPetPage:
         statement = (
             select(schema.LostPet)
@@ -107,6 +110,11 @@ class SqlAlchemyLostPetRepository:
                 schema.LostPet.is_resolved.is_(False),
                 schema.LostPet.created_at >= datetime.now(UTC) - timedelta(days=30),
             )
+
+        if bbox is not None:
+            min_lon, min_lat, max_lon, max_lat = bbox
+            envelope = func.ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
+            statement = statement.where(schema.LostPet.last_seen_location.op("&&")(envelope))
 
         distance_expr = None
         if latitude is not None or longitude is not None or radius_meters is not None:
@@ -152,6 +160,51 @@ class SqlAlchemyLostPetRepository:
         items = [self._model_to_record(row) for row in rows[:limit]]
         next_cursor = self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None
         return LostPetPage(items=items, next_cursor=next_cursor, limit=limit)
+
+    def list_map_markers(
+        self,
+        *,
+        limit: int,
+        bbox: tuple[float, float, float, float],
+    ) -> LostPetMapPage:
+        min_lon, min_lat, max_lon, max_lat = bbox
+        envelope = func.ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
+        statement = (
+            select(
+                schema.LostPet.id,
+                schema.LostPet.pet_name,
+                func.ST_Y(schema.LostPet.last_seen_location).label("latitude"),
+                func.ST_X(schema.LostPet.last_seen_location).label("longitude"),
+                schema.LostPet.is_resolved,
+                schema.LostPet.created_at,
+            )
+            .where(
+                schema.LostPet.deleted_at.is_(None),
+                schema.LostPet.is_public.is_(True),
+                schema.LostPet.is_resolved.is_(False),
+                schema.LostPet.created_at >= datetime.now(UTC) - timedelta(days=30),
+                schema.LostPet.last_seen_location.op("&&")(envelope),
+            )
+            .order_by(schema.LostPet.created_at.desc(), schema.LostPet.id.desc())
+            .limit(limit)
+        )
+        rows = self.session.execute(statement).mappings().all()
+        return LostPetMapPage(
+            items=[
+                LostPetMapMarker(
+                    id=row["id"],
+                    pet_name=row["pet_name"],
+                    last_seen_location=GeoPoint(
+                        latitude=float(row["latitude"]),
+                        longitude=float(row["longitude"]),
+                    ),
+                    is_resolved=bool(row["is_resolved"]),
+                    created_at=row["created_at"],
+                )
+                for row in rows
+            ],
+            limit=limit,
+        )
 
     def _model_to_record(self, item: schema.LostPet) -> LostPetRecord:
         photos = sorted(item.photos, key=lambda photo: photo.position)

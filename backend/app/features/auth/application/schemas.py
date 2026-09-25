@@ -46,6 +46,28 @@ class GoogleLoginRequest(BaseModel):
     accept_privacy: bool = Field(default=False)
 
 
+class SignInMethods(BaseModel):
+    has_password: bool
+    google_connected: bool
+
+
+class SetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_password: str = Field(min_length=8, max_length=128)
+    confirm_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(SetPasswordRequest):
+    current_password: str = Field(min_length=1, max_length=128)
+
+
+class ConnectGoogleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id_token: str = Field(min_length=1)
+
+
 class UserPublic(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

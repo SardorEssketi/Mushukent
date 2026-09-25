@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import PurePosixPath
+from time import perf_counter
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
@@ -49,6 +50,7 @@ class MediaStorageService:
         content_type: str | None = None,
         original_filename: str | None = None,
     ) -> StoredMedia:
+        started_at = perf_counter()
         try:
             if purpose in {
                 UploadPurpose.POST_OBSERVATION,
@@ -83,7 +85,14 @@ class MediaStorageService:
                 except Exception as exc:
                     self._best_effort_cleanup(canonical.key)
                     raise StorageOperationError("Failed to upload thumbnail image.") from exc
-                return StoredMedia(canonical=canonical, thumbnail=thumbnail)
+                result = StoredMedia(canonical=canonical, thumbnail=thumbnail)
+                self._log_upload_success(
+                    purpose=purpose,
+                    input_size=len(content),
+                    result=result,
+                    started_at=started_at,
+                )
+                return result
 
             image = self.processor.process_avatar_image(
                 content,
@@ -100,14 +109,51 @@ class MediaStorageService:
                 kind=kind,
                 variant=MediaVariant.ORIGINAL,
             )
-            return StoredMedia(canonical=canonical)
-        except StorageValidationError:
+            result = StoredMedia(canonical=canonical)
+            self._log_upload_success(
+                purpose=purpose,
+                input_size=len(content),
+                result=result,
+                started_at=started_at,
+            )
+            return result
+        except StorageValidationError as exc:
+            logger.info(
+                "media_upload_rejected",
+                purpose=purpose.value,
+                input_size=len(content),
+                content_type=content_type,
+                reason=str(exc),
+            )
             raise
-        except StorageOperationError:
+        except StorageOperationError as exc:
+            logger.warning(
+                "media_upload_storage_failed",
+                purpose=purpose.value,
+                input_size=len(content),
+                error_type=type(exc).__name__,
+            )
             raise
         except Exception as exc:  # pragma: no cover - defensive safety net
             logger.exception("Unexpected media upload failure", purpose=purpose.value)
             raise StorageOperationError("Image upload failed.") from exc
+
+    @staticmethod
+    def _log_upload_success(
+        *,
+        purpose: UploadPurpose,
+        input_size: int,
+        result: StoredMedia,
+        started_at: float,
+    ) -> None:
+        logger.info(
+            "media_upload_succeeded",
+            purpose=purpose.value,
+            input_size=input_size,
+            canonical_size=result.canonical.size_bytes,
+            thumbnail_size=(result.thumbnail.size_bytes if result.thumbnail is not None else None),
+            duration_ms=round((perf_counter() - started_at) * 1000),
+        )
 
     def object_exists(self, key: str) -> bool:
         return self.storage.exists(key)

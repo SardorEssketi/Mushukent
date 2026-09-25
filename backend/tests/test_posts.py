@@ -293,6 +293,55 @@ def test_authenticated_post_creation_with_existing_cat_and_image_upload(
     assert len(posts_runtime.fake_storage.objects) == 2
 
 
+def test_multiple_post_photos_are_uploaded_and_persisted(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="multiple-photo-post@example.com",
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=user.id)
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"cat_id": str(cat.id), "description": "Two photos"},
+        files=[
+            ("photos", ("first cat.jpg", _jpeg_bytes(), "image/jpeg")),
+            ("photos", ("второй кот.jpg", _jpeg_bytes((0, 255, 0)), "image/jpeg")),
+        ],
+    )
+
+    assert response.status_code == 201
+    assert len(response.json()["data"]["photo_urls"]) == 2
+    assert len(posts_runtime.fake_storage.objects) == 4
+
+
+def test_more_than_five_post_photos_are_rejected_before_storage(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="too-many-photo-post@example.com",
+    )
+    cat = _create_cat(posts_runtime.db_session_manager, creator_id=user.id)
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        data={"cat_id": str(cat.id), "description": "Too many photos"},
+        files=[("photos", (f"cat-{index}.jpg", _jpeg_bytes(), "image/jpeg")) for index in range(6)],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INVALID_PAYLOAD"
+    assert posts_runtime.fake_storage.objects == {}
+
+
 def test_create_post_with_new_cat_workflow(client: TestClient, posts_runtime) -> None:
     user, token = _create_user_with_token(
         posts_runtime.db_session_manager,

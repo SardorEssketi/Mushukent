@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from typing import Protocol
+from uuid import UUID
 
 from app.core.security import api_error
 from app.features.places.application.schemas import (
     GenericListResponse,
+    PlaceDetailResponse,
     PlaceListItem,
     PlaceListQuery,
     to_place_list_response,
+    to_place_map_response,
 )
 from app.features.places.domain.repositories import PlaceRepository
 from app.infrastructure.db.session import DatabaseSessionManager
@@ -38,12 +41,17 @@ class PlacesService:
                 longitude=query.longitude,
                 radius_meters=query.radius_meters,
                 bbox=bbox,
+                map_only=query.map_only,
             )
-            return to_place_list_response(
-                page.items,
-                next_cursor=page.next_cursor,
-                limit=page.limit,
-            )
+            response_factory = to_place_map_response if query.map_only else to_place_list_response
+            return response_factory(page.items, next_cursor=page.next_cursor, limit=page.limit)
+
+    def get_place(self, place_id: UUID) -> PlaceDetailResponse:
+        with self.db_session_manager.session_scope() as session:
+            item = self.repository_factory(session).get_place(place_id)
+            if item is None:
+                raise api_error(404, "PLACE_NOT_FOUND", "Place not found.")
+            return PlaceDetailResponse.model_validate(item, from_attributes=True)
 
     @staticmethod
     def _parse_bbox(bbox: str | None) -> tuple[float, float, float, float] | None:

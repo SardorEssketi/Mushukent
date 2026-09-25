@@ -8,7 +8,7 @@ from uuid import UUID
 
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy import and_, cast, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.features.cats.domain.models import (
@@ -62,17 +62,23 @@ class SqlAlchemyCatRepository(CatRepository):
         self.session = session
 
     @staticmethod
-    def _latest_public_post_kind_expression():
+    def _latest_public_post_lateral(
+        created_after: datetime | None = None,
+    ):
+        statement = select(
+            schema.Post.id.label("id"),
+            schema.Post.kind.label("kind"),
+        ).where(
+            schema.Post.cat_id == schema.Cat.id,
+            schema.Post.deleted_at.is_(None),
+            schema.Post.is_public.is_(True),
+        )
+        if created_after is not None:
+            statement = statement.where(schema.Post.created_at >= created_after)
         return (
-            select(schema.Post.kind)
-            .where(
-                schema.Post.cat_id == schema.Cat.id,
-                schema.Post.deleted_at.is_(None),
-                schema.Post.is_public.is_(True),
-            )
-            .order_by(schema.Post.created_at.desc(), schema.Post.id.desc())
+            statement.order_by(schema.Post.created_at.desc(), schema.Post.id.desc())
             .limit(1)
-            .scalar_subquery()
+            .lateral("latest_public_post")
         )
 
     def create(self, *, cat: CatRecord) -> CatRecord:
@@ -166,39 +172,43 @@ class SqlAlchemyCatRepository(CatRepository):
         longitude: float | None = None,
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
+        kind: PostKind | None = None,
     ) -> CatListPage:
-        latest_public_post_kind = self._latest_public_post_kind_expression()
-        statement = select(
-            schema.Cat.id,
-            schema.Cat.name,
-            schema.Cat.status,
-            schema.Cat.cover_photo_url,
-            func.ST_X(schema.Cat.canonical_location).label("longitude"),
-            func.ST_Y(schema.Cat.canonical_location).label("latitude"),
-            schema.Cat.last_seen_at,
-            schema.Cat.total_observations,
-            schema.Cat.created_at,
-            latest_public_post_kind.label("latest_post_kind"),
-        ).where(
-            schema.Cat.deleted_at.is_(None),
-            schema.Cat.is_active.is_(True),
-            schema.Cat.merged_into.is_(None),
+        map_recent_cutoff = datetime.now(UTC) - timedelta(days=10)
+        latest_public_post = self._latest_public_post_lateral(
+            map_recent_cutoff if bbox is not None or filter_by == CatListFilter.NEARBY else None,
+        )
+        statement = (
+            select(
+                schema.Cat.id,
+                schema.Cat.name,
+                schema.Cat.status,
+                schema.Cat.cover_photo_url,
+                func.ST_X(schema.Cat.canonical_location).label("longitude"),
+                func.ST_Y(schema.Cat.canonical_location).label("latitude"),
+                schema.Cat.last_seen_at,
+                schema.Cat.total_observations,
+                schema.Cat.created_at,
+                latest_public_post.c.kind.label("latest_post_kind"),
+            )
+            .select_from(schema.Cat)
+            .join(latest_public_post, true(), isouter=True)
+            .where(
+                schema.Cat.deleted_at.is_(None),
+                schema.Cat.is_active.is_(True),
+                schema.Cat.merged_into.is_(None),
+            )
         )
 
         cursor_payload = _decode_cursor(cursor)
-        map_recent_cutoff = datetime.now(UTC) - timedelta(days=10)
-        recent_public_post_exists = select(1).where(
-            schema.Post.cat_id == schema.Cat.id,
-            schema.Post.deleted_at.is_(None),
-            schema.Post.is_public.is_(True),
-            schema.Post.created_at >= map_recent_cutoff,
-        )
 
         if filter_by == CatListFilter.NEARBY:
             if latitude is None or longitude is None or radius_meters is None:
                 raise ValueError("Nearby filter requires latitude, longitude and radius_meters.")
             statement = statement.where(schema.Cat.canonical_location.is_not(None))
-            statement = statement.where(recent_public_post_exists.exists())
+            statement = statement.where(latest_public_post.c.id.is_not(None))
+            if kind is not None:
+                statement = statement.where(latest_public_post.c.kind == kind)
             reference_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
             statement = statement.where(
                 schema.Cat.canonical_location.op("&&")(
@@ -232,7 +242,9 @@ class SqlAlchemyCatRepository(CatRepository):
             min_lon, min_lat, max_lon, max_lat = bbox
             envelope = func.ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
             statement = statement.where(schema.Cat.canonical_location.is_not(None))
-            statement = statement.where(recent_public_post_exists.exists())
+            statement = statement.where(latest_public_post.c.id.is_not(None))
+            if kind is not None:
+                statement = statement.where(latest_public_post.c.kind == kind)
             statement = statement.where(schema.Cat.canonical_location.op("&&")(envelope))
             bbox_sort_key: Any = func.coalesce(schema.Cat.last_seen_at, schema.Cat.created_at)
             statement = statement.order_by(bbox_sort_key.desc(), schema.Cat.id.asc())
@@ -388,27 +400,31 @@ class SqlAlchemyCatRepository(CatRepository):
         )
 
     def _record_select_statement(self):
-        latest_public_post_kind = self._latest_public_post_kind_expression()
-        return select(
-            schema.Cat.id,
-            schema.Cat.name,
-            schema.Cat.status,
-            schema.Cat.approximate_age_smallyears,
-            schema.Cat.cover_photo_url,
-            func.ST_X(schema.Cat.canonical_location).label("longitude"),
-            func.ST_Y(schema.Cat.canonical_location).label("latitude"),
-            schema.Cat.first_seen_at,
-            schema.Cat.last_seen_at,
-            schema.Cat.total_observations,
-            schema.Cat.total_contributors,
-            schema.Cat.total_likes,
-            schema.Cat.created_at,
-            schema.Cat.updated_at,
-            schema.Cat.created_by,
-            schema.Cat.is_active,
-            schema.Cat.merged_into,
-            schema.Cat.deleted_at,
-            latest_public_post_kind.label("latest_post_kind"),
+        latest_public_post = self._latest_public_post_lateral()
+        return (
+            select(
+                schema.Cat.id,
+                schema.Cat.name,
+                schema.Cat.status,
+                schema.Cat.approximate_age_smallyears,
+                schema.Cat.cover_photo_url,
+                func.ST_X(schema.Cat.canonical_location).label("longitude"),
+                func.ST_Y(schema.Cat.canonical_location).label("latitude"),
+                schema.Cat.first_seen_at,
+                schema.Cat.last_seen_at,
+                schema.Cat.total_observations,
+                schema.Cat.total_contributors,
+                schema.Cat.total_likes,
+                schema.Cat.created_at,
+                schema.Cat.updated_at,
+                schema.Cat.created_by,
+                schema.Cat.is_active,
+                schema.Cat.merged_into,
+                schema.Cat.deleted_at,
+                latest_public_post.c.kind.label("latest_post_kind"),
+            )
+            .select_from(schema.Cat)
+            .join(latest_public_post, true(), isouter=True)
         )
 
     def _to_record_row(self, row: Any) -> CatRecord:
@@ -446,6 +462,9 @@ class SqlAlchemyCatRepository(CatRepository):
             canonical_location=_geometry_to_point(row.longitude, row.latitude),
             last_seen_at=row.last_seen_at,
             total_observations=int(row.total_observations or 0),
+            latest_post_kind=(
+                PostKind(row.latest_post_kind) if row.latest_post_kind is not None else None
+            ),
             distance_meters=getattr(row, "distance_meters", None),
             created_at=row.created_at,
         )

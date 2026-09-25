@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../application/add_observation_controller.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
-import '../../../map/presentation/screens/map_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 
 class AddObservationDetailsScreen extends ConsumerWidget {
@@ -105,10 +105,10 @@ class AddObservationDetailsScreen extends ConsumerWidget {
                   : () async {
                       try {
                         final post = await controller.submit(
-                          fallbackErrorMessage: strings.couldNotSaveChanges,
+                          strings: strings,
                         );
                         ref.invalidate(feedPostsProvider);
-                        ref.invalidate(mapCatsProvider);
+                        ref.read(postMutationRevisionProvider.notifier).state++;
                         ref.invalidate(profileMeProvider);
                         ref.invalidate(leaderboardProvider);
                         if (context.mounted) {

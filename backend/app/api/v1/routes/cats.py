@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.uploads import read_image_upload, run_upload_processing
 from app.core.dependencies import (
     get_cats_service,
     get_current_active_user,
@@ -36,6 +37,7 @@ from app.features.posts.application.schemas import (
     PostListQuery,
 )
 from app.features.posts.application.service import PostsService
+from app.infrastructure.db.enums import PostKind
 
 router = APIRouter(prefix="/cats")
 
@@ -136,14 +138,17 @@ async def create_cat(
 ) -> ApiSuccess[CatResponse]:
     data, upload = await _parse_cat_request(request)
     payload = _parse_create_payload(data)
-    content = await upload.read() if upload is not None else None
+    uploaded = (
+        await read_image_upload(upload, purpose="cat_cover_create") if upload is not None else None
+    )
     return ApiSuccess(
-        data=cats_service.create_cat(
+        data=await run_upload_processing(
+            cats_service.create_cat,
             current_user,
             payload,
-            cover_photo_content=content,
-            cover_photo_content_type=upload.content_type if upload is not None else None,
-            cover_photo_filename=upload.filename if upload is not None else None,
+            cover_photo_content=uploaded[0] if uploaded is not None else None,
+            cover_photo_content_type=uploaded[1] if uploaded is not None else None,
+            cover_photo_filename=uploaded[2] if uploaded is not None else None,
         )
     )
 
@@ -161,15 +166,18 @@ async def update_cat(
 ) -> ApiSuccess[CatResponse]:
     data, upload = await _parse_cat_request(request)
     payload = _parse_update_payload(data)
-    content = await upload.read() if upload is not None else None
+    uploaded = (
+        await read_image_upload(upload, purpose="cat_cover_update") if upload is not None else None
+    )
     return ApiSuccess(
-        data=cats_service.update_cat(
+        data=await run_upload_processing(
+            cats_service.update_cat,
             current_user,
             cat_id,
             payload,
-            cover_photo_content=content,
-            cover_photo_content_type=upload.content_type if upload is not None else None,
-            cover_photo_filename=upload.filename if upload is not None else None,
+            cover_photo_content=uploaded[0] if uploaded is not None else None,
+            cover_photo_content_type=uploaded[1] if uploaded is not None else None,
+            cover_photo_filename=uploaded[2] if uploaded is not None else None,
         )
     )
 
@@ -200,6 +208,7 @@ def list_cats(
     longitude: float | None = Query(default=None, alias="lon"),
     radius_meters: int | None = Query(default=None),
     bbox: str | None = Query(default=None),
+    kind: PostKind | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
     cats_service: CatsService = Depends(get_cats_service),
@@ -212,6 +221,7 @@ def list_cats(
                 "longitude": longitude,
                 "radius_meters": radius_meters,
                 "bbox": bbox,
+                "kind": kind,
                 "limit": limit,
                 "cursor": cursor,
             }

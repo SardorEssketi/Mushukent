@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -169,21 +168,22 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _error = null;
     });
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.image,
-        withData: true,
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: pickerImageQuality,
+        maxWidth: pickerMaxWidth,
+        maxHeight: pickerMaxHeight,
       );
-      if (result == null) {
+      if (image == null) {
         return;
       }
-      final prepared = await preparePlatformFilesForUpload(
-        result.files,
-        limit: 1,
+      final avatar = await preparePickedXFileForUpload(
+        image,
+        preserveTransparency: true,
       );
-      if (prepared.isEmpty || !mounted) {
+      if (!mounted) {
         return;
       }
-      final avatar = prepared.single;
       setState(() {
         _avatarBytes = avatar.bytes;
         _avatarFilename = avatar.filename;
@@ -193,7 +193,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       logPhotoPipelineFailure('avatar_gallery_picker', error);
       if (mounted) {
         setState(() {
-          _error = ref.read(appStringsProvider).couldNotPreparePhoto;
+          _error = selectedImageErrorMessage(
+            ref.read(appStringsProvider),
+            error,
+          );
         });
       }
     } finally {
@@ -215,11 +218,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       final image = await ImagePicker().pickImage(
         source: ImageSource.camera,
         imageQuality: pickerImageQuality,
+        maxWidth: pickerMaxWidth,
+        maxHeight: pickerMaxHeight,
       );
       if (image == null) {
         return;
       }
-      final avatar = await preparePickedXFileForUpload(image);
+      final avatar = await preparePickedXFileForUpload(
+        image,
+        preserveTransparency: true,
+      );
       if (!mounted) {
         return;
       }
@@ -232,7 +240,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       logPhotoPipelineFailure('avatar_camera_picker', error);
       if (mounted) {
         setState(() {
-          _error = ref.read(appStringsProvider).couldNotPreparePhoto;
+          _error = selectedImageErrorMessage(
+            ref.read(appStringsProvider),
+            error,
+          );
         });
       }
     } finally {
@@ -243,6 +254,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
+    if (_saving) {
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? true)) {
       return;
     }
@@ -250,6 +264,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _saving = true;
       _error = null;
     });
+    var avatarSaved = false;
+    final hasAvatarDraft = _avatarBytes != null;
     try {
       final api = ref.read(mushukistanApiProvider);
       final avatarBytes = _avatarBytes;
@@ -259,6 +275,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           avatarFilename: _avatarFilename ?? 'avatar.jpg',
           avatarContentType: _avatarContentType ?? 'image/jpeg',
         );
+        avatarSaved = true;
       }
       final normalizedPhone =
           normalizeUzbekPhoneNumber(_phoneController.text.trim());
@@ -277,11 +294,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         context.pop();
       }
     } catch (error) {
-      setState(() {
-        _error = error is MushukistanApiException
-            ? error.userMessage
-            : ref.read(appStringsProvider).couldNotSaveChanges;
-      });
+      if (mounted) {
+        final strings = ref.read(appStringsProvider);
+        setState(() {
+          if (avatarSaved) {
+            _avatarBytes = null;
+            _avatarFilename = null;
+            _avatarContentType = null;
+          }
+          _error = avatarSaved
+              ? strings.avatarSavedDetailsFailed
+              : hasAvatarDraft
+                  ? photoUploadErrorMessage(strings, error)
+                  : error is MushukistanApiException
+                      ? error.userMessage
+                      : strings.couldNotSaveChanges;
+        });
+        if (avatarSaved) {
+          ref.invalidate(profileMeProvider);
+        }
+      }
     } finally {
       if (mounted) {
         setState(() {

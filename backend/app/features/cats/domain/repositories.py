@@ -12,6 +12,7 @@ from app.features.cats.domain.models import (
     ObservationSortOrder,
     PostListItem,
 )
+from app.infrastructure.db.enums import PostKind
 
 
 @dataclass(slots=True)
@@ -51,6 +52,7 @@ class CatRepository(Protocol):
         longitude: float | None = None,
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
+        kind: PostKind | None = None,
     ) -> CatListPage: ...
 
     def list_history(

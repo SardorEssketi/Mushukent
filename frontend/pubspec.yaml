@@ -36,6 +36,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  image_picker_platform_interface: ^2.11.1
   flutter_lints: ^4.0.0
   build_runner: ^2.4.12
   freezed: ^2.5.7

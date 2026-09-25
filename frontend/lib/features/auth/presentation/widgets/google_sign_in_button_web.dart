@@ -41,11 +41,15 @@ class GoogleSignInEntryButton extends ConsumerStatefulWidget {
     required this.enabled,
     this.acceptTerms = false,
     this.acceptPrivacy = false,
+    this.onIdToken,
+    this.onError,
   });
 
   final bool enabled;
   final bool acceptTerms;
   final bool acceptPrivacy;
+  final Future<void> Function(String idToken)? onIdToken;
+  final void Function(String message)? onError;
 
   @override
   ConsumerState<GoogleSignInEntryButton> createState() =>
@@ -56,6 +60,7 @@ class _GoogleSignInEntryButtonState
     extends ConsumerState<GoogleSignInEntryButton> {
   StreamSubscription<GoogleSignInAuthenticationEvent>? _subscription;
   Future<void>? _initialization;
+  bool _handlingEvent = false;
 
   @override
   void initState() {
@@ -84,12 +89,10 @@ class _GoogleSignInEntryButtonState
         clientId: clientId,
         serverClientId: environment.googleServerClientId,
       );
-    } on Object catch (error, stackTrace) {
+    } on Object {
       developer.log(
         'Google Sign-In web initialization failed.',
         name: 'Mushukistan.GoogleSignIn',
-        error: error,
-        stackTrace: stackTrace,
       );
       rethrow;
     }
@@ -99,35 +102,47 @@ class _GoogleSignInEntryButtonState
     GoogleSignInAuthenticationEvent event,
   ) async {
     if (event case GoogleSignInAuthenticationEventSignIn(:final user)) {
+      if (_handlingEvent || !mounted || !widget.enabled) return;
+      _handlingEvent = true;
       final idToken = user.authentication.idToken;
       if (idToken == null || idToken.trim().isEmpty) {
-        ref.read(authControllerProvider.notifier).showUnauthenticatedMessage(
-              ref.read(appStringsProvider).googleSignInNoIdToken,
-            );
+        _showError(ref.read(appStringsProvider).googleSignInNoIdToken);
+        _handlingEvent = false;
         return;
       }
       try {
-        await ref.read(authControllerProvider.notifier).loginWithGoogleIdToken(
-              idToken,
-              acceptTerms: widget.acceptTerms,
-              acceptPrivacy: widget.acceptPrivacy,
-            );
+        if (widget.onIdToken != null) {
+          await widget.onIdToken!(idToken);
+        } else {
+          await ref
+              .read(authControllerProvider.notifier)
+              .loginWithGoogleIdToken(
+                idToken,
+                acceptTerms: widget.acceptTerms,
+                acceptPrivacy: widget.acceptPrivacy,
+              );
+        }
       } on Object {
         // Surface handled by auth state.
+      } finally {
+        _handlingEvent = false;
       }
     }
   }
 
   void _handleAuthenticationError(Object error, StackTrace stackTrace) {
-    final message = switch (error) {
-      GoogleSignInException(:final description)
-          when description != null && description.trim().isNotEmpty =>
-        description.trim(),
-      _ => ref.read(appStringsProvider).googleSignInFailed,
-    };
-    ref
-        .read(authControllerProvider.notifier)
-        .showUnauthenticatedMessage(message);
+    _showError(ref.read(appStringsProvider).googleSignInFailed);
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    if (widget.onError case final onError?) {
+      onError(message);
+    } else {
+      ref
+          .read(authControllerProvider.notifier)
+          .showUnauthenticatedMessage(message);
+    }
   }
 
   @override

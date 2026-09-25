@@ -32,6 +32,7 @@ import '../../features/profile/presentation/screens/about_account_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/public_profile_screen.dart';
 import '../../features/profile/presentation/screens/settings_screen.dart';
+import '../../features/profile/presentation/screens/account_security_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
 import '../network/mushukistan_api.dart';
 import '../startup/startup_log.dart';
@@ -257,6 +258,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'settings',
                     builder: (context, state) => const SettingsScreen(),
                     routes: [
+                      GoRoute(
+                        path: 'security',
+                        builder: (context, state) =>
+                            const AccountSecurityScreen(),
+                      ),
                       GoRoute(
                         path: 'about-account',
                         builder: (context, state) => const AboutAccountScreen(),

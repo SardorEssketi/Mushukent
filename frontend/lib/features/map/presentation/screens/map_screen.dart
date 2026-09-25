@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -11,41 +12,23 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/marker_detail_actions.dart';
+import '../../application/map_viewport.dart';
 
 final _tashkentBounds = LatLngBounds(
   const LatLng(41.1800, 69.0500),
   const LatLng(41.4300, 69.4200),
 );
 
-const _tashkentBbox = '69.0500,41.1800,69.4200,41.4300';
-
 /// This stays null until the user explicitly asks to use device location.
 /// Tashkent remains a map viewport and query fallback, never a user location.
 final _mapSearchLocationProvider = StateProvider<GeoPoint?>((ref) => null);
 
-final mapCatsProvider =
-    FutureProvider.autoDispose<ApiPage<CatSummary>>((ref) async {
-  final api = ref.watch(mushukistanApiProvider);
-  final location = ref.watch(_mapSearchLocationProvider);
-  if (location == null || !_isInsideTashkent(location)) {
-    return api.listCats(
-      filter: 'recently_added',
-      bbox: _tashkentBbox,
-      limit: 100,
-    );
-  }
-  return api.listCats(
-    filter: 'nearby',
-    lat: location.latitude,
-    lon: location.longitude,
-    radiusMeters: 4000,
-    limit: 100,
-  );
-});
-
 enum _MapLayer {
-  cats(Icons.pets, null),
+  observations(Icons.pets, null),
+  needsHelp(Icons.warning_amber_outlined, null),
   lostPets(Icons.search_outlined, null),
   vets(Icons.local_hospital_outlined, 'veterinary'),
   shops(Icons.storefront_outlined, 'pet_shop'),
@@ -59,66 +42,14 @@ enum _MapLayer {
 
 final _mapLayersProvider = StateProvider<Set<_MapLayer>>(
   (ref) => {
-    _MapLayer.cats,
+    _MapLayer.observations,
+    _MapLayer.needsHelp,
     _MapLayer.lostPets,
     _MapLayer.vets,
     _MapLayer.shops,
     _MapLayer.shelters,
   },
 );
-
-final mapPlacesProvider =
-    FutureProvider.autoDispose<ApiPage<PlaceSummary>>((ref) async {
-  final selectedLayers = ref.watch(_mapLayersProvider);
-  final categories = selectedLayers
-      .map((layer) => layer.placeCategory)
-      .whereType<String>()
-      .toList(growable: false);
-  if (categories.isEmpty) {
-    return const ApiPage<PlaceSummary>(items: [], limit: 0);
-  }
-
-  final api = ref.watch(mushukistanApiProvider);
-  final location = ref.watch(_mapSearchLocationProvider);
-  if (location == null || !_isInsideTashkent(location)) {
-    return api.listPlaces(
-      categories: categories,
-      bbox: _tashkentBbox,
-      limit: 200,
-    );
-  }
-  return api.listPlaces(
-    categories: categories,
-    lat: location.latitude,
-    lon: location.longitude,
-    radiusMeters: 8000,
-    limit: 200,
-  );
-});
-
-final mapLostPetsProvider =
-    FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
-  final selectedLayers = ref.watch(_mapLayersProvider);
-  if (!selectedLayers.contains(_MapLayer.lostPets)) {
-    return const ApiPage<FeedItem>(items: [], limit: 0);
-  }
-
-  final api = ref.watch(mushukistanApiProvider);
-  final location = ref.watch(_mapSearchLocationProvider);
-  if (location == null || !_isInsideTashkent(location)) {
-    return api.listLostPets(
-      limit: 100,
-      validForMap: true,
-    );
-  }
-  return api.listLostPets(
-    lat: location.latitude,
-    lon: location.longitude,
-    radiusMeters: 5000,
-    limit: 100,
-    validForMap: true,
-  );
-});
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key, this.focusLocation});
@@ -133,7 +64,143 @@ class _MapScreenState extends ConsumerState<MapScreen>
     with TickerProviderStateMixin {
   final MapController _mapController = MapController();
   AnimationController? _centerAnimationController;
+  late final ViewportRequestScheduler _viewportScheduler;
+  MapCamera? _currentCamera;
+  ApiPage<CatSummary>? _catPage;
+  ApiPage<PlaceSummary>? _placePage;
+  ApiPage<LostPetMapData>? _lostPetPage;
+  Object? _mapError;
+  final ViewportRequestGuard _viewportRequestGuard = ViewportRequestGuard();
+  bool _mapReady = false;
   bool _refreshingMap = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewportScheduler = ViewportRequestScheduler(
+      onScheduled: _viewportRequestGuard.invalidate,
+      onSettled: (query) => unawaited(_loadViewport(query)),
+    );
+  }
+
+  String _filterKey(Set<_MapLayer> layers) {
+    return (_MapLayer.values
+            .where(layers.contains)
+            .map((layer) => layer.name)
+            .toList(growable: false))
+        .join(',');
+  }
+
+  String? _catKind(Set<_MapLayer> layers) {
+    final showObservations = layers.contains(_MapLayer.observations);
+    final showNeedsHelp = layers.contains(_MapLayer.needsHelp);
+    if (showObservations == showNeedsHelp) {
+      return null;
+    }
+    return showNeedsHelp ? 'needs_help' : 'observation';
+  }
+
+  void _onMapReady() {
+    if (_mapReady || !mounted) {
+      return;
+    }
+    _mapReady = true;
+    _onCameraChanged(_mapController.camera, true, force: true);
+  }
+
+  void _onCameraChanged(
+    MapCamera camera,
+    bool hasGesture, {
+    bool force = false,
+  }) {
+    if (!_mapReady && !force) {
+      return;
+    }
+    _currentCamera = camera;
+    final query = MapViewportQuery.fromCamera(
+      camera,
+      allowedBounds: _tashkentBounds,
+    );
+    _viewportScheduler.schedule(
+      query,
+      filterKey: _filterKey(ref.read(_mapLayersProvider)),
+      force: force,
+    );
+  }
+
+  Future<void> _loadViewport(MapViewportQuery query) async {
+    if (!mounted) {
+      return;
+    }
+    final requestGeneration = _viewportRequestGuard.begin();
+    final layers = ref.read(_mapLayersProvider);
+    final showCats = layers.contains(_MapLayer.observations) ||
+        layers.contains(_MapLayer.needsHelp);
+    final categories = layers
+        .map((layer) => layer.placeCategory)
+        .whereType<String>()
+        .toList(growable: false);
+    final catKind = _catKind(layers);
+    final api = ref.read(mushukistanApiProvider);
+
+    if (mounted) {
+      setState(() {
+        _refreshingMap = true;
+        _mapError = null;
+      });
+    }
+
+    try {
+      final catsFuture = showCats
+          ? api.listCats(
+              filter: 'recently_added',
+              bbox: query.bbox,
+              limit: 100,
+              kind: catKind,
+            )
+          : Future<ApiPage<CatSummary>?>.value(null);
+      final placesFuture = categories.isEmpty
+          ? Future<ApiPage<PlaceSummary>?>.value(null)
+          : api
+              .listPlaces(
+                categories: categories,
+                bbox: query.bbox,
+                limit: 200,
+                mapOnly: true,
+              )
+              .then<ApiPage<PlaceSummary>?>((page) => page);
+      final lostPetsFuture = layers.contains(_MapLayer.lostPets)
+          ? api
+              .listMapLostPets(bbox: query.bbox, limit: 100)
+              .then<ApiPage<LostPetMapData>?>((page) => page)
+          : Future<ApiPage<LostPetMapData>?>.value(null);
+      final results = await Future.wait<Object?>([
+        catsFuture,
+        placesFuture,
+        lostPetsFuture,
+      ]);
+      if (!mounted || !_viewportRequestGuard.isCurrent(requestGeneration)) {
+        return;
+      }
+      setState(() {
+        _catPage = results[0] as ApiPage<CatSummary>? ?? _catPage;
+        _placePage = results[1] as ApiPage<PlaceSummary>? ?? _placePage;
+        _lostPetPage = results[2] as ApiPage<LostPetMapData>? ?? _lostPetPage;
+      });
+    } catch (error) {
+      if (mounted && _viewportRequestGuard.isCurrent(requestGeneration)) {
+        setState(() {
+          _mapError = error;
+        });
+      }
+    } finally {
+      if (mounted && _viewportRequestGuard.isCurrent(requestGeneration)) {
+        setState(() {
+          _refreshingMap = false;
+        });
+      }
+    }
+  }
 
   void _centerOnLocation(LatLng targetCenter, double targetZoom) {
     final camera = _mapController.camera;
@@ -273,30 +340,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     ref.read(_mapLayersProvider.notifier).state = selectedLayers;
+    if (_currentCamera != null) {
+      _onCameraChanged(_currentCamera!, true);
+    }
   }
 
   Future<void> _refreshMap() async {
     if (_refreshingMap) {
       return;
     }
-    setState(() {
-      _refreshingMap = true;
-    });
-    try {
-      final refreshedCats = ref.refresh(mapCatsProvider.future);
-      final refreshedPlaces = ref.refresh(mapPlacesProvider.future);
-      final refreshedLostPets = ref.refresh(mapLostPetsProvider.future);
-      await Future.wait([
-        refreshedCats,
-        refreshedPlaces,
-        refreshedLostPets,
-      ]);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _refreshingMap = false;
-        });
-      }
+    final camera = _currentCamera;
+    if (camera != null) {
+      _onCameraChanged(camera, false, force: true);
     }
   }
 
@@ -361,25 +416,26 @@ class _MapScreenState extends ConsumerState<MapScreen>
     }
   }
 
+  void _zoomIntoCluster(LatLng point) {
+    final camera = _currentCamera;
+    if (!_mapReady || camera == null) {
+      return;
+    }
+    _centerOnLocation(point, math.min(camera.zoom + 2, 16));
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedLayers = ref.watch(_mapLayersProvider);
     final strings = ref.watch(appStringsProvider);
+    ref.listen<int>(postMutationRevisionProvider, (previous, next) {
+      if (previous != next && _mapReady) {
+        _onCameraChanged(_mapController.camera, false, force: true);
+      }
+    });
     final selectedLocation = ref.watch(_mapSearchLocationProvider);
-    final showCats = selectedLayers.contains(_MapLayer.cats);
-    final catsAsync = showCats
-        ? ref.watch(mapCatsProvider)
-        : const AsyncData<ApiPage<CatSummary>>(
-            ApiPage<CatSummary>(items: [], limit: 0),
-          );
-    final placesAsync = ref.watch(mapPlacesProvider);
-    final lostPetsAsync = ref.watch(mapLostPetsProvider);
-    final catPage = catsAsync.valueOrNull;
-    final placePage = placesAsync.valueOrNull;
-    final lostPets = lostPetsAsync.valueOrNull?.items
-            .whereType<LostPetData>()
-            .toList(growable: false) ??
-        const <LostPetData>[];
+    final showObservations = selectedLayers.contains(_MapLayer.observations);
+    final showNeedsHelp = selectedLayers.contains(_MapLayer.needsHelp);
     final focusLocation = widget.focusLocation;
     final mapLocation =
         selectedLocation != null && _isInsideTashkent(selectedLocation)
@@ -395,7 +451,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                   LocationService.fallbackLocation.longitude,
                 ),
     );
-    final markers = <Marker>[
+    final fixedMarkers = <Marker>[
       if (mapLocation != null)
         Marker(
           point: _clampToTashkent(
@@ -412,47 +468,109 @@ class _MapScreenState extends ConsumerState<MapScreen>
           height: 52,
           child: const _FocusedLostPetMarker(),
         ),
-      if (showCats && catPage != null)
-        ...catPage.items.where((cat) => cat.canonicalLocation != null).map(
-              (cat) => Marker(
-                point: LatLng(
-                  cat.canonicalLocation!.latitude,
-                  cat.canonicalLocation!.longitude,
-                ),
-                width: 44,
-                height: 44,
-                child: _CatMarker(
-                  needsHelp: cat.latestPostKind == 'needs_help',
-                  onTap: () => unawaited(_openLatestCatPost(cat)),
+    ];
+    final normalCatSpecs = <_MapMarkerSpec>[];
+    final needsHelpSpecs = <_MapMarkerSpec>[];
+    for (final cat in _catPage?.items ?? const <CatSummary>[]) {
+      final location = cat.canonicalLocation;
+      if (location == null) {
+        continue;
+      }
+      final needsHelp = mapMarkerKindForPostKind(cat.latestPostKind) ==
+          MapMarkerKind.needsHelp;
+      if (needsHelp && !showNeedsHelp || !needsHelp && !showObservations) {
+        continue;
+      }
+      final spec = _MapMarkerSpec(
+        id: cat.id,
+        point: LatLng(location.latitude, location.longitude),
+        width: 44,
+        height: 44,
+        child: _CatMarker(
+          needsHelp: needsHelp,
+          onTap: () => _showCatSheet(
+            context,
+            cat,
+            strings,
+            onOpenPost: () => unawaited(_openLatestCatPost(cat)),
+          ),
+        ),
+      );
+      (needsHelp ? needsHelpSpecs : normalCatSpecs).add(spec);
+    }
+
+    final lostPetSpecs = <_MapMarkerSpec>[];
+    if (selectedLayers.contains(_MapLayer.lostPets)) {
+      for (final lostPet in _lostPetPage?.items ?? const <LostPetMapData>[]) {
+        lostPetSpecs.add(
+          _MapMarkerSpec(
+            id: lostPet.id,
+            point: LatLng(
+              lostPet.lastSeenLocation.latitude,
+              lostPet.lastSeenLocation.longitude,
+            ),
+            width: 48,
+            height: 48,
+            child: _MapLostPetMarker(
+              onTap: () => _showLostPetSheet(context, lostPet, strings),
+            ),
+          ),
+        );
+      }
+    }
+
+    final placeSpecsByCategory = <String, List<_MapMarkerSpec>>{};
+    for (final place in _placePage?.items ?? const <PlaceSummary>[]) {
+      if (!_isPlaceCategoryVisible(selectedLayers, place.category)) {
+        continue;
+      }
+      placeSpecsByCategory.putIfAbsent(place.category, () => []).add(
+            _MapMarkerSpec(
+              id: place.id,
+              point: LatLng(place.location.latitude, place.location.longitude),
+              width: 44,
+              height: 44,
+              child: _PlaceMarker(
+                category: place.category,
+                onTap: () => _showPlaceSheet(
+                  context,
+                  place,
+                  strings,
+                  ref.read(mushukistanApiProvider),
                 ),
               ),
             ),
-      ...lostPets.map(
-        (lostPet) => Marker(
-          point: LatLng(
-            lostPet.lastSeenLocation.latitude,
-            lostPet.lastSeenLocation.longitude,
-          ),
-          width: 48,
-          height: 48,
-          child: _MapLostPetMarker(
-            onTap: () => _showLostPetSheet(context, lostPet, strings),
-          ),
-        ),
+          );
+    }
+
+    final clusteredMarkers = <Marker>[
+      ..._clusterMarkerSpecs(
+        normalCatSpecs,
+        camera: _currentCamera,
+        clusterKind: _MapClusterKind.observations,
+        onClusterTap: _zoomIntoCluster,
       ),
-      if (placePage != null)
-        ...placePage.items.map(
-          (place) => Marker(
-            point: LatLng(place.location.latitude, place.location.longitude),
-            width: 44,
-            height: 44,
-            child: _PlaceMarker(
-              category: place.category,
-              onTap: () => _showPlaceSheet(context, place, strings),
-            ),
-          ),
+      ..._clusterMarkerSpecs(
+        needsHelpSpecs,
+        camera: _currentCamera,
+        clusterKind: _MapClusterKind.needsHelp,
+        onClusterTap: _zoomIntoCluster,
+      ),
+      ..._clusterMarkerSpecs(
+        lostPetSpecs,
+        camera: _currentCamera,
+        clusterKind: _MapClusterKind.lostPets,
+        onClusterTap: _zoomIntoCluster,
+      ),
+      for (final entry in placeSpecsByCategory.entries)
+        ..._clusterMarkerSpecs(
+          entry.value,
+          camera: _currentCamera,
+          clusterKind: _placeClusterKind(entry.key),
+          onClusterTap: _zoomIntoCluster,
         ),
     ];
+    final markers = [...fixedMarkers, ...clusteredMarkers];
 
     return Scaffold(
       body: Stack(
@@ -469,6 +587,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
+              onMapReady: _onMapReady,
+              onPositionChanged: _onCameraChanged,
             ),
             children: [
               TileLayer(
@@ -507,9 +627,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               ),
             ),
           ),
-          if (catsAsync.hasError ||
-              placesAsync.hasError ||
-              lostPetsAsync.hasError)
+          if (_mapError != null)
             Positioned(
               left: 12,
               right: 76,
@@ -539,9 +657,232 @@ class _MapScreenState extends ConsumerState<MapScreen>
 
   @override
   void dispose() {
+    _viewportScheduler.dispose();
     _centerAnimationController?.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+}
+
+bool _isPlaceCategoryVisible(Set<_MapLayer> layers, String category) {
+  return switch (category) {
+    'veterinary' => layers.contains(_MapLayer.vets),
+    'shelter' => layers.contains(_MapLayer.shelters),
+    'pet_shop' => layers.contains(_MapLayer.shops),
+    _ => false,
+  };
+}
+
+bool _placeSupportsRoute(String category) {
+  return category == 'veterinary' || category == 'pet_shop';
+}
+
+enum _MapClusterKind {
+  observations,
+  needsHelp,
+  lostPets,
+  veterinary,
+  petShop,
+  shelter,
+}
+
+class _MapMarkerSpec {
+  const _MapMarkerSpec({
+    required this.id,
+    required this.point,
+    required this.width,
+    required this.height,
+    required this.child,
+  });
+
+  final String id;
+  final LatLng point;
+  final double width;
+  final double height;
+  final Widget child;
+}
+
+_MapClusterKind _placeClusterKind(String category) {
+  return switch (category) {
+    'veterinary' => _MapClusterKind.veterinary,
+    'shelter' => _MapClusterKind.shelter,
+    _ => _MapClusterKind.petShop,
+  };
+}
+
+List<Marker> _clusterMarkerSpecs(
+  List<_MapMarkerSpec> specs, {
+  required MapCamera? camera,
+  required _MapClusterKind clusterKind,
+  required void Function(LatLng point) onClusterTap,
+}) {
+  if (specs.isEmpty) {
+    return const <Marker>[];
+  }
+  final cellSize =
+      camera == null ? null : mapClusterCellSizeForZoom(camera.zoom);
+  if (cellSize == null) {
+    return [
+      for (final spec in specs)
+        Marker(
+          key: ValueKey<String>('marker:${clusterKind.name}:${spec.id}'),
+          point: spec.point,
+          width: spec.width,
+          height: spec.height,
+          child: spec.child,
+        ),
+    ];
+  }
+
+  final groups = <String, List<_MapMarkerSpec>>{};
+  for (final spec in specs) {
+    final projected = camera!.projectAtZoom(spec.point, camera.zoom);
+    final cellX = (projected.dx / cellSize).floor();
+    final cellY = (projected.dy / cellSize).floor();
+    groups.putIfAbsent('$cellX:$cellY', () => []).add(spec);
+  }
+
+  return [
+    for (final entry in groups.entries)
+      if (entry.value.length == 1)
+        Marker(
+          key: ValueKey<String>(
+              'marker:${clusterKind.name}:${entry.value.single.id}'),
+          point: entry.value.single.point,
+          width: entry.value.single.width,
+          height: entry.value.single.height,
+          child: entry.value.single.child,
+        )
+      else
+        Marker(
+          key: ValueKey<String>('cluster:${clusterKind.name}:${entry.key}'),
+          point: _clusterCenter(entry.value),
+          width: 52,
+          height: 52,
+          child: _MapClusterMarker(
+            count: entry.value.length,
+            kind: clusterKind,
+            onTap: () => onClusterTap(_clusterCenter(entry.value)),
+          ),
+        ),
+  ];
+}
+
+LatLng _clusterCenter(List<_MapMarkerSpec> specs) {
+  var latitude = 0.0;
+  var longitude = 0.0;
+  for (final spec in specs) {
+    latitude += spec.point.latitude;
+    longitude += spec.point.longitude;
+  }
+  return LatLng(latitude / specs.length, longitude / specs.length);
+}
+
+class _MapClusterMarker extends StatelessWidget {
+  const _MapClusterMarker({
+    required this.count,
+    required this.kind,
+    required this.onTap,
+  });
+
+  final int count;
+  final _MapClusterKind kind;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isPlace = switch (kind) {
+      _MapClusterKind.veterinary ||
+      _MapClusterKind.petShop ||
+      _MapClusterKind.shelter =>
+        true,
+      _ => false,
+    };
+    final alert =
+        kind == _MapClusterKind.needsHelp || kind == _MapClusterKind.lostPets;
+    final color = switch (kind) {
+      _MapClusterKind.needsHelp => colors.tertiary,
+      _MapClusterKind.lostPets => colors.error,
+      _MapClusterKind.veterinary => AppPalette.lost,
+      _MapClusterKind.shelter => AppPalette.sageDark,
+      _MapClusterKind.petShop => AppPalette.adoption,
+      _MapClusterKind.observations => colors.secondary,
+    };
+    final icon = switch (kind) {
+      _MapClusterKind.needsHelp =>
+        mapMarkerIconForKind(MapMarkerKind.needsHelp),
+      _MapClusterKind.lostPets => mapMarkerIconForKind(MapMarkerKind.lostPet),
+      _MapClusterKind.veterinary => Icons.local_hospital,
+      _MapClusterKind.shelter => Icons.home_work,
+      _MapClusterKind.petShop => Icons.storefront,
+      _MapClusterKind.observations => Icons.pets,
+    };
+    final decoration = isPlace
+        ? BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withValues(alpha: 0.96),
+                color.withValues(alpha: 0.72),
+              ],
+            ),
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.surface, width: 3),
+            boxShadow: const [
+              BoxShadow(
+                blurRadius: 7,
+                color: Color(0x55000000),
+                offset: Offset(0, 3),
+              ),
+            ],
+          )
+        : BoxDecoration(
+            color: color.withValues(alpha: alert ? 0.94 : 0.88),
+            shape: BoxShape.circle,
+            border: Border.all(color: colors.surface, width: 2),
+            boxShadow: const [
+              BoxShadow(
+                blurRadius: 5,
+                color: Color(0x44000000),
+                offset: Offset(0, 2),
+              ),
+            ],
+          );
+    return GestureDetector(
+      onTap: onTap,
+      child: DecoratedBox(
+        decoration: decoration,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(icon, color: colors.onPrimary, size: isPlace ? 23 : 21),
+            Positioned(
+              right: 0,
+              top: 0,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: color, width: 1.5),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Text(
+                    '$count',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: color,
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -554,11 +895,6 @@ Future<void> _openOsmCopyright() async {
 
 Future<void> _launchPlaceUri(Uri uri) async {
   await launchUrl(uri, mode: LaunchMode.externalApplication);
-}
-
-Uri _phoneUri(String phone) {
-  final compact = phone.replaceAll(RegExp(r'\s+'), '');
-  return Uri(scheme: 'tel', path: compact);
 }
 
 Uri _webUri(String value) {
@@ -577,6 +913,73 @@ Uri _telegramUri(String value) {
   return _webUri(trimmed);
 }
 
+void _showCatSheet(
+  BuildContext context,
+  CatSummary cat,
+  AppStrings strings, {
+  required VoidCallback onOpenPost,
+}) {
+  final markerKind = mapMarkerKindForPostKind(cat.latestPostKind);
+  final title = cat.name?.trim().isNotEmpty == true
+      ? cat.name!.trim()
+      : strings.unnamedCat;
+  showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      final theme = Theme.of(sheetContext);
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: markerKind == MapMarkerKind.needsHelp
+                        ? theme.colorScheme.tertiaryContainer
+                        : theme.colorScheme.secondaryContainer,
+                    child: Icon(
+                      mapMarkerIconForKind(markerKind),
+                      color: markerKind == MapMarkerKind.needsHelp
+                          ? theme.colorScheme.onTertiaryContainer
+                          : theme.colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(title, style: theme.textTheme.titleLarge),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                markerKind == MapMarkerKind.needsHelp
+                    ? strings.needsHelp
+                    : strings.observation,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  onOpenPost();
+                },
+                icon: const Icon(Icons.open_in_new),
+                label: Text(strings.openPost),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 String _formatDate(DateTime dateTime) {
   final local = dateTime.toLocal();
   return '${local.year.toString().padLeft(4, '0')}-'
@@ -588,133 +991,166 @@ void _showPlaceSheet(
   BuildContext context,
   PlaceSummary place,
   AppStrings strings,
+  MushukistanApi api,
 ) {
+  final markerPlace = place;
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     builder: (sheetContext) {
-      final theme = Theme.of(sheetContext);
-      return SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
+      return FutureBuilder<PlaceSummary>(
+        future: api.getPlace(markerPlace.id),
+        initialData: markerPlace,
+        builder: (sheetContext, snapshot) {
+          final place = snapshot.data ?? markerPlace;
+          final publicPhone = publicPhoneUri(place.phone) != null
+              ? place.phone
+              : publicPhoneUri(place.phone2) != null
+                  ? place.phone2
+                  : null;
+          final theme = Theme.of(sheetContext);
+          return SafeArea(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _PlaceBadge(category: place.category),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        place.name,
-                        style: theme.textTheme.titleLarge,
+                    Row(
+                      children: [
+                        _PlaceBadge(category: place.category),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            place.name,
+                            style: theme.textTheme.titleLarge,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final category in place.categories)
+                          _PlaceCategoryChip(
+                            label: _placeCategoryLabel(category, strings),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    MarkerDetailActions(
+                      strings: strings,
+                      destination: place.location,
+                      publicPhone: publicPhone,
+                      showRoute: _placeSupportsRoute(place.category),
+                    ),
+                    if (place.address != null) ...[
+                      const SizedBox(height: 12),
+                      _PlaceDetailRow(
+                        icon: Icons.place_outlined,
+                        text: place.address!,
                       ),
+                    ],
+                    if (place.phone != null &&
+                        publicPhoneUri(place.phone) != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.phone_outlined,
+                        text: place.phone!,
+                        onTap: () => unawaited(
+                          launchPublicPhone(
+                            sheetContext,
+                            phone: place.phone!,
+                            strings: strings,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (place.phone2 != null &&
+                        publicPhoneUri(place.phone2) != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.phone_outlined,
+                        text: place.phone2!,
+                        onTap: () => unawaited(
+                          launchPublicPhone(
+                            sheetContext,
+                            phone: place.phone2!,
+                            strings: strings,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (place.openingHours != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.schedule_outlined,
+                        text: place.openingHours!,
+                      ),
+                    ],
+                    if (place.daysOff != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.event_busy_outlined,
+                        text: place.daysOff!,
+                      ),
+                    ],
+                    if (place.website != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.language_outlined,
+                        text: place.website!,
+                        onTap: () => unawaited(
+                          _launchPlaceUri(_webUri(place.website!)),
+                        ),
+                      ),
+                    ],
+                    if (place.instagram != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.camera_alt_outlined,
+                        text: place.instagram!,
+                        onTap: () => unawaited(
+                          _launchPlaceUri(_webUri(place.instagram!)),
+                        ),
+                      ),
+                    ],
+                    if (place.telegram != null) ...[
+                      const SizedBox(height: 8),
+                      _PlaceDetailRow(
+                        icon: Icons.send_outlined,
+                        text: place.telegram!,
+                        onTap: () => unawaited(
+                          _launchPlaceUri(_telegramUri(place.telegram!)),
+                        ),
+                      ),
+                    ],
+                    if (place.description != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        place.description!,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Text(
+                      place.source == 'osm'
+                          ? strings.sourceOpenStreetMap
+                          : strings.sourceMushukistan,
+                      style: theme.textTheme.bodySmall,
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final category in place.categories)
-                      _PlaceCategoryChip(
-                        label: _placeCategoryLabel(category, strings),
-                      ),
-                  ],
-                ),
-                if (place.address != null) ...[
-                  const SizedBox(height: 12),
-                  _PlaceDetailRow(
-                    icon: Icons.place_outlined,
-                    text: place.address!,
-                  ),
-                ],
-                if (place.phone != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.phone_outlined,
-                    text: place.phone!,
-                    onTap: () =>
-                        unawaited(_launchPlaceUri(_phoneUri(place.phone!))),
-                  ),
-                ],
-                if (place.phone2 != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.phone_outlined,
-                    text: place.phone2!,
-                    onTap: () =>
-                        unawaited(_launchPlaceUri(_phoneUri(place.phone2!))),
-                  ),
-                ],
-                if (place.openingHours != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.schedule_outlined,
-                    text: place.openingHours!,
-                  ),
-                ],
-                if (place.daysOff != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.event_busy_outlined,
-                    text: place.daysOff!,
-                  ),
-                ],
-                if (place.website != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.language_outlined,
-                    text: place.website!,
-                    onTap: () => unawaited(
-                      _launchPlaceUri(_webUri(place.website!)),
-                    ),
-                  ),
-                ],
-                if (place.instagram != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.camera_alt_outlined,
-                    text: place.instagram!,
-                    onTap: () => unawaited(
-                      _launchPlaceUri(_webUri(place.instagram!)),
-                    ),
-                  ),
-                ],
-                if (place.telegram != null) ...[
-                  const SizedBox(height: 8),
-                  _PlaceDetailRow(
-                    icon: Icons.send_outlined,
-                    text: place.telegram!,
-                    onTap: () => unawaited(
-                      _launchPlaceUri(_telegramUri(place.telegram!)),
-                    ),
-                  ),
-                ],
-                if (place.description != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    place.description!,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Text(
-                  place.source == 'osm'
-                      ? strings.sourceOpenStreetMap
-                      : strings.sourceMushukistan,
-                  style: theme.textTheme.bodySmall,
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       );
     },
   );
@@ -722,7 +1158,7 @@ void _showPlaceSheet(
 
 void _showLostPetSheet(
   BuildContext context,
-  LostPetData lostPet,
+  LostPetMapData lostPet,
   AppStrings strings,
 ) {
   showModalBottomSheet<void>(
@@ -759,14 +1195,6 @@ void _showLostPetSheet(
               Text('${strings.lostPet} · ${_formatDate(lostPet.createdAt)}'),
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () => unawaited(
-                  _launchPlaceUri(_phoneUri(lostPet.ownerPhoneNumber)),
-                ),
-                icon: const Icon(Icons.phone_outlined),
-                label: Text(strings.contactOwner),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
                   context.push('/lost-pets/${lostPet.id}');
@@ -859,7 +1287,7 @@ class _FocusedLostPetMarker extends StatelessWidget {
             ],
           ),
           child: _MarkerIcon(
-            icon: Icons.priority_high,
+            icon: mapMarkerIconForKind(MapMarkerKind.lostPet),
             color: colorScheme.onError,
             size: 28,
           ),
@@ -887,6 +1315,9 @@ class _CatMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _color(context);
+    final markerKind =
+        needsHelp ? MapMarkerKind.needsHelp : MapMarkerKind.observation;
+    final icon = mapMarkerIconForKind(markerKind);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -895,12 +1326,12 @@ class _CatMarker extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             Icon(
-              Icons.pets,
+              icon,
               color: Theme.of(context).colorScheme.surface,
               size: 31,
             ),
             _MarkerIcon(
-              icon: Icons.pets,
+              icon: icon,
               color: color,
               size: 26,
             ),
@@ -934,25 +1365,38 @@ class _PlaceMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _color(context);
+    final icon = _icon;
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: color.withValues(alpha: 0.16),
           shape: BoxShape.circle,
+          border: Border.all(color: color.withValues(alpha: 0.7), width: 2),
           boxShadow: const [
             BoxShadow(
-              blurRadius: 5,
-              color: Color(0x33000000),
-              offset: Offset(0, 1),
+              blurRadius: 7,
+              color: Color(0x44000000),
+              offset: Offset(0, 2),
             ),
           ],
         ),
-        child: Center(
-          child: _MarkerIcon(
-            icon: _icon,
-            color: color,
-            size: 18,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              border: Border.all(color: colors.surface, width: 1.5),
+            ),
+            child: Center(
+              child: _MarkerIcon(
+                icon: icon,
+                color: colors.onPrimary,
+                size: 19,
+              ),
+            ),
           ),
         ),
       ),
@@ -995,7 +1439,7 @@ class _MapLostPetMarker extends StatelessWidget {
               ],
             ),
             child: _MarkerIcon(
-              icon: Icons.priority_high,
+              icon: mapMarkerIconForKind(MapMarkerKind.lostPet),
               color: colorScheme.onError,
               size: 26,
             ),
@@ -1079,7 +1523,8 @@ class _MapControlButton extends StatelessWidget {
 
 String _layerLabel(_MapLayer layer, AppStrings strings) {
   return switch (layer) {
-    _MapLayer.cats => strings.cats,
+    _MapLayer.observations => strings.cats,
+    _MapLayer.needsHelp => strings.needsHelp,
     _MapLayer.lostPets => strings.lostPets,
     _MapLayer.vets => strings.vets,
     _MapLayer.shops => strings.shops,

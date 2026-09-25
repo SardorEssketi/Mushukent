@@ -182,6 +182,8 @@ Feature: Authentication
 
 5) POST /api/v1/auth/google
 - Purpose: Login via Google id_token
+- Identity key: verified Google `sub`, stored uniquely. Matching email alone cannot authenticate an existing password account. Such a user connects Google from an authenticated session.
+
 - Auth: none
 - Request: {"id_token":"<google-id-token>","accept_terms":true,"accept_privacy":true}
 - Validation: id_token required
@@ -189,10 +191,20 @@ Feature: Authentication
 - Errors: 401 INVALID_GOOGLE_TOKEN
 - Notes:
   - Validate issuer, expiry, `aud` against one configured Google OAuth client ID, and require `email_verified=true`.
-  - If the Google email does not match an existing account, the backend creates the account only when Terms and Privacy acceptance are true.
+  - If neither subject nor email matches an existing account, the backend creates an account only when Terms and Privacy acceptance are true.
+  - An existing password account with the same verified email returns `GOOGLE_LINK_REQUIRED` until Google is connected from an authenticated session.
+  - A legacy passwordless account with an external-domain email and no stored Google subject returns `GOOGLE_LEGACY_LINK_REQUIRED` until Google is connected from an existing authenticated session or through support-assisted verification.
   - Existing accounts with current legal acceptance may authenticate without resubmitting acceptance flags.
   - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
   - Google-authenticated accounts are considered verified immediately.
+
+Account Security (authenticated)
+--------------------------------
+- `GET /api/v1/auth/methods` returns `{"has_password":bool,"google_connected":bool}`. No credential material is returned.
+- `POST /api/v1/auth/set-password` accepts `new_password` and `confirm_password` (8-128 characters). It requires a signed-in account without a local password; a second attempt returns `PASSWORD_ALREADY_SET`.
+- `POST /api/v1/auth/change-password` accepts `current_password`, `new_password`, and `confirm_password`. It verifies the current password before updating the Argon2 hash.
+- `POST /api/v1/auth/connect-google` accepts a Google `id_token`. The verified Google email must match the signed-in account, and its subject must not belong to another user. A collision returns 409.
+- Successful credential mutations return 204 and preserve the current MVP session policy.
 
 6) POST /api/v1/auth/refresh
 - Purpose: Exchange a valid refresh/session token for a new access token and renewed refresh session.
@@ -419,6 +431,7 @@ Feature: Cats
   - lat, lon, radius_meters (nearby)
   - bbox=minLon,minLat,maxLon,maxLat
   - filter: nearby|recently_seen|needs_help|recently_added
+  - kind: observation|needs_help (optional recent map marker kind filter)
   - limit, cursor
 - Sorting: by distance (if lat/lon provided), or last_seen_at desc
 - Response: GenericListResponse[CatListItem]
@@ -651,8 +664,8 @@ Feature: Lost Pets
 2) GET /api/v1/lost-pets
 - Purpose: List public lost pet posts.
 - Auth: optional
-- Query params: limit, cursor, lat, lon, radius_meters, valid_for_map
-- Notes: `valid_for_map=true` returns unresolved public records created in the last 30 days for map markers. Older records remain available in feed/detail unless deleted or resolved.
+- Query params: limit, cursor, lat, lon, radius_meters, bbox, valid_for_map
+- Notes: `valid_for_map=true` returns unresolved public records created in the last 30 days for map markers. Older records remain available in feed/detail unless deleted or resolved. Viewport clients should use `GET /api/v1/lost-pets/map` for compact marker payloads.
 - Response: GenericListResponse[LostPetListItem]
 
 3) GET /api/v1/lost-pets/{lost_pet_id}
@@ -660,6 +673,12 @@ Feature: Lost Pets
 - Auth: optional
 - Response: LostPetResponse
 - Errors: 404 LOST_PET_NOT_FOUND
+
+4) GET /api/v1/lost-pets/map
+- Purpose: return compact public lost-pet markers for one visible map viewport.
+- Auth: optional
+- Query params: `bbox=minLon,minLat,maxLon,maxLat`, `limit` (max 100)
+- Behavior: returns only unresolved, public, non-deleted records created in the last 30 days inside the bbox. The response excludes photos, phone numbers, descriptions, and author data; open the detail endpoint for those fields.
 
 Feature: Adoption Posts
 -----------------------
@@ -709,6 +728,7 @@ Feature: Places
   - category: repeatable, one or more of pet_shop|veterinary|shelter
   - lat, lon, radius_meters for nearby filtering
   - bbox=minLon,minLat,maxLon,maxLat for viewport filtering
+  - map_only=true for compact marker fields; full details remain available from the detail endpoint
   - limit, default 100, max 200
 - Response: GenericListResponse[PlaceListItem]
   Example response:
@@ -746,6 +766,12 @@ Feature: Places
   - `category` is the primary/backward-compatible category. `categories` is the full category list.
   - If radius_meters is provided, lat and lon are required.
   - If bbox is provided, it must be minLon,minLat,maxLon,maxLat.
+
+2) GET /api/v1/places/{place_id}
+- Purpose: retrieve full public details for one active place after a marker is opened.
+- Auth: optional
+- Response: PlaceListItem with contact, hours, description, source, and location fields when available.
+- Errors: 404 PLACE_NOT_FOUND
 - Notes:
   - Free source tags: amenity=veterinary, shop=pet, amenity=animal_shelter, animal_shelter=cat, animal_boarding=cat.
   - Read phone from `phone`, `contact:phone`, `mobile` or `contact:mobile`.

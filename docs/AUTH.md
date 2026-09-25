@@ -35,18 +35,20 @@ MVP constraints:
 - Client submits verification token received through email delivery.
 - Backend validates token signature, issuer, audience, expiration, and token type.
 - Backend marks the matching user as `email_verified = true`.
-- Development flow may expose the verification token in API responses and logs; production must deliver the token by email provider only.
+- Development flow may expose the verification token in API responses for local testing; production must deliver the token by email provider only. Verification tokens are not logged.
 
 2.4 Google OAuth Login
 - Client obtains Google `id_token` using official Google Sign-In SDK.
 - Client sends `id_token` to backend.
 - Backend validates token signature, issuer (`iss`), configured audience (`aud`), and expiration (`exp`).
-- Backend finds user by email:
-  - if exists and current legal acceptance is already recorded, log user in;
-  - if exists but current legal acceptance is missing, require explicit Terms and Privacy acceptance before completing login;
-  - if not exists, create user with `password_hash = NULL` only when explicit Terms and Privacy acceptance is provided.
+- Backend finds an already connected user by Google's stable `sub` claim.
+- A legacy Google-only consumer Gmail row without a stored subject is bound on its next verified Google login when its email matches and the migration marked it as a legacy Google account.
+- Legacy external-domain Google rows are not automatically bound by email. They must connect Google from an existing authenticated session or use support-assisted identity verification; otherwise Google login returns `GOOGLE_LEGACY_LINK_REQUIRED`.
+- An existing password account with a matching Google email must connect Google while authenticated in Account Security. Email matching alone never signs into that password account.
+- A new Google user is created with `password_hash = NULL` only after explicit Terms and Privacy acceptance.
 - Google-authenticated users are treated as verified immediately.
 - Backend issues a short-lived JWT access token and a refresh/session token.
+- Google login rejections log only provider, status, and error code; raw credentials and claims are not logged.
 
 2.5 Logout
 - Client calls `POST /auth/logout` with the current refresh token when available, then deletes local credentials.
@@ -113,11 +115,13 @@ Startup/session restore:
   - token not expired,
   - `email_verified` is true,
   - email exists in token payload.
-- Upsert user:
+- Find or create user:
   - for new users, require `accept_terms=true` and `accept_privacy=true`;
   - record current Terms and Privacy versions and a backend-owned acceptance timestamp when legal acceptance is provided;
   - set `email_verified = true` (for Google-authenticated emails);
   - update `last_login_at`.
+- Require a non-empty Google `sub`; store it uniquely on the existing user row.
+- For an already connected subject, keep the account's Mushukistan email unchanged if the Google email later changes.
 - Issue local JWT access token.
 
 5.3 Error Handling
@@ -168,6 +172,14 @@ Startup/session restore:
 - Maximum length: 128
 - No complexity hard-fail beyond length for MVP (to reduce registration friction), but UI should recommend strong passwords.
 
+7.4 Account Security
+- Authenticated `GET /auth/methods` returns only `has_password` and `google_connected`.
+- Authenticated `POST /auth/set-password` is allowed only while `password_hash` is null; it requires a matching confirmation and stores an Argon2 hash on the same user row.
+- Authenticated `POST /auth/change-password` requires the current password and a matching new-password confirmation.
+- Authenticated `POST /auth/connect-google` verifies the Google ID token and requires its verified email to match the signed-in Mushukistan account. A Google subject already attached to another account is rejected.
+- These operations retain existing access and refresh sessions under the MVP session policy. They never disconnect an existing method.
+- Eligible legacy consumer Gmail accounts are marked as unbound by migration until the next verified Google sign-in. This marker remains through Set Password so the original Google method is not lost. External-domain legacy accounts require authenticated or support-assisted linking because their email address may be reassigned.
+
 8. Account Lifecycle
 --------------------
 8.1 Creation
@@ -212,6 +224,10 @@ This document aligns to these endpoint families in `API.md`:
 - `POST /api/v1/auth/verify-email`
 - `POST /api/v1/auth/google`
 - `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/methods`
+- `POST /api/v1/auth/set-password`
+- `POST /api/v1/auth/change-password`
+- `POST /api/v1/auth/connect-google`
 
 11. Out of Scope for MVP
 ------------------------

@@ -223,6 +223,40 @@ class AppStrings {
   final String changesSaved;
   final String couldNotSaveChanges;
 
+  String get unsavedChangesTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Saqlanmagan o\'zgarishlar',
+      _RussianStrings() => 'Несохранённые изменения',
+      _ => 'Unsaved changes',
+    };
+  }
+
+  String get unsavedChangesMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Saqlanmagan o\'zgarishlar mavjud. Saqlamasdan chiqilsinmi?',
+      _RussianStrings() =>
+        'Есть несохранённые изменения. Выйти без сохранения?',
+      _ => 'You have unsaved changes. Leave without saving?',
+    };
+  }
+
+  String get discardChanges {
+    return switch (this) {
+      _UzbekStrings() => 'O\'zgarishlarni bekor qilish',
+      _RussianStrings() => 'Отменить изменения',
+      _ => 'Discard changes',
+    };
+  }
+
+  String get keepEditing {
+    return switch (this) {
+      _UzbekStrings() => 'Tahrirlashni davom ettirish',
+      _RussianStrings() => 'Продолжить редактирование',
+      _ => 'Keep editing',
+    };
+  }
+
   String get acceptTermsAndPrivacy {
     return switch (this) {
       _UzbekStrings() =>
@@ -785,6 +819,15 @@ class AppStrings {
 
   String get supportCardNumber => '5614 6810 1028 4564';
 
+  String get supportRecipient {
+    return switch (this) {
+      _UzbekStrings() => 'Qabul qiluvchi: Sardor Muxtorov',
+      _RussianStrings() =>
+        '\u{041F}\u{043E}\u{043B}\u{0443}\u{0447}\u{0430}\u{0442}\u{0435}\u{043B}\u{044C}: Sardor Muxtorov',
+      _ => 'Recipient: Sardor Muxtorov',
+    };
+  }
+
   String get supportCardIntro {
     return switch (this) {
       _UzbekStrings() =>
@@ -960,6 +1003,101 @@ class AppStrings {
       _RussianStrings() =>
         'Не удалось подготовить фото. Выберите другое изображение JPEG или PNG.',
       _ => 'Could not prepare the photo. Choose another JPEG or PNG image.',
+    };
+  }
+
+  String get unsupportedPhotoFormat {
+    return switch (this) {
+      _UzbekStrings() => 'Faqat JPEG yoki PNG rasmlarni tanlang.',
+      _RussianStrings() => 'Выберите изображение в формате JPEG или PNG.',
+      _ => 'Choose a JPEG or PNG image.',
+    };
+  }
+
+  String get heifPhotoUnsupported {
+    return switch (this) {
+      _UzbekStrings() =>
+        'HEIC/HEIF rasmni ochib bo‘lmadi. Uni JPEG formatida saqlab, qayta tanlang.',
+      _RussianStrings() =>
+        'Не удалось открыть HEIC/HEIF. Сохраните фото как JPEG и выберите его снова.',
+      _ =>
+        'Could not open this HEIC/HEIF photo. Save it as JPEG and select it again.',
+    };
+  }
+
+  String get photoUploadTimedOut {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Rasm yuklash juda uzoq davom etdi. Internetni tekshirib, qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Загрузка фото заняла слишком много времени. Проверьте подключение и повторите попытку.',
+      _ => 'Photo upload timed out. Check your connection and try again.',
+    };
+  }
+
+  String get photoUploadNetworkError {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Rasm yuklanmadi. Internetni tekshirib, qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Не удалось загрузить фото. Проверьте подключение и повторите попытку.',
+      _ => 'Photo upload failed. Check your connection and try again.',
+    };
+  }
+
+  String get photoUploadStorageError {
+    return switch (this) {
+      _UzbekStrings() => 'Rasm yuklanmadi. Keyinroq qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Не удалось загрузить фото. Повторите попытку позже.',
+      _ => 'Photo upload failed. Try again later.',
+    };
+  }
+
+  String get photoUploadRequiresSignIn {
+    return switch (this) {
+      _UzbekStrings() => 'Rasm yuklash uchun qayta kiring.',
+      _RussianStrings() => 'Войдите снова, чтобы загрузить фото.',
+      _ => 'Sign in again to upload the photo.',
+    };
+  }
+
+  String get avatarSavedDetailsFailed {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Profil rasmi saqlandi, ammo boshqa o‘zgarishlar saqlanmadi. Qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Фото профиля сохранено, но остальные изменения нет. Повторите попытку.',
+      _ => 'Profile photo was saved, but other changes were not. Try again.',
+    };
+  }
+
+  String get invalidPhoto {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Rasm buzilgan yoki uni o‘qib bo‘lmaydi. Boshqa rasmni tanlang.',
+      _RussianStrings() =>
+        'Изображение повреждено или не читается. Выберите другое фото.',
+      _ => 'The image is damaged or unreadable. Choose another photo.',
+    };
+  }
+
+  String get photoTooLarge {
+    return switch (this) {
+      _UzbekStrings() => 'Rasm juda katta. Kichikroq rasmni tanlang.',
+      _RussianStrings() =>
+        'Изображение слишком большое. Выберите фото меньшего размера.',
+      _ => 'The image is too large. Choose a smaller photo.',
+    };
+  }
+
+  String get couldNotReadPhoto {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Rasmni qurilmadan o‘qib bo‘lmadi. Qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Не удалось прочитать фото с устройства. Попробуйте ещё раз.',
+      _ => 'Could not read the photo from this device. Try again.',
     };
   }
 
@@ -2446,6 +2584,46 @@ class AppStrings {
       _UzbekStrings() => 'Xaritada ko‘rish',
       _RussianStrings() => 'Показать на карте',
       _ => 'View on map',
+    };
+  }
+
+  String get route {
+    return switch (this) {
+      _UzbekStrings() => "Yo'nalish",
+      _RussianStrings() => 'Маршрут',
+      _ => 'Route',
+    };
+  }
+
+  String get call {
+    return switch (this) {
+      _UzbekStrings() => "Qo'ng'iroq qilish",
+      _RussianStrings() => 'Позвонить',
+      _ => 'Call',
+    };
+  }
+
+  String get googleMaps {
+    return 'Google Maps';
+  }
+
+  String get yandexMaps {
+    return 'Yandex Maps';
+  }
+
+  String get couldNotOpenDirections {
+    return switch (this) {
+      _UzbekStrings() => "Yo'nalishlarni ochib bo'lmadi.",
+      _RussianStrings() => 'Не удалось открыть маршрут.',
+      _ => 'Could not open directions.',
+    };
+  }
+
+  String get couldNotOpenPhone {
+    return switch (this) {
+      _UzbekStrings() => "Telefon ilovasini ochib bo'lmadi.",
+      _RussianStrings() => 'Не удалось открыть приложение телефона.',
+      _ => 'Could not open the phone app.',
     };
   }
 

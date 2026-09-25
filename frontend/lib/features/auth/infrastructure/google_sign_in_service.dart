@@ -22,15 +22,22 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
 
   final AppEnvironment _environment;
   bool _initialized = false;
+  Future<void>? _initialization;
+  bool _authenticating = false;
 
   @override
   Future<String> authenticate() async {
+    if (_authenticating) {
+      throw const GoogleSignInFlowException(
+          'Google sign-in is already in progress.');
+    }
     if (!_environment.isGoogleSignInConfigured) {
       throw const GoogleSignInFlowException(
         'Google sign-in is not configured for this build.',
       );
     }
 
+    _authenticating = true;
     try {
       await _ensureInitialized();
 
@@ -50,29 +57,26 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
       return idToken;
     } on GoogleSignInFlowException {
       rethrow;
-    } on GoogleSignInException catch (error, stackTrace) {
+    } on GoogleSignInException catch (error) {
       developer.log(
-        'Google Sign-In failed: code=${error.code}, '
-        'description=${error.description}, details=${error.details}',
+        'Google Sign-In failed: code=${error.code}',
         name: 'Mushukistan.GoogleSignIn',
-        error: error,
-        stackTrace: stackTrace,
       );
       throw GoogleSignInFlowException(
         error.description?.trim().isNotEmpty == true
             ? error.description!.trim()
             : 'Google sign-in failed.',
       );
-    } on Object catch (error, stackTrace) {
+    } on Object {
       developer.log(
         'Google Sign-In initialization failed.',
         name: 'Mushukistan.GoogleSignIn',
-        error: error,
-        stackTrace: stackTrace,
       );
       throw const GoogleSignInFlowException(
         'Google sign-in could not be initialized for this build.',
       );
+    } finally {
+      _authenticating = false;
     }
   }
 
@@ -80,10 +84,10 @@ class GoogleSignInService implements GoogleIdentityTokenProvider {
     if (_initialized) {
       return;
     }
-    await GoogleSignIn.instance.initialize(
+    await (_initialization ??= GoogleSignIn.instance.initialize(
       clientId: _environment.googleClientId,
       serverClientId: _environment.googleServerClientId,
-    );
+    ));
     _initialized = true;
   }
 }

@@ -304,7 +304,6 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 24),
               if (isOwner || isModerator) ...[
                 Wrap(
                   spacing: 12,

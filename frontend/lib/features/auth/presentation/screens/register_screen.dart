@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/localization/account_security_strings.dart';
 import '../../../../core/localization/language_controller.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../application/auth_controller.dart';
@@ -30,6 +31,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _acceptPrivacy = false;
   bool _acceptGoogleTerms = false;
   bool _acceptGooglePrivacy = false;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -40,6 +42,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _continueGoogleWithLegalAcceptance(String idToken) async {
+    if (_submitting) return;
     final strings = ref.read(appStringsProvider);
     if (!_acceptGoogleTerms || !_acceptGooglePrivacy) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -49,6 +52,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
 
     try {
+      _submitting = true;
       await ref.read(authControllerProvider.notifier).loginWithGoogleIdToken(
             idToken,
             acceptTerms: _acceptGoogleTerms,
@@ -56,10 +60,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           );
     } on Object {
       // Surface handled by auth state.
+    } finally {
+      _submitting = false;
     }
   }
 
   Future<void> _submit() async {
+    if (_submitting || ref.read(authControllerProvider).isBusy) return;
     final controller = ref.read(authControllerProvider.notifier);
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
@@ -76,6 +83,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     final registrationLanguage = ref.read(appLanguageProvider);
     try {
+      _submitting = true;
       await controller.register(
         RegisterCredentials(
           name: _nameController.text.trim(),
@@ -88,6 +96,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       );
     } on Object {
       // Surface handled by auth state.
+    } finally {
+      _submitting = false;
     }
   }
 
@@ -229,7 +239,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                               height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Text('Create account'),
+                          : Text(strings.register),
                     ),
                     const SizedBox(height: 12),
                     if (requiresGoogleLegalAcceptance) ...[
@@ -365,6 +375,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     }
     if (password.length < 8) {
       return strings.passwordMin8;
+    }
+    if (password.length > 128) {
+      return ref.read(accountSecurityStringsProvider).passwordLength;
     }
     return null;
   }

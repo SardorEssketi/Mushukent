@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -93,6 +94,11 @@ class _AboutAccountScreenState extends ConsumerState<AboutAccountScreen> {
               subtitle: Text(_phoneNumberLabel(profile.phoneNumber, strings)),
             ),
             const Divider(),
+            _TelegramAccountTile(
+              username: profile.telegramUsername,
+              strings: strings,
+            ),
+            const Divider(),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.policy_outlined),
@@ -138,6 +144,39 @@ class _AboutAccountScreenState extends ConsumerState<AboutAccountScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TelegramAccountTile extends StatelessWidget {
+  const _TelegramAccountTile({
+    required this.username,
+    required this.strings,
+  });
+
+  final String? username;
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = _normalizedTelegramUsername(username);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.send_outlined),
+      title: Text(strings.telegramUsername),
+      subtitle: Text(
+        normalized == null ? strings.notAdded : '@$normalized',
+      ),
+      trailing:
+          normalized == null ? null : const Icon(Icons.open_in_new_outlined),
+      onTap: normalized == null
+          ? null
+          : () => unawaited(
+                launchUrl(
+                  Uri.https('t.me', normalized),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
     );
   }
 }
@@ -242,4 +281,13 @@ String _formatDate(DateTime dateTime) {
 String _phoneNumberLabel(String? phoneNumber, AppStrings strings) {
   final trimmed = phoneNumber?.trim() ?? '';
   return trimmed.isEmpty ? strings.notAdded : trimmed;
+}
+
+String? _normalizedTelegramUsername(String? value) {
+  final trimmed = value?.trim() ?? '';
+  if (trimmed.isEmpty) {
+    return null;
+  }
+  final withoutAt = trimmed.startsWith('@') ? trimmed.substring(1) : trimmed;
+  return withoutAt.isEmpty ? null : withoutAt;
 }

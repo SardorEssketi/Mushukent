@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import warnings
 from dataclasses import dataclass
 from typing import Final
 
@@ -146,7 +147,14 @@ class ImageProcessor:
                 )
 
         try:
-            with Image.open(io.BytesIO(content)) as image:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+                image = Image.open(io.BytesIO(content))
+            with image:
+                width, height = image.size
+                max_pixels = Image.MAX_IMAGE_PIXELS
+                if max_pixels is not None and width * height > max_pixels:
+                    raise StorageValidationError("Image dimensions are too large.")
                 image.load()
                 transposed: Image.Image = ImageOps.exif_transpose(image)
                 width, height = transposed.size

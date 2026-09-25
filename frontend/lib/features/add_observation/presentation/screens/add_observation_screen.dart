@@ -55,13 +55,15 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
     try {
       images = await ImagePicker().pickMultiImage(
         imageQuality: pickerImageQuality,
+        maxWidth: pickerMaxWidth,
+        maxHeight: pickerMaxHeight,
         limit: 5,
       );
     } catch (error) {
       logPhotoPipelineFailure('observation_gallery_picker', error);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+          SnackBar(content: Text(selectedImageErrorMessage(strings, error))),
         );
       }
       return;
@@ -113,7 +115,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(strings.couldNotPreparePhoto)),
+        SnackBar(content: Text(selectedImageErrorMessage(strings, error))),
       );
     } finally {
       if (mounted) {
@@ -138,12 +140,14 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
       image = await ImagePicker().pickImage(
         source: ImageSource.camera,
         imageQuality: pickerImageQuality,
+        maxWidth: pickerMaxWidth,
+        maxHeight: pickerMaxHeight,
       );
     } catch (error) {
       logPhotoPipelineFailure('observation_camera_picker', error);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotPreparePhoto)),
+          SnackBar(content: Text(selectedImageErrorMessage(strings, error))),
         );
       }
       return;
@@ -277,7 +281,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               onTap: () => unawaited(
                 _openContactRequiredFlow(
                   path: '/add/lost-pet',
-                  requirementMessage: strings.phoneNumberRequiredForLostPet,
+                  requirementMessage: strings.phoneNumberRequiredForAdoption,
                 ),
               ),
             ),

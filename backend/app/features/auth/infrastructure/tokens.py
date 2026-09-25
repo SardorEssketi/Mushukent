@@ -321,6 +321,10 @@ class GoogleOAuthIdTokenVerifier:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
         if payload.get("email_verified") is not True:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+        if not isinstance(payload.get("email"), str) or not payload["email"].strip():
+            raise api_error(400, "GOOGLE_EMAIL_MISSING", "Google token is missing an email claim.")
+        if not isinstance(payload.get("sub"), str) or not payload["sub"].strip():
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
         return GoogleIdTokenClaims(
             email=payload.get("email"),

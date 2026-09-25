@@ -16,6 +16,7 @@ class AppEnvironment {
   AppEnvironment({
     required this.apiBaseUri,
     this.requestTimeout = const Duration(seconds: 15),
+    this.uploadRequestTimeout = const Duration(minutes: 3),
     this.googleClientId,
     this.googleServerClientId,
     this.isWeb = kIsWeb,
@@ -24,6 +25,7 @@ class AppEnvironment {
 
   final Uri apiBaseUri;
   final Duration requestTimeout;
+  final Duration uploadRequestTimeout;
   final String? googleClientId;
   final String? googleServerClientId;
   final bool isWeb;

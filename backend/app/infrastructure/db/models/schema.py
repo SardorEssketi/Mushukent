@@ -103,6 +103,10 @@ class User(UUIDPrimaryKeyMixin, Base):
         server_default=text("false"),
     )
     password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    google_subject: Mapped[str | None] = mapped_column(Text, nullable=True, unique=True)
+    legacy_google_unbound: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     name: Mapped[str | None] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     phone_number: Mapped[str | None] = mapped_column(Text, nullable=True)

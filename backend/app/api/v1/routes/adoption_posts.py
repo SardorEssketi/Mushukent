@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.uploads import read_image_uploads, run_upload_processing
 from app.core.dependencies import get_adoption_posts_service, get_current_active_user
 from app.core.security import api_error
 from app.features.adoption_posts.application.schemas import (
@@ -58,9 +59,10 @@ async def create_adoption_post(
         additional_info,
         owner_phone_publication_consent,
     )
-    photo_payloads = [(await photo.read(), photo.content_type, photo.filename) for photo in photos]
+    photo_payloads = await read_image_uploads(photos, purpose="adoption_create")
     return ApiSuccess(
-        data=adoption_posts_service.create_adoption_post(
+        data=await run_upload_processing(
+            adoption_posts_service.create_adoption_post,
             current_user,
             payload,
             photos=photo_payloads,

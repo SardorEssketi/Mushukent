@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.features.cats.domain.models import GeoPoint
-from app.features.lost_pets.domain.models import LostPetPage, LostPetRecord
+from app.features.lost_pets.domain.models import LostPetMapPage, LostPetPage, LostPetRecord
 from app.features.posts.application.schemas import GenericListResponse, PostAuthor
 
 
@@ -50,6 +50,17 @@ class LostPetResponse(LostPetListItem):
     pass
 
 
+class LostPetMapListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    item_type: str = "lost_pet"
+    id: UUID
+    pet_name: str
+    last_seen_location: GeoPoint
+    is_resolved: bool = False
+    created_at: datetime
+
+
 def to_lost_pet_response(item: LostPetRecord) -> LostPetResponse:
     return LostPetResponse.model_validate(item, from_attributes=True)
 
@@ -58,5 +69,17 @@ def to_lost_pet_page_response(page: LostPetPage) -> GenericListResponse[LostPetL
     return GenericListResponse[LostPetListItem](
         items=[LostPetListItem.model_validate(item, from_attributes=True) for item in page.items],
         next_cursor=page.next_cursor,
+        limit=page.limit,
+    )
+
+
+def to_lost_pet_map_page_response(
+    page: LostPetMapPage,
+) -> GenericListResponse[LostPetMapListItem]:
+    return GenericListResponse[LostPetMapListItem](
+        items=[
+            LostPetMapListItem.model_validate(item, from_attributes=True) for item in page.items
+        ],
+        next_cursor=None,
         limit=page.limit,
     )

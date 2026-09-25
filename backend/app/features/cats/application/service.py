@@ -240,6 +240,7 @@ class CatsService:
                     longitude=query.longitude,
                     radius_meters=query.radius_meters,
                     bbox=bbox,
+                    kind=query.kind,
                 )
             except ValueError as exc:
                 raise api_error(

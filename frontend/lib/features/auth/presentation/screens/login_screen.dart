@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/localization/account_security_strings.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
@@ -77,6 +78,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
     final strings = ref.watch(appStringsProvider);
+    final securityStrings = ref.watch(accountSecurityStringsProvider);
     final isLoading = authState.isBusy;
     final pendingGoogleIdToken = authState.pendingGoogleIdToken;
     final requiresGoogleLegalAcceptance =
@@ -157,6 +159,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             color: Theme.of(context).colorScheme.error,
                           ),
                         ),
+                        if (authState.message
+                                ?.toLowerCase()
+                                .contains('password') ==
+                            true)
+                          Text(securityStrings.loginHelp),
                         const SizedBox(height: AppSpacing.lg),
                       ],
                       FilledButton(

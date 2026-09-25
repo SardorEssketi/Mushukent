@@ -24,11 +24,25 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         model = self.session.scalar(statement)
         return self._to_domain(model) if model is not None else None
 
+    def get_by_google_subject(self, subject: str) -> AuthUser | None:
+        model = self.session.scalar(
+            select(schema.User).where(schema.User.google_subject == subject)
+        )
+        return self._to_domain(model) if model is not None else None
+
+    def get_by_id_for_update(self, user_id: UUID) -> AuthUser | None:
+        model = self.session.scalar(
+            select(schema.User).where(schema.User.id == user_id).with_for_update()
+        )
+        return self._to_domain(model) if model is not None else None
+
     def create(
         self,
         *,
         email: str,
         password_hash: str | None,
+        google_subject: str | None = None,
+        legacy_google_unbound: bool = False,
         name: str | None = None,
         preferred_language: str = "en",
         email_verified: bool = False,
@@ -40,6 +54,8 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         model = schema.User(
             email=email,
             password_hash=password_hash,
+            google_subject=google_subject,
+            legacy_google_unbound=legacy_google_unbound,
             name=name,
             preferred_language=preferred_language,
             email_verified=email_verified,
@@ -59,6 +75,8 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
             raise ValueError(f"User {user.id} no longer exists.")
         model.email = user.email
         model.password_hash = user.password_hash
+        model.google_subject = user.google_subject
+        model.legacy_google_unbound = user.legacy_google_unbound
         model.name = user.name
         model.avatar_url = user.avatar_url
         model.phone_number = user.phone_number
@@ -166,6 +184,8 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
             id=model.id,
             email=model.email,
             password_hash=model.password_hash,
+            google_subject=model.google_subject,
+            legacy_google_unbound=model.legacy_google_unbound,
             name=model.name,
             avatar_url=model.avatar_url,
             phone_number=model.phone_number,

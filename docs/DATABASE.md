@@ -61,6 +61,8 @@ CREATE TABLE users (
     email TEXT UNIQUE NOT NULL,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     password_hash TEXT NULL, -- nullable for OAuth-only accounts
+    google_subject TEXT NULL UNIQUE, -- stable Google sub, populated on verified sign-in
+    legacy_google_unbound BOOLEAN NOT NULL DEFAULT FALSE, -- eligible consumer Gmail pre-subject accounts only
     name TEXT,
     avatar_url TEXT,
     phone_number TEXT NULL, -- Uzbekistan format: +998 XX XXX XXXX
