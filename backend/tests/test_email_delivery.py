@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from html.parser import HTMLParser
 from urllib import error
+from urllib.parse import parse_qs, quote, urlsplit
 
 import pytest
 from fastapi import HTTPException
@@ -23,6 +25,29 @@ class StubResponse:
 
     def __exit__(self, *args: object) -> None:
         return None
+
+
+class AnchorCollector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.anchors: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._text = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a":
+            self._href = dict(attrs).get("href")
+            self._text = ""
+
+    def handle_data(self, data: str) -> None:
+        if self._href is not None:
+            self._text += data
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "a" and self._href is not None:
+            self.anchors.append((self._href, self._text.strip()))
+            self._href = None
+            self._text = ""
 
 
 def _production_settings(**overrides: object) -> Settings:
@@ -60,9 +85,10 @@ def test_verification_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(email_module.request, "urlopen", fake_urlopen)
     settings = _production_settings()
 
+    token = "header.payload/with+reserved="
     EmailVerificationSender(settings).send_verification_email(
         email="user@example.com",
-        token="verification-token",
+        token=token,
     )
 
     assert captured["url"] == "https://api.resend.com/emails"
@@ -70,16 +96,36 @@ def test_verification_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch
     assert captured["headers"]["Authorization"] == "Bearer re_test_key"
     assert captured["headers"]["Content-type"] == "application/json"
     assert captured["headers"]["User-agent"] == RESEND_USER_AGENT
-    assert captured["payload"] == {
-        "from": "noreply@mushukistan.uz",
-        "to": ["user@example.com"],
-        "subject": "Verify your Mushukistan account",
-        "text": (
-            "Confirm your Mushukistan account by opening this link:\n\n"
-            "https://mushukistan.uz/verify-email?token=verification-token\n\n"
-            "If you did not create this account, ignore this email."
-        ),
-    }
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["from"] == "noreply@mushukistan.uz"
+    assert payload["to"] == ["user@example.com"]
+    assert payload["subject"] == "Verify your Mushukistan account"
+
+    expected_url = "https://mushukistan.uz/verify-email?token=" + quote(token, safe="")
+    text = payload["text"]
+    html = payload["html"]
+    assert isinstance(text, str)
+    assert isinstance(html, str)
+    assert expected_url in text
+    assert "Mushukistan" in text
+    assert "Verify your email" in text
+    assert "This link expires in 24 hours." in text
+    assert "If you did not create this account, ignore this email." in text
+
+    anchors = AnchorCollector()
+    anchors.feed(html)
+    assert [label for _, label in anchors.anchors] == [
+        "Verify email address",
+        expected_url,
+    ]
+    assert all(href == expected_url for href, _ in anchors.anchors)
+    assert all(parse_qs(urlsplit(href).query)["token"] == [token] for href, _ in anchors.anchors)
+    assert "Verify your email" in html
+    assert "Button not working? Copy and paste this link:" in html
+    assert "This link expires in 24 hours." in html
+    assert "If you didn't create this account, you can ignore this email." in html
+    assert "<script" not in html.casefold()
 
 
 def test_account_deletion_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch) -> None:
