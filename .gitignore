@@ -33,3 +33,8 @@ Thumbs.db
 # Local screenshots / manual browser captures
 _chrome-*.png
 
+# Local inspection data, deployment bundles/logs, and manual screenshots
+/.data/
+/.codex/
+/screens/
+

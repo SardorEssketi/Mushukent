@@ -1,1 +1,0 @@
-"""Posts domain layer."""

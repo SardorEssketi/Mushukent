@@ -1,1 +1,0 @@
-"""Likes domain layer."""

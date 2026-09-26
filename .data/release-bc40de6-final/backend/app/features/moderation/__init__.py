@@ -1,1 +1,0 @@
-"""Moderation feature module skeleton."""

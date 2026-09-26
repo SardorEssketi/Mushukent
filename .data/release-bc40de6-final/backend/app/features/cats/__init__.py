@@ -1,1 +1,0 @@
-"""Cats feature module skeleton."""

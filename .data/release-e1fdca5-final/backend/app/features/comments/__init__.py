@@ -1,1 +1,0 @@
-"""Comments feature module skeleton."""

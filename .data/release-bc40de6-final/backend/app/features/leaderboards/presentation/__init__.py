@@ -1,1 +1,0 @@
-"""Leaderboard presentation layer."""

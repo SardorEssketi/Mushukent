@@ -1,1 +1,0 @@
-"""Leaderboard feature module skeleton."""

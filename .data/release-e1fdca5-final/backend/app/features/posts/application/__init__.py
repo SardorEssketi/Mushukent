@@ -1,1 +1,0 @@
-"""Posts application layer."""
