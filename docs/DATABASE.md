@@ -355,7 +355,7 @@ Important constraints, indexes and rationale
   needs-help post requires location; a normal observation follows the normal optional-location
   policy. This is independent of cat-status metadata.
 - Observation posts do not have tags or tag relations.
-- New observations create an unnamed `unknown` cat record automatically; the client does not perform nearby-cat matching.
+- New observations create a cat record automatically. The client may provide its optional name; if omitted the record remains unnamed (`unknown` for display). The client does not perform nearby-cat matching or existing-cat selection.
 - Unique constraint (post_id, user_id) in likes enforces single-like policy.
 - Soft-delete: queries should include WHERE deleted_at IS NULL where appropriate; consider adding partial indexes to speed up active-only queries. Example:
 CREATE INDEX idx_posts_active_created_at ON posts (created_at DESC) WHERE deleted_at IS NULL;

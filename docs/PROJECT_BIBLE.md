@@ -309,7 +309,7 @@ bugfix/feed
 
 Artificial Intelligence must never make final decisions.
 
-The current MVP does not perform cat matching. Each new observation receives an unnamed Unknown cat record automatically. Any future identification feature must remain an explicit, separately approved scope change.
+The current MVP does not perform cat matching. Each new observation receives its own automatically created cat record; users may optionally provide its name, and a blank name is displayed as Unknown. Existing-cat matching or selection remains out of scope.
 
 AI should improve user experience, not replace user decisions.
 

@@ -116,7 +116,7 @@ Bottom navigation with 5 tabs:
   - link to Login
 - Interactions:
   - tapping Register after valid fields submits registration using the current app language.
-  - Google account creation starts from the Login screen's Google flow, which collects any required legal consent separately from the email registration form.
+  - Google sign-in is available from Login and Register. When legal consent is required for Google, show that consent flow by itself instead of duplicating the email-registration consent controls.
 - Validation:
   - email valid,
   - password min 8,
@@ -231,12 +231,15 @@ Bottom navigation with 5 tabs:
 - Purpose: complete metadata before submission.
 - Layout:
 - one to five image previews
+- optional cat name input (max 100 characters)
 - description input
 - located observations include an explicitly confirmed current location or manually selected map point.
 - submit button
-- The backend creates an unnamed `Unknown` cat record automatically for each observation. The user is not asked to search for, select, or name a cat during this flow.
+- The backend creates a new cat record automatically for each observation. Users may enter its optional name; when left blank, it remains unnamed and is displayed as `Unknown`.
+- The user is not asked to search for or select an existing cat; cat matching is not part of this flow.
 - Validation:
   - image required,
+  - cat name optional, max 100 characters,
 - location optional for Observation and required for Needs help.
 - Edge cases:
 - GPS unavailable for current-location flow -> show error and retry or allow manual map placement / skip location.

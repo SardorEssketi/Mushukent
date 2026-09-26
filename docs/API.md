@@ -193,6 +193,7 @@ Feature: Authentication
   - Validate issuer, expiry, `aud` against one configured Google OAuth client ID, and require `email_verified=true`.
   - If neither subject nor email matches an existing account, the backend creates an account only when Terms and Privacy acceptance are true.
   - An existing password account with the same verified email returns `GOOGLE_LINK_REQUIRED` until Google is connected from an authenticated session.
+  - A passwordless legacy account with a verified `gmail.com` or `googlemail.com` address may bind its Google subject on sign-in even if its migration marker was missed.
   - A legacy passwordless account with an external-domain email and no stored Google subject returns `GOOGLE_LEGACY_LINK_REQUIRED` until Google is connected from an existing authenticated session or through support-assisted verification.
   - Existing accounts with current legal acceptance may authenticate without resubmitting acceptance flags.
   - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
@@ -452,7 +453,7 @@ Feature: Posts (Observations)
 - Request options:
   a) multipart/form-data with file:
   - photo/photos (one to five files) required OR photo_url string
-     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional for the current observation flow
+     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional. Mobile clients omit cat_id and may send new_cat.name to name the automatically created cat.
      - description string (max 2000)
      - kind (`observation` or `needs_help`, defaults to `observation`)
      - status (cat_status, independent metadata when supplied)
@@ -465,6 +466,7 @@ Feature: Posts (Observations)
   - If cat_id provided, must exist
   - If new_cat provided, validate per CatCreate
   - If neither cat_id nor new_cat is provided, create an unnamed cat with status `unknown` automatically
+  - If new_cat is provided, create a new cat record for this observation; mobile clients do not search for or select an existing cat
   - latitude in [-90,90], longitude in [-180,180]
   - location may be omitted for a normal observation; it is required when `kind` is `needs_help`
   - photo file: content-type image/jpeg|image/png, size<=10MB
@@ -500,7 +502,7 @@ Feature: Posts (Observations)
   - 401 UNAUTHORIZED
   - 422 INVALID_IMAGE
   - 409 DUPLICATE_OBSERVATION
-- Transactional notes: when no cat reference is supplied, create the unnamed cat and post within one DB transaction, then update cat counters.
+- Transactional notes: create the new cat (named when `new_cat.name` is supplied, otherwise unnamed) and post within one DB transaction, then update cat counters.
 - Rate limit: image-upload stricter (10 req/min)
 
 2) GET /api/v1/posts/{post_id}

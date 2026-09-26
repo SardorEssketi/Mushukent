@@ -130,118 +130,121 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextFormField(
-                      controller: _nameController,
-                      enabled: !isLoading,
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: strings.nameOptional,
-                      ),
-                      validator: (value) => _validateName(value, strings),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _emailController,
-                      enabled: !isLoading,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: strings.email,
-                        hintText: strings.emailHint,
-                      ),
-                      validator: (value) => _validateEmail(value, strings),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      enabled: !isLoading,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      onFieldSubmitted: (_) {
-                        unawaited(_submit());
-                      },
-                      decoration: InputDecoration(
-                        labelText: strings.password,
-                        suffixIcon: IconButton(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
-                        ),
-                      ),
-                      validator: (value) => _validatePassword(value, strings),
-                    ),
-                    const SizedBox(height: 12),
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _acceptTerms,
-                      onChanged: isLoading
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _acceptTerms = value ?? false;
-                              });
-                            },
-                      title: LegalConsentText(
-                        leadingText: strings.acceptLegalLeading,
-                        linkText: strings.termsOfService,
-                        trailingText: strings.acceptLegalTrailing,
-                        route: '/legal/terms',
+                    if (!requiresGoogleLegalAcceptance) ...[
+                      TextFormField(
+                        controller: _nameController,
                         enabled: !isLoading,
-                      ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _acceptPrivacy,
-                      onChanged: isLoading
-                          ? null
-                          : (value) {
-                              setState(() {
-                                _acceptPrivacy = value ?? false;
-                              });
-                            },
-                      title: LegalConsentText(
-                        leadingText: strings.acceptLegalLeading,
-                        linkText: strings.privacyPolicy,
-                        trailingText: strings.acceptLegalTrailing,
-                        route: '/legal/privacy',
-                        enabled: !isLoading,
-                      ),
-                      controlAffinity: ListTileControlAffinity.leading,
-                    ),
-                    if (authState.hasError) ...[
-                      Text(
-                        authState.message!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: strings.nameOptional,
                         ),
+                        validator: (value) => _validateName(value, strings),
                       ),
                       const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _emailController,
+                        enabled: !isLoading,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: strings.email,
+                          hintText: strings.emailHint,
+                        ),
+                        validator: (value) => _validateEmail(value, strings),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordController,
+                        enabled: !isLoading,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) {
+                          unawaited(_submit());
+                        },
+                        decoration: InputDecoration(
+                          labelText: strings.password,
+                          suffixIcon: IconButton(
+                            onPressed: isLoading
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _obscurePassword = !_obscurePassword;
+                                    });
+                                  },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                        validator: (value) => _validatePassword(value, strings),
+                      ),
+                      const SizedBox(height: 12),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _acceptTerms,
+                        onChanged: isLoading
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _acceptTerms = value ?? false;
+                                });
+                              },
+                        title: LegalConsentText(
+                          leadingText: strings.acceptLegalLeading,
+                          linkText: strings.termsOfService,
+                          trailingText: strings.acceptLegalTrailing,
+                          route: '/legal/terms',
+                          enabled: !isLoading,
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                      CheckboxListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _acceptPrivacy,
+                        onChanged: isLoading
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  _acceptPrivacy = value ?? false;
+                                });
+                              },
+                        title: LegalConsentText(
+                          leadingText: strings.acceptLegalLeading,
+                          linkText: strings.privacyPolicy,
+                          trailingText: strings.acceptLegalTrailing,
+                          route: '/legal/privacy',
+                          enabled: !isLoading,
+                        ),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
+                      if (authState.hasError) ...[
+                        Text(
+                          authState.message!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      FilledButton(
+                        onPressed: isLoading
+                            ? null
+                            : () {
+                                unawaited(_submit());
+                              },
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Text(strings.register),
+                      ),
+                      const SizedBox(height: 12),
                     ],
-                    FilledButton(
-                      onPressed: isLoading
-                          ? null
-                          : () {
-                              unawaited(_submit());
-                            },
-                      child: isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(strings.register),
-                    ),
-                    const SizedBox(height: 12),
                     if (requiresGoogleLegalAcceptance) ...[
                       Text(
                         strings.googleLegalConsentTitle,
@@ -252,6 +255,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         strings.googleLegalConsentMessage,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
+                      if (authState.hasError) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          authState.message!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ],
                       CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
                         value: _acceptGoogleTerms,

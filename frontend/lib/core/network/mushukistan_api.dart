@@ -594,6 +594,7 @@ class MushukistanApi {
     required List<ObservationPhotoUpload> photos,
     GeoPoint? location,
     String kind = 'observation',
+    String? catName,
     String? description,
     bool isPublic = true,
   }) {
@@ -609,6 +610,8 @@ class MushukistanApi {
             )
             .toList(growable: false),
         if (location != null) 'location': jsonEncode(location.toJson()),
+        if (catName != null && catName.trim().isNotEmpty)
+          'new_cat': jsonEncode(<String, String>{'name': catName.trim()}),
         'kind': kind,
         'is_public': isPublic,
         if (description != null && description.trim().isNotEmpty)

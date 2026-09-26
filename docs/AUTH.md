@@ -42,7 +42,8 @@ MVP constraints:
 - Client sends `id_token` to backend.
 - Backend validates token signature, issuer (`iss`), configured audience (`aud`), and expiration (`exp`).
 - Backend finds an already connected user by Google's stable `sub` claim.
-- A legacy Google-only consumer Gmail row without a stored subject is bound on its next verified Google login when its email matches and the migration marked it as a legacy Google account.
+- A passwordless legacy consumer Gmail row without a stored subject is bound on its next verified Google login. The migration marks existing eligible rows; runtime also recognizes a verified `gmail.com` or `googlemail.com` identity when a row was missed by migration.
+- Password accounts still require an authenticated session to connect Google unless they were already marked as legacy Google accounts. Email matching alone never signs into an ordinary password account.
 - Legacy external-domain Google rows are not automatically bound by email. They must connect Google from an existing authenticated session or use support-assisted identity verification; otherwise Google login returns `GOOGLE_LEGACY_LINK_REQUIRED`.
 - An existing password account with a matching Google email must connect Google while authenticated in Account Security. Email matching alone never signs into that password account.
 - A new Google user is created with `password_hash = NULL` only after explicit Terms and Privacy acceptance.

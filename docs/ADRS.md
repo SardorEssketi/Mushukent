@@ -15,16 +15,18 @@ deeper conversation threads.
 
 - A new observation without a legacy `cat_id` or `new_cat` reference creates an
   unnamed `unknown` cat in the same transaction as the post.
-- The mobile observation flow does not expose cat matching, cat naming, or
-  nearby-cat suggestions.
+- The mobile observation flow does not expose cat matching or nearby-cat
+  suggestions. Optional naming of the automatically created cat is specified
+  by ADR-0019.
 - Comments store an optional self-referencing `parent_comment_id`. The API
   returns a flat page with that relationship, and clients render unlimited
   nesting recursively.
 
 ### Consequences
 
-- Existing legacy API clients may continue to provide `cat_id` or `new_cat`,
-  but new clients should omit both for observations.
+- Existing legacy API clients may continue to provide `cat_id` or `new_cat`.
+  Mobile clients omit `cat_id` and may provide `new_cat.name` only to name the
+  automatically created cat; they do not select or match existing cats.
 - Cat records remain available for grouping, map visibility, and future
   separately approved identification work.
 - Physical comment cleanup cascades to replies through the database foreign key;
@@ -90,3 +92,58 @@ and can therefore duplicate or skip records across pages.
 - A cursor cannot be reused under a different filter or nearby scope.
 - Cursor internals are an API implementation detail and may evolve by version;
   clients only persist and return the opaque value.
+
+## ADR-0019: Optional cat names on observations
+
+- Status: Accepted
+- Date: 2026-09-26
+
+### Context
+
+Users sometimes know the name of the cat in an observation. The existing flow
+automatically creates one cat record per observation and intentionally has no
+cat matching or existing-cat selection.
+
+### Decision
+
+- Add an optional cat-name field to the shared observation details form,
+  including Needs help posts.
+- Send a nonblank name for the newly created cat record. A blank field omits
+  the name and keeps the existing `Unknown` display behavior.
+- Keep one automatically created cat record per observation. Do not add
+  nearby-cat search, matching, or existing-cat selection.
+- Limit the name to 100 characters, matching the existing API schema.
+
+### Consequences
+
+- No database migration is needed; cat names are already nullable and the
+  observation API already accepts `new_cat.name`.
+- Existing observations and blank-name submissions remain unnamed.
+
+## ADR-0020: Bind missed passwordless Gmail records on verified sign-in
+
+- Status: Accepted
+- Date: 2026-09-26
+
+### Context
+
+The Google-subject migration marks existing active, verified consumer Gmail
+records as eligible for binding. A passwordless legacy Gmail record that was
+not marked by that migration can otherwise be rejected even when Google has
+verified the same email address.
+
+### Decision
+
+- On Google sign-in, allow a passwordless, unlinked record to bind to the
+  verified Google subject when its address is `gmail.com` or `googlemail.com`,
+  even when the migration marker is absent.
+- Keep the existing authenticated-linking requirement for ordinary
+  email/password accounts and for passwordless external-domain accounts.
+- Continue to reject a Google subject that is already linked to another user.
+
+### Consequences
+
+- The fix requires no database migration and handles eligible Gmail records
+  missed by the migration.
+- External-domain legacy records still require an existing authenticated
+  session or support-assisted verification.

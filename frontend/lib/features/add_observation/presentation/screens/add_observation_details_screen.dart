@@ -83,6 +83,16 @@ class AddObservationDetailsScreen extends ConsumerWidget {
                 ),
               ),
             const SizedBox(height: AppSpacing.lg),
+            TextFormField(
+              initialValue: state.catName,
+              decoration: InputDecoration(
+                labelText: strings.catNameOptionalLabel,
+              ),
+              maxLength: 100,
+              textCapitalization: TextCapitalization.words,
+              onChanged: controller.setCatName,
+            ),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               decoration: InputDecoration(
                 labelText: strings.descriptionLabel,

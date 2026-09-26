@@ -16,6 +16,7 @@ class AddObservationState {
     this.photos = const [],
     this.location,
     this.kind = 'observation',
+    this.catName = '',
     this.description = '',
     this.isPublic = true,
     this.submitting = false,
@@ -26,6 +27,7 @@ class AddObservationState {
   final List<ObservationPhotoUpload> photos;
   final GeoPoint? location;
   final String kind;
+  final String catName;
   final String description;
   final bool isPublic;
   final bool submitting;
@@ -38,6 +40,7 @@ class AddObservationState {
       photos.isNotEmpty ||
       location != null ||
       kind != 'observation' ||
+      catName.trim().isNotEmpty ||
       description.trim().isNotEmpty ||
       !isPublic;
 
@@ -46,6 +49,7 @@ class AddObservationState {
     GeoPoint? location,
     String? kind,
     bool clearLocation = false,
+    String? catName,
     String? description,
     bool? isPublic,
     bool? submitting,
@@ -56,6 +60,7 @@ class AddObservationState {
       photos: photos ?? this.photos,
       location: clearLocation ? null : location ?? this.location,
       kind: kind ?? this.kind,
+      catName: catName ?? this.catName,
       description: description ?? this.description,
       isPublic: isPublic ?? this.isPublic,
       submitting: submitting ?? this.submitting,
@@ -104,6 +109,10 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     state = state.copyWith(description: description);
   }
 
+  void setCatName(String catName) {
+    state = state.copyWith(catName: catName);
+  }
+
   void setIsPublic(bool value) {
     state = state.copyWith(isPublic: value);
   }
@@ -126,6 +135,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
         photos: state.photos,
         location: location,
         kind: state.kind,
+        catName: state.catName.trim().isEmpty ? null : state.catName.trim(),
         description:
             state.description.trim().isEmpty ? null : state.description.trim(),
         isPublic: state.isPublic,

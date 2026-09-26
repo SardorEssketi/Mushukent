@@ -652,11 +652,10 @@ class AppStrings {
   String get googleLegalConsentMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Google hisobingiz bilan Mushukistan hisobini yaratish uchun huquqiy hujjatlarni qabul qiling.',
+        'Google orqali davom etishdan oldin huquqiy hujjatlarni qabul qiling.',
       _RussianStrings() =>
-        'Примите юридические документы, чтобы создать аккаунт Mushukistan через Google.',
-      _ =>
-        'Accept the legal documents to create your Mushukistan account with Google.',
+        'Примите юридические документы, чтобы продолжить через Google.',
+      _ => 'Accept the legal documents to continue with Google.',
     };
   }
 
@@ -2429,6 +2428,14 @@ class AppStrings {
       _UzbekStrings() => 'Mushuk nomi',
       _RussianStrings() => '\u0418\u043c\u044f \u043a\u043e\u0448\u043a\u0438',
       _ => 'Cat name',
+    };
+  }
+
+  String get catNameOptionalLabel {
+    return switch (this) {
+      _UzbekStrings() => 'Mushuk nomi (ixtiyoriy)',
+      _RussianStrings() => 'Имя кошки (необязательно)',
+      _ => 'Cat name (optional)',
     };
   }
 

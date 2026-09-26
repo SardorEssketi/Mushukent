@@ -255,17 +255,19 @@ class AuthService(AuthenticationService):
                         )
                     if not user.legacy_google_unbound and user.google_subject is None:
                         if user.password_hash is None:
+                            if not self._is_consumer_gmail_address(user.email):
+                                raise api_error(
+                                    409,
+                                    "GOOGLE_LEGACY_LINK_REQUIRED",
+                                    "Connect Google from an existing signed-in session in Account "
+                                    "Security, or contact support.",
+                                )
+                        else:
                             raise api_error(
                                 409,
-                                "GOOGLE_LEGACY_LINK_REQUIRED",
-                                "Connect Google from an existing signed-in session in Account "
-                                "Security, or contact support.",
+                                "GOOGLE_LINK_REQUIRED",
+                                "Sign in with your password and connect Google in Account Security.",
                             )
-                        raise api_error(
-                            409,
-                            "GOOGLE_LINK_REQUIRED",
-                            "Sign in with your password and connect Google in Account Security.",
-                        )
                     user.google_subject = subject
                     user.legacy_google_unbound = False
                     user = repository.save(user)
@@ -517,6 +519,11 @@ class AuthService(AuthenticationService):
     @staticmethod
     def _normalize_email(email: str) -> str:
         return email.strip().casefold()
+
+    @staticmethod
+    def _is_consumer_gmail_address(email: str) -> bool:
+        domain = email.rsplit("@", 1)[-1].casefold()
+        return domain in {"gmail.com", "googlemail.com"}
 
     @staticmethod
     def _validate_password(password: str) -> None:
