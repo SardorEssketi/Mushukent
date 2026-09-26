@@ -20,9 +20,15 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
         return self._to_domain(model) if model is not None else None
 
     def get_by_email(self, email: str) -> AuthUser | None:
-        statement = select(schema.User).where(func.lower(schema.User.email) == email.casefold())
-        model = self.session.scalar(statement)
-        return self._to_domain(model) if model is not None else None
+        matches = self.get_users_by_email(email)
+        return matches[0] if len(matches) == 1 else None
+
+    def get_users_by_email(self, email: str) -> list[AuthUser]:
+        statement = select(schema.User).where(
+            func.lower(func.trim(schema.User.email)) == email.strip().lower()
+        )
+        models = self.session.scalars(statement).all()
+        return [self._to_domain(model) for model in models]
 
     def get_by_google_subject(self, subject: str) -> AuthUser | None:
         model = self.session.scalar(

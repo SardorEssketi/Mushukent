@@ -32,6 +32,12 @@ class AccountSecurityStrings {
     required this.google,
     required this.password,
     required this.loginHelp,
+    required this.emailAddress,
+    required this.emailVerified,
+    required this.emailNeedsVerification,
+    required this.requireGoogleReauthentication,
+    required this.reauthenticateGoogle,
+    required this.googleReauthenticated,
   });
 
   final String title;
@@ -58,6 +64,12 @@ class AccountSecurityStrings {
   final String google;
   final String password;
   final String loginHelp;
+  final String emailAddress;
+  final String emailVerified;
+  final String emailNeedsVerification;
+  final String requireGoogleReauthentication;
+  final String reauthenticateGoogle;
+  final String googleReauthenticated;
 
   static AccountSecurityStrings forLanguage(AppLanguage language) =>
       switch (language) {
@@ -87,7 +99,15 @@ class AccountSecurityStrings {
             google: 'Google',
             password: 'Password',
             loginHelp:
-                'If you signed up with Google, use Continue with Google. You can set a separate Mushukistan password in Account Security after signing in.'),
+                'If you signed up with Google, use Continue with Google. You can set a separate Mushukistan password in Account Security after signing in.',
+            emailAddress: 'Email address',
+            emailVerified: 'Verified',
+            emailNeedsVerification: 'Needs verification',
+            requireGoogleReauthentication:
+                'Confirm your Google account again before adding a password.',
+            reauthenticateGoogle: 'Re-authenticate with Google',
+            googleReauthenticated:
+                'Google confirmed. You can now save your password.'),
         AppLanguage.uzbek => const AccountSecurityStrings(
             title: 'Hisob xavfsizligi',
             signInMethods: 'Kirish usullari',
@@ -115,7 +135,15 @@ class AccountSecurityStrings {
             google: 'Google',
             password: 'Parol',
             loginHelp:
-                'Agar Google orqali ro‘yxatdan o‘tgan bo‘lsangiz, Google bilan davom eting. Kirgach, Hisob xavfsizligida alohida Mushukistan parolini o‘rnatishingiz mumkin.'),
+                'Agar Google orqali ro‘yxatdan o‘tgan bo‘lsangiz, Google bilan davom eting. Kirgach, Hisob xavfsizligida alohida Mushukistan parolini o‘rnatishingiz mumkin.',
+            emailAddress: 'Elektron pochta',
+            emailVerified: 'Tasdiqlangan',
+            emailNeedsVerification: 'Tasdiqlash kerak',
+            requireGoogleReauthentication:
+                'Parol qo‘shishdan oldin Google hisobingizni qayta tasdiqlang.',
+            reauthenticateGoogle: 'Google orqali qayta tasdiqlash',
+            googleReauthenticated:
+                'Google tasdiqlandi. Endi parolni saqlashingiz mumkin.'),
         AppLanguage.russian => const AccountSecurityStrings(
             title: 'Безопасность аккаунта',
             signInMethods: 'Способы входа',
@@ -142,6 +170,14 @@ class AccountSecurityStrings {
             google: 'Google',
             password: 'Пароль',
             loginHelp:
-                'Если вы зарегистрировались через Google, войдите с помощью Google. Затем в разделе безопасности аккаунта можно установить отдельный пароль Mushukistan.'),
+                'Если вы зарегистрировались через Google, войдите с помощью Google. Затем в разделе безопасности аккаунта можно установить отдельный пароль Mushukistan.',
+            emailAddress: 'Электронная почта',
+            emailVerified: 'Подтверждён',
+            emailNeedsVerification: 'Требуется подтверждение',
+            requireGoogleReauthentication:
+                'Повторно подтвердите аккаунт Google перед добавлением пароля.',
+            reauthenticateGoogle: 'Повторно подтвердить через Google',
+            googleReauthenticated:
+                'Google подтверждён. Теперь можно сохранить пароль.'),
       };
 }

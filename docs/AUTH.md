@@ -3,7 +3,7 @@ AUTH.md
 Mushukistan Authentication and Authorization (MVP)
 
 Version: 1.0 (MVP)
-Scope: Android app + FastAPI backend only
+Scope: Flutter Android/web app + FastAPI backend
 
 1. Purpose
 ----------
@@ -35,25 +35,27 @@ MVP constraints:
 - Client submits verification token received through email delivery.
 - Backend validates token signature, issuer, audience, expiration, and token type.
 - Backend marks the matching user as `email_verified = true`.
+- Verification tokens expire after 24 hours by default. Replay before expiry is idempotent and does not issue a session or change other account data; tokens are not strictly single-use.
 - Development flow may expose the verification token in API responses for local testing; production must deliver the token by email provider only. Verification tokens are not logged.
 
 2.4 Google OAuth Login
 - Client obtains Google `id_token` using official Google Sign-In SDK.
 - Client sends `id_token` to backend.
-- Backend validates token signature, issuer (`iss`), configured audience (`aud`), and expiration (`exp`).
-- Backend finds an already connected user by Google's stable `sub` claim.
-- A passwordless legacy consumer Gmail row without a stored subject is bound on its next verified Google login. The migration marks existing eligible rows; runtime also recognizes a verified `gmail.com` or `googlemail.com` identity when a row was missed by migration.
-- Password accounts still require an authenticated session to connect Google unless they were already marked as legacy Google accounts. Email matching alone never signs into an ordinary password account.
-- Legacy external-domain Google rows are not automatically bound by email. They must connect Google from an existing authenticated session or use support-assisted identity verification; otherwise Google login returns `GOOGLE_LEGACY_LINK_REQUIRED`.
-- An existing password account with a matching Google email must connect Google while authenticated in Account Security. Email matching alone never signs into that password account.
+- Backend validates the token signature, issuer (`iss`), configured audience (`aud`), authorized party (`azp`) when applicable, expiration (`exp`), issued-at (`iat`), email, `email_verified`, and stable `sub`.
+- Backend looks up an existing Google identity by `sub` first. Email is not the permanent identity key.
+- With a new `sub`, automatic email matching is allowed only for exactly one active Mushukistan account whose email is already verified and exactly matches the verified consumer Gmail address. Google's signed, authoritative Gmail claim proves control of the address, and Mushukistan's existing verified-email state protects the target password account. Password hash and user data remain on that same row.
+- Same-email Workspace and other external-domain accounts are never automatically linked by email, even when Google reports a verified email. Those addresses may be reassigned; the user must sign in to Mushukistan and connect Google from Account Security. Unverified password accounts are also never auto-linked.
+- An already-linked subject continues to sign into its original Mushukistan user if the Google email changes. The Mushukistan email and verification state are not changed by a different provider email.
+- New Google users get Mushukistan `email_verified = true` only for an authoritative Gmail or verified hosted-domain claim. Other provider-verified addresses can authenticate by `sub` while Mushukistan password login still requires Mushukistan email verification.
+- Multiple normalized email matches, an inactive matching account, or a subject already attached elsewhere fail closed. Separate user rows are never merged based on email.
+- Google login and password login issue the same Mushukistan access and refresh session types.
 - A new Google user is created with `password_hash = NULL` only after explicit Terms and Privacy acceptance.
-- Google-authenticated users are treated as verified immediately.
 - Backend issues a short-lived JWT access token and a refresh/session token.
 - Google login rejections log only provider, status, and error code; raw credentials and claims are not logged.
 
 2.5 Logout
 - Client calls `POST /auth/logout` with the current refresh token when available, then deletes local credentials.
-- Backend revokes the matching refresh session, or all active refresh sessions for the authenticated user when no token is provided.
+- Backend revokes the matching refresh session only when it belongs to the authenticated user, or all active refresh sessions for that user when no token is provided.
 - Access-token blacklist remains out of MVP scope.
 
 3. JWT Strategy
@@ -103,23 +105,23 @@ Startup/session restore:
 -------------------------------
 5.1 Client Steps
 - User taps "Continue with Google".
-- Android app obtains Google ID token.
-- App sends `id_token` to `POST /api/v1/auth/google`.
+- Flutter mobile or web obtains a Google ID token through its official Google Sign-In flow.
+- Client sends `id_token` to `POST /api/v1/auth/google`.
 - If the backend returns `LEGAL_ACCEPTANCE_REQUIRED`, the app shows explicit Terms of Service and Privacy Policy consent controls and resubmits the same Google ID token with `accept_terms=true` and `accept_privacy=true`.
-- The app must not silently accept legal documents or require the user to choose their Google account twice.
+- The client must not silently accept legal documents or require the user to choose their Google account twice.
 
 5.2 Backend Steps
 - Verify token with Google public keys.
 - Validate:
   - `iss` is Google issuer,
-  - `aud` matches one configured Google OAuth client ID,
-  - token not expired,
+  - `aud` matches a configured Google OAuth client ID and `azp` is valid when applicable,
+  - token is not expired and `iat` is not in the future,
   - `email_verified` is true,
-  - email exists in token payload.
+  - email and stable `sub` exist in token payload.
 - Find or create user:
   - for new users, require `accept_terms=true` and `accept_privacy=true`;
   - record current Terms and Privacy versions and a backend-owned acceptance timestamp when legal acceptance is provided;
-  - set `email_verified = true` (for Google-authenticated emails);
+  - set Mushukistan `email_verified = true` only when the Google email claim is authoritative (consumer Gmail or `email_verified=true` with a hosted-domain claim);
   - update `last_login_at`.
 - Require a non-empty Google `sub`; store it uniquely on the existing user row.
 - For an already connected subject, keep the account's Mushukistan email unchanged if the Google email later changes.
@@ -130,6 +132,7 @@ Startup/session restore:
 - Missing email claim -> 400 `GOOGLE_EMAIL_MISSING`.
 - Missing required legal acceptance -> 422 `LEGAL_ACCEPTANCE_REQUIRED`.
 - Disabled user -> 403 `ACCOUNT_DISABLED`.
+- Unsafe/ambiguous email match or identity already linked elsewhere -> 409; never merge users automatically.
 
 6. User Roles and Permissions
 -----------------------------
@@ -174,12 +177,12 @@ Startup/session restore:
 - No complexity hard-fail beyond length for MVP (to reduce registration friction), but UI should recommend strong passwords.
 
 7.4 Account Security
-- Authenticated `GET /auth/methods` returns only `has_password` and `google_connected`.
-- Authenticated `POST /auth/set-password` is allowed only while `password_hash` is null; it requires a matching confirmation and stores an Argon2 hash on the same user row.
+- Authenticated `GET /auth/methods` returns `has_password`, `google_connected`, and `email_verified`; it returns no provider subject or credential material.
+- Authenticated `POST /auth/set-password` is allowed only while `password_hash` is null. It requires a fresh server-verified Google ID token matching the account email and any already linked subject, plus a matching confirmation, then stores an Argon2 hash on the same user row.
 - Authenticated `POST /auth/change-password` requires the current password and a matching new-password confirmation.
 - Authenticated `POST /auth/connect-google` verifies the Google ID token and requires its verified email to match the signed-in Mushukistan account. A Google subject already attached to another account is rejected.
-- These operations retain existing access and refresh sessions under the MVP session policy. They never disconnect an existing method.
-- Eligible legacy consumer Gmail accounts are marked as unbound by migration until the next verified Google sign-in. This marker remains through Set Password so the original Google method is not lost. External-domain legacy accounts require authenticated or support-assisted linking because their email address may be reassigned.
+- Credential mutations retain existing access and refresh sessions under the MVP session policy. There is no unlink or password-removal operation, so Google-only users cannot remove their only method.
+- Eligible legacy consumer Gmail accounts are marked as unbound by migration until the next verified Google sign-in. Setting a password requires Google reauthentication and records its stable subject, clearing the legacy marker. External-domain legacy accounts require authenticated or support-assisted linking because their email address may be reassigned.
 
 8. Account Lifecycle
 --------------------
@@ -190,7 +193,7 @@ Startup/session restore:
 - `is_active = true` means login allowed.
 - `is_active = false` means authentication denied with 403 `ACCOUNT_DISABLED`.
 - `email_verified = false` means password login is denied with 401 `EMAIL_NOT_VERIFIED`.
-- Google-created users are created or updated with `email_verified = true`.
+- Google email verification follows the trusted-claim rules in section 5.2. Login by an already linked Google `sub` remains available even when Mushukistan does not trust that email for password login.
 
 8.3 Profile Updates
 - User can update display name, bio, avatar URL.
@@ -203,7 +206,7 @@ Startup/session restore:
 - Account deletion is available from Settings -> About account -> Delete account.
 - The backend anonymizes and deactivates the account instead of hard-deleting the `users` row.
 - Login is disabled by setting `is_active = false`; existing access tokens are rejected on subsequent protected requests because the account is inactive.
-- Authentication credentials and profile personal data are removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data.
+- Authentication credentials and profile personal data are removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data. The Google `sub` remains on the inactive anonymized row as a tombstone so a deleted identity cannot silently create a replacement account.
 - User-owned posts, comments, lost-pet posts, and adoption/rehoming posts are hidden and anonymized.
 - User likes, user block rows, and affected leaderboard cache entries are removed.
 - Shared domain records such as cats may remain when they no longer identify the deleted user; user attribution is cleared where possible.

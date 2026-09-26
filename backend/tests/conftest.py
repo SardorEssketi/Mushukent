@@ -96,8 +96,12 @@ def clean_integration_database(request: pytest.FixtureRequest) -> Iterator[None]
 
 
 @pytest.fixture()
-def db_session_manager(integration_database_url: str) -> DatabaseSessionManager:
-    return DatabaseSessionManager(integration_database_url)
+def db_session_manager(integration_database_url: str) -> Iterator[DatabaseSessionManager]:
+    manager = DatabaseSessionManager(integration_database_url)
+    try:
+        yield manager
+    finally:
+        manager.dispose()
 
 
 @pytest.fixture()

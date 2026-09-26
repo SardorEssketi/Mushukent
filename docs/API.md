@@ -179,10 +179,11 @@ Feature: Authentication
 - Errors:
   - 401 INVALID_VERIFICATION_TOKEN
   - 404 USER_NOT_FOUND
+- Notes: The default expiry is 24 hours. A valid token can be replayed until expiry; repeat verification is idempotent and creates no session. Tokens are not strictly single-use.
 
 5) POST /api/v1/auth/google
 - Purpose: Login via Google id_token
-- Identity key: verified Google `sub`, stored uniquely. Matching email alone cannot authenticate an existing password account. Such a user connects Google from an authenticated session.
+- Identity key: verified Google `sub`, stored uniquely. Password and Google credentials belong to the same `users` row when linked.
 
 - Auth: none
 - Request: {"id_token":"<google-id-token>","accept_terms":true,"accept_privacy":true}
@@ -190,21 +191,24 @@ Feature: Authentication
 - Response: same as login
 - Errors: 401 INVALID_GOOGLE_TOKEN
 - Notes:
-  - Validate issuer, expiry, `aud` against one configured Google OAuth client ID, and require `email_verified=true`.
+  - Validate token signature, issuer, expiry, `iat`, configured `aud`, applicable `azp`, `sub`, and `email_verified=true`.
   - If neither subject nor email matches an existing account, the backend creates an account only when Terms and Privacy acceptance are true.
-  - An existing password account with the same verified email returns `GOOGLE_LINK_REQUIRED` until Google is connected from an authenticated session.
-  - A passwordless legacy account with a verified `gmail.com` or `googlemail.com` address may bind its Google subject on sign-in even if its migration marker was missed.
-  - A legacy passwordless account with an external-domain email and no stored Google subject returns `GOOGLE_LEGACY_LINK_REQUIRED` until Google is connected from an existing authenticated session or through support-assisted verification.
+  - A single active Mushukistan account whose email is already verified can be auto-linked only when it exactly matches the verified consumer Gmail claim and has no conflicting Google subject. This does not apply to an unverified password account.
+  - Workspace and other external-domain email matches return `GOOGLE_LINK_REQUIRED` for password accounts or `GOOGLE_LEGACY_LINK_REQUIRED` for passwordless legacy records until the user connects Google from an authenticated session or support resolves the legacy record.
+  - Passwordless verified Gmail legacy records may bind their Google subject on sign-in even when the migration marker was missed.
+  - New accounts set Mushukistan `email_verified=true` only for an authoritative Gmail or verified hosted-domain claim. A non-hosted external Google email remains unverified for Mushukistan password login, while Google login by `sub` remains usable.
+  - An inactive matching account returns `ACCOUNT_DISABLED`; multiple normalized email matches or a Google subject attached elsewhere fail closed. The backend never merges user rows by email.
+  - Repeated login looks up by `sub`. A changed Google email does not change the Mushukistan email or its verification state.
   - Existing accounts with current legal acceptance may authenticate without resubmitting acceptance flags.
   - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
-  - Google-authenticated accounts are considered verified immediately.
 
 Account Security (authenticated)
 --------------------------------
-- `GET /api/v1/auth/methods` returns `{"has_password":bool,"google_connected":bool}`. No credential material is returned.
-- `POST /api/v1/auth/set-password` accepts `new_password` and `confirm_password` (8-128 characters). It requires a signed-in account without a local password; a second attempt returns `PASSWORD_ALREADY_SET`.
+- `GET /api/v1/auth/methods` returns `{"has_password":bool,"google_connected":bool,"email_verified":bool}`. No credential material or provider subject is returned.
+- `POST /api/v1/auth/set-password` accepts `new_password`, `confirm_password`, and a fresh Google `id_token`. The ID token must match the signed-in account email and any existing Google subject. It requires an account without a local password; a second attempt returns `PASSWORD_ALREADY_SET`.
 - `POST /api/v1/auth/change-password` accepts `current_password`, `new_password`, and `confirm_password`. It verifies the current password before updating the Argon2 hash.
 - `POST /api/v1/auth/connect-google` accepts a Google `id_token`. The verified Google email must match the signed-in account, and its subject must not belong to another user. A collision returns 409.
+- There is no Google unlink or password removal endpoint. This prevents an account from removing its only login method.
 - Successful credential mutations return 204 and preserve the current MVP session policy.
 
 6) POST /api/v1/auth/refresh
@@ -215,6 +219,7 @@ Account Security (authenticated)
 - Errors:
   - 401 INVALID_REFRESH_TOKEN
   - 403 ACCOUNT_DISABLED
+- Notes: Sliding renewal keeps the same refresh token under the documented MVP policy; it is not one-time token rotation.
 
 7) POST /api/v1/auth/logout
 - Purpose: Logout; optional server-side token blacklist (not used in MVP)
@@ -222,7 +227,7 @@ Account Security (authenticated)
 - Request: optional {"refresh_token":"<opaque-refresh-token>"}
 - Response: 204 No Content
 - Errors: 401
-- Notes: Backend revokes the refresh session where possible; clients must drop local access and refresh tokens.
+- Notes: Backend revokes the supplied refresh session only when it belongs to the authenticated user; without a token it revokes all of that user's active sessions. Clients must drop local access and refresh tokens.
 
 Feature: Users
 --------------

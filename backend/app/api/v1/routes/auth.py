@@ -46,7 +46,9 @@ def set_password(
     user=Depends(get_current_active_user),
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Response:
-    auth_service.set_password(user.id, payload.new_password, payload.confirm_password)
+    auth_service.set_password(
+        user.id, payload.new_password, payload.confirm_password, payload.id_token
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -28,6 +28,7 @@ class GoogleIdTokenClaims:
     sub: str | None = None
     name: str | None = None
     email_verified: bool = False
+    hosted_domain: str | None = None
     raw: dict[str, object] | None = None
 
     @property

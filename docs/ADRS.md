@@ -122,7 +122,7 @@ cat matching or existing-cat selection.
 
 ## ADR-0020: Bind missed passwordless Gmail records on verified sign-in
 
-- Status: Accepted
+- Status: Superseded by ADR-0021
 - Date: 2026-09-26
 
 ### Context
@@ -147,3 +147,46 @@ verified the same email address.
   missed by the migration.
 - External-domain legacy records still require an existing authenticated
   session or support-assisted verification.
+
+## ADR-0021: Keep Google and password methods on one user with bounded auto-linking
+
+- Status: Accepted
+- Date: 2026-09-26
+
+### Context
+
+The `users` table already supports a nullable password hash and a unique nullable
+Google subject on one row. The old login policy nevertheless rejected a Google
+sign-in when a password account had the same verified email, while a separate
+legacy Gmail exception allowed email matching. This split the account behavior
+without requiring a different data model.
+
+### Decision
+
+- Keep one Mushukistan user row as the account; password hash and Google subject
+  are independent sign-in methods. Use Google `sub` as the stable Google key.
+- Automatically attach a new Google subject by email only when there is exactly
+  one active matching row, Mushukistan already marks that email verified, and
+  the verified Google address is consumer Gmail. Preserve the password hash and
+  all user-owned data on that row.
+- Require an authenticated Account Security link for Workspace and other
+  external-domain email matches, and for unverified password accounts. Never
+  merge two user rows by email.
+- Treat a Google email as Mushukistan-verified only for an authoritative Gmail
+  or verified hosted-domain claim. A non-hosted external email may still sign
+  in through its `sub`, but it must pass Mushukistan email verification before
+  password login.
+- Preserve stable refresh-token sliding renewal per the existing MVP session
+  policy. Do not add an unlink operation until an account-safe recovery flow is
+  designed; currently Google cannot be disconnected.
+
+### Consequences
+
+- No identity-table rewrite is needed. An additive functional unique index
+  prevents case/whitespace email duplicates; the migration refuses to proceed
+  when legacy collisions exist and does not alter or merge records.
+- Existing verified password accounts can use both password and Google sign-in
+  when the conservative Gmail match rule applies. Workspace/external users keep
+  their existing account and can link after authenticating to it.
+- Adding a password to a Google account requires a fresh server-verified
+  Google ID token matching the current account.

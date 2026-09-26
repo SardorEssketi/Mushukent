@@ -11,6 +11,7 @@ from uuid import UUID
 
 from jose import jwk, jwt
 from jose.exceptions import JWTError
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from structlog import get_logger
 
 from app.core.auth import AccessTokenService, AuthenticatedPrincipal, GoogleIdTokenClaims, Role
@@ -19,6 +20,7 @@ from app.core.security import api_error
 
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 logger = get_logger(__name__)
+_EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
 @dataclass(slots=True)
@@ -316,24 +318,47 @@ class GoogleOAuthIdTokenVerifier:
         if not audiences or not set(audiences).intersection(allowed_audiences):
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
-        exp = payload.get("exp")
-        if not isinstance(exp, (int, float)):
+        authorized_party = payload.get("azp")
+        if (len(audiences) > 1 and authorized_party not in allowed_audiences) or (
+            authorized_party is not None and authorized_party not in allowed_audiences
+        ):
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+
+        expiration_at = self._timestamp(payload.get("exp"))
+        issued_at = self._timestamp(payload.get("iat"))
+        if expiration_at is None or issued_at is None:
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+        now = datetime.now(UTC)
+        if expiration_at <= now - timedelta(seconds=self.settings.jwt_clock_skew_seconds):
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+        if issued_at > now + timedelta(seconds=self.settings.jwt_clock_skew_seconds):
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
         if payload.get("email_verified") is not True:
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
-        if not isinstance(payload.get("email"), str) or not payload["email"].strip():
+        provider_email = payload.get("email")
+        if not isinstance(provider_email, str) or not provider_email.strip():
             raise api_error(400, "GOOGLE_EMAIL_MISSING", "Google token is missing an email claim.")
+        try:
+            provider_email = str(_EMAIL_ADAPTER.validate_python(provider_email))
+        except ValidationError as exc:
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.") from exc
         if not isinstance(payload.get("sub"), str) or not payload["sub"].strip():
+            raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
+        hosted_domain = payload.get("hd")
+        if hosted_domain is not None and (
+            not isinstance(hosted_domain, str) or not hosted_domain.strip()
+        ):
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
         return GoogleIdTokenClaims(
-            email=payload.get("email"),
+            email=provider_email,
             iss=issuer,
             aud=audiences[0] if audiences else "",
-            exp=datetime.fromtimestamp(float(exp), UTC),
+            exp=expiration_at,
             sub=payload.get("sub"),
             name=payload.get("name"),
             email_verified=bool(payload.get("email_verified", False)),
+            hosted_domain=hosted_domain.strip().lower() if isinstance(hosted_domain, str) else None,
             raw=payload,
         )
 
@@ -366,6 +391,15 @@ class GoogleOAuthIdTokenVerifier:
         if isinstance(audience, list) and all(isinstance(item, str) for item in audience):
             return audience
         return []
+
+    @staticmethod
+    def _timestamp(value: object) -> datetime | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        try:
+            return datetime.fromtimestamp(value, UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
 
     @cached_property
     def _jwks(self) -> _GoogleJwkSet:

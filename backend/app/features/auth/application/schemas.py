@@ -49,16 +49,21 @@ class GoogleLoginRequest(BaseModel):
 class SignInMethods(BaseModel):
     has_password: bool
     google_connected: bool
+    email_verified: bool
 
 
-class SetPasswordRequest(BaseModel):
+class _NewPasswordFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     new_password: str = Field(min_length=8, max_length=128)
     confirm_password: str = Field(min_length=8, max_length=128)
 
 
-class ChangePasswordRequest(SetPasswordRequest):
+class SetPasswordRequest(_NewPasswordFields):
+    id_token: str = Field(min_length=1)
+
+
+class ChangePasswordRequest(_NewPasswordFields):
     current_password: str = Field(min_length=1, max_length=128)
 
 

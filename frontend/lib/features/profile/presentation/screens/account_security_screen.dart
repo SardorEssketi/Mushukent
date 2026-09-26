@@ -28,6 +28,7 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
   bool _googleInProgress = false;
   bool _editingPassword = false;
   bool _showPassword = false;
+  String? _googleReauthToken;
   String? _error;
   String? _success;
 
@@ -54,6 +55,10 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
   Future<void> _savePassword(bool hasPassword) async {
     if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
     final strings = ref.read(accountSecurityStringsProvider);
+    if (!hasPassword && (_googleReauthToken?.trim().isEmpty ?? true)) {
+      setState(() => _error = strings.requireGoogleReauthentication);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -65,7 +70,11 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
         await repository.changePassword(
             _current.text, _password.text, _confirmation.text);
       } else {
-        await repository.setPassword(_password.text, _confirmation.text);
+        await repository.setPassword(
+          _password.text,
+          _confirmation.text,
+          _googleReauthToken!,
+        );
       }
       _current.clear();
       _password.clear();
@@ -73,6 +82,7 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
       if (!mounted) return;
       setState(() {
         _editingPassword = false;
+        _googleReauthToken = null;
         _success = strings.saved;
       });
       _reload();
@@ -126,6 +136,36 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
     }
   }
 
+  Future<void> _reauthenticateGoogleNative() async {
+    if (_busy || _googleInProgress) return;
+    setState(() {
+      _googleInProgress = true;
+      _error = null;
+      _success = null;
+    });
+    try {
+      final token = await ref.read(googleIdentityTokenProvider).authenticate();
+      if (mounted) await _storeGoogleReauthToken(token);
+    } on Object {
+      if (mounted) {
+        setState(() =>
+            _error = ref.read(accountSecurityStringsProvider).googleFailed);
+      }
+    } finally {
+      if (mounted) setState(() => _googleInProgress = false);
+    }
+  }
+
+  Future<void> _storeGoogleReauthToken(String idToken) async {
+    if (!mounted || idToken.trim().isEmpty) return;
+    final strings = ref.read(accountSecurityStringsProvider);
+    setState(() {
+      _googleReauthToken = idToken;
+      _error = null;
+      _success = strings.googleReauthenticated;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(accountSecurityStringsProvider);
@@ -154,6 +194,17 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                 Text(strings.signInMethods,
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: AppSpacing.lg),
+                AppCard(
+                  child: ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.alternate_email),
+                    title: Text(strings.emailAddress),
+                    subtitle: Text(methods.emailVerified
+                        ? strings.emailVerified
+                        : strings.emailNeedsVerification),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
                 AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -201,7 +252,10 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                         OutlinedButton(
                           onPressed: _busy
                               ? null
-                              : () => setState(() => _editingPassword = true),
+                              : () => setState(() {
+                                    _googleReauthToken = null;
+                                    _editingPassword = true;
+                                  }),
                           child: Text(methods.hasPassword
                               ? strings.changePassword
                               : strings.setPassword),
@@ -259,9 +313,30 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                                     ? null
                                     : strings.passwordMismatch,
                               ),
+                              if (!methods.hasPassword) ...[
+                                const SizedBox(height: AppSpacing.md),
+                                Text(strings.requireGoogleReauthentication),
+                                const SizedBox(height: AppSpacing.sm),
+                                if (kIsWeb)
+                                  GoogleSignInEntryButton(
+                                    enabled: !_busy,
+                                    onIdToken: _storeGoogleReauthToken,
+                                    onError: (_) => setState(
+                                        () => _error = strings.googleFailed),
+                                  )
+                                else
+                                  OutlinedButton(
+                                    onPressed: _busy || _googleInProgress
+                                        ? null
+                                        : _reauthenticateGoogleNative,
+                                    child: Text(strings.reauthenticateGoogle),
+                                  ),
+                              ],
                               const SizedBox(height: AppSpacing.md),
                               FilledButton(
-                                onPressed: _busy
+                                onPressed: _busy ||
+                                        (!methods.hasPassword &&
+                                            _googleReauthToken == null)
                                     ? null
                                     : () => _savePassword(methods.hasPassword),
                                 child: _busy

@@ -189,6 +189,11 @@ class User(UUIDPrimaryKeyMixin, Base):
             "preferred_language IN ('en', 'uz', 'ru')",
             name="preferred_language_supported",
         ),
+        Index(
+            "uq_users_email_normalized",
+            text("lower(trim(email))"),
+            unique=True,
+        ),
         Index("idx_users_registered_at", "registered_at"),
     )
 

@@ -78,6 +78,8 @@ CREATE TABLE users (
     registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_login_at TIMESTAMPTZ NULL
 );
+-- App canonicalization trims and lowercases email; this guards case/space variants too.
+CREATE UNIQUE INDEX uq_users_email_normalized ON users (lower(trim(email)));
 CREATE INDEX idx_users_registered_at ON users (registered_at);
 
 -- Cats (the primary domain entity)
@@ -395,6 +397,9 @@ Operational notes (MVP)
 -----------------------
 - Backups: schedule nightly logical backups (pg_dump) and periodic physical backups. Store backups offsite (object storage). Test restore procedures regularly.
 - Migrations: use Alembic for schema changes. Follow semantic migration naming and peer-review any migration that modifies existing data.
+- Auth email matching uses `lower(trim(email))`; no Gmail dot or plus-address rewrites are applied. Migration `20260926_0021` adds a non-destructive unique expression index. It fails closed if a normalized collision exists; inspect those records manually and never merge user rows by email.
+- Safe collision diagnostic before applying the index:
+  `SELECT lower(trim(email)) AS normalized_email, count(*), array_agg(id) FROM users GROUP BY lower(trim(email)) HAVING count(*) > 1;`
 - Local dev: recommend a docker-compose service for Postgres + PostGIS. Example image: postgis/postgis:15-3.4.
 
 Sample docker-compose service for Postgres (dev)
@@ -450,6 +455,7 @@ LIMIT :limit;
 Security & privacy considerations (DB-related)
 ----------------------------------------------
 - Passwords: store only hashed password (bcrypt/argon2) in password_hash; never store plaintext. Email used for login must be unique and verified.
+- Auth methods share one `users` row: `password_hash` and `google_subject` are independently nullable; `google_subject` is the stable unique provider key. Refresh sessions remain separate hashed-token rows. Account deletion keeps the Google subject on the inactive anonymized row as a tombstone while clearing login email/password.
 - Sensitive PII: limit what is stored — do not store device identifiers in plain DB without hashing. Be careful with location retention policies for privacy-sensitive content.
 - Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, clears report actor links where possible, and attempts best-effort media cleanup.
 - Audit logs: keep moderator actions and important security events in write-once logs or a separate audit table. Don't store secrets in DB.

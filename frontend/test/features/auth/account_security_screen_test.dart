@@ -10,9 +10,10 @@ import 'package:mushukistan_frontend/features/profile/presentation/screens/accou
 import '../../support/fakes.dart';
 
 void main() {
-  testWidgets('Google-only account sets a password with one submission',
+  testWidgets('Google-only account reauthenticates before setting a password',
       (tester) async {
     final client = FakeApiClient();
+    final google = FakeGoogleIdentityTokenProvider();
     var hasPassword = false;
     final save = Completer<Object?>();
     client.setHandler(
@@ -21,6 +22,7 @@ void main() {
         (_) => {
               'has_password': hasPassword,
               'google_connected': true,
+              'email_verified': true,
             });
     client.setHandler('POST', 'auth/set-password', (_) async {
       await save.future;
@@ -28,22 +30,44 @@ void main() {
       return null;
     });
     await tester.pumpWidget(ProviderScope(
-      overrides: [apiClientProvider.overrideWithValue(client)],
+      overrides: [
+        apiClientProvider.overrideWithValue(client),
+        googleIdentityTokenProvider.overrideWithValue(google),
+      ],
       child: const MaterialApp(home: AccountSecurityScreen()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Connected'), findsOneWidget);
     expect(find.text('Not set'), findsOneWidget);
+    expect(find.text('Verified'), findsOneWidget);
+    expect(find.text('Disconnect Google'), findsNothing);
+    await tester.ensureVisible(find.text('Set password'));
     await tester.tap(find.text('Set password'));
     await tester.pumpAndSettle();
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'Password123');
     await tester.enterText(fields.at(1), 'Password123');
+    await tester.ensureVisible(find.text('Re-authenticate with Google'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Re-authenticate with Google'));
+    await tester.pumpAndSettle();
+    expect(google.calls, 1);
+    expect(find.text('Google confirmed. You can now save your password.'),
+        findsOneWidget);
+    await tester.ensureVisible(find.text('Save password'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save password'));
     await tester.pump();
     expect(
         client.calls.where((call) => call.path == 'auth/set-password').length,
         1);
+    final setPasswordCall =
+        client.calls.singleWhere((call) => call.path == 'auth/set-password');
+    expect(setPasswordCall.body, {
+      'new_password': 'Password123',
+      'confirm_password': 'Password123',
+      'id_token': 'google-id-token',
+    });
     save.complete(null);
     await tester.pumpAndSettle();
     expect(find.text('Password saved.'), findsOneWidget);
@@ -67,6 +91,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Not connected'), findsOneWidget);
+    await tester.ensureVisible(find.text('Change password'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Change password'));
     await tester.pumpAndSettle();
     final fields = find.byType(TextFormField);
@@ -114,6 +140,8 @@ void main() {
       child: const MaterialApp(home: AccountSecurityScreen()),
     ));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Connect Google'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Connect Google'));
     await tester.pump();
     expect(google.calls, 1);
@@ -141,6 +169,8 @@ void main() {
       ],
       child: const MaterialApp(home: AccountSecurityScreen()),
     ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Connect Google'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Connect Google'));
     await tester.pumpAndSettle();

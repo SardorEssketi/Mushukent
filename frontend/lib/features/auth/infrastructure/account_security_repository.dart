@@ -9,16 +9,20 @@ final accountSecurityRepositoryProvider =
 
 class SignInMethods {
   const SignInMethods(
-      {required this.hasPassword, required this.googleConnected});
+      {required this.hasPassword,
+      required this.googleConnected,
+      required this.emailVerified});
 
   final bool hasPassword;
   final bool googleConnected;
+  final bool emailVerified;
 
   factory SignInMethods.fromJson(Object? json) {
     final map = (json as Map).cast<String, Object?>();
     return SignInMethods(
       hasPassword: map['has_password'] == true,
       googleConnected: map['google_connected'] == true,
+      emailVerified: map['email_verified'] == true,
     );
   }
 }
@@ -31,10 +35,15 @@ class AccountSecurityRepository {
   Future<SignInMethods> getMethods() => _client
       .get<SignInMethods>('auth/methods', decoder: SignInMethods.fromJson);
 
-  Future<void> setPassword(String password, String confirmation) async {
+  Future<void> setPassword(
+      String password, String confirmation, String googleIdToken) async {
     await _client.postJson<Object?>(
       'auth/set-password',
-      body: {'new_password': password, 'confirm_password': confirmation},
+      body: {
+        'new_password': password,
+        'confirm_password': confirmation,
+        'id_token': googleIdToken,
+      },
       decoder: (_) => null,
     );
   }
