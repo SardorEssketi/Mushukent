@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/location/location_service.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/routing/app_router.dart';
+import 'package:mushukistan_frontend/app.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/core/onboarding/authenticated_onboarding_store.dart';
@@ -13,19 +15,24 @@ import 'package:mushukistan_frontend/features/auth/application/auth_controller.d
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_sign_in_entry_button.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
 
 import '../../support/fakes.dart';
 
-Widget _buildApp(ProviderContainer container) {
+Widget _buildApp(ProviderContainer container,
+    {bool useProductionRoot = false}) {
   return UncontrolledProviderScope(
     container: container,
-    child: Consumer(
-      builder: (context, ref, _) {
-        return MaterialApp.router(
-          routerConfig: ref.watch(appRouterProvider),
-        );
-      },
-    ),
+    child: useProductionRoot
+        ? const MushukistanApp()
+        : Consumer(
+            builder: (context, ref, _) {
+              return MaterialApp.router(
+                routerConfig: ref.watch(appRouterProvider),
+              );
+            },
+          ),
   );
 }
 
@@ -163,12 +170,18 @@ ProviderContainer _containerWithRepo(
   );
 }
 
-Future<void> _pumpApp(WidgetTester tester, ProviderContainer container) async {
+Future<void> _pumpApp(
+  WidgetTester tester,
+  ProviderContainer container, {
+  bool useProductionRoot = false,
+}) async {
   tester.view.physicalSize = const Size(800, 1000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(_buildApp(container));
+  await tester.pumpWidget(
+    _buildApp(container, useProductionRoot: useProductionRoot),
+  );
   await tester.pump();
 }
 
@@ -327,6 +340,40 @@ void main() {
 
     expect(router.routeInformationProvider.value.uri.path, '/add/lost-pet');
     expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+  });
+
+  testWidgets('successful password login from Login immediately opens Feed',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: const SessionRestoreMissing(),
+      loginResult: AuthSession.restored(
+        accessToken: 'token-123',
+        user: testUser(),
+      ),
+    );
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+    router.go('/login');
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byType(TextFormField).first,
+      'user@example.com',
+    );
+    await tester.enterText(find.byType(TextFormField).last, 'password1');
+    await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+    await tester.pumpAndSettle();
+
+    expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+    expect(router.routeInformationProvider.value.uri.path, '/feed');
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('unauthenticated users are redirected away from protected routes',
@@ -555,10 +602,58 @@ void main() {
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Invalid email or password.'), findsOneWidget);
+    expect(find.text('Email or password is incorrect.'), findsOneWidget);
     expect(container.read(authControllerProvider).phase,
         AuthPhase.unauthenticated);
   });
+
+  for (final route in ['/login', '/register']) {
+    testWidgets('Google collision on $route confirms password inside sign-in',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: const SessionRestoreMissing(),
+        loginResult:
+            AuthSession.restored(accessToken: 'token-123', user: testUser()),
+      );
+      repo.loginError = const MushukistanApiException(
+        kind: ApiFailureKind.conflict,
+        code: 'GOOGLE_PASSWORD_REQUIRED',
+        message: 'Confirm password',
+      );
+      final google = FakeGoogleIdentityTokenProvider();
+      final container = _containerWithRepo(repo, googleIdentityTokens: google);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go(route);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pumpAndSettle();
+      expect(find.text('Confirm your password'), findsOneWidget);
+      final field = find.descendant(
+          of: find.byType(AlertDialog), matching: find.byType(TextField));
+      await tester.enterText(field, 'Wrong1234');
+      repo.loginError = const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'INVALID_CREDENTIALS',
+        message: 'Wrong password',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(repo.lastGooglePassword, 'Wrong1234');
+      expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+      await tester.enterText(field, 'Original123');
+      repo.loginError = null;
+      await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+      await tester.pumpAndSettle();
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(repo.lastGooglePassword, 'Original123');
+      expect(repo.lastGoogleIdToken, 'google-id-token');
+      expect(google.calls, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+    });
+  }
 
   testWidgets('login shows Google sign-in when unauthenticated',
       (tester) async {
@@ -617,40 +712,139 @@ void main() {
     expect(google.calls, 1);
   });
 
-  testWidgets('existing Google user signs in without email registration',
-      (tester) async {
-    final repo = FakeAuthRepository(
-      restoreResult: const SessionRestoreMissing(),
-      loginResult: AuthSession.restored(
-        accessToken: 'token-123',
-        user: testUser(email: 'existing-google@example.com'),
-      ),
-    );
-    final google = FakeGoogleIdentityTokenProvider(idToken: 'google-id-token');
-    final container = _containerWithRepo(
-      repo,
-      googleIdentityTokens: google,
-    );
-    addTearDown(container.dispose);
+  for (final route in ['/login', '/register']) {
+    for (final account in <String, String>{
+      'new Google user': 'new-google@example.com',
+      'existing Google user': 'existing-google@example.com',
+    }.entries) {
+      testWidgets('${account.key} authenticates from $route', (tester) async {
+        final repo = FakeAuthRepository(
+          restoreResult: const SessionRestoreMissing(),
+          loginResult: AuthSession.restored(
+            accessToken: 'token-123',
+            user: testUser(email: account.value),
+          ),
+        );
+        final google =
+            FakeGoogleIdentityTokenProvider(idToken: 'google-id-token');
+        final container = _containerWithRepo(
+          repo,
+          googleIdentityTokens: google,
+        );
+        addTearDown(container.dispose);
 
-    await _pumpApp(tester, container);
-    await tester.pumpAndSettle();
+        await _pumpApp(tester, container);
+        await tester.pumpAndSettle();
+        container.read(appRouterProvider).go(route);
+        await tester.pumpAndSettle();
 
-    container.read(appRouterProvider).go('/login');
-    await tester.pumpAndSettle();
+        expect(find.text('Terms of Service'), findsWidgets);
+        expect(find.text('Privacy Policy'), findsWidgets);
+        expect(find.text('Continue with Google'), findsOneWidget);
+        await tester.tap(find.text('Continue with Google'));
+        await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continue with Google'));
-    await tester.pumpAndSettle();
+        expect(
+          container.read(authControllerProvider).phase,
+          AuthPhase.authenticated,
+        );
+        expect(repo.lastGoogleIdToken, 'google-id-token');
+        expect(repo.registerCalls, 0);
+        expect(
+          find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+          findsOneWidget,
+        );
+        expect(
+            container
+                .read(appRouterProvider)
+                .routeInformationProvider
+                .value
+                .uri
+                .path,
+            '/feed');
+      });
+    }
+  }
 
-    expect(
-        container.read(authControllerProvider).phase, AuthPhase.authenticated);
-    expect(find.text('Join Mushukistan'), findsNothing);
-    expect(repo.registerCalls, 0);
-    expect(repo.lastGoogleAcceptTerms, isFalse);
-    expect(repo.lastGoogleAcceptPrivacy, isFalse);
-  });
+  for (final route in ['/login', '/register']) {
+    testWidgets('web Google callback immediately leaves $route',
+        (tester) async {
+      if (!kIsWeb) return;
 
-  testWidgets('google login asks for legal consent before account creation',
+      final repo = FakeAuthRepository(
+        restoreResult: const SessionRestoreMissing(),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-123',
+          user: testUser(email: 'google-user@example.com'),
+        ),
+      );
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+
+      await _pumpApp(
+        tester,
+        container,
+        useProductionRoot: true,
+      );
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go(route);
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<GoogleSignInEntryButton>(
+        find.byType(GoogleSignInEntryButton),
+      );
+      await button.onIdToken!('google-id-token');
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(
+          container
+              .read(appRouterProvider)
+              .routeInformationProvider
+              .value
+              .uri
+              .path,
+          '/feed');
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+        findsOneWidget,
+      );
+    });
+  }
+
+  for (final route in ['/login', '/register']) {
+    testWidgets('Google verification error stays clear on $route',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: const SessionRestoreMissing(),
+      );
+      repo.loginError = const MushukistanApiException(
+        kind: ApiFailureKind.unauthorized,
+        code: 'INVALID_GOOGLE_TOKEN',
+        message: 'Invalid token',
+      );
+      final container = _containerWithRepo(
+        repo,
+        googleIdentityTokens: FakeGoogleIdentityTokenProvider(),
+      );
+      addTearDown(container.dispose);
+
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go(route);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not verify this Google account. Try again.'),
+          findsOneWidget);
+      expect(container.read(authControllerProvider).phase,
+          AuthPhase.unauthenticated);
+      expect(repo.registerCalls, 0);
+    });
+  }
+
+  testWidgets('google login shows linked legal notice without a retry screen',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1000);
     tester.view.devicePixelRatio = 1;
@@ -664,11 +858,6 @@ void main() {
         user: testUser(email: 'google-user@example.com'),
       ),
     );
-    repo.loginError = const MushukistanApiException(
-      kind: ApiFailureKind.validation,
-      code: 'LEGAL_ACCEPTANCE_REQUIRED',
-      message: 'Terms of Service and Privacy Policy acceptance is required.',
-    );
     final google = FakeGoogleIdentityTokenProvider(idToken: 'google-id-token');
     final container = _containerWithRepo(
       repo,
@@ -682,34 +871,14 @@ void main() {
     container.read(appRouterProvider).go('/login');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Continue with Google'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Before you continue'), findsOneWidget);
+    expect(find.byType(LegalAgreementText), findsOneWidget);
     expect(find.text('Terms of Service'), findsWidgets);
     expect(find.text('Privacy Policy'), findsWidgets);
-    expect(find.text('Google sign-in is unavailable.'), findsNothing);
-    expect(container.read(authControllerProvider).pendingGoogleIdToken,
-        'google-id-token');
-    expect(google.calls, 1);
-
-    repo.loginError = null;
-    final termsCheckbox = find.byType(Checkbox).at(0);
-    final privacyCheckbox = find.byType(Checkbox).at(1);
-    await tester.ensureVisible(termsCheckbox);
-    await tester.tap(termsCheckbox);
-    await tester.ensureVisible(privacyCheckbox);
-    await tester.tap(privacyCheckbox);
-    await tester.pump();
-    final continueButton = find.widgetWithText(FilledButton, 'Continue');
-    await tester.ensureVisible(continueButton);
-    await tester.tap(continueButton);
+    await tester.tap(find.text('Continue with Google'));
     await tester.pumpAndSettle();
-
-    expect(repo.lastGoogleIdToken, 'google-id-token');
-    expect(repo.lastGoogleAcceptTerms, isTrue);
-    expect(repo.lastGoogleAcceptPrivacy, isTrue);
     expect(google.calls, 1);
+    expect(repo.lastGoogleIdToken, 'google-id-token');
+    expect(find.byType(Checkbox), findsNothing);
     expect(
       find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
       findsOneWidget,
@@ -737,7 +906,6 @@ void main() {
         find.byType(TextFormField).at(1), 'user@example.com');
     await tester.enterText(find.byType(TextFormField).at(2), 'password1');
     await tester.tap(find.byType(Checkbox).at(0));
-    await tester.tap(find.byType(Checkbox).at(1));
     await tester.pump();
     final registerButton = find.widgetWithText(FilledButton, 'Register');
     await tester.ensureVisible(registerButton);

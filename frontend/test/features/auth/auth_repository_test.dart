@@ -61,40 +61,41 @@ void main() {
     expect(await tokenStore.read(), isNull);
   });
 
-  test('google login success persists the token and returns a session',
-      () async {
-    final apiClient = FakeApiClient();
-    final tokenStore = FakeAuthTokenStore();
-    apiClient.setHandler('POST', 'auth/google', (call) {
-      expect(call.authenticated, isFalse);
-      expect(call.body, <String, Object?>{
-        'id_token': 'google-id-token',
-        'accept_terms': true,
-        'accept_privacy': true,
+  for (final password in <String?>[null, 'Original123']) {
+    test(
+        'google login sends optional confirmation and persists session ($password)',
+        () async {
+      final apiClient = FakeApiClient();
+      final tokenStore = FakeAuthTokenStore();
+      apiClient.setHandler('POST', 'auth/google', (call) {
+        expect(call.authenticated, isFalse);
+        expect(call.body, <String, Object?>{
+          'id_token': 'google-id-token',
+          if (password != null) 'password': password,
+          'accept_terms': true,
+          'accept_privacy': true,
+        });
+        return <String, Object?>{
+          'access_token': 'token-123',
+          'refresh_token': 'refresh-123',
+          'token_type': 'Bearer',
+          'expires_in': 3600,
+          'user': testUser(email: 'google-user@example.com').toJson(),
+        };
       });
-      return <String, Object?>{
-        'access_token': 'token-123',
-        'refresh_token': 'refresh-123',
-        'token_type': 'Bearer',
-        'expires_in': 3600,
-        'user': testUser(email: 'google-user@example.com').toJson(),
-      };
+
+      final repository = MushukistanAuthRepository(
+        apiClient: apiClient,
+        tokenStore: tokenStore,
+      );
+      final session = await repository.loginWithGoogleIdToken('google-id-token',
+          password: password);
+
+      expect(session.user.email, 'google-user@example.com');
+      expect(await tokenStore.read(), 'token-123');
+      expect(await tokenStore.readRefreshToken(), 'refresh-123');
     });
-
-    final repository = MushukistanAuthRepository(
-      apiClient: apiClient,
-      tokenStore: tokenStore,
-    );
-    final session = await repository.loginWithGoogleIdToken(
-      'google-id-token',
-      acceptTerms: true,
-      acceptPrivacy: true,
-    );
-
-    expect(session.user.email, 'google-user@example.com');
-    expect(await tokenStore.read(), 'token-123');
-    expect(await tokenStore.readRefreshToken(), 'refresh-123');
-  });
+  }
 
   test('session restoration returns the current user when the token is valid',
       () async {

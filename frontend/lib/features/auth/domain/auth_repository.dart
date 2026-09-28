@@ -35,11 +35,8 @@ final class SessionRestoreSuccess extends SessionRestoreResult {
 abstract interface class AuthRepository {
   Future<VerificationRequirement> register(RegisterCredentials credentials);
   Future<AuthSession> login(AuthCredentials credentials);
-  Future<AuthSession> loginWithGoogleIdToken(
-    String idToken, {
-    bool acceptTerms = false,
-    bool acceptPrivacy = false,
-  });
+  Future<AuthSession> loginWithGoogleIdToken(String idToken,
+      {String? password});
   Future<VerificationRequirement> resendVerification(String email);
   Future<void> verifyEmail(String token);
   Future<MushukistanUser> fetchCurrentUser();

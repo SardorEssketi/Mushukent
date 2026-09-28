@@ -194,27 +194,22 @@ class _VerifyEmailScreenState extends ConsumerState<VerifyEmailScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                email == null || email.isEmpty
-                    ? strings.verifyEmailWithoutAddress
-                    : strings.verifyEmailWithAddress.replaceAll(
-                        '{email}',
-                        email,
-                      ),
+                authState.message ??
+                    (email == null || email.isEmpty
+                        ? strings.verifyEmailWithoutAddress
+                        : strings.verifyEmailWithAddress.replaceAll(
+                            '{email}',
+                            email,
+                          )),
+                style: authState.hasError
+                    ? TextStyle(color: Theme.of(context).colorScheme.error)
+                    : null,
               ),
               const SizedBox(height: 16),
               Text(
                 strings.devVerificationHelp,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              if (authState.hasError) ...[
-                const SizedBox(height: 16),
-                Text(
-                  authState.message!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
               if (authState.devVerificationToken != null) ...[
                 FilledButton(

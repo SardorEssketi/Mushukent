@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../localization/app_strings.dart';
 import '../navigation/settings_changes_guard.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
+import '../../features/lost_pets/presentation/widgets/lost_pet_follow_up_listener.dart';
 
 class AppShellScaffold extends ConsumerWidget {
   const AppShellScaffold({super.key, required this.navigationShell});
@@ -31,7 +32,9 @@ class AppShellScaffold extends ConsumerWidget {
     final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
-      body: AuthenticatedOnboardingFlow(child: navigationShell),
+      body: AuthenticatedOnboardingFlow(
+        child: LostPetFollowUpListener(child: navigationShell),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => _selectBranch(context, ref, index),

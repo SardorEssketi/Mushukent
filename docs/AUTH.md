@@ -17,10 +17,11 @@ MVP constraints:
 2. Authentication Flows
 -----------------------
 2.1 Email/Password Registration
-- Client submits email, password, optional display name.
+- Client submits name, email, password, and required Terms/Privacy acceptance.
 - Backend validates payload and password policy.
 - Backend creates user record with hashed password.
 - Backend returns a verification-required response containing the email address and, in development only, a verification token for local testing.
+- A normalized-email duplicate returns the same public response shape and creates no second user; clients must not reveal whether an arbitrary address already has an account.
 - Account remains inactive for password login until email verification is completed.
 
 2.2 Email/Password Login
@@ -29,7 +30,8 @@ MVP constraints:
 - Backend verifies password hash.
 - Backend rejects unverified users with `EMAIL_NOT_VERIFIED`.
 - Backend issues a short-lived JWT access token and a refresh/session token.
-- Client stores both credentials using secure storage and attaches only the access token to protected requests.
+- Android stores credentials in platform secure storage; web uses localStorage
+  with a memory fallback. Only the access token is attached to protected requests.
 
 2.3 Email Verification
 - Client submits verification token received through email delivery.
@@ -39,19 +41,38 @@ MVP constraints:
 - Development flow may expose the verification token in API responses for local testing; production must deliver the token by email provider only. Verification tokens are not logged.
 
 2.4 Google OAuth Login
-- Client obtains Google `id_token` using official Google Sign-In SDK.
-- Client sends `id_token` to backend.
-- Backend validates the token signature, issuer (`iss`), configured audience (`aud`), authorized party (`azp`) when applicable, expiration (`exp`), issued-at (`iat`), email, `email_verified`, and stable `sub`.
-- Backend looks up an existing Google identity by `sub` first. Email is not the permanent identity key.
-- With a new `sub`, automatic email matching is allowed only for exactly one active Mushukistan account whose email is already verified and exactly matches the verified consumer Gmail address. Google's signed, authoritative Gmail claim proves control of the address, and Mushukistan's existing verified-email state protects the target password account. Password hash and user data remain on that same row.
-- Same-email Workspace and other external-domain accounts are never automatically linked by email, even when Google reports a verified email. Those addresses may be reassigned; the user must sign in to Mushukistan and connect Google from Account Security. Unverified password accounts are also never auto-linked.
-- An already-linked subject continues to sign into its original Mushukistan user if the Google email changes. The Mushukistan email and verification state are not changed by a different provider email.
-- New Google users get Mushukistan `email_verified = true` only for an authoritative Gmail or verified hosted-domain claim. Other provider-verified addresses can authenticate by `sub` while Mushukistan password login still requires Mushukistan email verification.
-- Multiple normalized email matches, an inactive matching account, or a subject already attached elsewhere fail closed. Separate user rows are never merged based on email.
-- Google login and password login issue the same Mushukistan access and refresh session types.
-- A new Google user is created with `password_hash = NULL` only after explicit Terms and Privacy acceptance.
-- Backend issues a short-lived JWT access token and a refresh/session token.
-- Google login rejections log only provider, status, and error code; raw credentials and claims are not logged.
+- The backend verifies signature, issuer, audience, applicable azp, expiry, iat,
+  email, email_verified=true and a nonempty stable Google sub.
+- A known sub signs in its original active user. A changed Google email never
+  moves the subject or overwrites the stored Mushukistan email.
+- For a new sub with no email collision, create one Google-only account after
+  legal acceptance. Gmail/Googlemail and hosted Workspace email claims establish
+  current email ownership; other Google emails remain locally unverified.
+  Those Google-only users can still sign in by sub.
+- For an email collision, lock and re-read the matching active user. Reject
+  ambiguity, a different bound sub, or a changed stored email.
+- An already verified Gmail/Googlemail account may bind automatically. These
+  consumer addresses are treated as non-reassignable; do not canonicalize dots,
+  plus aliases, or gmail.com/googlemail.com into a different email.
+- A verified Workspace/custom-domain password account requires its current
+  Mushukistan password in the same Google login request. The client asks once
+  inside sign-in and reuses the token only in memory for that attempt. Every
+  retry verifies the Google token again. Later Google sign-ins use sub directly.
+- An unverified account is never automatically claimed, verified, or cleared by
+  Google. Finish password login/email verification first, then retry Google.
+  A person who did not create the pending account must contact support. This
+  accepts a registration-squatting availability risk rather than data exposure.
+  email_verified is a mailbox-status flag, not pending-registration provenance.
+  The schema does not guarantee that unverified rows own no data; unverified
+  bound Google accounts can already use the app. The flag cannot authorize reclaiming data.
+- Passwordless legacy Gmail/Googlemail rows with verified email follow the same
+  bounded Gmail rule. External legacy rows without a bound sub need support;
+  current ownership of a reassigned address does not prove historical ownership.
+- No user rows are merged, deleted, or moved. Password hashes remain unchanged.
+- Legal acceptance is displayed beside the Google action; the backend retains
+  current versions and a timestamp, and does not rewrite unchanged acceptance.
+- Token/password material is never logged. Google rejections log only status
+  and error code. Both login methods use the same sessions.
 
 2.5 Logout
 - Client calls `POST /auth/logout` with the current refresh token when available, then deletes local credentials.
@@ -107,32 +128,22 @@ Startup/session restore:
 - User taps "Continue with Google".
 - Flutter mobile or web obtains a Google ID token through its official Google Sign-In flow.
 - Client sends `id_token` to `POST /api/v1/auth/google`.
-- If the backend returns `LEGAL_ACCEPTANCE_REQUIRED`, the app shows explicit Terms of Service and Privacy Policy consent controls and resubmits the same Google ID token with `accept_terms=true` and `accept_privacy=true`.
-- The client must not silently accept legal documents or require the user to choose their Google account twice.
+- The app presents the linked notice "By continuing with Google, you agree to the Terms of Service and Privacy Policy" before the Google button and submits `accept_terms=true` and `accept_privacy=true` in the initial request. It does not retain a Google ID token for a legal-consent retry.
+- Existing current-version acceptance is not recorded again. If legal versions change, clicking the linked agreement and continuing records the new current versions through the same server-side acceptance checks.
 
 5.2 Backend Steps
-- Verify token with Google public keys.
-- Validate:
-  - `iss` is Google issuer,
-  - `aud` matches a configured Google OAuth client ID and `azp` is valid when applicable,
-  - token is not expired and `iat` is not in the future,
-  - `email_verified` is true,
-  - email and stable `sub` exist in token payload.
-- Find or create user:
-  - for new users, require `accept_terms=true` and `accept_privacy=true`;
-  - record current Terms and Privacy versions and a backend-owned acceptance timestamp when legal acceptance is provided;
-  - set Mushukistan `email_verified = true` only when the Google email claim is authoritative (consumer Gmail or `email_verified=true` with a hosted-domain claim);
-  - update `last_login_at`.
-- Require a non-empty Google `sub`; store it uniquely on the existing user row.
-- For an already connected subject, keep the account's Mushukistan email unchanged if the Google email later changes.
-- Issue local JWT access token.
+Apply the verified-sub and collision rules in section 2.4 in a transaction.
+Use unique normalized-email and Google-sub constraints, row locking, and one
+bounded retry after an integrity violation. A locked read refreshes ORM state.
 
 5.3 Error Handling
-- Invalid token -> 401 `INVALID_GOOGLE_TOKEN`.
-- Missing email claim -> 400 `GOOGLE_EMAIL_MISSING`.
-- Missing required legal acceptance -> 422 `LEGAL_ACCEPTANCE_REQUIRED`.
-- Disabled user -> 403 `ACCOUNT_DISABLED`.
-- Unsafe/ambiguous email match or identity already linked elsewhere -> 409; never merge users automatically.
+- Invalid token: 401 INVALID_GOOGLE_TOKEN; missing email: GOOGLE_EMAIL_MISSING.
+- Missing legal acceptance: 422 LEGAL_ACCEPTANCE_REQUIRED.
+- Disabled account: 403 ACCOUNT_DISABLED.
+- Password proof needed: 409 GOOGLE_PASSWORD_REQUIRED, only after valid Google proof.
+- Wrong confirmation password: 401 INVALID_CREDENTIALS; no binding/session.
+- Pending email verification: 409 GOOGLE_ACCOUNT_UNVERIFIED; no mutation/session.
+- Ambiguous, differently bound, or unrecoverable legacy match: GOOGLE_IDENTITY_CONFLICT.
 
 6. User Roles and Permissions
 -----------------------------
@@ -177,12 +188,20 @@ Startup/session restore:
 - No complexity hard-fail beyond length for MVP (to reduce registration friction), but UI should recommend strong passwords.
 
 7.4 Account Security
-- Authenticated `GET /auth/methods` returns `has_password`, `google_connected`, and `email_verified`; it returns no provider subject or credential material.
-- Authenticated `POST /auth/set-password` is allowed only while `password_hash` is null. It requires a fresh server-verified Google ID token matching the account email and any already linked subject, plus a matching confirmation, then stores an Argon2 hash on the same user row.
-- Authenticated `POST /auth/change-password` requires the current password and a matching new-password confirmation.
-- Authenticated `POST /auth/connect-google` verifies the Google ID token and requires its verified email to match the signed-in Mushukistan account. A Google subject already attached to another account is rejected.
-- Credential mutations retain existing access and refresh sessions under the MVP session policy. There is no unlink or password-removal operation, so Google-only users cannot remove their only method.
-- Eligible legacy consumer Gmail accounts are marked as unbound by migration until the next verified Google sign-in. Setting a password requires Google reauthentication and records its stable subject, clearing the legacy marker. External-domain legacy accounts require authenticated or support-assisted linking because their email address may be reassigned.
+- GET /auth/methods remains the small authenticated read used for has_password
+  and email_verified. Its old google_connected field stays for response
+  compatibility but is not displayed. Renaming this endpoint adds no value.
+- POST /auth/change-password requires the current password and matching new
+  password confirmation. Google-only users have no Password section.
+- Add password and manual Google connection are removed from UI and backend.
+  /auth/set-password and /auth/connect-google now return 404. Old clients must
+  update for these actions and for inline collision confirmation.
+- Google-only users continue using Google. No password recovery feature is
+  claimed; a separate password reset design remains outside this change.
+- legacy_google_unbound stays as historical schema metadata, is cleared on
+  binding, and grants no authority. Removing the column would needlessly add a migration.
+- Password changes retain the existing session policy. Account Security shows
+  email verification, Change password when applicable, and Log out.
 
 8. Account Lifecycle
 --------------------
@@ -193,7 +212,7 @@ Startup/session restore:
 - `is_active = true` means login allowed.
 - `is_active = false` means authentication denied with 403 `ACCOUNT_DISABLED`.
 - `email_verified = false` means password login is denied with 401 `EMAIL_NOT_VERIFIED`.
-- Google email verification follows the trusted-claim rules in section 5.2. Login by an already linked Google `sub` remains available even when Mushukistan does not trust that email for password login.
+- Google email verification follows section 2.4; an external non-hosted claim alone does not establish current mailbox ownership.
 
 8.3 Profile Updates
 - User can update display name, bio, avatar URL.
@@ -229,9 +248,7 @@ This document aligns to these endpoint families in `API.md`:
 - `POST /api/v1/auth/google`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/methods`
-- `POST /api/v1/auth/set-password`
 - `POST /api/v1/auth/change-password`
-- `POST /api/v1/auth/connect-google`
 
 11. Out of Scope for MVP
 ------------------------
@@ -252,3 +269,28 @@ Change Log
 ----------
 - 2026-07-23: Initial MVP auth architecture document.
 
+
+Compatibility and session audit (2026-09-27)
+--------------------------------------------
+- Commit 0179a7b included set-password without Google reauthentication;
+  7213afb added required id_token. Both use Android version 0.1.0+8.
+  Git proves source history, not Play publication; distributed client state is unknown.
+- No schema/configuration/OAuth changes. Deployment requires existing migrations
+  20260924_0020 and 20260926_0021; the latter refuses legacy email duplicates.
+- Access JWT defaults to 60 minutes plus 60 seconds skew. Refresh tokens use
+  secrets.token_urlsafe(48), SHA-256 storage and 30-day sliding expiry. They
+  remain stable; the repository method named rotate_refresh_session renews them.
+- Logout revokes the supplied owned refresh session; no token means all user
+  refresh sessions. Already issued access JWTs survive logout until expiry.
+- Inactive users fail login, refresh and protected requests. Revocation attempted
+  while rejecting inactive refresh originally rolled back with the exception;
+  rejection alone did not persist revocation. The rejection now occurs after
+  the revocation transaction commits, preventing refresh revival on reactivation.
+- Web localStorage exposes tokens to same-origin script/XSS. Cookie-based web
+  session storage is a separate session-hardening design, not changed here.
+- Separate follow-up: refresh rotation/reuse detection and absolute lifetime,
+  password-change session revocation, and access-token immediate revocation.
+- Google key fetching currently caches keys for the process lifetime; key-cache
+  expiry/refresh is a separate reliability follow-up. Real OAuth must be checked.
+- Reference: https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
+  explains stable sub and why non-hosted email_verified does not prove current ownership.

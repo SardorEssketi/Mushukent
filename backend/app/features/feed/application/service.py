@@ -128,7 +128,9 @@ class FeedService:
                     viewer_user_id=viewer_user_id,
                     viewer_is_moderator=viewer_is_moderator,
                 )
-                lost_pets = self.lost_pet_repository_factory(session).get_by_ids(lost_pet_ids)
+                lost_pets = self.lost_pet_repository_factory(session).get_by_ids(
+                    lost_pet_ids, active_only=True
+                )
                 adoption_posts = self.adoption_post_repository_factory(session).get_by_ids(
                     adoption_ids
                 )

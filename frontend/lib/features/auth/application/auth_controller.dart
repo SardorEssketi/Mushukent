@@ -29,10 +29,9 @@ class AuthState {
     this.message,
     this.fieldErrors = const <String, String>{},
     this.retryable = false,
+    this.messageIsError = false,
     this.pendingVerificationEmail,
     this.devVerificationToken,
-    this.pendingGoogleIdToken,
-    this.googleLegalAcceptanceRequired = false,
   });
 
   final AuthPhase phase;
@@ -40,17 +39,15 @@ class AuthState {
   final String? message;
   final Map<String, String> fieldErrors;
   final bool retryable;
+  final bool messageIsError;
   final String? pendingVerificationEmail;
   final String? devVerificationToken;
-  final String? pendingGoogleIdToken;
-  final bool googleLegalAcceptanceRequired;
 
   bool get isAuthenticated => phase == AuthPhase.authenticated;
   bool get isBusy =>
       phase == AuthPhase.restoring || phase == AuthPhase.authenticating;
-  bool get hasError => message != null && message!.trim().isNotEmpty;
-  bool get requiresGoogleLegalAcceptance => googleLegalAcceptanceRequired;
-
+  bool get hasError =>
+      messageIsError && message != null && message!.trim().isNotEmpty;
   factory AuthState.initial() => const AuthState._(phase: AuthPhase.initial);
 
   factory AuthState.restoring() =>
@@ -59,24 +56,13 @@ class AuthState {
   factory AuthState.unauthenticated({
     String? message,
     Map<String, String> fieldErrors = const <String, String>{},
+    bool messageIsError = true,
   }) {
     return AuthState._(
       phase: AuthPhase.unauthenticated,
       message: message,
       fieldErrors: fieldErrors,
-    );
-  }
-
-  factory AuthState.googleLegalAcceptanceRequired({
-    String? idToken,
-    required String message,
-  }) {
-    return AuthState._(
-      phase: AuthPhase.unauthenticated,
-      message: message,
-      pendingGoogleIdToken:
-          idToken?.trim().isNotEmpty == true ? idToken!.trim() : null,
-      googleLegalAcceptanceRequired: true,
+      messageIsError: messageIsError,
     );
   }
 
@@ -87,10 +73,12 @@ class AuthState {
     required String email,
     String? message,
     String? devVerificationToken,
+    bool messageIsError = false,
   }) {
     return AuthState._(
       phase: AuthPhase.verificationRequired,
       message: message,
+      messageIsError: messageIsError,
       pendingVerificationEmail: email,
       devVerificationToken: devVerificationToken,
     );
@@ -108,6 +96,7 @@ class AuthState {
       phase: AuthPhase.failure,
       message: message,
       retryable: retryable,
+      messageIsError: true,
     );
   }
 }
@@ -251,6 +240,7 @@ class AuthController extends StateNotifier<AuthState> {
         state = AuthState.verificationRequired(
           email: credentials.email.trim(),
           message: error.userMessage,
+          messageIsError: true,
         );
       } else {
         state = AuthState.unauthenticated(
@@ -268,7 +258,9 @@ class AuthController extends StateNotifier<AuthState> {
       final verification = await _repository.register(credentials);
       state = AuthState.verificationRequired(
         email: verification.email,
-        message: 'Check your email for a verification link.',
+        message:
+            'If an account can be registered with this email, check your inbox '
+            'for next steps. If you already have an account, sign in.',
         devVerificationToken: verification.devVerificationToken,
       );
     } on MushukistanApiException catch (error) {
@@ -281,43 +273,37 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> loginWithGoogle({
-    bool acceptTerms = false,
-    bool acceptPrivacy = false,
+    Future<void> Function(String token)? onPasswordRequired,
   }) async {
     if (state.isBusy) return;
     state = AuthState.authenticating();
     var idToken = '';
     try {
       idToken = await _googleIdentityTokens.authenticate();
-      await loginWithGoogleIdToken(
-        idToken,
-        acceptTerms: acceptTerms,
-        acceptPrivacy: acceptPrivacy,
-      );
+      await loginWithGoogleIdToken(idToken);
     } on GoogleSignInFlowException catch (error) {
       state = AuthState.unauthenticated(message: error.message);
       rethrow;
     } on MushukistanApiException catch (error) {
-      state = _googleFailureState(error, pendingIdToken: idToken);
+      state = AuthState.unauthenticated(message: error.userMessage);
+      if (error.code == 'GOOGLE_PASSWORD_REQUIRED' &&
+          onPasswordRequired != null) {
+        await onPasswordRequired(idToken);
+        return;
+      }
       rethrow;
     }
   }
 
-  Future<void> loginWithGoogleIdToken(
-    String idToken, {
-    bool acceptTerms = false,
-    bool acceptPrivacy = false,
-  }) async {
+  Future<void> loginWithGoogleIdToken(String idToken,
+      {String? password}) async {
     state = AuthState.authenticating();
     try {
-      final session = await _repository.loginWithGoogleIdToken(
-        idToken,
-        acceptTerms: acceptTerms,
-        acceptPrivacy: acceptPrivacy,
-      );
+      final session =
+          await _repository.loginWithGoogleIdToken(idToken, password: password);
       state = AuthState.authenticated(session.user);
     } on MushukistanApiException catch (error) {
-      state = _googleFailureState(error, pendingIdToken: idToken);
+      state = AuthState.unauthenticated(message: error.userMessage);
       rethrow;
     }
   }
@@ -337,7 +323,9 @@ class AuthController extends StateNotifier<AuthState> {
       final verification = await _repository.resendVerification(targetEmail);
       state = AuthState.verificationRequired(
         email: verification.email,
-        message: 'Verification email sent.',
+        message:
+            'If an unverified account uses this address, check your inbox for '
+            'a verification link.',
         devVerificationToken: verification.devVerificationToken,
       );
     } on MushukistanApiException catch (error) {
@@ -345,6 +333,7 @@ class AuthController extends StateNotifier<AuthState> {
         email: targetEmail,
         message: error.userMessage,
         devVerificationToken: state.devVerificationToken,
+        messageIsError: true,
       );
       rethrow;
     }
@@ -355,6 +344,7 @@ class AuthController extends StateNotifier<AuthState> {
       await _repository.verifyEmail(token);
       state = AuthState.unauthenticated(
         message: 'Email verified. You can sign in now.',
+        messageIsError: false,
       );
     } on MushukistanApiException catch (error) {
       state = AuthState.unauthenticated(message: error.userMessage);
@@ -392,24 +382,6 @@ class AuthController extends StateNotifier<AuthState> {
       }
     }
     return result;
-  }
-
-  AuthState _googleFailureState(
-    MushukistanApiException error, {
-    required String pendingIdToken,
-  }) {
-    if (error.code == 'LEGAL_ACCEPTANCE_REQUIRED' &&
-        pendingIdToken.trim().isNotEmpty) {
-      return AuthState.googleLegalAcceptanceRequired(
-        idToken: pendingIdToken,
-        message: error.userMessage,
-      );
-    }
-    if (error.code == 'LEGAL_ACCEPTANCE_REQUIRED') {
-      return AuthState.googleLegalAcceptanceRequired(
-          message: error.userMessage);
-    }
-    return AuthState.unauthenticated(message: error.userMessage);
   }
 
   @override

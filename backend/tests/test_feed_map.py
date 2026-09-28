@@ -1,19 +1,29 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier, Event
 from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from geoalchemy2.elements import WKTElement
 
 from app.core.auth import AuthenticatedPrincipal, Role
 from app.core.config import Settings
 from app.core.container import AppContainer
+from app.features.adoption_posts.infrastructure.repositories import SqlAlchemyAdoptionPostRepository
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 from app.features.cats.domain.models import CatStatus
+from app.features.feed.application.schemas import FeedQuery
+from app.features.feed.application.service import FeedService
+from app.features.feed.infrastructure.repositories import SqlAlchemyFeedRepository
+from app.features.lost_pets.application.schemas import LostPetFollowUpAnswer
+from app.features.lost_pets.application.service import LostPetsService
+from app.features.lost_pets.infrastructure.repositories import SqlAlchemyLostPetRepository
 from app.infrastructure.db.enums import PlaceCategory, PlaceSource, PostKind
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
@@ -303,6 +313,250 @@ def _create_lost_pet(
         session.add(lost_pet)
         session.flush()
         return lost_pet.id
+
+
+@pytest.mark.integration
+def test_lost_pet_contact_follow_up_and_resolution_flow(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-followup-owner@example.com",
+    )
+    contact_a, contact_a_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-followup-contact-a@example.com",
+    )
+    contact_b, contact_b_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-followup-contact-b@example.com",
+    )
+    pet_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    contact_a_headers = {"Authorization": f"Bearer {contact_a_token}"}
+    contact_b_headers = {"Authorization": f"Bearer {contact_b_token}"}
+    contact_url = f"/api/v1/lost-pets/{pet_id}/contact"
+    due_url = "/api/v1/lost-pets/follow-ups/due"
+
+    assert client.post(contact_url).status_code == 401
+    assert client.post(contact_url, headers=owner_headers).status_code == 403
+    assert client.post(contact_url, headers=contact_a_headers).status_code == 204
+    assert client.post(contact_url, headers=contact_b_headers).status_code == 204
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        contacts = session.query(schema.LostPetContactEvent).filter_by(lost_pet_id=pet_id).all()
+        follow_ups = session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).all()
+        assert len(contacts) == 2
+        assert {event.contacting_user_id for event in contacts} == {contact_a.id, contact_b.id}
+        assert {event.owner_id for event in contacts} == {owner.id}
+        assert len(follow_ups) == 1
+        follow_up = follow_ups[0]
+        assert follow_up.due_at == contacts[0].created_at + timedelta(hours=1)
+        follow_up_id = follow_up.id
+
+    assert client.get(due_url, headers=owner_headers).json()["data"] == []
+    answer_url = f"/api/v1/lost-pets/follow-ups/{follow_up_id}/answer"
+    assert client.post(answer_url, headers=owner_headers, json={"answer": "yes"}).status_code == 409
+    with feed_runtime.db_session_manager.session_scope() as session:
+        session.get(schema.LostPetFollowUp, follow_up_id).due_at = datetime.now(UTC) - timedelta(
+            minutes=1
+        )
+
+    due = client.get(due_url, headers=owner_headers)
+    assert due.status_code == 200
+    assert [item["id"] for item in due.json()["data"]] == [str(follow_up_id)]
+    assert client.get(due_url, headers=contact_a_headers).json()["data"] == []
+    assert (
+        client.post(answer_url, headers=contact_a_headers, json={"answer": "yes"}).status_code
+        == 403
+    )
+    assert (
+        client.post(answer_url, headers=owner_headers, json={"answer": "maybe"}).status_code == 422
+    )
+
+    no_response = client.post(answer_url, headers=owner_headers, json={"answer": "no"})
+    assert no_response.status_code == 200
+    assert no_response.json()["data"]["is_resolved"] is False
+    assert client.post(answer_url, headers=owner_headers, json={"answer": "yes"}).status_code == 409
+    assert client.get(due_url, headers=owner_headers).json()["data"] == []
+    assert str(pet_id) in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    map_params = {"bbox": "69.2,41.2,69.3,41.4"}
+    assert str(pet_id) in [
+        item["id"]
+        for item in client.get("/api/v1/lost-pets/map", params=map_params).json()["data"]["items"]
+    ]
+
+    assert client.post(contact_url, headers=contact_a_headers).status_code == 204
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_ups = session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).all()
+        assert len(follow_ups) == 2
+        pending = next(item for item in follow_ups if item.completed_at is None)
+        pending_id = pending.id
+        pending.due_at = datetime.now(UTC) - timedelta(minutes=1)
+
+    yes_url = f"/api/v1/lost-pets/follow-ups/{pending_id}/answer"
+    yes_response = client.post(yes_url, headers=owner_headers, json={"answer": "yes"})
+    assert yes_response.status_code == 200
+    assert yes_response.json()["data"]["is_resolved"] is True
+    assert client.post(yes_url, headers=owner_headers, json={"answer": "yes"}).status_code == 409
+    assert client.post(contact_url, headers=contact_b_headers).status_code == 404
+    assert str(pet_id) not in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    assert str(pet_id) not in [
+        item["id"] for item in client.get("/api/v1/lost-pets").json()["data"]["items"]
+    ]
+    assert str(pet_id) not in [
+        item["id"]
+        for item in client.get("/api/v1/lost-pets/map", params=map_params).json()["data"]["items"]
+    ]
+    mine = client.get("/api/v1/lost-pets/mine", headers=owner_headers)
+    assert mine.status_code == 200
+    assert [item["id"] for item in mine.json()["data"]["items"]] == [str(pet_id)]
+    assert mine.json()["data"]["items"][0]["is_resolved"] is True
+    assert client.get(f"/api/v1/lost-pets/{pet_id}").json()["data"]["is_resolved"] is True
+
+
+@pytest.mark.integration
+def test_concurrent_contacts_keep_first_recorded_timestamp_and_one_follow_up(
+    feed_runtime,
+) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="contact-race-owner@example.com",
+    )
+    contact_a, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="contact-race-a@example.com",
+    )
+    contact_b, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="contact-race-b@example.com",
+    )
+    pet_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+    first_entered = Event()
+    release_first = Event()
+
+    class DelayedContactRepository(SqlAlchemyLostPetRepository):
+        def record_contact(
+            self, lost_pet_id: UUID, contacting_user_id: UUID, *args, **kwargs
+        ) -> bool:
+            if contacting_user_id == contact_a.id:
+                first_entered.set()
+                assert release_first.wait(timeout=10)
+            return super().record_contact(lost_pet_id, contacting_user_id, *args, **kwargs)
+
+    service = LostPetsService(
+        db_session_manager=feed_runtime.db_session_manager,
+        repository_factory=DelayedContactRepository,
+    )
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.contact_owner, pet_id, contact_a)
+        assert first_entered.wait(timeout=10)
+        try:
+            pool.submit(service.contact_owner, pet_id, contact_b).result(timeout=10)
+        finally:
+            release_first.set()
+        first.result(timeout=10)
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        contacts = session.query(schema.LostPetContactEvent).filter_by(lost_pet_id=pet_id).all()
+        follow_ups = session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).all()
+        assert len(contacts) == 2
+        assert len(follow_ups) == 1
+        assert follow_ups[0].due_at == min(event.created_at for event in contacts) + timedelta(
+            hours=1
+        )
+        assert {event.contacting_user_id for event in contacts} == {contact_a.id, contact_b.id}
+
+
+@pytest.mark.integration
+def test_conflicting_concurrent_answers_complete_only_once(feed_runtime) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="answer-race-owner@example.com",
+    )
+    contact, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="answer-race-contact@example.com",
+    )
+    pet_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+    service = LostPetsService(
+        db_session_manager=feed_runtime.db_session_manager,
+        repository_factory=SqlAlchemyLostPetRepository,
+    )
+    service.contact_owner(pet_id, contact)
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_up = session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).one()
+        follow_up.due_at = datetime.now(UTC) - timedelta(minutes=1)
+        follow_up_id = follow_up.id
+
+    start = Barrier(3)
+
+    def answer(value: str) -> bool | int:
+        start.wait(timeout=10)
+        try:
+            return service.answer_follow_up(
+                follow_up_id, owner, LostPetFollowUpAnswer(answer=value)
+            ).is_resolved
+        except HTTPException as exc:
+            return exc.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        yes = pool.submit(answer, "yes")
+        no = pool.submit(answer, "no")
+        start.wait(timeout=10)
+        results = [yes.result(timeout=10), no.result(timeout=10)]
+
+    assert results.count(409) == 1
+    with feed_runtime.db_session_manager.session_scope() as session:
+        pet = session.get(schema.LostPet, pet_id)
+        follow_up = session.get(schema.LostPetFollowUp, follow_up_id)
+        assert follow_up.completed_at is not None
+        assert pet.is_resolved is follow_up.answer_yes
+        assert pet.is_resolved in results
+
+
+@pytest.mark.integration
+def test_feed_hydration_excludes_pet_resolved_after_key_query(feed_runtime) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="feed-hydration-owner@example.com",
+    )
+    pet_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+
+    class ResolveAfterKeysRepository(SqlAlchemyFeedRepository):
+        def list_mixed_feed_keys(self, **kwargs):
+            page = super().list_mixed_feed_keys(**kwargs)
+            with feed_runtime.db_session_manager.session_scope() as session:
+                session.get(schema.LostPet, pet_id).is_resolved = True
+            return page
+
+    service = FeedService(
+        db_session_manager=feed_runtime.db_session_manager,
+        repository_factory=ResolveAfterKeysRepository,
+        lost_pet_repository_factory=SqlAlchemyLostPetRepository,
+        adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
+    )
+    page = service.list_feed(FeedQuery.model_validate({"filter": "recent"}))
+    assert all(item.id != pet_id for item in page.items)
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        archived = SqlAlchemyLostPetRepository(session).get_by_ids([pet_id])
+        assert len(archived) == 1
+        assert archived[0].is_resolved is True
 
 
 def test_anonymous_recent_feed_hides_private_deleted_and_unavailable_posts(

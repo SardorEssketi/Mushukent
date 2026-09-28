@@ -12,13 +12,11 @@ from app.features.auth.application.schemas import (
     AuthRegisterRequest,
     AuthRegisterResponse,
     ChangePasswordRequest,
-    ConnectGoogleRequest,
     GoogleLoginRequest,
     LogoutRequest,
     RefreshTokenRequest,
     ResendVerificationRequest,
     ResendVerificationResponse,
-    SetPasswordRequest,
     SignInMethods,
     UserPublic,
     VerificationTokenData,
@@ -40,18 +38,6 @@ def sign_in_methods(
     return ApiSuccess(data=SignInMethods(**auth_service.get_sign_in_methods(user.id)))
 
 
-@router.post("/set-password", status_code=status.HTTP_204_NO_CONTENT)
-def set_password(
-    payload: SetPasswordRequest,
-    user=Depends(get_current_active_user),
-    auth_service: AuthService = Depends(get_auth_service),
-) -> Response:
-    auth_service.set_password(
-        user.id, payload.new_password, payload.confirm_password, payload.id_token
-    )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(
     payload: ChangePasswordRequest,
@@ -61,16 +47,6 @@ def change_password(
     auth_service.change_password(
         user.id, payload.current_password, payload.new_password, payload.confirm_password
     )
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/connect-google", status_code=status.HTTP_204_NO_CONTENT)
-def connect_google(
-    payload: ConnectGoogleRequest,
-    user=Depends(get_current_active_user),
-    auth_service: AuthService = Depends(get_auth_service),
-) -> Response:
-    auth_service.connect_google(user.id, payload.id_token)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -94,7 +70,7 @@ def register(
     )
     return ApiSuccess(
         data=VerificationTokenData(
-            email=result.user.email,
+            email=result.email,
             verification_required=result.verification_required,
             dev_verification_token=result.dev_verification_token,
         )
@@ -139,6 +115,7 @@ def login_with_google(
             payload.id_token,
             accept_terms=payload.accept_terms,
             accept_privacy=payload.accept_privacy,
+            password=payload.password,
         )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}

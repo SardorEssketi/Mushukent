@@ -21,6 +21,8 @@ def test_metadata_discovers_all_mvp_tables() -> None:
         "likes",
         "lost_pet_photos",
         "lost_pets",
+        "lost_pet_contact_events",
+        "lost_pet_follow_ups",
         "adoption_post_photos",
         "adoption_posts",
         "reports",
@@ -41,6 +43,7 @@ def test_table_definitions_match_database_contract() -> None:
     post_history = schema.PostHistory.__table__
     comments = schema.Comment.__table__
     adoption_posts = schema.AdoptionPost.__table__
+    follow_ups = schema.LostPetFollowUp.__table__
     likes = schema.Like.__table__
     reports = schema.Report.__table__
     leaderboard_cache = schema.LeaderboardCache.__table__
@@ -85,6 +88,9 @@ def test_table_definitions_match_database_contract() -> None:
     assert adoption_posts.c.created_at.type.timezone is True
     assert adoption_posts.c.updated_at.type.timezone is True
     assert adoption_posts.c.deleted_at.type.timezone is True
+    assert follow_ups.c.due_at.type.timezone is True
+    assert follow_ups.c.completed_at.type.timezone is True
+    assert follow_ups.c.answer_yes.nullable is True
     assert likes.constraints
     assert any(
         isinstance(constraint, UniqueConstraint)
@@ -111,6 +117,7 @@ def test_table_definitions_match_database_contract() -> None:
 
 
 def test_constraints_and_indexes_match_mvp_rules() -> None:
+    follow_ups = schema.LostPetFollowUp.__table__
     cat_constraints = {constraint.name for constraint in schema.Cat.__table__.constraints}
     user_constraints = {constraint.name for constraint in schema.User.__table__.constraints}
     post_constraints = {constraint.name for constraint in schema.Post.__table__.constraints}
@@ -192,6 +199,12 @@ def test_constraints_and_indexes_match_mvp_rules() -> None:
         "idx_adoption_posts_active_created_at",
         "idx_adoption_posts_user_id",
     } <= adoption_post_indexes
+
+    pending_index = next(
+        index for index in follow_ups.indexes if index.name == "uq_lost_pet_follow_ups_pending"
+    )
+    assert pending_index.unique is True
+    assert str(pending_index.dialect_options["postgresql"]["where"]) == "completed_at IS NULL"
 
 
 def test_alembic_environment_discovers_base_metadata() -> None:

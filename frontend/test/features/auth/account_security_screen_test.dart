@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,172 +8,74 @@ import 'package:mushukistan_frontend/features/profile/presentation/screens/accou
 import '../../support/fakes.dart';
 
 void main() {
-  testWidgets('Google-only account reauthenticates before setting a password',
+  testWidgets(
+      'Google-only account has email and logout without password management',
       (tester) async {
     final client = FakeApiClient();
-    final google = FakeGoogleIdentityTokenProvider();
-    var hasPassword = false;
-    final save = Completer<Object?>();
-    client.setHandler(
-        'GET',
-        'auth/methods',
-        (_) => {
-              'has_password': hasPassword,
-              'google_connected': true,
-              'email_verified': true,
-            });
-    client.setHandler('POST', 'auth/set-password', (_) async {
-      await save.future;
-      hasPassword = true;
-      return null;
-    });
+    client.setHandler('GET', 'auth/methods',
+        (_) => {'has_password': false, 'email_verified': true});
     await tester.pumpWidget(ProviderScope(
       overrides: [
         apiClientProvider.overrideWithValue(client),
-        googleIdentityTokenProvider.overrideWithValue(google),
+        currentUserProvider
+            .overrideWithValue(testUser(email: 'google-only@example.com')),
       ],
       child: const MaterialApp(home: AccountSecurityScreen()),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Connected'), findsOneWidget);
-    expect(find.text('Not set'), findsOneWidget);
+    expect(find.text('google-only@example.com'), findsOneWidget);
     expect(find.text('Verified'), findsOneWidget);
-    expect(find.text('Disconnect Google'), findsNothing);
-    await tester.ensureVisible(find.text('Set password'));
-    await tester.tap(find.text('Set password'));
-    await tester.pumpAndSettle();
-    final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'Password123');
-    await tester.enterText(fields.at(1), 'Password123');
-    await tester.ensureVisible(find.text('Re-authenticate with Google'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Re-authenticate with Google'));
-    await tester.pumpAndSettle();
-    expect(google.calls, 1);
-    expect(find.text('Google confirmed. You can now save your password.'),
-        findsOneWidget);
-    await tester.ensureVisible(find.text('Save password'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save password'));
-    await tester.pump();
-    expect(
-        client.calls.where((call) => call.path == 'auth/set-password').length,
-        1);
-    final setPasswordCall =
-        client.calls.singleWhere((call) => call.path == 'auth/set-password');
-    expect(setPasswordCall.body, {
-      'new_password': 'Password123',
-      'confirm_password': 'Password123',
-      'id_token': 'google-id-token',
-    });
-    save.complete(null);
-    await tester.pumpAndSettle();
-    expect(find.text('Password saved.'), findsOneWidget);
-    expect(find.text('Set'), findsOneWidget);
+    expect(find.text('Password'), findsNothing);
+    expect(find.text('Add password (optional)'), findsNothing);
+    expect(find.text('Google'), findsNothing);
+    expect(find.text('Logout'), findsOneWidget);
   });
 
-  testWidgets('Password account shows change form and validates confirmation',
+  testWidgets('password account shows email security and change form',
       (tester) async {
     final client = FakeApiClient();
     client.setHandler(
-        'GET',
-        'auth/methods',
-        (_) => {
-              'has_password': true,
-              'google_connected': false,
-            });
+      'GET',
+      'auth/methods',
+      (_) => {'has_password': true, 'email_verified': false},
+    );
     client.setHandler('POST', 'auth/change-password', (_) => null);
     await tester.pumpWidget(ProviderScope(
-      overrides: [apiClientProvider.overrideWithValue(client)],
+      overrides: [
+        apiClientProvider.overrideWithValue(client),
+        currentUserProvider.overrideWithValue(
+          testUser(email: 'password-user@example.com'),
+        ),
+      ],
       child: const MaterialApp(home: AccountSecurityScreen()),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Not connected'), findsOneWidget);
+
+    expect(find.text('password-user@example.com'), findsOneWidget);
+    expect(find.text('Needs verification'), findsOneWidget);
+    expect(find.text('Enabled'), findsOneWidget);
+    expect(find.text('Google'), findsNothing);
     await tester.ensureVisible(find.text('Change password'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Change password'));
     await tester.pumpAndSettle();
+
     final fields = find.byType(TextFormField);
     expect(fields, findsNWidgets(3));
     await tester.enterText(fields.at(0), 'Password123');
     await tester.enterText(fields.at(1), 'Password456');
     await tester.enterText(fields.at(2), 'Mismatch123');
     await tester.ensureVisible(find.text('Save password'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Save password'));
     await tester.pumpAndSettle();
     expect(find.text('Passwords do not match.'), findsOneWidget);
     expect(client.calls.where((call) => call.path == 'auth/change-password'),
         isEmpty);
+
     await tester.enterText(fields.at(2), 'Password456');
     await tester.ensureVisible(find.text('Save password'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Save password'));
     await tester.pumpAndSettle();
-    expect(
-        client.calls
-            .where((call) => call.path == 'auth/change-password')
-            .length,
-        1);
-  });
-
-  testWidgets('Password account connects Google without duplicate submissions',
-      (tester) async {
-    final client = FakeApiClient();
-    final google = FakeGoogleIdentityTokenProvider();
-    final connection = Completer<Object?>();
-    var connected = false;
-    client.setHandler('GET', 'auth/methods',
-        (_) => {'has_password': true, 'google_connected': connected});
-    client.setHandler('POST', 'auth/connect-google', (_) async {
-      await connection.future;
-      connected = true;
-      return null;
-    });
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        apiClientProvider.overrideWithValue(client),
-        googleIdentityTokenProvider.overrideWithValue(google),
-      ],
-      child: const MaterialApp(home: AccountSecurityScreen()),
-    ));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Connect Google'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Connect Google'));
-    await tester.pump();
-    expect(google.calls, 1);
-    expect(
-        client.calls.where((call) => call.path == 'auth/connect-google').length,
-        1);
-    connection.complete(null);
-    await tester.pumpAndSettle();
-    expect(find.text('Connected'), findsOneWidget);
-    expect(find.text('Set'), findsOneWidget);
-    expect(find.text('Google connected.'), findsOneWidget);
-  });
-
-  testWidgets('Google connection failure hides SDK exception details',
-      (tester) async {
-    final client = FakeApiClient();
-    client.setHandler('GET', 'auth/methods',
-        (_) => {'has_password': true, 'google_connected': false});
-    final google = FakeGoogleIdentityTokenProvider(
-        error: StateError('sensitive SDK exception detail'));
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        apiClientProvider.overrideWithValue(client),
-        googleIdentityTokenProvider.overrideWithValue(google),
-      ],
-      child: const MaterialApp(home: AccountSecurityScreen()),
-    ));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Connect Google'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Connect Google'));
-    await tester.pumpAndSettle();
-    expect(find.text('Could not connect Google. Please try again.'),
-        findsOneWidget);
-    expect(find.textContaining('sensitive SDK exception'), findsNothing);
+    expect(client.calls.where((call) => call.path == 'auth/change-password'),
+        hasLength(1));
   });
 }

@@ -752,6 +752,51 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
 
+class LostPetContactEvent(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "lost_pet_contact_events"
+
+    lost_pet_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("lost_pets.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    contacting_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (Index("idx_lost_pet_contacts_lost_pet_id", "lost_pet_id"),)
+
+
+class LostPetFollowUp(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "lost_pet_follow_ups"
+
+    lost_pet_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("lost_pets.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    answer_yes: Mapped[bool | None] = mapped_column(Boolean)
+
+    __table_args__ = (
+        Index(
+            "uq_lost_pet_follow_ups_pending",
+            "lost_pet_id",
+            unique=True,
+            postgresql_where=text("completed_at IS NULL"),
+        ),
+        Index("idx_lost_pet_follow_ups_owner_due", "owner_id", "due_at"),
+        CheckConstraint(
+            "(completed_at IS NULL AND answer_yes IS NULL) OR "
+            "(completed_at IS NOT NULL AND answer_yes IS NOT NULL)",
+            name="lost_pet_follow_ups_answer_state",
+        ),
+    )
+
+
 class LostPetPhoto(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "lost_pet_photos"
 

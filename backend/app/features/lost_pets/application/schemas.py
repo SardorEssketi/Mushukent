@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -59,6 +60,19 @@ class LostPetMapListItem(BaseModel):
     last_seen_location: GeoPoint
     is_resolved: bool = False
     created_at: datetime
+
+
+class LostPetFollowUpItem(BaseModel):
+    id: UUID
+    lost_pet_id: UUID
+    pet_name: str
+    due_at: datetime
+
+
+class LostPetFollowUpAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    answer: Literal["yes", "no"]
 
 
 def to_lost_pet_response(item: LostPetRecord) -> LostPetResponse:

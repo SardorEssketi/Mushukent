@@ -109,6 +109,14 @@ class ProfileScreen extends ConsumerWidget {
               const Divider(height: 1),
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.search_outlined),
+                title: Text(strings.myLostPets),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/profile/lost-pets'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.settings_outlined),
                 title: Text(strings.settings),
                 trailing: const Icon(Icons.chevron_right),

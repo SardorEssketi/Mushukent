@@ -87,6 +87,7 @@ class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
         ).where(
             schema.LostPet.deleted_at.is_(None),
             schema.LostPet.is_public.is_(True),
+            schema.LostPet.is_resolved.is_(False),
         )
         if reference_geom is not None:
             lost_pet_index = lost_pet_index.where(

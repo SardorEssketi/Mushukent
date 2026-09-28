@@ -311,7 +311,7 @@ class _LostPetCard extends StatelessWidget {
   void _openMap(BuildContext context) {
     final location = lostPet.lastSeenLocation;
     context.go(
-      '/map?lat=${location.latitude}&lon=${location.longitude}',
+      '/map?lat=${location.latitude}&lon=${location.longitude}&lostPetId=${lostPet.id}',
     );
   }
 

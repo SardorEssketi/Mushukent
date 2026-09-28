@@ -150,7 +150,7 @@ verified the same email address.
 
 ## ADR-0021: Keep Google and password methods on one user with bounded auto-linking
 
-- Status: Accepted
+- Status: Superseded by ADR-0022
 - Date: 2026-09-26
 
 ### Context
@@ -190,3 +190,51 @@ without requiring a different data model.
   their existing account and can link after authenticating to it.
 - Adding a password to a Google account requires a fresh server-verified
   Google ID token matching the current account.
+
+## ADR-0022: Keep bounded Gmail linking and confirm other collisions during sign-in
+
+- Status: Accepted
+- Date: 2026-09-27
+
+The uncommitted broad verified-email linking proposal is rejected. Workspace
+addresses can be reassigned, and non-hosted Google email verification can be
+stale. Verifying a pending password row while preserving an attacker-selected
+password also creates a pre-hijacking path.
+
+Use the existing user row, optional password hash and unique Google subject.
+Known sub wins over email. Already verified Gmail/Googlemail accounts can bind
+automatically; verified Workspace/custom-domain password accounts must confirm
+their password directly inside Google sign-in. Unverified accounts first complete
+normal password registration verification; do not clear/reclaim historical rows.
+Passwordless external legacy accounts require support. Preserve data and IDs.
+
+Remove Add password and manual Google connection, including their backend
+endpoints. Keep GET /auth/methods for the security screen's email/password state
+and its existing response shape. Keep historical schema metadata without a new
+migration. Present legal notice at the Google action and retain server version
+and timestamp enforcement. No duplicated consent retry state.
+
+No session redesign: stable sliding refresh remains. Fix only the existing
+inactive-user revocation rollback. Rotation/reuse detection remains follow-up.
+
+Source history confirms pre-7213afb clients omitted id_token on set-password;
+Android version stayed 0.1.0+8. Play distribution cannot be established from Git.
+Removed actions and non-Gmail collision confirmation require a client update.
+
+## ADR-0023: Persist Lost Pet contact follow-ups without background delivery
+
+- Status: Accepted
+- Date: 2026-09-28
+
+Contacting a Lost Pet owner creates a contact event and, when none is pending for
+that pet, one follow-up due one hour later. PostgreSQL stores the due time and
+enforces one pending follow-up per pet. The owner sees due follow-ups when the
+authenticated app checks the API; there is no email, push, worker, or server
+timer. The app checks on entry, resume, and periodically while open. The server
+decides whether the hour has elapsed. Only the owner may answer, once.
+
+The existing `is_resolved` boolean remains the status source. Answering Yes
+resolves the pet, removes it from public Feed and Map queries, and retains it in
+the owner's existing profile area. Answering No leaves it active. Migration
+`20260928_0022` adds contact-event and follow-up tables and a partial unique
+index for pending follow-ups. It does not rewrite existing Lost Pet rows.

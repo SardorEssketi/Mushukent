@@ -206,6 +206,14 @@ Profile phone numbers used for lost pet contact shall use the Uzbekistan format 
 
 Lost pet posts shall include a Contact Owner action that initiates a phone call to the stored owner phone number.
 
+Contact Owner requires sign-in and records the contact event. One hour after the
+first contact in a pending cycle, an in-app owner follow-up becomes due and asks
+"Did you find your pet?" with only Yes and No. Additional contacts while pending
+do not start more prompts. Yes resolves the post; No completes the prompt and
+leaves the post active. Resolved posts leave Feed and Map and remain in the
+owner's profile Lost Pets history. No message is delivered while the owner is
+offline; the app retrieves due prompts when used again.
+
 Adoption Posts
 
 Users shall be able to view adoption posts in the main feed with a distinct Adoption tag.

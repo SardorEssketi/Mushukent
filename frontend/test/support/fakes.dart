@@ -243,8 +243,7 @@ class FakeAuthRepository implements AuthRepository {
   String? lastResendVerificationEmail;
   String? lastVerifyEmailToken;
   String? lastGoogleIdToken;
-  bool? lastGoogleAcceptTerms;
-  bool? lastGoogleAcceptPrivacy;
+  String? lastGooglePassword;
 
   @override
   Future<AuthSession> login(AuthCredentials credentials) async {
@@ -284,14 +283,10 @@ class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<AuthSession> loginWithGoogleIdToken(
-    String idToken, {
-    bool acceptTerms = false,
-    bool acceptPrivacy = false,
-  }) async {
+  Future<AuthSession> loginWithGoogleIdToken(String idToken,
+      {String? password}) async {
     lastGoogleIdToken = idToken;
-    lastGoogleAcceptTerms = acceptTerms;
-    lastGoogleAcceptPrivacy = acceptPrivacy;
+    lastGooglePassword = password;
     if (loginError != null) {
       throw loginError!;
     }

@@ -48,4 +48,32 @@ void main() {
 
     expect(error.isRetryable, isTrue);
   });
+
+  test('maps auth conflicts to user-facing messages without provider codes',
+      () {
+    final googleConflict = MushukistanApiException.fromEnvelope(
+      {
+        'error': {
+          'code': 'GOOGLE_IDENTITY_CONFLICT',
+          'message': 'Google identity could not be connected.',
+        },
+      },
+      statusCode: 409,
+    );
+    final duplicate = MushukistanApiException.fromEnvelope(
+      {
+        'error': {
+          'code': 'EMAIL_ALREADY_EXISTS',
+          'message': 'Email already registered.',
+        },
+      },
+      statusCode: 409,
+    );
+
+    expect(googleConflict.userMessage, contains('Google account'));
+    expect(googleConflict.userMessage,
+        isNot(contains('GOOGLE_IDENTITY_CONFLICT')));
+    expect(duplicate.userMessage, contains('If you already have an account'));
+    expect(duplicate.userMessage, isNot(contains('already registered')));
+  });
 }

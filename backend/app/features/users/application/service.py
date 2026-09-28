@@ -189,6 +189,28 @@ class UsersService:
                     photo.photo_url = f"deleted://lost-pet/{photo.id}"
                     photo.thumb_url = None
 
+            session.execute(
+                delete(schema.LostPetFollowUp).where(
+                    schema.LostPetFollowUp.owner_id == user.id,
+                    schema.LostPetFollowUp.completed_at.is_(None),
+                )
+            )
+            session.execute(
+                update(schema.LostPetFollowUp)
+                .where(schema.LostPetFollowUp.owner_id == user.id)
+                .values(owner_id=None)
+            )
+            session.execute(
+                update(schema.LostPetContactEvent)
+                .where(schema.LostPetContactEvent.owner_id == user.id)
+                .values(owner_id=None)
+            )
+            session.execute(
+                update(schema.LostPetContactEvent)
+                .where(schema.LostPetContactEvent.contacting_user_id == user.id)
+                .values(contacting_user_id=None)
+            )
+
             adoption_post_rows = session.scalars(
                 select(schema.AdoptionPost).where(schema.AdoptionPost.user_id == user.id)
             ).all()

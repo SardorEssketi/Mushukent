@@ -16,6 +16,9 @@ final mushukistanApiProvider = Provider<MushukistanApi>((ref) {
 /// A lightweight invalidation signal shared by every post surface.
 final postMutationRevisionProvider = StateProvider<int>((ref) => 0);
 
+/// Lost Pets resolved in this app session stay hidden while Map refreshes.
+final resolvedLostPetIdsProvider = StateProvider<Set<String>>((ref) => {});
+
 class MushukistanApi {
   MushukistanApi({required MushukistanApiClient client}) : _client = client;
 
@@ -132,6 +135,43 @@ class MushukistanApi {
       'lost-pets/$lostPetId',
       authenticated: false,
       decoder: (json) => LostPetData.fromJson(json),
+    );
+  }
+
+  Future<void> contactLostPetOwner(String lostPetId) async {
+    await _client.postJson<Object?>(
+      'lost-pets/$lostPetId/contact',
+      decoder: (_) => null,
+    );
+  }
+
+  Future<List<LostPetFollowUpData>> listDueLostPetFollowUps() {
+    return _client.get<List<LostPetFollowUpData>>(
+      'lost-pets/follow-ups/due',
+      decoder: (json) => _readList(json)
+          .map((item) => LostPetFollowUpData.fromJson(item))
+          .toList(growable: false),
+    );
+  }
+
+  Future<LostPetData> answerLostPetFollowUp(String followUpId,
+      {required bool yes}) {
+    return _client.postJson<LostPetData>(
+      'lost-pets/follow-ups/$followUpId/answer',
+      body: {'answer': yes ? 'yes' : 'no'},
+      decoder: (json) => LostPetData.fromJson(json),
+    );
+  }
+
+  Future<ApiPage<LostPetData>> listMyLostPets(
+      {int limit = 50, String? cursor}) {
+    return _client.get<ApiPage<LostPetData>>(
+      'lost-pets/mine',
+      queryParameters: {'limit': limit, if (cursor != null) 'cursor': cursor},
+      decoder: (json) => ApiPage.fromJson(
+        json,
+        (item) => LostPetData.fromJson(item),
+      ),
     );
   }
 
@@ -1136,6 +1176,30 @@ class PostHistoryEntry {
       createdAt: _readDateTime(map['created_at']),
       actorId: _readStringOrNull(map['actor_id']),
       actorName: _readStringOrNull(map['actor_name']),
+    );
+  }
+}
+
+class LostPetFollowUpData {
+  const LostPetFollowUpData({
+    required this.id,
+    required this.lostPetId,
+    required this.petName,
+    required this.dueAt,
+  });
+
+  final String id;
+  final String lostPetId;
+  final String petName;
+  final DateTime dueAt;
+
+  factory LostPetFollowUpData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return LostPetFollowUpData(
+      id: _readString(map['id']),
+      lostPetId: _readString(map['lost_pet_id']),
+      petName: _readString(map['pet_name']),
+      dueAt: _readDateTime(map['due_at']),
     );
   }
 }

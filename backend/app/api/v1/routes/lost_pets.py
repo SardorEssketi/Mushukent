@@ -14,6 +14,8 @@ from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
+    LostPetFollowUpAnswer,
+    LostPetFollowUpItem,
     LostPetListItem,
     LostPetMapListItem,
     LostPetResponse,
@@ -124,6 +126,45 @@ def list_lost_pet_map_markers(
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[GenericListResponse[LostPetMapListItem]]:
     return ApiSuccess(data=lost_pets_service.list_map_markers(limit=limit, bbox=bbox))
+
+
+@router.get("/mine", response_model=ApiSuccess[GenericListResponse[LostPetListItem]])
+def list_my_lost_pets(
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[GenericListResponse[LostPetListItem]]:
+    return ApiSuccess(
+        data=lost_pets_service.list_my_lost_pets(current_user, limit=limit, cursor=cursor)
+    )
+
+
+@router.get("/follow-ups/due", response_model=ApiSuccess[list[LostPetFollowUpItem]])
+def list_due_follow_ups(
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[list[LostPetFollowUpItem]]:
+    return ApiSuccess(data=lost_pets_service.list_due_follow_ups(current_user))
+
+
+@router.post("/follow-ups/{follow_up_id}/answer", response_model=ApiSuccess[LostPetResponse])
+def answer_follow_up(
+    follow_up_id: UUID,
+    payload: LostPetFollowUpAnswer,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[LostPetResponse]:
+    return ApiSuccess(data=lost_pets_service.answer_follow_up(follow_up_id, current_user, payload))
+
+
+@router.post("/{lost_pet_id}/contact", status_code=status.HTTP_204_NO_CONTENT)
+def contact_owner(
+    lost_pet_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> None:
+    lost_pets_service.contact_owner(lost_pet_id, current_user)
 
 
 @router.get(

@@ -641,35 +641,62 @@ class AppStrings {
     };
   }
 
-  String get googleLegalConsentTitle {
+  String get confirmSignInPassword => switch (this) {
+        _UzbekStrings() => 'Parolingizni tasdiqlang',
+        _RussianStrings() => 'Подтвердите пароль',
+        _ => 'Confirm your password',
+      };
+
+  String get confirmSignInPasswordHelp => switch (this) {
+        _UzbekStrings() =>
+          'Davom etish uchun Mushukistan parolingizni bir marta kiriting.',
+        _RussianStrings() =>
+          'Один раз введите пароль Mushukistan, чтобы продолжить.',
+        _ => 'Enter your Mushukistan password once to continue with Google.',
+      };
+
+  String get orContinueWithEmail {
     return switch (this) {
-      _UzbekStrings() => 'Davom etishdan oldin',
-      _RussianStrings() => 'Перед продолжением',
-      _ => 'Before you continue',
+      _UzbekStrings() => 'yoki email bilan',
+      _RussianStrings() => 'или по электронной почте',
+      _ => 'or continue with email',
     };
   }
 
-  String get googleLegalConsentMessage {
+  String get agreementBetween {
     return switch (this) {
-      _UzbekStrings() =>
-        'Google orqali davom etishdan oldin huquqiy hujjatlarni qabul qiling.',
-      _RussianStrings() =>
-        'Примите юридические документы, чтобы продолжить через Google.',
-      _ => 'Accept the legal documents to continue with Google.',
+      _UzbekStrings() => ' va ',
+      _RussianStrings() => ' и ',
+      _ => ' and ',
     };
   }
 
-  String get acceptLegalLeading {
+  String get registrationLegalLeading {
     return switch (this) {
       _UzbekStrings() => 'Men ',
       _RussianStrings() => 'Я принимаю ',
-      _ => 'I accept the ',
+      _ => 'I agree to the ',
     };
   }
 
-  String get acceptLegalTrailing {
+  String get registrationLegalTrailing {
     return switch (this) {
       _UzbekStrings() => 'ni qabul qilaman.',
+      _ => '.',
+    };
+  }
+
+  String get googleLegalLeading {
+    return switch (this) {
+      _UzbekStrings() => 'Google bilan davom etish orqali ',
+      _RussianStrings() => 'Продолжая с Google, вы соглашаетесь с ',
+      _ => 'By continuing with Google, you agree to the ',
+    };
+  }
+
+  String get googleLegalTrailing {
+    return switch (this) {
+      _UzbekStrings() => 'shartlariga rozilik bildirasiz.',
       _ => '.',
     };
   }
@@ -2577,6 +2604,54 @@ class AppStrings {
       _ => 'Contact Owner',
     };
   }
+
+  String get didYouFindYourPet => switch (this) {
+        _UzbekStrings() => 'Uy hayvoningizni topdingizmi?',
+        _RussianStrings() => 'Вы нашли своего питомца?',
+        _ => 'Did you find your pet?',
+      };
+
+  String get followUpYes => switch (this) {
+        _UzbekStrings() => 'Ha',
+        _RussianStrings() => 'Да',
+        _ => 'Yes',
+      };
+
+  String get followUpNo => switch (this) {
+        _UzbekStrings() => 'Yo‘q',
+        _RussianStrings() => 'Нет',
+        _ => 'No',
+      };
+
+  String get myLostPets => switch (this) {
+        _UzbekStrings() => 'Mening yo‘qolgan uy hayvonlarim',
+        _RussianStrings() => 'Мои потерянные питомцы',
+        _ => 'My lost pets',
+      };
+
+  String get activeLostPet => switch (this) {
+        _UzbekStrings() => 'Qidirilmoqda',
+        _RussianStrings() => 'Поиск продолжается',
+        _ => 'Missing',
+      };
+
+  String get reunitedLostPet => switch (this) {
+        _UzbekStrings() => 'Topildi',
+        _RussianStrings() => 'Найден',
+        _ => 'Reunited',
+      };
+
+  String get noLostPetsYet => switch (this) {
+        _UzbekStrings() => 'Hozircha yo‘qolgan uy hayvonlari yo‘q.',
+        _RussianStrings() => 'Пока нет объявлений о потерянных питомцах.',
+        _ => 'No lost pets yet.',
+      };
+
+  String get loadMoreLostPets => switch (this) {
+        _UzbekStrings() => 'Yana ko‘rsatish',
+        _RussianStrings() => 'Показать ещё',
+        _ => 'Show more',
+      };
 
   String get ownerPhone {
     return switch (this) {

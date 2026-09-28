@@ -38,7 +38,10 @@ class SqlAlchemyAuthUserRepository(AuthUserRepository):
 
     def get_by_id_for_update(self, user_id: UUID) -> AuthUser | None:
         model = self.session.scalar(
-            select(schema.User).where(schema.User.id == user_id).with_for_update()
+            select(schema.User)
+            .where(schema.User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         return self._to_domain(model) if model is not None else None
 

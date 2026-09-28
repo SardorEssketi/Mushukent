@@ -83,10 +83,11 @@ Bottom navigation with 5 tabs:
 - Purpose: authenticate existing users.
 - Layout:
   - title: "Welcome back"
-  - email input
-  - password input (toggle visibility)
-  - login button
+  - linked "By continuing with Google, you agree to the Terms of Service and Privacy Policy" notice
   - "Continue with Google" button
+  - simple "or continue with email" divider
+  - email and password inputs
+  - login button
   - link to Register screen
 - Interactions:
   - submit via button or keyboard action.
@@ -106,17 +107,18 @@ Bottom navigation with 5 tabs:
 5.3 Register Screen
 - Purpose: create account.
 - Layout:
+  - linked "By continuing with Google, you agree to the Terms of Service and Privacy Policy" notice
+  - "Continue with Google" button
+  - simple "or continue with email" divider
   - name
   - email
   - password
-  - Terms of Service acceptance
-  - Privacy Policy acceptance
+  - one checkbox accepting both linked Terms of Service and Privacy Policy
   - register button
-  - Continue with Google button
   - link to Login
 - Interactions:
   - tapping Register after valid fields submits registration using the current app language.
-  - Google sign-in is available from Login and Register. When legal consent is required for Google, show that consent flow by itself instead of duplicating the email-registration consent controls.
+  - clicking Google is a deliberate acceptance action for the linked legal notice; acceptance remains versioned and recorded by the backend.
 - Validation:
   - email valid,
   - password min 8,
@@ -124,7 +126,7 @@ Bottom navigation with 5 tabs:
 - Success:
   - show Verify Email screen; password users cannot log in until confirmation is complete.
 - Edge cases:
-  - duplicate email,
+  - duplicate normalized email gets a generic next-steps message and creates no second user; do not reveal whether an address already has an account.
   - weak password,
   - network failure.
 
@@ -143,6 +145,19 @@ Bottom navigation with 5 tabs:
 - Edge cases:
   - expired token -> show failure and allow resend
   - already verified account -> route to Login with success message
+
+5.5 Account Security Screen
+- Purpose: let a signed-in user review their email state and manage a Mushukistan password.
+- Layout:
+  - email address and Verified / Needs verification status
+  - Change password only for accounts with a password
+  - Log out
+  - no Google connection state or manual Connect Google action
+- Interactions:
+  - changing a password requires the current password.
+  - Google-only accounts have no Password section.
+  - Google sign-in may ask once for the existing Mushukistan password directly
+    inside the sign-in flow. Never direct users to provider management.
 
 5.4.1 Authenticated Welcome Onboarding
 - Purpose: greet newly authenticated users after email verification and sign-in.
@@ -197,6 +212,12 @@ Bottom navigation with 5 tabs:
 - Observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
 - Needs help: follows the observation flow with a required current or manually marked location.
 - Lost Pet: creates a lost pet post shown in the feed.
+- Lost Pet detail: another signed-in user can select Contact Owner to use the
+  published phone number. Guests are asked to sign in before the contact event
+  is recorded or the phone action proceeds.
+- A due owner follow-up appears in app with exactly Yes and No. Yes removes the
+  resolved Lost Pet from Feed and Map. The owner can find active and resolved
+  Lost Pets in the existing Profile area.
 - Interactions:
 - permission prompts for camera/gallery.
 - map location picker shows user's current location, a recenter-on-user button, and a tappable observation marker.

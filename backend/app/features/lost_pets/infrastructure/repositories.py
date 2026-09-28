@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.features.cats.domain.models import GeoPoint
 from app.features.lost_pets.domain.models import (
     LostPetCreateDraft,
+    LostPetFollowUpRecord,
     LostPetMapMarker,
     LostPetMapPage,
     LostPetPage,
@@ -72,10 +73,12 @@ class SqlAlchemyLostPetRepository:
         )
         return self._model_to_record(item) if item is not None else None
 
-    def get_by_ids(self, lost_pet_ids: list[UUID]) -> list[LostPetRecord]:
+    def get_by_ids(
+        self, lost_pet_ids: list[UUID], *, active_only: bool = False
+    ) -> list[LostPetRecord]:
         if not lost_pet_ids:
             return []
-        items = self.session.scalars(
+        statement = (
             select(schema.LostPet)
             .options(selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author))
             .where(
@@ -83,8 +86,144 @@ class SqlAlchemyLostPetRepository:
                 schema.LostPet.deleted_at.is_(None),
                 schema.LostPet.is_public.is_(True),
             )
-        ).all()
+        )
+        if active_only:
+            statement = statement.where(schema.LostPet.is_resolved.is_(False))
+        items = self.session.scalars(statement).all()
         return [self._model_to_record(item) for item in items]
+
+    def record_contact(self, lost_pet_id: UUID, contacting_user_id: UUID) -> bool:
+        pet = self.session.scalar(
+            select(schema.LostPet).where(schema.LostPet.id == lost_pet_id).with_for_update()
+        )
+        if (
+            pet is None
+            or pet.deleted_at is not None
+            or not pet.is_public
+            or pet.is_resolved
+            or pet.user_id is None
+        ):
+            return False
+        if pet.user_id == contacting_user_id:
+            raise PermissionError("Owners cannot contact themselves through this flow.")
+        now = datetime.now(UTC)
+        self.session.add(
+            schema.LostPetContactEvent(
+                lost_pet_id=pet.id,
+                owner_id=pet.user_id,
+                contacting_user_id=contacting_user_id,
+                created_at=now,
+            )
+        )
+        pending = self.session.scalar(
+            select(schema.LostPetFollowUp).where(
+                schema.LostPetFollowUp.lost_pet_id == pet.id,
+                schema.LostPetFollowUp.completed_at.is_(None),
+            )
+        )
+        if pending is None:
+            self.session.add(
+                schema.LostPetFollowUp(
+                    lost_pet_id=pet.id,
+                    owner_id=pet.user_id,
+                    due_at=now + timedelta(hours=1),
+                    created_at=now,
+                )
+            )
+        self.session.flush()
+        return True
+
+    def list_due_follow_ups(self, owner_id: UUID, now: datetime) -> list[LostPetFollowUpRecord]:
+        rows = self.session.execute(
+            select(schema.LostPetFollowUp, schema.LostPet.pet_name)
+            .join(schema.LostPet, schema.LostPetFollowUp.lost_pet_id == schema.LostPet.id)
+            .where(
+                schema.LostPetFollowUp.owner_id == owner_id,
+                schema.LostPetFollowUp.completed_at.is_(None),
+                schema.LostPetFollowUp.due_at <= now,
+                schema.LostPet.user_id == owner_id,
+                schema.LostPet.deleted_at.is_(None),
+                schema.LostPet.is_public.is_(True),
+                schema.LostPet.is_resolved.is_(False),
+            )
+            .order_by(schema.LostPetFollowUp.due_at.asc())
+        ).all()
+        return [
+            LostPetFollowUpRecord(
+                id=follow_up.id,
+                lost_pet_id=follow_up.lost_pet_id,
+                pet_name=pet_name,
+                due_at=follow_up.due_at,
+            )
+            for follow_up, pet_name in rows
+        ]
+
+    def answer_follow_up(
+        self, follow_up_id: UUID, owner_id: UUID, answer_yes: bool, now: datetime
+    ) -> tuple[str, UUID | None]:
+        follow_up = self.session.get(schema.LostPetFollowUp, follow_up_id)
+        if follow_up is None:
+            return "not_found", None
+        pet = self.session.scalar(
+            select(schema.LostPet)
+            .where(schema.LostPet.id == follow_up.lost_pet_id)
+            .with_for_update()
+        )
+        follow_up = self.session.scalar(
+            select(schema.LostPetFollowUp)
+            .where(schema.LostPetFollowUp.id == follow_up_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if follow_up is None or pet is None:
+            return "not_found", None
+        if follow_up.owner_id != owner_id or pet.user_id != owner_id:
+            return "forbidden", None
+        if follow_up.completed_at is not None:
+            return "completed", None
+        if follow_up.due_at > now:
+            return "not_due", None
+        if pet.deleted_at is not None or not pet.is_public or pet.is_resolved:
+            return "unavailable", None
+        follow_up.completed_at = now
+        follow_up.answer_yes = answer_yes
+        if answer_yes:
+            pet.is_resolved = True
+            pet.updated_at = now
+        self.session.flush()
+        return "answered", pet.id
+
+    def list_owned(self, owner_id: UUID, *, limit: int, cursor: str | None = None) -> LostPetPage:
+        statement = (
+            select(schema.LostPet)
+            .options(selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author))
+            .where(
+                schema.LostPet.user_id == owner_id,
+                schema.LostPet.deleted_at.is_(None),
+                schema.LostPet.is_public.is_(True),
+            )
+        )
+        if cursor is not None:
+            cursor_created_at, cursor_id = self._decode_cursor(cursor)
+            statement = statement.where(
+                or_(
+                    schema.LostPet.created_at < cursor_created_at,
+                    and_(
+                        schema.LostPet.created_at == cursor_created_at,
+                        schema.LostPet.id < cursor_id,
+                    ),
+                )
+            )
+        rows = self.session.scalars(
+            statement.order_by(schema.LostPet.created_at.desc(), schema.LostPet.id.desc()).limit(
+                limit + 1
+            )
+        ).all()
+        return LostPetPage(
+            items=[self._model_to_record(row) for row in rows[:limit]],
+            next_cursor=self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None,
+            limit=limit,
+        )
 
     def list_public(
         self,
@@ -103,6 +242,7 @@ class SqlAlchemyLostPetRepository:
             .where(
                 schema.LostPet.deleted_at.is_(None),
                 schema.LostPet.is_public.is_(True),
+                schema.LostPet.is_resolved.is_(False),
             )
         )
         if valid_for_map:

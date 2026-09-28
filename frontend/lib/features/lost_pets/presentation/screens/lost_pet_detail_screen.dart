@@ -4,28 +4,73 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
+import '../../../auth/application/auth_controller.dart';
 
 final lostPetDetailProvider =
     FutureProvider.autoDispose.family<LostPetData, String>((ref, lostPetId) {
   return ref.watch(mushukistanApiProvider).getLostPet(lostPetId);
 });
 
-class LostPetDetailScreen extends ConsumerWidget {
+class LostPetDetailScreen extends ConsumerStatefulWidget {
   const LostPetDetailScreen({super.key, required this.lostPetId});
 
   final String lostPetId;
 
+  @override
+  ConsumerState<LostPetDetailScreen> createState() =>
+      _LostPetDetailScreenState();
+}
+
+class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
+  bool _contactInFlight = false;
+
   Future<void> _contactOwner(
-    BuildContext context,
-    AppStrings strings,
-    String phoneNumber,
-  ) {
-    return launchPublicPhone(context, phone: phoneNumber, strings: strings);
+      BuildContext context, AppStrings strings, LostPetData lostPet,
+      {bool telegram = false}) async {
+    if (_contactInFlight) return;
+    if (!ref.read(authControllerProvider).isAuthenticated) {
+      requestAuthentication(context);
+      return;
+    }
+    _contactInFlight = true;
+    try {
+      await ref.read(mushukistanApiProvider).contactLostPetOwner(lostPet.id);
+      if (!context.mounted) return;
+      if (telegram) {
+        await _openTelegram(lostPet.ownerTelegramUsername!);
+      } else {
+        await launchPublicPhone(
+          context,
+          phone: lostPet.ownerPhoneNumber,
+          strings: strings,
+        );
+      }
+    } on MushukistanApiException catch (error) {
+      if (error.code == 'LOST_PET_NOT_ACTIVE') {
+        ref.invalidate(lostPetDetailProvider(lostPet.id));
+        ref.read(postMutationRevisionProvider.notifier).state++;
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    } finally {
+      _contactInFlight = false;
+    }
   }
 
   Future<void> _openTelegram(String username) async {
@@ -35,12 +80,16 @@ class LostPetDetailScreen extends ConsumerWidget {
     );
   }
 
-  void _openMap(BuildContext context, GeoPoint location) {
-    context.go('/map?lat=${location.latitude}&lon=${location.longitude}');
+  void _openMap(BuildContext context, LostPetData pet) {
+    final location = pet.lastSeenLocation;
+    context.go(
+      '/map?lat=${location.latitude}&lon=${location.longitude}&lostPetId=${pet.id}',
+    );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final lostPetId = widget.lostPetId;
     final lostPetAsync = ref.watch(lostPetDetailProvider(lostPetId));
     final strings = ref.watch(appStringsProvider);
 
@@ -49,6 +98,10 @@ class LostPetDetailScreen extends ConsumerWidget {
       body: lostPetAsync.when(
         data: (lostPet) {
           final info = lostPet.additionalInfo?.trim();
+          final viewerId = ref.watch(currentUserProvider)?.id;
+          final canContact = !lostPet.isResolved &&
+              lostPet.author?.id != null &&
+              lostPet.author?.id != viewerId;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -56,7 +109,11 @@ class LostPetDetailScreen extends ConsumerWidget {
               const SizedBox(height: 20),
               Align(
                 alignment: Alignment.centerLeft,
-                child: _LostPetDetailBadge(label: strings.lostPet),
+                child: _LostPetDetailBadge(
+                  label: lostPet.isResolved
+                      ? strings.reunitedLostPet
+                      : strings.lostPet,
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -69,30 +126,35 @@ class LostPetDetailScreen extends ConsumerWidget {
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 16),
-              _DetailActionTile(
-                icon: Icons.location_on_outlined,
-                title: strings.lastSeen,
-                subtitle: strings.viewOnMap,
-                onTap: () => _openMap(context, lostPet.lastSeenLocation),
-              ),
-              const SizedBox(height: 10),
-              _DetailActionTile(
-                icon: Icons.phone_outlined,
-                title: strings.ownerPhone,
-                subtitle: lostPet.ownerPhoneNumber,
-                onTap: () => _contactOwner(
-                  context,
-                  strings,
-                  lostPet.ownerPhoneNumber,
+              if (!lostPet.isResolved) ...[
+                _DetailActionTile(
+                  icon: Icons.location_on_outlined,
+                  title: strings.lastSeen,
+                  subtitle: strings.viewOnMap,
+                  onTap: () => _openMap(context, lostPet),
                 ),
-              ),
-              if (lostPet.ownerTelegramUsername != null) ...[
+              ],
+              if (canContact) ...[
+                const SizedBox(height: 10),
+                _DetailActionTile(
+                  icon: Icons.phone_outlined,
+                  title: strings.contactOwner,
+                  subtitle: lostPet.ownerPhoneNumber,
+                  onTap: () => _contactOwner(context, strings, lostPet),
+                ),
+              ],
+              if (canContact && lostPet.ownerTelegramUsername != null) ...[
                 const SizedBox(height: 10),
                 _DetailActionTile(
                   icon: Icons.alternate_email,
                   title: 'Telegram',
                   subtitle: '@${lostPet.ownerTelegramUsername}',
-                  onTap: () => _openTelegram(lostPet.ownerTelegramUsername!),
+                  onTap: () => _contactOwner(
+                    context,
+                    strings,
+                    lostPet,
+                    telegram: true,
+                  ),
                 ),
               ],
               if (info != null && info.isNotEmpty) ...[

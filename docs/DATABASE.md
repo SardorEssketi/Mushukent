@@ -62,7 +62,7 @@ CREATE TABLE users (
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     password_hash TEXT NULL, -- nullable for OAuth-only accounts
     google_subject TEXT NULL UNIQUE, -- stable Google sub, populated on verified sign-in
-    legacy_google_unbound BOOLEAN NOT NULL DEFAULT FALSE, -- eligible consumer Gmail pre-subject accounts only
+    legacy_google_unbound BOOLEAN NOT NULL DEFAULT FALSE, -- historical migration marker for pre-subject Google accounts
     name TEXT,
     avatar_url TEXT,
     phone_number TEXT NULL, -- Uzbekistan format: +998 XX XXX XXXX
@@ -319,6 +319,37 @@ CREATE TABLE lost_pet_photos (
 );
 CREATE INDEX idx_lost_pet_photos_lost_pet_id_position ON lost_pet_photos (lost_pet_id, position);
 
+-- In-app Lost Pet contact follow-ups (migration 20260928_0022)
+-- A contact is recorded on the Contact Owner action. The first contact in a
+-- cycle creates one follow-up with due_at = contact time + 1 hour. A partial
+-- unique index on (lost_pet_id) where completed_at IS NULL prevents duplicates.
+-- Follow-ups are retrieved on app checks; no background worker is required.
+CREATE TABLE lost_pet_contact_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lost_pet_id UUID NOT NULL REFERENCES lost_pets(id) ON DELETE CASCADE,
+    owner_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    contacting_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_lost_pet_contacts_lost_pet_id ON lost_pet_contact_events (lost_pet_id);
+
+CREATE TABLE lost_pet_follow_ups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    lost_pet_id UUID NOT NULL REFERENCES lost_pets(id) ON DELETE CASCADE,
+    owner_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    due_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ NULL,
+    answer_yes BOOLEAN NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT lost_pet_follow_ups_answer_state CHECK (
+        (completed_at IS NULL AND answer_yes IS NULL) OR
+        (completed_at IS NOT NULL AND answer_yes IS NOT NULL)
+    )
+);
+CREATE UNIQUE INDEX uq_lost_pet_follow_ups_pending ON lost_pet_follow_ups (lost_pet_id)
+    WHERE completed_at IS NULL;
+CREATE INDEX idx_lost_pet_follow_ups_owner_due ON lost_pet_follow_ups (owner_id, due_at);
+
 -- Adoption posts
 CREATE TABLE adoption_posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -454,15 +485,18 @@ LIMIT :limit;
 
 Security & privacy considerations (DB-related)
 ----------------------------------------------
-- Passwords: store only hashed password (bcrypt/argon2) in password_hash; never store plaintext. Email used for login must be unique and verified.
+- Passwords: store only hashed password (bcrypt/argon2) in password_hash; never store plaintext. Normalized login email is unique and password login requires `email_verified=true`.
 - Auth methods share one `users` row: `password_hash` and `google_subject` are independently nullable; `google_subject` is the stable unique provider key. Refresh sessions remain separate hashed-token rows. Account deletion keeps the Google subject on the inactive anonymized row as a tombstone while clearing login email/password.
 - Sensitive PII: limit what is stored — do not store device identifiers in plain DB without hashing. Be careful with location retention policies for privacy-sensitive content.
-- Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, clears report actor links where possible, and attempts best-effort media cleanup.
+- Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, removes unanswerable pending Lost Pet follow-ups, preserves completed follow-ups without the deleted owner link, clears deleted-user contact-event links and report actor links where possible, and attempts best-effort media cleanup.
 - Audit logs: keep moderator actions and important security events in write-once logs or a separate audit table. Don't store secrets in DB.
 
 Data retention policy
 ---------------------
 - Active account and content data is retained while the account or content remains active.
+- Auth simplification requires no new migration. Keep IDs and credentials; apply
+  the bounded linking and password-confirmation policy in AUTH.md under row locks.
+- legacy_google_unbound is historical metadata, not an authorization rule.
 - Account deletion anonymizes/deactivates the account and hides/anonymizes user-owned content according to `docs/legal/ACCOUNT_DELETION_POLICY.md`.
 - The repository includes `backend/scripts/cleanup_retention.py` for optional cleanup of some soft-deleted records, but production scheduling has not been verified.
 - Do not publish a guaranteed automatic deletion period until production cleanup scheduling and backup retention are verified.

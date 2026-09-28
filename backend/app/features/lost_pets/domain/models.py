@@ -81,3 +81,11 @@ class LostPetCreateDraft:
     last_seen_longitude: float
     additional_info: str | None
     photos: list[LostPetPhotoDraft]
+
+
+@dataclass(slots=True)
+class LostPetFollowUpRecord:
+    id: UUID
+    lost_pet_id: UUID
+    pet_name: str
+    due_at: datetime

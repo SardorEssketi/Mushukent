@@ -35,8 +35,32 @@ class MushukistanApiException implements Exception {
       kind == ApiFailureKind.notFound ||
       (kind == ApiFailureKind.forbidden && code == 'ACCOUNT_DISABLED');
 
-  String get userMessage =>
-      message.trim().isEmpty ? 'Request failed.' : message;
+  String get userMessage {
+    switch (code) {
+      case 'GOOGLE_IDENTITY_CONFLICT':
+        return 'That Google account can’t be used here. Try the Google account '
+            'previously used for this Mushukistan account or contact support.';
+      case 'GOOGLE_PASSWORD_REQUIRED':
+        return 'Confirm your Mushukistan password to continue.';
+      case 'GOOGLE_ACCOUNT_UNVERIFIED':
+        return 'Sign in with email and password to finish email verification first. '
+            'If you did not create this account, contact support.';
+      case 'INVALID_GOOGLE_TOKEN':
+      case 'GOOGLE_EMAIL_MISSING':
+        return 'Could not verify this Google account. Try again.';
+      case 'LEGAL_ACCEPTANCE_REQUIRED':
+        return 'Review the Terms of Service and Privacy Policy to continue.';
+      case 'INVALID_CREDENTIALS':
+        return 'Email or password is incorrect.';
+      case 'EMAIL_ALREADY_EXISTS':
+        return 'If you already have an account, sign in. Otherwise, check your inbox.';
+      default:
+        if (code.startsWith('GOOGLE_')) {
+          return 'Could not verify this Google account. Try again.';
+        }
+        return message.trim().isEmpty ? 'Request failed.' : message;
+    }
+  }
 
   factory MushukistanApiException.fromEnvelope(
     Object? raw, {

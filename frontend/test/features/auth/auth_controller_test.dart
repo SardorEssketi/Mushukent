@@ -151,7 +151,7 @@ void main() {
     );
 
     expect(controller.state.phase, AuthPhase.unauthenticated);
-    expect(controller.state.message, 'Invalid email or password.');
+    expect(controller.state.message, 'Email or password is incorrect.');
   });
 
   test('logout clears the authenticated state', () async {
@@ -282,8 +282,6 @@ void main() {
 
     expect(controller.state.phase, AuthPhase.authenticated);
     expect(repo.lastGoogleIdToken, 'google-id-token');
-    expect(repo.lastGoogleAcceptTerms, isFalse);
-    expect(repo.lastGoogleAcceptPrivacy, isFalse);
     expect(google.calls, 1);
   });
 
@@ -313,7 +311,8 @@ void main() {
     expect(controller.state.phase, AuthPhase.authenticated);
   });
 
-  test('google legal acceptance retry reuses the existing id token', () async {
+  test('google consent error is shown without retaining the ID token',
+      () async {
     final repo = FakeAuthRepository(
       loginResult: AuthSession.restored(
         accessToken: 'token-123',
@@ -336,44 +335,9 @@ void main() {
     );
 
     expect(controller.state.phase, AuthPhase.unauthenticated);
-    expect(controller.state.requiresGoogleLegalAcceptance, isTrue);
-    expect(controller.state.pendingGoogleIdToken, 'google-id-token');
+    expect(controller.state.message,
+        'Review the Terms of Service and Privacy Policy to continue.');
     expect(google.calls, 1);
-
-    repo.loginError = null;
-    await controller.loginWithGoogleIdToken(
-      controller.state.pendingGoogleIdToken!,
-      acceptTerms: true,
-      acceptPrivacy: true,
-    );
-
-    expect(controller.state.phase, AuthPhase.authenticated);
-    expect(repo.lastGoogleIdToken, 'google-id-token');
-    expect(repo.lastGoogleAcceptTerms, isTrue);
-    expect(repo.lastGoogleAcceptPrivacy, isTrue);
-    expect(google.calls, 1);
-  });
-
-  test('google legal acceptance is tracked even without a reusable id token',
-      () async {
-    final repo = FakeAuthRepository();
-    repo.loginError = const MushukistanApiException(
-      kind: ApiFailureKind.validation,
-      code: 'LEGAL_ACCEPTANCE_REQUIRED',
-      message: 'Terms of Service and Privacy Policy acceptance is required.',
-    );
-    final controller = AuthController(repo, FakeGoogleIdentityTokenProvider());
-
-    await settle();
-
-    await expectLater(
-      controller.loginWithGoogleIdToken(''),
-      throwsA(isA<MushukistanApiException>()),
-    );
-
-    expect(controller.state.phase, AuthPhase.unauthenticated);
-    expect(controller.state.requiresGoogleLegalAcceptance, isTrue);
-    expect(controller.state.pendingGoogleIdToken, isNull);
   });
 
   test('google login configuration failure returns to unauthenticated',

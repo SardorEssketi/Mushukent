@@ -110,11 +110,12 @@ Feature: Authentication
   }
 - Error examples:
   - 400: {"success":false, "error":{"code":"INVALID_PAYLOAD","message":"Invalid register payload","details":{...}}}
-  - 409: {"success":false, "error":{"code":"EMAIL_ALREADY_EXISTS","message":"Email already registered."}}
+  - A normalized-email duplicate returns the same 201 verification-shaped response as a new address and does not create another user. Do not expose whether an arbitrary email already has an account.
 - Rate limit: auth endpoints stricter: 10 req/min per IP
 - Notes:
   - Password stored hashed with Argon2 or bcrypt.
   - Password accounts must verify email before first login.
+  - If a duplicate address is submitted, the generic response advises the user to check the inbox for next steps or sign in if they already have an account; no user row is created or changed.
   - `dev_verification_token` is exposed only in development builds for local testing.
 
 2) POST /api/v1/auth/login
@@ -192,24 +193,28 @@ Feature: Authentication
 - Errors: 401 INVALID_GOOGLE_TOKEN
 - Notes:
   - Validate token signature, issuer, expiry, `iat`, configured `aud`, applicable `azp`, `sub`, and `email_verified=true`.
-  - If neither subject nor email matches an existing account, the backend creates an account only when Terms and Privacy acceptance are true.
-  - A single active Mushukistan account whose email is already verified can be auto-linked only when it exactly matches the verified consumer Gmail claim and has no conflicting Google subject. This does not apply to an unverified password account.
-  - Workspace and other external-domain email matches return `GOOGLE_LINK_REQUIRED` for password accounts or `GOOGLE_LEGACY_LINK_REQUIRED` for passwordless legacy records until the user connects Google from an authenticated session or support resolves the legacy record.
-  - Passwordless verified Gmail legacy records may bind their Google subject on sign-in even when the migration marker was missed.
-  - New accounts set Mushukistan `email_verified=true` only for an authoritative Gmail or verified hosted-domain claim. A non-hosted external Google email remains unverified for Mushukistan password login, while Google login by `sub` remains usable.
-  - An inactive matching account returns `ACCOUNT_DISABLED`; multiple normalized email matches or a Google subject attached elsewhere fail closed. The backend never merges user rows by email.
-  - Repeated login looks up by `sub`. A changed Google email does not change the Mushukistan email or its verification state.
-  - Existing accounts with current legal acceptance may authenticate without resubmitting acceptance flags.
-  - Existing accounts missing current legal acceptance must submit Terms and Privacy acceptance before login completes.
+  - Known sub resolves its original account even after the Google email changes.
+  - New sub/no email match creates one Google-only user after legal acceptance.
+  - A locked verified Gmail/Googlemail email match may bind automatically.
+  - Other verified password-account collisions return 409 GOOGLE_PASSWORD_REQUIRED.
+    Retry this endpoint with the same id_token and optional `password` (1-128 chars).
+    The backend revalidates the token and password; a wrong password returns 401
+    INVALID_CREDENTIALS. No account ID or email supplied by Flutter selects a target.
+  - Unverified existing accounts return GOOGLE_ACCOUNT_UNVERIFIED without mutation.
+    Finish normal email/password verification first; unknown pending accounts need support.
+  - Unbound passwordless external legacy rows, different bound subjects, and
+    ambiguous matches fail closed with GOOGLE_IDENTITY_CONFLICT.
+  - New external non-hosted emails remain locally unverified; Google login by sub
+    still works. Current legal versions/timestamp are required and retained.
 
 Account Security (authenticated)
 --------------------------------
-- `GET /api/v1/auth/methods` returns `{"has_password":bool,"google_connected":bool,"email_verified":bool}`. No credential material or provider subject is returned.
-- `POST /api/v1/auth/set-password` accepts `new_password`, `confirm_password`, and a fresh Google `id_token`. The ID token must match the signed-in account email and any existing Google subject. It requires an account without a local password; a second attempt returns `PASSWORD_ALREADY_SET`.
-- `POST /api/v1/auth/change-password` accepts `current_password`, `new_password`, and `confirm_password`. It verifies the current password before updating the Argon2 hash.
-- `POST /api/v1/auth/connect-google` accepts a Google `id_token`. The verified Google email must match the signed-in account, and its subject must not belong to another user. A collision returns 409.
-- There is no Google unlink or password removal endpoint. This prevents an account from removing its only login method.
-- Successful credential mutations return 204 and preserve the current MVP session policy.
+- GET /api/v1/auth/methods returns has_password, google_connected, email_verified.
+  Current UI displays only email state and Change password when applicable.
+- POST /api/v1/auth/change-password requires current_password, new_password,
+  confirm_password. Success: 204. Existing sessions follow the current MVP policy.
+- /auth/set-password and /auth/connect-google are removed (404). Old clients
+  must update. There is no add-password, unlink, or password-removal operation.
 
 6) POST /api/v1/auth/refresh
 - Purpose: Exchange a valid refresh/session token for a new access token and renewed refresh session.
@@ -290,6 +295,7 @@ Feature: Users
   - future requests with the same token are rejected as disabled;
   - delete the user's likes;
   - hide and anonymize owned posts, comments, and lost-pet posts;
+  - remove pending Lost Pet owner follow-ups that can no longer be answered, retain completed follow-ups, and clear deleted-user links in Lost Pet contact history;
   - redact owned-post history descriptions, locations, and media URLs, and remove the deleted user from history actor links;
   - remove copied lost-pet phone numbers;
   - remove the user from cat creator, report reporter, and report handler links where possible;
@@ -687,6 +693,27 @@ Feature: Lost Pets
 - Query params: `bbox=minLon,minLat,maxLon,maxLat`, `limit` (max 100)
 - Behavior: returns only unresolved, public, non-deleted records created in the last 30 days inside the bbox. The response excludes photos, phone numbers, descriptions, and author data; open the detail endpoint for those fields.
 
+5) POST /api/v1/lost-pets/{lost_pet_id}/contact
+- Auth: Bearer required; only another user may contact an active Lost Pet owner.
+- Behavior: record a contact event with pet, owner, contacting user and timestamp. Create one follow-up due one hour later only if that pet has no pending follow-up. Repeated contacts still record events.
+- Response: 204. Resolved, unavailable and ownerless posts cannot be contacted.
+
+6) GET /api/v1/lost-pets/follow-ups/due
+- Auth: Bearer required.
+- Response: due, unanswered follow-ups owned by the authenticated user (`id`, `lost_pet_id`, `pet_name`, `due_at`). No background delivery is used.
+
+7) POST /api/v1/lost-pets/follow-ups/{follow_up_id}/answer
+- Auth: Bearer required; only the Lost Pet owner may answer.
+- Body: `{"answer":"yes"}` or `{"answer":"no"}`.
+- Response: LostPetResponse. Yes sets `is_resolved=true`; No leaves it false. The follow-up is completed atomically and cannot be answered twice.
+
+8) GET /api/v1/lost-pets/mine
+- Auth: Bearer required.
+- Query: limit, cursor.
+- Response: the owner's public, non-deleted active and resolved Lost Pets, for the profile's Lost Pets section.
+
+The public Lost Pet list and mixed Feed contain only unresolved posts. Resolved posts remain accessible by detail ID and in the owner's profile history; Map already excludes them.
+
 Feature: Adoption Posts
 -----------------------
 1) POST /api/v1/adoption-posts
@@ -976,7 +1003,7 @@ Common error response examples
 - 404 NOT_FOUND
   {"success":false,"error":{"code":"POST_NOT_FOUND","message":"Post not found."}}
 - 409 CONFLICT
-  {"success":false,"error":{"code":"EMAIL_ALREADY_EXISTS","message":"Email already registered."}}
+  {"success":false,"error":{"code":"GOOGLE_IDENTITY_CONFLICT","message":"Google identity could not be connected."}}
 - 422 VALIDATION_ERROR
   {"success":false,"error":{"code":"VALIDATION_ERROR","message":"Validation failed.","details":{"password":["too_short"]}}}
 - 429 RATE_LIMIT_EXCEEDED

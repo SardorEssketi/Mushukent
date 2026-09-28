@@ -39,15 +39,11 @@ class GoogleSignInEntryButton extends ConsumerStatefulWidget {
   const GoogleSignInEntryButton({
     super.key,
     required this.enabled,
-    this.acceptTerms = false,
-    this.acceptPrivacy = false,
     this.onIdToken,
     this.onError,
   });
 
   final bool enabled;
-  final bool acceptTerms;
-  final bool acceptPrivacy;
   final Future<void> Function(String idToken)? onIdToken;
   final void Function(String message)? onError;
 
@@ -116,11 +112,7 @@ class _GoogleSignInEntryButtonState
         } else {
           await ref
               .read(authControllerProvider.notifier)
-              .loginWithGoogleIdToken(
-                idToken,
-                acceptTerms: widget.acceptTerms,
-                acceptPrivacy: widget.acceptPrivacy,
-              );
+              .loginWithGoogleIdToken(idToken);
         }
       } on Object {
         // Surface handled by auth state.

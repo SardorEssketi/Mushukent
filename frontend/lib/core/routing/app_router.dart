@@ -19,6 +19,7 @@ import '../../features/leaderboards/presentation/screens/leaderboard_screen.dart
 import '../../features/legal/presentation/screens/legal_document_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_create_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_detail_screen.dart';
+import '../../features/lost_pets/presentation/screens/my_lost_pets_screen.dart';
 import '../../features/map/presentation/screens/map_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_report_detail_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_reports_screen.dart';
@@ -46,6 +47,9 @@ final _addNavigatorKey = GlobalKey<NavigatorState>();
 final _leaderboardNavigatorKey = GlobalKey<NavigatorState>();
 final _profileNavigatorKey = GlobalKey<NavigatorState>();
 
+bool _isAuthenticationEntryRoute(String path) =>
+    path == '/login' || path == '/register' || path == '/auth-required';
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -57,9 +61,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/feed';
       }
 
-      final isAuthEntryRoute = location == '/login' ||
-          location == '/register' ||
-          location == '/auth-required';
+      final isAuthEntryRoute = _isAuthenticationEntryRoute(location);
       final isModeratorRoute = location.startsWith('/moderation');
       final isProtectedRoute = location.startsWith('/add') ||
           location.startsWith('/profile') ||
@@ -185,7 +187,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   final focusLocation = latitude == null || longitude == null
                       ? null
                       : GeoPoint(latitude: latitude, longitude: longitude);
-                  return MapScreen(focusLocation: focusLocation);
+                  return MapScreen(
+                    focusLocation: focusLocation,
+                    focusLostPetId: state.uri.queryParameters['lostPetId'],
+                  );
                 },
               ),
             ],
@@ -253,6 +258,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'adoption-help',
                     builder: (context, state) => const AdoptionHelpScreen(),
+                  ),
+                  GoRoute(
+                    path: 'lost-pets',
+                    builder: (context, state) => const MyLostPetsScreen(),
                   ),
                   GoRoute(
                     path: 'settings',
@@ -381,7 +390,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   logStartupStage('Router ready');
 
-  ref.listen<AuthState>(authControllerProvider, (_, __) {
+  ref.listen<AuthState>(authControllerProvider, (_, authState) {
+    final currentUri = router.routeInformationProvider.value.uri;
+    final isAuthEntryRoute = _isAuthenticationEntryRoute(currentUri.path) ||
+        currentUri.path == '/verify-email';
+
+    if (authState.isAuthenticated && isAuthEntryRoute) {
+      final destination = validatedPostAuthRedirect(
+        currentUri.queryParameters['redirect'],
+      );
+      router.go(destination ?? '/feed');
+      return;
+    }
+
     router.refresh();
   });
   ref.onDispose(router.dispose);

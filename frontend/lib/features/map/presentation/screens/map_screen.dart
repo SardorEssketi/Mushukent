@@ -52,9 +52,10 @@ final _mapLayersProvider = StateProvider<Set<_MapLayer>>(
 );
 
 class MapScreen extends ConsumerStatefulWidget {
-  const MapScreen({super.key, this.focusLocation});
+  const MapScreen({super.key, this.focusLocation, this.focusLostPetId});
 
   final GeoPoint? focusLocation;
+  final String? focusLostPetId;
 
   @override
   ConsumerState<MapScreen> createState() => _MapScreenState();
@@ -427,6 +428,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
   @override
   Widget build(BuildContext context) {
     final selectedLayers = ref.watch(_mapLayersProvider);
+    final resolvedLostPetIds = ref.watch(resolvedLostPetIdsProvider);
     final strings = ref.watch(appStringsProvider);
     ref.listen<int>(postMutationRevisionProvider, (previous, next) {
       if (previous != next && _mapReady) {
@@ -461,7 +463,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
           height: 40,
           child: const _CurrentLocationMarker(),
         ),
-      if (focusLocation != null)
+      if (focusLocation != null &&
+          selectedLayers.contains(_MapLayer.lostPets) &&
+          widget.focusLostPetId != null &&
+          !resolvedLostPetIds.contains(widget.focusLostPetId) &&
+          (_lostPetPage?.items.any((pet) => pet.id == widget.focusLostPetId) ??
+              false))
         Marker(
           point: center,
           width: 52,
@@ -502,6 +509,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final lostPetSpecs = <_MapMarkerSpec>[];
     if (selectedLayers.contains(_MapLayer.lostPets)) {
       for (final lostPet in _lostPetPage?.items ?? const <LostPetMapData>[]) {
+        if (resolvedLostPetIds.contains(lostPet.id)) continue;
         lostPetSpecs.add(
           _MapMarkerSpec(
             id: lostPet.id,

@@ -46,7 +46,8 @@ class AuthSessionResult:
 
 @dataclass(slots=True)
 class RegistrationResult:
-    user: AuthUser
+    user: AuthUser | None
+    email: str
     verification_required: bool
     dev_verification_token: str | None = None
 
@@ -90,10 +91,12 @@ class AuthService(AuthenticationService):
             with self.db_session_manager.session_scope() as session:
                 repository = self.repository_factory(session)
                 if repository.get_users_by_email(normalized_email):
-                    raise api_error(
-                        409,
-                        "EMAIL_ALREADY_EXISTS",
-                        "Email already registered.",
+                    # Keep public registration responses indistinguishable for existing and
+                    # new addresses. Never create a second account for a normalized email.
+                    return RegistrationResult(
+                        user=None,
+                        email=normalized_email,
+                        verification_required=True,
                     )
 
                 user = repository.create(
@@ -114,15 +117,22 @@ class AuthService(AuthenticationService):
                 self._emit_verification_link(user.email, token)
                 return RegistrationResult(
                     user=user,
+                    email=user.email,
                     verification_required=True,
                     dev_verification_token=token if self._is_dev_verification_flow else None,
                 )
-        except IntegrityError as exc:
-            raise api_error(
-                409,
-                "EMAIL_ALREADY_EXISTS",
-                "Email already registered.",
-            ) from exc
+        except IntegrityError:
+            # A concurrent registration can win the unique-email constraint after our
+            # initial lookup. Return the same generic result if that address now exists.
+            with self.db_session_manager.session_scope() as session:
+                repository = self.repository_factory(session)
+                if repository.get_users_by_email(normalized_email):
+                    return RegistrationResult(
+                        user=None,
+                        email=normalized_email,
+                        verification_required=True,
+                    )
+            raise
 
     def authenticate_with_password(self, email: str, password: str) -> AuthSessionResult:
         normalized_email = self._normalize_email(email)
@@ -133,9 +143,9 @@ class AuthService(AuthenticationService):
             matching_users = repository.get_users_by_email(normalized_email)
             if len(matching_users) > 1:
                 raise api_error(
-                    409,
-                    "ACCOUNT_EMAIL_CONFLICT",
-                    "This email matches multiple accounts. Contact support to resolve it.",
+                    401,
+                    "INVALID_CREDENTIALS",
+                    "Invalid email or password.",
                 )
             user = matching_users[0] if matching_users else None
             if user is None or not user.password_hash:
@@ -208,6 +218,7 @@ class AuthService(AuthenticationService):
         *,
         accept_terms: bool = False,
         accept_privacy: bool = False,
+        password: str | None = None,
     ) -> AuthSessionResult:
         claims = self.google_token_verifier.verify(id_token)
         self._validate_google_identity_claims(claims)
@@ -217,13 +228,13 @@ class AuthService(AuthenticationService):
 
         try:
             return self._authenticate_verified_google(
-                normalized_email, claims, accept_terms, accept_privacy
+                normalized_email, claims, accept_terms, accept_privacy, password
             )
         except IntegrityError:
             # Re-read after a concurrent create/link and apply the same safe matching rules.
             try:
                 return self._authenticate_verified_google(
-                    normalized_email, claims, accept_terms, accept_privacy
+                    normalized_email, claims, accept_terms, accept_privacy, password
                 )
             except IntegrityError as retry_exc:
                 raise api_error(
@@ -236,12 +247,15 @@ class AuthService(AuthenticationService):
         claims: GoogleIdTokenClaims,
         accept_terms: bool,
         accept_privacy: bool,
+        password: str | None,
     ) -> AuthSessionResult:
         assert claims.sub is not None
         subject = claims.sub
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             user = repository.get_by_google_subject(subject)
+            if user is not None:
+                user = repository.get_by_id_for_update(user.id)
             if user is None:
                 email_users = repository.get_users_by_email(normalized_email)
                 if len(email_users) > 1:
@@ -269,21 +283,35 @@ class AuthService(AuthenticationService):
                         )
                     if not user.is_active:
                         raise api_error(403, "ACCOUNT_DISABLED", "Account is disabled.")
-                    if user.google_subject is None and not self._can_auto_link_google_email(
-                        user=user,
-                        normalized_email=normalized_email,
-                    ):
-                        error_code = (
-                            "GOOGLE_LINK_REQUIRED"
-                            if user.password_hash is not None
-                            else "GOOGLE_LEGACY_LINK_REQUIRED"
-                        )
-                        raise api_error(
-                            409,
-                            error_code,
-                            "Sign in to the existing account and connect Google in Account "
-                            "Security, or contact support if you cannot access it.",
-                        )
+                    if self._normalize_email(user.email) != normalized_email:
+                        raise api_error(409, "GOOGLE_IDENTITY_CONFLICT", "Unable to sign in.")
+                    if user.google_subject is None:
+                        # A verified Google email is not proof of historical account ownership.
+                        # Only already-verified consumer Gmail addresses can skip the password.
+                        if not user.email_verified:
+                            raise api_error(
+                                409,
+                                "GOOGLE_ACCOUNT_UNVERIFIED",
+                                "Sign in with email and password to finish email verification "
+                                "first. If you did not create this account, contact support.",
+                            )
+                        if not self._is_consumer_gmail_address(normalized_email):
+                            if user.password_hash is None:
+                                raise api_error(
+                                    409,
+                                    "GOOGLE_IDENTITY_CONFLICT",
+                                    "Unable to sign in. Contact support to recover your account.",
+                                )
+                            if password is None:
+                                raise api_error(
+                                    409,
+                                    "GOOGLE_PASSWORD_REQUIRED",
+                                    "Confirm your Mushukistan password to continue.",
+                                )
+                            if not self.password_hasher.verify_password(
+                                password, user.password_hash
+                            ):
+                                raise api_error(401, "INVALID_CREDENTIALS", "Incorrect password.")
                     user.google_subject = subject
                     user.legacy_google_unbound = False
                     user = repository.save(user)
@@ -340,49 +368,6 @@ class AuthService(AuthenticationService):
                 "email_verified": user.email_verified,
             }
 
-    def set_password(self, user_id: UUID, password: str, confirmation: str, id_token: str) -> None:
-        self._validate_new_password(password, confirmation)
-        claims = self.google_token_verifier.verify(id_token)
-        self._validate_google_identity_claims(claims)
-        assert claims.email is not None and claims.sub is not None
-        try:
-            with self.db_session_manager.session_scope() as session:
-                repository = self.repository_factory(session)
-                user = repository.get_by_id_for_update(user_id)
-                if user is None or not user.is_active:
-                    raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
-                if user.password_hash is not None:
-                    raise api_error(409, "PASSWORD_ALREADY_SET", "Password is already set.")
-                if self._normalize_email(claims.email) != self._normalize_email(user.email):
-                    raise api_error(
-                        409,
-                        "GOOGLE_EMAIL_MISMATCH",
-                        "Google email must match your account email.",
-                    )
-                connected = repository.get_by_google_subject(claims.sub)
-                if connected is not None and connected.id != user.id:
-                    raise api_error(
-                        409,
-                        "GOOGLE_IDENTITY_CONFLICT",
-                        "Google identity could not be connected.",
-                    )
-                if user.google_subject is not None and user.google_subject != claims.sub:
-                    raise api_error(
-                        409,
-                        "GOOGLE_IDENTITY_CONFLICT",
-                        "Google identity could not be connected.",
-                    )
-                user.google_subject = claims.sub
-                user.legacy_google_unbound = False
-                if self._is_google_email_authoritative(claims):
-                    user.email_verified = True
-                user.password_hash = self.password_hasher.hash_password(password)
-                repository.save(user)
-        except IntegrityError as exc:
-            raise api_error(
-                409, "GOOGLE_IDENTITY_CONFLICT", "Google identity could not be connected."
-            ) from exc
-
     def change_password(
         self, user_id: UUID, current_password: str, new_password: str, confirmation: str
     ) -> None:
@@ -398,39 +383,6 @@ class AuthService(AuthenticationService):
                 raise api_error(401, "INVALID_CREDENTIALS", "Invalid current password.")
             user.password_hash = self.password_hasher.hash_password(new_password)
             repository.save(user)
-
-    def connect_google(self, user_id: UUID, id_token: str) -> None:
-        claims = self.google_token_verifier.verify(id_token)
-        self._validate_google_identity_claims(claims)
-        assert claims.email is not None and claims.sub is not None
-        try:
-            with self.db_session_manager.session_scope() as session:
-                repository = self.repository_factory(session)
-                user = repository.get_by_id_for_update(user_id)
-                if user is None or not user.is_active:
-                    raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
-                if self._normalize_email(claims.email) != self._normalize_email(user.email):
-                    raise api_error(
-                        409, "GOOGLE_EMAIL_MISMATCH", "Google email must match your account email."
-                    )
-                connected = repository.get_by_google_subject(claims.sub)
-                if connected is not None and connected.id != user.id:
-                    raise api_error(
-                        409, "GOOGLE_IDENTITY_CONFLICT", "Google identity could not be connected."
-                    )
-                if user.google_subject is not None and user.google_subject != claims.sub:
-                    raise api_error(
-                        409, "GOOGLE_IDENTITY_CONFLICT", "Google identity could not be connected."
-                    )
-                user.google_subject = claims.sub
-                user.legacy_google_unbound = False
-                if self._is_google_email_authoritative(claims):
-                    user.email_verified = True
-                repository.save(user)
-        except IntegrityError as exc:
-            raise api_error(
-                409, "GOOGLE_IDENTITY_CONFLICT", "Google identity could not be connected."
-            ) from exc
 
     @classmethod
     def _validate_new_password(cls, password: str, confirmation: str) -> None:
@@ -467,18 +419,21 @@ class AuthService(AuthenticationService):
                 raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
             if not user.is_active:
                 repository.revoke_user_refresh_sessions(user.id, now)
-                raise api_error(403, "ACCOUNT_DISABLED", "Account is disabled.")
+            else:
+                renewed = repository.rotate_refresh_session(
+                    refresh_session.id,
+                    new_token_hash=token_hash,
+                    expires_at=new_expires_at,
+                    used_at=now,
+                )
+                if renewed is None:
+                    raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
+                user = repository.update_last_login_at(user.id, now) or user
+                principal = self._principal_from_user(user)
 
-            rotated = repository.rotate_refresh_session(
-                refresh_session.id,
-                new_token_hash=token_hash,
-                expires_at=new_expires_at,
-                used_at=now,
-            )
-            if rotated is None:
-                raise api_error(401, "INVALID_REFRESH_TOKEN", "Invalid or expired session.")
-            user = repository.update_last_login_at(user.id, now) or user
-            principal = self._principal_from_user(user)
+        # Raise after commit so suspension revocation survives a later reactivation.
+        if not user.is_active:
+            raise api_error(403, "ACCOUNT_DISABLED", "Account is disabled.")
 
         access_token = self.access_token_service.issue_access_token(principal)
         return AuthSessionResult(
@@ -576,7 +531,7 @@ class AuthService(AuthenticationService):
         if not isinstance(claims.email, str) or not claims.email.strip():
             raise api_error(400, "GOOGLE_EMAIL_MISSING", "Google token is missing an email claim.")
         if (
-            not claims.email_verified
+            claims.email_verified is not True
             or not isinstance(claims.sub, str)
             or not claims.sub.strip()
             or claims.sub != claims.sub.strip()
@@ -585,26 +540,13 @@ class AuthService(AuthenticationService):
 
     @classmethod
     def _is_google_email_authoritative(cls, claims: GoogleIdTokenClaims) -> bool:
-        if not claims.email:
-            return False
-        return cls._is_consumer_gmail_address(claims.email) or bool(
-            claims.hosted_domain and claims.hosted_domain.strip()
-        )
-
-    @classmethod
-    def _can_auto_link_google_email(cls, *, user: AuthUser, normalized_email: str) -> bool:
-        # Google is authoritative for consumer Gmail addresses. Workspace and other external
-        # addresses can be reassigned, so those require an authenticated explicit link.
-        return (
-            user.email_verified
-            and cls._is_consumer_gmail_address(normalized_email)
-            and cls._normalize_email(user.email) == normalized_email
+        return bool(
+            claims.email and (cls._is_consumer_gmail_address(claims.email) or claims.hosted_domain)
         )
 
     @staticmethod
     def _is_consumer_gmail_address(email: str) -> bool:
-        domain = email.rsplit("@", 1)[-1].lower()
-        return domain in {"gmail.com", "googlemail.com"}
+        return email.rsplit("@", 1)[-1].lower() in {"gmail.com", "googlemail.com"}
 
     @staticmethod
     def _validate_password(password: str) -> None:

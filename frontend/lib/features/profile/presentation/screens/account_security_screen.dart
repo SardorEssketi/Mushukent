@@ -1,14 +1,13 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/localization/account_security_strings.dart';
+import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../auth/infrastructure/account_security_repository.dart';
-import '../../../auth/presentation/widgets/google_sign_in_entry_button.dart';
 
 class AccountSecurityScreen extends ConsumerStatefulWidget {
   const AccountSecurityScreen({super.key});
@@ -25,10 +24,8 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
   final _confirmation = TextEditingController();
   late Future<SignInMethods> _methods;
   bool _busy = false;
-  bool _googleInProgress = false;
   bool _editingPassword = false;
   bool _showPassword = false;
-  String? _googleReauthToken;
   String? _error;
   String? _success;
 
@@ -52,13 +49,9 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
     });
   }
 
-  Future<void> _savePassword(bool hasPassword) async {
+  Future<void> _savePassword() async {
     if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
     final strings = ref.read(accountSecurityStringsProvider);
-    if (!hasPassword && (_googleReauthToken?.trim().isEmpty ?? true)) {
-      setState(() => _error = strings.requireGoogleReauthentication);
-      return;
-    }
     setState(() {
       _busy = true;
       _error = null;
@@ -66,23 +59,14 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
     });
     try {
       final repository = ref.read(accountSecurityRepositoryProvider);
-      if (hasPassword) {
-        await repository.changePassword(
-            _current.text, _password.text, _confirmation.text);
-      } else {
-        await repository.setPassword(
-          _password.text,
-          _confirmation.text,
-          _googleReauthToken!,
-        );
-      }
+      await repository.changePassword(
+          _current.text, _password.text, _confirmation.text);
       _current.clear();
       _password.clear();
       _confirmation.clear();
       if (!mounted) return;
       setState(() {
         _editingPassword = false;
-        _googleReauthToken = null;
         _success = strings.saved;
       });
       _reload();
@@ -95,80 +79,10 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
     }
   }
 
-  Future<void> _connectGoogleToken(String idToken) async {
-    if (_busy) return;
-    final strings = ref.read(accountSecurityStringsProvider);
-    setState(() {
-      _busy = true;
-      _error = null;
-      _success = null;
-    });
-    try {
-      await ref.read(accountSecurityRepositoryProvider).connectGoogle(idToken);
-      if (!mounted) return;
-      setState(() => _success = strings.connectionSaved);
-      _reload();
-    } on MushukistanApiException catch (error) {
-      if (mounted) setState(() => _error = error.userMessage);
-    } on Object {
-      if (mounted) setState(() => _error = strings.loadFailed);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _connectGoogleNative() async {
-    if (_busy || _googleInProgress) return;
-    setState(() {
-      _googleInProgress = true;
-      _error = null;
-    });
-    try {
-      final token = await ref.read(googleIdentityTokenProvider).authenticate();
-      if (mounted) await _connectGoogleToken(token);
-    } on Object {
-      if (mounted) {
-        setState(() =>
-            _error = ref.read(accountSecurityStringsProvider).googleFailed);
-      }
-    } finally {
-      if (mounted) setState(() => _googleInProgress = false);
-    }
-  }
-
-  Future<void> _reauthenticateGoogleNative() async {
-    if (_busy || _googleInProgress) return;
-    setState(() {
-      _googleInProgress = true;
-      _error = null;
-      _success = null;
-    });
-    try {
-      final token = await ref.read(googleIdentityTokenProvider).authenticate();
-      if (mounted) await _storeGoogleReauthToken(token);
-    } on Object {
-      if (mounted) {
-        setState(() =>
-            _error = ref.read(accountSecurityStringsProvider).googleFailed);
-      }
-    } finally {
-      if (mounted) setState(() => _googleInProgress = false);
-    }
-  }
-
-  Future<void> _storeGoogleReauthToken(String idToken) async {
-    if (!mounted || idToken.trim().isEmpty) return;
-    final strings = ref.read(accountSecurityStringsProvider);
-    setState(() {
-      _googleReauthToken = idToken;
-      _error = null;
-      _success = strings.googleReauthenticated;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(accountSecurityStringsProvider);
+    final user = ref.watch(currentUserProvider);
     return Scaffold(
       appBar: AppBar(title: Text(strings.title)),
       body: AppContentWidth(
@@ -191,82 +105,68 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
             return ListView(
               padding: const EdgeInsets.all(AppSpacing.lg),
               children: [
-                Text(strings.signInMethods,
+                Text(strings.emailAddress,
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: AppSpacing.lg),
-                AppCard(
-                  child: ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.alternate_email),
-                    title: Text(strings.emailAddress),
-                    subtitle: Text(methods.emailVerified
-                        ? strings.emailVerified
-                        : strings.emailNeedsVerification),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.account_circle_outlined),
-                        title: Text(strings.google),
-                        subtitle: Text(methods.googleConnected
-                            ? strings.connected
-                            : strings.notConnected),
-                      ),
-                      if (!methods.googleConnected)
-                        kIsWeb
-                            ? GoogleSignInEntryButton(
-                                enabled: !_busy,
-                                onIdToken: _connectGoogleToken,
-                                onError: (_) => setState(
-                                    () => _error = strings.googleFailed))
-                            : OutlinedButton(
-                                onPressed: _busy || _googleInProgress
-                                    ? null
-                                    : _connectGoogleNative,
-                                child: Text(strings.connectGoogle),
-                              ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
                 AppCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.lock_outline),
-                        title: Text(strings.password),
-                        subtitle: Text(methods.hasPassword
-                            ? strings.passwordSet
-                            : strings.passwordNotSet),
+                      Text(user?.email ?? strings.emailUnavailable),
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        children: [
+                          Icon(
+                            methods.emailVerified
+                                ? Icons.verified_outlined
+                                : Icons.info_outline,
+                            size: 18,
+                            color: methods.emailVerified
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Text(methods.emailVerified
+                              ? strings.emailVerified
+                              : strings.emailNeedsVerification),
+                        ],
                       ),
-                      Text(strings.separatePassword),
-                      const SizedBox(height: AppSpacing.md),
-                      if (!_editingPassword)
-                        OutlinedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => setState(() {
-                                    _googleReauthToken = null;
-                                    _editingPassword = true;
-                                  }),
-                          child: Text(methods.hasPassword
-                              ? strings.changePassword
-                              : strings.setPassword),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (methods.hasPassword) ...[
+                  Text(strings.password,
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: AppSpacing.lg),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.lock_outline),
+                          title: Text(strings.password),
+                          subtitle: Text(strings.passwordSet),
                         ),
-                      if (_editingPassword)
-                        Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (methods.hasPassword) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        if (!_editingPassword)
+                          OutlinedButton(
+                            onPressed: _busy
+                                ? null
+                                : () => setState(() {
+                                      _editingPassword = true;
+                                    }),
+                            child: Text(strings.changePassword),
+                          ),
+                        if (_editingPassword)
+                          Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
                                 TextFormField(
                                   controller: _current,
                                   enabled: !_busy,
@@ -279,75 +179,62 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                                           : strings.required,
                                 ),
                                 const SizedBox(height: AppSpacing.sm),
-                              ],
-                              TextFormField(
-                                controller: _password,
-                                enabled: !_busy,
-                                obscureText: !_showPassword,
-                                decoration: InputDecoration(
-                                  labelText: strings.newPassword,
-                                  suffixIcon: IconButton(
-                                    onPressed: _busy
-                                        ? null
-                                        : () => setState(() =>
-                                            _showPassword = !_showPassword),
-                                    icon: Icon(_showPassword
-                                        ? Icons.visibility_off_outlined
-                                        : Icons.visibility_outlined),
+                                TextFormField(
+                                  controller: _password,
+                                  enabled: !_busy,
+                                  obscureText: !_showPassword,
+                                  decoration: InputDecoration(
+                                    labelText: strings.newPassword,
+                                    suffixIcon: IconButton(
+                                      onPressed: _busy
+                                          ? null
+                                          : () => setState(() =>
+                                              _showPassword = !_showPassword),
+                                      icon: Icon(_showPassword
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined),
+                                    ),
                                   ),
+                                  validator: (value) => value != null &&
+                                          value.length >= 8 &&
+                                          value.length <= 128
+                                      ? null
+                                      : strings.passwordLength,
                                 ),
-                                validator: (value) => value != null &&
-                                        value.length >= 8 &&
-                                        value.length <= 128
-                                    ? null
-                                    : strings.passwordLength,
-                              ),
-                              const SizedBox(height: AppSpacing.sm),
-                              TextFormField(
-                                controller: _confirmation,
-                                enabled: !_busy,
-                                obscureText: !_showPassword,
-                                decoration: InputDecoration(
-                                    labelText: strings.confirmPassword),
-                                validator: (value) => value == _password.text
-                                    ? null
-                                    : strings.passwordMismatch,
-                              ),
-                              if (!methods.hasPassword) ...[
-                                const SizedBox(height: AppSpacing.md),
-                                Text(strings.requireGoogleReauthentication),
                                 const SizedBox(height: AppSpacing.sm),
-                                if (kIsWeb)
-                                  GoogleSignInEntryButton(
-                                    enabled: !_busy,
-                                    onIdToken: _storeGoogleReauthToken,
-                                    onError: (_) => setState(
-                                        () => _error = strings.googleFailed),
-                                  )
-                                else
-                                  OutlinedButton(
-                                    onPressed: _busy || _googleInProgress
-                                        ? null
-                                        : _reauthenticateGoogleNative,
-                                    child: Text(strings.reauthenticateGoogle),
-                                  ),
+                                TextFormField(
+                                  controller: _confirmation,
+                                  enabled: !_busy,
+                                  obscureText: !_showPassword,
+                                  decoration: InputDecoration(
+                                      labelText: strings.confirmPassword),
+                                  validator: (value) => value == _password.text
+                                      ? null
+                                      : strings.passwordMismatch,
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                FilledButton(
+                                  onPressed: _busy ? null : _savePassword,
+                                  child: _busy
+                                      ? const CircularProgressIndicator()
+                                      : Text(strings.save),
+                                ),
                               ],
-                              const SizedBox(height: AppSpacing.md),
-                              FilledButton(
-                                onPressed: _busy ||
-                                        (!methods.hasPassword &&
-                                            _googleReauthToken == null)
-                                    ? null
-                                    : () => _savePassword(methods.hasPassword),
-                                child: _busy
-                                    ? const CircularProgressIndicator()
-                                    : Text(strings.save),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
+                ],
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          await ref
+                              .read(authControllerProvider.notifier)
+                              .logout();
+                        },
+                  child: Text(ref.watch(appStringsProvider).logout),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: AppSpacing.md),

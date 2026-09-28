@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -15,6 +16,8 @@ from app.core.storage import (
 from app.features.auth.domain.models import AuthUser
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
+    LostPetFollowUpAnswer,
+    LostPetFollowUpItem,
     LostPetListItem,
     LostPetMapListItem,
     LostPetResponse,
@@ -145,6 +148,65 @@ class LostPetsService:
             if item is None:
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
             return to_lost_pet_response(item)
+
+    def contact_owner(self, lost_pet_id: UUID, user: AuthUser) -> None:
+        with self.db_session_manager.session_scope() as session:
+            try:
+                recorded = self.repository_factory(session).record_contact(
+                    lost_pet_id, user.id
+                )
+            except PermissionError as exc:
+                raise api_error(
+                    403, "CONTACT_OWNER_FORBIDDEN", "You own this lost pet post."
+                ) from exc
+            if not recorded:
+                raise api_error(404, "LOST_PET_NOT_ACTIVE", "Active lost pet post not found.")
+
+    def list_due_follow_ups(self, user: AuthUser) -> list[LostPetFollowUpItem]:
+        with self.db_session_manager.session_scope() as session:
+            records = self.repository_factory(session).list_due_follow_ups(
+                user.id, datetime.now(UTC)
+            )
+            return [
+                LostPetFollowUpItem.model_validate(item, from_attributes=True) for item in records
+            ]
+
+    def answer_follow_up(
+        self, follow_up_id: UUID, user: AuthUser, payload: LostPetFollowUpAnswer
+    ) -> LostPetResponse:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            result, lost_pet_id = repository.answer_follow_up(
+                follow_up_id, user.id, payload.answer == "yes", datetime.now(UTC)
+            )
+            if result == "not_found":
+                raise api_error(404, "FOLLOW_UP_NOT_FOUND", "Lost pet follow-up not found.")
+            if result == "forbidden":
+                raise api_error(
+                    403, "FOLLOW_UP_FORBIDDEN", "Only the owner can answer this follow-up."
+                )
+            if result == "completed":
+                raise api_error(409, "FOLLOW_UP_COMPLETED", "This follow-up was already answered.")
+            if result == "not_due":
+                raise api_error(409, "FOLLOW_UP_NOT_DUE", "This follow-up is not due yet.")
+            if result != "answered" or lost_pet_id is None:
+                raise api_error(409, "LOST_PET_NOT_ACTIVE", "Lost pet post is no longer active.")
+            item = repository.get_by_id(lost_pet_id)
+            if item is None:
+                raise RuntimeError("Answered lost pet could not be loaded.")
+            return to_lost_pet_response(item)
+
+    def list_my_lost_pets(
+        self, user: AuthUser, *, limit: int = 20, cursor: str | None = None
+    ) -> GenericListResponse[LostPetListItem]:
+        with self.db_session_manager.session_scope() as session:
+            try:
+                page = self.repository_factory(session).list_owned(
+                    user.id, limit=limit, cursor=cursor
+                )
+            except ValueError as exc:
+                raise api_error(422, "VALIDATION_ERROR", "Invalid cursor.") from exc
+            return to_lost_pet_page_response(page)
 
     def list_lost_pets(
         self,
