@@ -228,6 +228,28 @@ class UsersService:
                     photo.photo_url = f"deleted://adoption-post/{photo.id}"
                     photo.thumb_url = None
 
+            session.execute(
+                delete(schema.AdoptionFollowUp).where(
+                    schema.AdoptionFollowUp.owner_id == user.id,
+                    schema.AdoptionFollowUp.completed_at.is_(None),
+                )
+            )
+            session.execute(
+                update(schema.AdoptionFollowUp)
+                .where(schema.AdoptionFollowUp.owner_id == user.id)
+                .values(owner_id=None)
+            )
+            session.execute(
+                update(schema.AdoptionContactEvent)
+                .where(schema.AdoptionContactEvent.owner_id == user.id)
+                .values(owner_id=None)
+            )
+            session.execute(
+                update(schema.AdoptionContactEvent)
+                .where(schema.AdoptionContactEvent.contacting_user_id == user.id)
+                .values(contacting_user_id=None)
+            )
+
             liked_post_counts = session.execute(
                 select(schema.Like.post_id, func.count(schema.Like.id))
                 .where(schema.Like.user_id == user.id)

@@ -429,6 +429,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   Widget build(BuildContext context) {
     final selectedLayers = ref.watch(_mapLayersProvider);
     final resolvedLostPetIds = ref.watch(resolvedLostPetIdsProvider);
+    final deletedLostPetIds = ref.watch(deletedLostPetIdsProvider);
+    final lostPetOverrides = ref.watch(lostPetMutationOverridesProvider);
     final strings = ref.watch(appStringsProvider);
     ref.listen<int>(postMutationRevisionProvider, (previous, next) {
       if (previous != next && _mapReady) {
@@ -467,6 +469,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
           selectedLayers.contains(_MapLayer.lostPets) &&
           widget.focusLostPetId != null &&
           !resolvedLostPetIds.contains(widget.focusLostPetId) &&
+          !deletedLostPetIds.contains(widget.focusLostPetId) &&
+          !(lostPetOverrides[widget.focusLostPetId]?.isResolved ?? false) &&
           (_lostPetPage?.items.any((pet) => pet.id == widget.focusLostPetId) ??
               false))
         Marker(
@@ -509,18 +513,32 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final lostPetSpecs = <_MapMarkerSpec>[];
     if (selectedLayers.contains(_MapLayer.lostPets)) {
       for (final lostPet in _lostPetPage?.items ?? const <LostPetMapData>[]) {
-        if (resolvedLostPetIds.contains(lostPet.id)) continue;
+        if (resolvedLostPetIds.contains(lostPet.id) ||
+            deletedLostPetIds.contains(lostPet.id)) {
+          continue;
+        }
+        final override = lostPetOverrides[lostPet.id];
+        final visiblePet = override == null
+            ? lostPet
+            : LostPetMapData(
+                id: override.id,
+                petName: override.petName,
+                lastSeenLocation: override.lastSeenLocation,
+                createdAt: lostPet.createdAt,
+                isResolved: override.isResolved,
+              );
+        if (visiblePet.isResolved) continue;
         lostPetSpecs.add(
           _MapMarkerSpec(
-            id: lostPet.id,
+            id: visiblePet.id,
             point: LatLng(
-              lostPet.lastSeenLocation.latitude,
-              lostPet.lastSeenLocation.longitude,
+              visiblePet.lastSeenLocation.latitude,
+              visiblePet.lastSeenLocation.longitude,
             ),
             width: 48,
             height: 48,
             child: _MapLostPetMarker(
-              onTap: () => _showLostPetSheet(context, lostPet, strings),
+              onTap: () => _showLostPetSheet(context, visiblePet, strings),
             ),
           ),
         );

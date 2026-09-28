@@ -21,11 +21,16 @@ from app.features.lost_pets.application.schemas import (
     LostPetListItem,
     LostPetMapListItem,
     LostPetResponse,
+    LostPetUpdateRequest,
     to_lost_pet_map_page_response,
     to_lost_pet_page_response,
     to_lost_pet_response,
 )
-from app.features.lost_pets.domain.models import LostPetCreateDraft, LostPetPhotoDraft
+from app.features.lost_pets.domain.models import (
+    LostPetCreateDraft,
+    LostPetPhotoDraft,
+    LostPetUpdateDraft,
+)
 from app.features.lost_pets.domain.repositories import LostPetRepository
 from app.features.posts.application.schemas import GenericListResponse
 from app.infrastructure.db.session import DatabaseSessionManager
@@ -148,6 +153,126 @@ class LostPetsService:
             if item is None:
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
             return to_lost_pet_response(item)
+
+    def update_lost_pet(
+        self,
+        lost_pet_id: UUID,
+        user: AuthUser,
+        payload: LostPetUpdateRequest,
+        *,
+        photos: list[tuple[bytes, str | None, str | None]] | None = None,
+    ) -> LostPetResponse:
+        photo_payloads = list(photos or [])
+        if len(photo_payloads) > 5:
+            raise api_error(400, "INVALID_PAYLOAD", "Lost pet posts can include up to 5 photos.")
+
+        uploaded_keys: list[str] = []
+        replacement_photos: list[LostPetPhotoDraft] | None = None
+        try:
+            with self.db_session_manager.session_scope() as session:
+                existing = self.repository_factory(session).get_by_id(lost_pet_id)
+                self._require_owner(existing, user)
+
+            for index, (content, content_type, filename) in enumerate(photo_payloads):
+                photo_id = uuid4()
+                photo_url, thumb_url, keys = self._upload_photo(
+                    entity_id=photo_id,
+                    content=content,
+                    content_type=content_type,
+                    filename=filename,
+                )
+                uploaded_keys.extend(keys)
+                if replacement_photos is None:
+                    replacement_photos = []
+                replacement_photos.append(
+                    LostPetPhotoDraft(
+                        id=photo_id,
+                        photo_url=photo_url,
+                        thumb_url=thumb_url,
+                        position=index,
+                    )
+                )
+
+            phone = existing.owner_phone_number
+            if "owner_phone_number" in payload.model_fields_set:
+                try:
+                    phone = normalize_uzbek_phone_number(payload.owner_phone_number or "")
+                except UzbekPhoneNumberError as exc:
+                    raise api_error(
+                        422,
+                        "INVALID_PHONE_NUMBER",
+                        "Use Uzbekistan phone format: +998 XX XXX XXXX.",
+                    ) from exc
+
+            telegram = existing.owner_telegram_username
+            if "owner_telegram_username" in payload.model_fields_set:
+                telegram = (
+                    payload.owner_telegram_username.strip().removeprefix("@") or None
+                    if payload.owner_telegram_username is not None
+                    else None
+                )
+
+            location = payload.last_seen_location or existing.last_seen_location
+            pet_name = (
+                payload.pet_name.strip()
+                if "pet_name" in payload.model_fields_set and payload.pet_name is not None
+                else existing.pet_name
+            )
+            additional_info = (
+                payload.additional_info.strip() or None
+                if "additional_info" in payload.model_fields_set
+                and payload.additional_info is not None
+                else None
+                if "additional_info" in payload.model_fields_set
+                else existing.additional_info
+            )
+
+            with self.db_session_manager.session_scope() as session:
+                repository = self.repository_factory(session)
+                current = repository.get_by_id(lost_pet_id, for_update=True)
+                self._require_owner(current, user)
+                assert current is not None
+                updated = repository.update(
+                    lost_pet_id,
+                    LostPetUpdateDraft(
+                        pet_name=pet_name,
+                        owner_phone_number=phone,
+                        owner_telegram_username=telegram,
+                        last_seen_latitude=location.latitude,
+                        last_seen_longitude=location.longitude,
+                        additional_info=additional_info,
+                        photos=replacement_photos,
+                        updated_at=datetime.now(UTC),
+                    ),
+                )
+                return to_lost_pet_response(updated)
+        except StorageValidationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
+        except StorageConfigurationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(
+                500,
+                "STORAGE_NOT_CONFIGURED",
+                "Image storage is not configured.",
+            ) from exc
+        except StorageOperationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(502, "IMAGE_UPLOAD_FAILED", "Image upload failed.") from exc
+        except Exception:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise
+
+    def delete_lost_pet(self, lost_pet_id: UUID, user: AuthUser) -> None:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            current = repository.get_by_id(
+                lost_pet_id, for_update=True, include_deleted=True
+            )
+            self._require_owner(current, user)
+            if current.deleted_at is not None:
+                return
+            repository.soft_delete(lost_pet_id, datetime.now(UTC))
 
     def contact_owner(self, lost_pet_id: UUID, user: AuthUser) -> None:
         with self.db_session_manager.session_scope() as session:
@@ -320,3 +445,14 @@ class LostPetsService:
                 self.media_storage_service.delete_object(key)
             except Exception:  # pragma: no cover
                 logger.warning("lost_pet_upload_cleanup_failed", key=key)
+
+    @staticmethod
+    def _require_owner(item, user: AuthUser) -> None:
+        if item is None:
+            raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
+        if item.user_id != user.id:
+            raise api_error(
+                403,
+                "FORBIDDEN",
+                "You do not have permission to perform this action.",
+            )

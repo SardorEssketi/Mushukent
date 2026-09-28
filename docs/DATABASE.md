@@ -359,6 +359,7 @@ CREATE TABLE adoption_posts (
     owner_telegram_username TEXT NULL,
     owner_phone_publication_consent BOOLEAN NOT NULL DEFAULT FALSE,
     additional_info TEXT NULL,
+    is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
     is_public BOOLEAN NOT NULL DEFAULT TRUE,
     comment_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -378,6 +379,35 @@ CREATE TABLE adoption_post_photos (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_adoption_post_photos_post_id_position ON adoption_post_photos (adoption_post_id, position);
+
+-- In-app Rehoming contact follow-ups (migration 20260928_0023)
+-- Existing adoption posts default to is_resolved=false. The post row lock
+-- serializes contacts, and the partial unique index enforces one pending cycle.
+CREATE TABLE adoption_contact_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    adoption_post_id UUID NOT NULL REFERENCES adoption_posts(id) ON DELETE CASCADE,
+    owner_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    contacting_user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_adoption_contacts_post_id ON adoption_contact_events (adoption_post_id);
+
+CREATE TABLE adoption_follow_ups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    adoption_post_id UUID NOT NULL REFERENCES adoption_posts(id) ON DELETE CASCADE,
+    owner_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+    due_at TIMESTAMPTZ NOT NULL,
+    completed_at TIMESTAMPTZ NULL,
+    answer_yes BOOLEAN NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT adoption_follow_ups_answer_state CHECK (
+        (completed_at IS NULL AND answer_yes IS NULL) OR
+        (completed_at IS NOT NULL AND answer_yes IS NOT NULL)
+    )
+);
+CREATE UNIQUE INDEX uq_adoption_follow_ups_pending ON adoption_follow_ups (adoption_post_id)
+    WHERE completed_at IS NULL;
+CREATE INDEX idx_adoption_follow_ups_owner_due ON adoption_follow_ups (owner_id, due_at);
 
 
 Important constraints, indexes and rationale
@@ -488,7 +518,7 @@ Security & privacy considerations (DB-related)
 - Passwords: store only hashed password (bcrypt/argon2) in password_hash; never store plaintext. Normalized login email is unique and password login requires `email_verified=true`.
 - Auth methods share one `users` row: `password_hash` and `google_subject` are independently nullable; `google_subject` is the stable unique provider key. Refresh sessions remain separate hashed-token rows. Account deletion keeps the Google subject on the inactive anonymized row as a tombstone while clearing login email/password.
 - Sensitive PII: limit what is stored — do not store device identifiers in plain DB without hashing. Be careful with location retention policies for privacy-sensitive content.
-- Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet posts, removes copied lost-pet phone numbers, removes unanswerable pending Lost Pet follow-ups, preserves completed follow-ups without the deleted owner link, clears deleted-user contact-event links and report actor links where possible, and attempts best-effort media cleanup.
+- Data deletion: account deletion anonymizes the account, disables login, deletes likes, hides/anonymizes owned posts/comments/lost-pet and rehoming posts, removes copied contact phone numbers, removes unanswerable pending Lost Pet and Rehoming follow-ups, preserves completed follow-ups without the deleted owner link, clears deleted-user contact-event links and report actor links where possible, and attempts best-effort media cleanup.
 - Audit logs: keep moderator actions and important security events in write-once logs or a separate audit table. Don't store secrets in DB.
 
 Data retention policy

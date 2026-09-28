@@ -7,15 +7,16 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 
-class MyLostPetsScreen extends ConsumerStatefulWidget {
-  const MyLostPetsScreen({super.key});
+class MyAdoptionPostsScreen extends ConsumerStatefulWidget {
+  const MyAdoptionPostsScreen({super.key});
 
   @override
-  ConsumerState<MyLostPetsScreen> createState() => _MyLostPetsScreenState();
+  ConsumerState<MyAdoptionPostsScreen> createState() =>
+      _MyAdoptionPostsScreenState();
 }
 
-class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
-  final List<LostPetData> _items = [];
+class _MyAdoptionPostsScreenState extends ConsumerState<MyAdoptionPostsScreen> {
+  final List<AdoptionPostData> _items = [];
   String? _cursor;
   bool _loading = false;
   bool _loaded = false;
@@ -37,12 +38,10 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
     setState(() {
       _loading = true;
       _error = false;
-      if (reset) {
-        _cursor = null;
-      }
+      if (reset) _cursor = null;
     });
     try {
-      final page = await ref.read(mushukistanApiProvider).listMyLostPets(
+      final page = await ref.read(mushukistanApiProvider).listMyAdoptionPosts(
             cursor: _cursor,
           );
       if (!mounted) return;
@@ -68,41 +67,40 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
-    final lostPetOverrides = ref.watch(lostPetMutationOverridesProvider);
-    final deletedLostPetIds = ref.watch(deletedLostPetIdsProvider);
+    final overrides = ref.watch(adoptionMutationOverridesProvider);
+    final deletedIds = ref.watch(deletedAdoptionIdsProvider);
     ref.listen<int>(postMutationRevisionProvider, (previous, next) {
       if (previous != next) _load(reset: true);
     });
     final visibleItems = _items
-        .where((pet) => !deletedLostPetIds.contains(pet.id))
-        .map((pet) => lostPetOverrides[pet.id] ?? pet)
+        .where((post) => !deletedIds.contains(post.id))
+        .map((post) => overrides[post.id] ?? post)
         .toList(growable: false);
     return Scaffold(
-      appBar: AppBar(title: Text(strings.myLostPets)),
+      appBar: AppBar(title: Text(strings.myAdoptionPosts)),
       body: RefreshIndicator(
         onRefresh: () => _load(reset: true),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            if (_loaded && visibleItems.isEmpty) Text(strings.noLostPetsYet),
-            for (final pet in visibleItems)
+            if (_loaded && visibleItems.isEmpty)
+              Text(strings.noAdoptionPostsYet),
+            for (final post in visibleItems)
               Card(
                 child: ListTile(
                   leading: Image.network(
-                    pet.thumbUrl ?? pet.photoUrl,
+                    post.thumbUrl ?? post.photoUrl,
                     width: 52,
                     height: 52,
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => const Icon(Icons.pets),
                   ),
-                  title: Text(pet.petName),
-                  subtitle: Text(
-                    pet.isResolved
-                        ? strings.reunitedLostPet
-                        : strings.activeLostPet,
-                  ),
+                  title: Text(post.petName),
+                  subtitle: Text(post.isResolved
+                      ? strings.rehomedAdoptionPost
+                      : strings.activeAdoptionPost),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/lost-pets/${pet.id}'),
+                  onTap: () => context.push('/adoption-posts/${post.id}'),
                 ),
               ),
             if (_error)
@@ -113,9 +111,7 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
             if (_loading) const Center(child: CircularProgressIndicator()),
             if (!_loading && _cursor != null)
               TextButton(
-                onPressed: _load,
-                child: Text(strings.loadMoreLostPets),
-              ),
+                  onPressed: _load, child: Text(strings.loadMoreAdoptionPosts)),
           ],
         ),
       ),

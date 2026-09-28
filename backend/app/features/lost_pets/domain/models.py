@@ -84,6 +84,18 @@ class LostPetCreateDraft:
 
 
 @dataclass(slots=True)
+class LostPetUpdateDraft:
+    pet_name: str
+    owner_phone_number: str
+    owner_telegram_username: str | None
+    last_seen_latitude: float
+    last_seen_longitude: float
+    additional_info: str | None
+    photos: list[LostPetPhotoDraft] | None
+    updated_at: datetime
+
+
+@dataclass(slots=True)
 class LostPetFollowUpRecord:
     id: UUID
     lost_pet_id: UUID

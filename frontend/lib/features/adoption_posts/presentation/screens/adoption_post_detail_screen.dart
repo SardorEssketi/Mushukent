@@ -4,24 +4,123 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
-import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/marker_detail_actions.dart';
+import '../../../auth/application/auth_controller.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
+import '../../../feed/presentation/screens/feed_screen.dart';
 
 final adoptionPostDetailProvider = FutureProvider.autoDispose
     .family<AdoptionPostData, String>((ref, adoptionPostId) {
+  final override = ref.watch(adoptionMutationOverridesProvider)[adoptionPostId];
+  if (override != null) return override;
   return ref.watch(mushukistanApiProvider).getAdoptionPost(adoptionPostId);
 });
 
-class AdoptionPostDetailScreen extends ConsumerWidget {
+class AdoptionPostDetailScreen extends ConsumerStatefulWidget {
   const AdoptionPostDetailScreen({super.key, required this.adoptionPostId});
 
   final String adoptionPostId;
 
-  Future<void> _contactOwner(String phoneNumber) async {
-    await launchUrl(Uri(scheme: 'tel', path: dialablePhoneNumber(phoneNumber)));
+  @override
+  ConsumerState<AdoptionPostDetailScreen> createState() =>
+      _AdoptionPostDetailScreenState();
+}
+
+class _AdoptionPostDetailScreenState
+    extends ConsumerState<AdoptionPostDetailScreen> {
+  bool _contactInFlight = false;
+
+  Future<void> _contactOwner(
+      BuildContext context, AppStrings strings, AdoptionPostData post,
+      {bool telegram = false}) async {
+    if (_contactInFlight) return;
+    if (!ref.read(authControllerProvider).isAuthenticated) {
+      requestAuthentication(context);
+      return;
+    }
+    _contactInFlight = true;
+    try {
+      await ref.read(mushukistanApiProvider).contactAdoptionOwner(post.id);
+      if (!context.mounted) return;
+      if (telegram) {
+        await _openTelegram(post.ownerTelegramUsername!);
+      } else {
+        await launchPublicPhone(context,
+            phone: post.ownerPhoneNumber, strings: strings);
+      }
+    } on MushukistanApiException catch (error) {
+      if (error.code == 'ADOPTION_POST_NOT_ACTIVE') {
+        ref.invalidate(adoptionPostDetailProvider(post.id));
+        ref.read(postMutationRevisionProvider.notifier).state++;
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    } finally {
+      _contactInFlight = false;
+    }
+  }
+
+  Future<void> _editPost(AdoptionPostData post) async {
+    final result = await context.push<bool>('/adoption-posts/${post.id}/edit');
+    if (mounted && result == true) {
+      ref.invalidate(adoptionPostDetailProvider(widget.adoptionPostId));
+    }
+  }
+
+  Future<void> _deletePost(
+      BuildContext context, AppStrings strings, AdoptionPostData post) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.deleteAdoptionPost),
+        content: Text(strings.deleteAdoptionPostMessage),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.delete)),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref.read(mushukistanApiProvider).deleteAdoptionPost(post.id);
+      ref.read(deletedAdoptionIdsProvider.notifier).state = {
+        ...ref.read(deletedAdoptionIdsProvider),
+        post.id,
+      };
+      ref.read(postMutationRevisionProvider.notifier).state++;
+      ref.invalidate(feedPostsProvider);
+      if (context.mounted) context.pop(true);
+    } on MushukistanApiException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.userMessage)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    }
   }
 
   Future<void> _openTelegram(String username) async {
@@ -32,7 +131,8 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final adoptionPostId = widget.adoptionPostId;
     final adoptionAsync = ref.watch(adoptionPostDetailProvider(adoptionPostId));
     final strings = ref.watch(appStringsProvider);
 
@@ -41,6 +141,11 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
       body: adoptionAsync.when(
         data: (post) {
           final info = post.additionalInfo?.trim();
+          final viewerId = ref.watch(currentUserProvider)?.id;
+          final isOwner = viewerId != null && post.author?.id == viewerId;
+          final canContact = !post.isResolved &&
+              post.author?.id != null &&
+              post.author?.id != viewerId;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -48,7 +153,10 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
               const SizedBox(height: 20),
               Align(
                 alignment: Alignment.centerLeft,
-                child: _AdoptionBadge(label: strings.adoption),
+                child: _AdoptionBadge(
+                    label: post.isResolved
+                        ? strings.rehomedAdoptionPost
+                        : strings.adoption),
               ),
               const SizedBox(height: 12),
               Text(
@@ -61,19 +169,21 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 16),
-              _DetailActionTile(
-                icon: Icons.phone_outlined,
-                title: strings.phoneNumber,
-                subtitle: post.ownerPhoneNumber,
-                onTap: () => _contactOwner(post.ownerPhoneNumber),
-              ),
-              if (post.ownerTelegramUsername != null) ...[
+              if (canContact)
+                _DetailActionTile(
+                  icon: Icons.phone_outlined,
+                  title: strings.contactOwner,
+                  subtitle: post.ownerPhoneNumber,
+                  onTap: () => _contactOwner(context, strings, post),
+                ),
+              if (canContact && post.ownerTelegramUsername != null) ...[
                 const SizedBox(height: 10),
                 _DetailActionTile(
                   icon: Icons.alternate_email,
                   title: 'Telegram',
                   subtitle: '@${post.ownerTelegramUsername}',
-                  onTap: () => _openTelegram(post.ownerTelegramUsername!),
+                  onTap: () =>
+                      _contactOwner(context, strings, post, telegram: true),
                 ),
               ],
               if (info != null && info.isNotEmpty) ...[
@@ -84,6 +194,24 @@ class AdoptionPostDetailScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(info),
+              ],
+              if (isOwner) ...[
+                const SizedBox(height: 20),
+                Wrap(spacing: 12, runSpacing: 12, children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _editPost(post),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: Text(strings.editAdoptionPost),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _deletePost(context, strings, post),
+                    icon: const Icon(Icons.delete_outline),
+                    label: Text(strings.deleteAdoptionPost),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ]),
               ],
               const SizedBox(height: 20),
               Align(

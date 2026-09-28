@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -13,15 +14,19 @@ from app.core.storage import (
     StorageValidationError,
 )
 from app.features.adoption_posts.application.schemas import (
+    AdoptionFollowUpAnswer,
+    AdoptionFollowUpItem,
     AdoptionPostCreateRequest,
     AdoptionPostListItem,
     AdoptionPostResponse,
+    AdoptionPostUpdateRequest,
     to_adoption_post_page_response,
     to_adoption_post_response,
 )
 from app.features.adoption_posts.domain.models import (
     AdoptionPostCreateDraft,
     AdoptionPostPhotoDraft,
+    AdoptionPostUpdateDraft,
 )
 from app.features.adoption_posts.domain.repositories import AdoptionPostRepository
 from app.features.auth.domain.models import AuthUser
@@ -74,12 +79,6 @@ class AdoptionPostsService:
             raise api_error(400, "INVALID_PAYLOAD", "At least one photo is required.")
         if len(photos) > 5:
             raise api_error(400, "INVALID_PAYLOAD", "Adoption posts can include up to 5 photos.")
-        if not payload.owner_phone_publication_consent:
-            raise api_error(
-                422,
-                "PHONE_PUBLICATION_CONSENT_REQUIRED",
-                "Confirm that your phone number may be shown publicly for this adoption post.",
-            )
 
         adoption_post_id = uuid4()
         uploaded_keys: list[str] = []
@@ -144,6 +143,179 @@ class AdoptionPostsService:
             if item is None:
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
             return to_adoption_post_response(item)
+
+    def update_adoption_post(
+        self,
+        adoption_post_id: UUID,
+        user: AuthUser,
+        payload: AdoptionPostUpdateRequest,
+        *,
+        photos: list[tuple[bytes, str | None, str | None]] | None = None,
+    ) -> AdoptionPostResponse:
+        photo_payloads = list(photos or [])
+        if len(photo_payloads) > 5:
+            raise api_error(400, "INVALID_PAYLOAD", "Adoption posts can include up to 5 photos.")
+        uploaded_keys: list[str] = []
+        replacement_photos: list[AdoptionPostPhotoDraft] | None = None
+        try:
+            with self.db_session_manager.session_scope() as session:
+                existing = self.repository_factory(session).get_by_id(adoption_post_id)
+                self._require_owner(existing, user)
+            assert existing is not None
+
+            for index, (content, content_type, filename) in enumerate(photo_payloads):
+                photo_id = uuid4()
+                photo_url, thumb_url, keys = self._upload_photo(
+                    entity_id=photo_id,
+                    content=content,
+                    content_type=content_type,
+                    filename=filename,
+                )
+                uploaded_keys.extend(keys)
+                if replacement_photos is None:
+                    replacement_photos = []
+                replacement_photos.append(
+                    AdoptionPostPhotoDraft(
+                        id=photo_id,
+                        photo_url=photo_url,
+                        thumb_url=thumb_url,
+                        position=index,
+                    )
+                )
+
+            phone = existing.owner_phone_number
+            if "owner_phone_number" in payload.model_fields_set:
+                try:
+                    phone = normalize_uzbek_phone_number(payload.owner_phone_number or "")
+                except UzbekPhoneNumberError as exc:
+                    raise api_error(
+                        422,
+                        "INVALID_PHONE_NUMBER",
+                        "Use Uzbekistan phone format: +998 XX XXX XXXX.",
+                    ) from exc
+            telegram = existing.owner_telegram_username
+            if "owner_telegram_username" in payload.model_fields_set:
+                telegram = (
+                    payload.owner_telegram_username.removeprefix("@") or None
+                    if payload.owner_telegram_username is not None
+                    else None
+                )
+            pet_name = (
+                payload.pet_name if "pet_name" in payload.model_fields_set else existing.pet_name
+            )
+            additional_info = (
+                payload.additional_info or None
+                if "additional_info" in payload.model_fields_set
+                else existing.additional_info
+            )
+
+            with self.db_session_manager.session_scope() as session:
+                repository = self.repository_factory(session)
+                current = repository.get_by_id(adoption_post_id, for_update=True)
+                self._require_owner(current, user)
+                updated = repository.update(
+                    adoption_post_id,
+                    AdoptionPostUpdateDraft(
+                        pet_name=pet_name,
+                        owner_phone_number=phone,
+                        owner_telegram_username=telegram,
+                        additional_info=additional_info,
+                        photos=replacement_photos,
+                        updated_at=datetime.now(UTC),
+                    ),
+                )
+                return to_adoption_post_response(updated)
+        except StorageValidationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
+        except StorageConfigurationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(
+                500, "STORAGE_NOT_CONFIGURED", "Image storage is not configured."
+            ) from exc
+        except StorageOperationError as exc:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise api_error(502, "IMAGE_UPLOAD_FAILED", "Image upload failed.") from exc
+        except Exception:
+            self._cleanup_uploaded_objects(uploaded_keys)
+            raise
+
+    def delete_adoption_post(self, adoption_post_id: UUID, user: AuthUser) -> None:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            current = repository.get_by_id(adoption_post_id, for_update=True, include_deleted=True)
+            self._require_owner(current, user)
+            assert current is not None
+            if current.deleted_at is None:
+                repository.soft_delete(adoption_post_id, datetime.now(UTC))
+
+    def contact_owner(self, adoption_post_id: UUID, user: AuthUser) -> None:
+        with self.db_session_manager.session_scope() as session:
+            try:
+                recorded = self.repository_factory(session).record_contact(
+                    adoption_post_id, user.id
+                )
+            except PermissionError as exc:
+                raise api_error(
+                    403, "CONTACT_OWNER_FORBIDDEN", "You own this adoption post."
+                ) from exc
+            if not recorded:
+                raise api_error(404, "ADOPTION_POST_NOT_ACTIVE", "Active adoption post not found.")
+
+    def list_due_follow_ups(self, user: AuthUser) -> list[AdoptionFollowUpItem]:
+        with self.db_session_manager.session_scope() as session:
+            records = self.repository_factory(session).list_due_follow_ups(
+                user.id, datetime.now(UTC)
+            )
+            return [
+                AdoptionFollowUpItem.model_validate(item, from_attributes=True) for item in records
+            ]
+
+    def answer_follow_up(
+        self, follow_up_id: UUID, user: AuthUser, payload: AdoptionFollowUpAnswer
+    ) -> AdoptionPostResponse:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            result, post_id = repository.answer_follow_up(
+                follow_up_id, user.id, payload.answer == "yes", datetime.now(UTC)
+            )
+            if result == "not_found":
+                raise api_error(404, "FOLLOW_UP_NOT_FOUND", "Adoption follow-up not found.")
+            if result == "forbidden":
+                raise api_error(
+                    403, "FOLLOW_UP_FORBIDDEN", "Only the owner can answer this follow-up."
+                )
+            if result == "completed":
+                raise api_error(409, "FOLLOW_UP_COMPLETED", "This follow-up was already answered.")
+            if result == "not_due":
+                raise api_error(409, "FOLLOW_UP_NOT_DUE", "This follow-up is not due yet.")
+            if result != "answered" or post_id is None:
+                raise api_error(
+                    409, "ADOPTION_POST_NOT_ACTIVE", "Adoption post is no longer active."
+                )
+            item = repository.get_by_id(post_id)
+            if item is None:
+                raise RuntimeError("Answered adoption post could not be loaded.")
+            return to_adoption_post_response(item)
+
+    def list_my_adoption_posts(
+        self, user: AuthUser, *, limit: int = 20, cursor: str | None = None
+    ) -> GenericListResponse[AdoptionPostListItem]:
+        with self.db_session_manager.session_scope() as session:
+            try:
+                page = self.repository_factory(session).list_owned(
+                    user.id, limit=limit, cursor=cursor
+                )
+            except ValueError as exc:
+                raise api_error(422, "VALIDATION_ERROR", "Invalid cursor.") from exc
+            return to_adoption_post_page_response(page)
+
+    @staticmethod
+    def _require_owner(item, user: AuthUser) -> None:
+        if item is None:
+            raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
+        if item.user_id != user.id:
+            raise api_error(403, "ADOPTION_POST_FORBIDDEN", "Only the owner may change this post.")
 
     def list_adoption_posts(
         self,

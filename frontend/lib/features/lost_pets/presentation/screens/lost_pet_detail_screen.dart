@@ -12,9 +12,13 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../feed/presentation/screens/feed_screen.dart';
+import '../../../profile/presentation/screens/profile_screen.dart';
 
 final lostPetDetailProvider =
     FutureProvider.autoDispose.family<LostPetData, String>((ref, lostPetId) {
+  final override = ref.watch(lostPetMutationOverridesProvider)[lostPetId];
+  if (override != null) return override;
   return ref.watch(mushukistanApiProvider).getLostPet(lostPetId);
 });
 
@@ -30,6 +34,61 @@ class LostPetDetailScreen extends ConsumerStatefulWidget {
 
 class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
   bool _contactInFlight = false;
+
+  Future<void> _editLostPet(LostPetData lostPet) async {
+    final result = await context.push<bool>('/lost-pets/${lostPet.id}/edit');
+    if (mounted && result == true) {
+      ref.invalidate(lostPetDetailProvider(widget.lostPetId));
+    }
+  }
+
+  Future<void> _deleteLostPet(
+    BuildContext context,
+    AppStrings strings,
+    LostPetData lostPet,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(strings.deleteLostPet),
+        content: Text(strings.deleteLostPetMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(strings.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(strings.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref.read(mushukistanApiProvider).deleteLostPet(lostPet.id);
+      ref.read(deletedLostPetIdsProvider.notifier).state = {
+        ...ref.read(deletedLostPetIdsProvider),
+        lostPet.id,
+      };
+      ref.read(postMutationRevisionProvider.notifier).state++;
+      ref.invalidate(feedPostsProvider);
+      ref.invalidate(profileMeProvider);
+      if (context.mounted) context.pop(true);
+    } on MushukistanApiException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.userMessage)),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    }
+  }
 
   Future<void> _contactOwner(
       BuildContext context, AppStrings strings, LostPetData lostPet,
@@ -99,6 +158,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
         data: (lostPet) {
           final info = lostPet.additionalInfo?.trim();
           final viewerId = ref.watch(currentUserProvider)?.id;
+          final isOwner = viewerId != null && lostPet.author?.id == viewerId;
           final canContact = !lostPet.isResolved &&
               lostPet.author?.id != null &&
               lostPet.author?.id != viewerId;
@@ -165,6 +225,29 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(info),
+              ],
+              if (isOwner) ...[
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _editLostPet(lostPet),
+                      icon: const Icon(Icons.edit_outlined),
+                      label: Text(strings.editLostPet),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () =>
+                          _deleteLostPet(context, strings, lostPet),
+                      icon: const Icon(Icons.delete_outline),
+                      label: Text(strings.deleteLostPet),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                ),
               ],
               const SizedBox(height: 20),
               Align(

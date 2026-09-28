@@ -4,7 +4,7 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from pydantic import ValidationError
 
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
@@ -19,6 +19,7 @@ from app.features.lost_pets.application.schemas import (
     LostPetListItem,
     LostPetMapListItem,
     LostPetResponse,
+    LostPetUpdateRequest,
 )
 from app.features.lost_pets.application.service import LostPetsService
 from app.features.posts.application.schemas import GenericListResponse
@@ -53,6 +54,53 @@ def _parse_create_payload(
     except ValidationError as exc:
         details: dict[str, Any] = {"body": exc.errors()}
         raise api_error(422, "VALIDATION_ERROR", "Validation failed.", details=details) from exc
+
+
+async def _parse_update_request(
+    request: Request,
+) -> tuple[LostPetUpdateRequest, list[UploadFile]]:
+    if request.headers.get("content-type", "").startswith("multipart/form-data"):
+        form = await request.form()
+        data: dict[str, Any] = dict(form)
+        uploads = [item for item in form.getlist("photos") if hasattr(item, "read")]
+        data.pop("photos", None)
+        if isinstance(data.get("last_seen_location"), str):
+            try:
+                data["last_seen_location"] = json.loads(data["last_seen_location"])
+            except json.JSONDecodeError as exc:
+                raise api_error(
+                    422,
+                    "VALIDATION_ERROR",
+                    "Validation failed.",
+                    details={"last_seen_location": ["invalid_json"]},
+                ) from exc
+    else:
+        try:
+            data = await request.json()
+        except Exception as exc:
+            raise api_error(
+                422,
+                "VALIDATION_ERROR",
+                "Validation failed.",
+                details={"body": ["invalid_json"]},
+            ) from exc
+        if not isinstance(data, dict):
+            raise api_error(
+                422,
+                "VALIDATION_ERROR",
+                "Validation failed.",
+                details={"body": ["object_required"]},
+            )
+        uploads = []
+    try:
+        return LostPetUpdateRequest.model_validate(data), uploads
+    except ValidationError as exc:
+        raise api_error(
+            422,
+            "VALIDATION_ERROR",
+            "Validation failed.",
+            details={"body": exc.errors()},
+        ) from exc
 
 
 @router.post(
@@ -165,6 +213,39 @@ def contact_owner(
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> None:
     lost_pets_service.contact_owner(lost_pet_id, current_user)
+
+
+@router.patch(
+    "/{lost_pet_id}",
+    response_model=ApiSuccess[LostPetResponse],
+    response_model_exclude_none=True,
+)
+async def update_lost_pet(
+    lost_pet_id: UUID,
+    request: Request,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[LostPetResponse]:
+    payload, uploads = await _parse_update_request(request)
+    photo_payloads = await read_image_uploads(uploads, purpose="lost_pet_update")
+    return ApiSuccess(
+        data=await run_upload_processing(
+            lost_pets_service.update_lost_pet,
+            lost_pet_id,
+            current_user,
+            payload,
+            photos=photo_payloads,
+        )
+    )
+
+
+@router.delete("/{lost_pet_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_lost_pet(
+    lost_pet_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> None:
+    lost_pets_service.delete_lost_pet(lost_pet_id, current_user)
 
 
 @router.get(

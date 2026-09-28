@@ -14,6 +14,10 @@ from geoalchemy2.elements import WKTElement
 from app.core.auth import AuthenticatedPrincipal, Role
 from app.core.config import Settings
 from app.core.container import AppContainer
+from app.features.adoption_posts.application.schemas import (
+    AdoptionFollowUpAnswer,
+)
+from app.features.adoption_posts.application.service import AdoptionPostsService
 from app.features.adoption_posts.infrastructure.repositories import SqlAlchemyAdoptionPostRepository
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
@@ -529,6 +533,197 @@ def test_conflicting_concurrent_answers_complete_only_once(feed_runtime) -> None
 
 
 @pytest.mark.integration
+def test_lost_pet_owner_edit_authorization_and_follow_up_history_preservation(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-edit-owner@example.com",
+    )
+    contact, contact_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-edit-contact@example.com",
+    )
+    other, other_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-edit-other@example.com",
+    )
+    pet_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+    assert (
+        client.post(
+            f"/api/v1/lost-pets/{pet_id}/contact",
+            headers={"Authorization": f"Bearer {contact_token}"},
+        ).status_code
+        == 204
+    )
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    update_url = f"/api/v1/lost-pets/{pet_id}"
+    changes = {
+        "pet_name": "Updated Mittens",
+        "additional_info": "Seen near the park.",
+        "last_seen_location": {"latitude": 41.31, "longitude": 69.26},
+        "owner_phone_number": "+998 91 234 56 78",
+        "owner_telegram_username": "mittens_owner",
+    }
+
+    assert client.patch(update_url, json=changes).status_code == 401
+    assert (
+        client.patch(
+            update_url,
+            headers={"Authorization": f"Bearer {other_token}"},
+            json=changes,
+        ).status_code
+        == 403
+    )
+    invalid_internal_change = client.patch(
+        update_url,
+        headers=owner_headers,
+        json={**changes, "is_resolved": True, "user_id": str(other.id)},
+    )
+    assert invalid_internal_change.status_code == 422
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        original_follow_up = (
+            session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).one()
+        )
+        original_due_at = original_follow_up.due_at
+
+    updated = client.patch(update_url, headers=owner_headers, json=changes)
+    assert updated.status_code == 200, updated.text
+    data = updated.json()["data"]
+    assert data["pet_name"] == "Updated Mittens"
+    assert data["owner_phone_number"] == "+998 91 234 5678"
+    assert data["owner_telegram_username"] == "mittens_owner"
+    assert data["additional_info"] == "Seen near the park."
+    assert data["last_seen_location"] == {"latitude": 41.31, "longitude": 69.26}
+    assert data["is_resolved"] is False
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        pet = session.get(schema.LostPet, pet_id)
+        follow_up = session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).one()
+        contacts = session.query(schema.LostPetContactEvent).filter_by(lost_pet_id=pet_id).all()
+        assert pet.user_id == owner.id
+        assert pet.is_resolved is False
+        assert follow_up.due_at == original_due_at
+        assert follow_up.completed_at is None
+        assert len(contacts) == 1
+        assert contacts[0].contacting_user_id == contact.id
+
+    active_feed = client.get("/api/v1/lost-pets").json()["data"]["items"]
+    assert str(pet_id) in {item["id"] for item in active_feed}
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        pet = session.get(schema.LostPet, pet_id)
+        pet.is_resolved = True
+    archived_edit = client.patch(
+        update_url,
+        headers=owner_headers,
+        json={"pet_name": "Archived Mittens"},
+    )
+    assert archived_edit.status_code == 200
+    assert archived_edit.json()["data"]["is_resolved"] is True
+
+
+@pytest.mark.integration
+def test_lost_pet_soft_delete_hides_public_surfaces_and_closes_pending_follow_up(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-delete-owner@example.com",
+    )
+    contact, contact_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-delete-contact@example.com",
+    )
+    _, other_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="lost-delete-other@example.com",
+    )
+    pet_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+    assert (
+        client.post(
+            f"/api/v1/lost-pets/{pet_id}/contact",
+            headers={"Authorization": f"Bearer {contact_token}"},
+        ).status_code
+        == 204
+    )
+    now = datetime.now(UTC)
+    with feed_runtime.db_session_manager.session_scope() as session:
+        session.add(
+            schema.LostPetFollowUp(
+                lost_pet_id=pet_id,
+                owner_id=owner.id,
+                due_at=now - timedelta(minutes=1),
+                completed_at=now - timedelta(minutes=2),
+                answer_yes=False,
+            )
+        )
+
+    delete_url = f"/api/v1/lost-pets/{pet_id}"
+    assert client.delete(delete_url).status_code == 401
+    assert (
+        client.delete(
+            delete_url,
+            headers={"Authorization": f"Bearer {other_token}"},
+        ).status_code
+        == 403
+    )
+    deleted = client.delete(
+        delete_url,
+        headers={"Authorization": f"Bearer {owner_token}"},
+    )
+    assert deleted.status_code == 204
+    assert (
+        client.delete(
+            delete_url,
+            headers={"Authorization": f"Bearer {owner_token}"},
+        ).status_code
+        == 204
+    )
+    assert client.get(delete_url).status_code == 404
+    assert (
+        client.post(
+            f"{delete_url}/contact",
+            headers={"Authorization": f"Bearer {contact_token}"},
+        ).status_code
+        == 404
+    )
+
+    mine = client.get(
+        "/api/v1/lost-pets/mine",
+        headers={"Authorization": f"Bearer {owner_token}"},
+    ).json()["data"]["items"]
+    public = client.get("/api/v1/lost-pets").json()["data"]["items"]
+    map_items = client.get(
+        "/api/v1/lost-pets/map",
+        params={"bbox": "69.1,41.2,69.3,41.4"},
+    ).json()["data"]["items"]
+    assert str(pet_id) not in {item["id"] for item in mine}
+    assert str(pet_id) not in {item["id"] for item in public}
+    assert str(pet_id) not in {item["id"] for item in map_items}
+
+    with feed_runtime.db_session_manager.session_scope() as session:
+        pet = session.get(schema.LostPet, pet_id)
+        follow_ups = session.query(schema.LostPetFollowUp).filter_by(lost_pet_id=pet_id).all()
+        contacts = session.query(schema.LostPetContactEvent).filter_by(lost_pet_id=pet_id).all()
+        assert pet.deleted_at is not None
+        assert pet.user_id == owner.id
+        assert {item.completed_at is None for item in follow_ups} == {False}
+        assert len(follow_ups) == 1
+        assert len(contacts) == 1
+        assert contacts[0].contacting_user_id == contact.id
+
+
+@pytest.mark.integration
 def test_feed_hydration_excludes_pet_resolved_after_key_query(feed_runtime) -> None:
     owner, _ = _create_user_with_token(
         feed_runtime.db_session_manager,
@@ -555,6 +750,36 @@ def test_feed_hydration_excludes_pet_resolved_after_key_query(feed_runtime) -> N
 
     with feed_runtime.db_session_manager.session_scope() as session:
         archived = SqlAlchemyLostPetRepository(session).get_by_ids([pet_id])
+        assert len(archived) == 1
+        assert archived[0].is_resolved is True
+
+
+@pytest.mark.integration
+def test_feed_hydration_excludes_rehomed_post_after_key_query(feed_runtime) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-hydration-owner@example.com",
+    )
+    post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+
+    class ResolveAfterKeysRepository(SqlAlchemyFeedRepository):
+        def list_mixed_feed_keys(self, **kwargs):
+            page = super().list_mixed_feed_keys(**kwargs)
+            with feed_runtime.db_session_manager.session_scope() as session:
+                session.get(schema.AdoptionPost, post_id).is_resolved = True
+            return page
+
+    service = FeedService(
+        db_session_manager=feed_runtime.db_session_manager,
+        repository_factory=ResolveAfterKeysRepository,
+        lost_pet_repository_factory=SqlAlchemyLostPetRepository,
+        adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
+    )
+    page = service.list_feed(FeedQuery.model_validate({"filter": "recent"}))
+    assert all(item.id != post_id for item in page.items)
+    with feed_runtime.db_session_manager.session_scope() as session:
+        archived = SqlAlchemyAdoptionPostRepository(session).get_by_ids([post_id])
         assert len(archived) == 1
         assert archived[0].is_resolved is True
 
@@ -1683,3 +1908,311 @@ def test_places_map_payload_is_compact_and_detail_is_loaded_separately(
     detail = detail_response.json()["data"]
     assert detail["phone"] == "+998 90 123 45 67"
     assert detail["description"] == "Long detail that should not be sent with map markers."
+
+
+@pytest.mark.integration
+def test_adoption_contact_follow_up_lifecycle_and_archive(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-lifecycle-owner@example.com",
+    )
+    contact, contact_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-lifecycle-contact@example.com",
+    )
+    post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    contact_headers = {"Authorization": f"Bearer {contact_token}"}
+    contact_url = f"/api/v1/adoption-posts/{post_id}/contact"
+    due_url = "/api/v1/adoption-posts/follow-ups/due"
+    assert client.get(f"/api/v1/adoption-posts/{post_id}").json()["data"]["is_resolved"] is False
+    assert str(post_id) in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    assert client.post(contact_url).status_code == 401
+    assert client.post(contact_url, headers=owner_headers).status_code == 403
+    assert client.post(contact_url, headers=contact_headers).status_code == 204
+    assert client.post(contact_url, headers=contact_headers).status_code == 204
+    with feed_runtime.db_session_manager.session_scope() as session:
+        events = (
+            session.query(schema.AdoptionContactEvent).filter_by(adoption_post_id=post_id).all()
+        )
+        follow_ups = (
+            session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).all()
+        )
+        assert len(events) == 2
+        assert len(follow_ups) == 1
+        first_due = follow_ups[0].due_at
+        assert first_due == events[0].created_at + timedelta(hours=1)
+        assert follow_ups[0].due_at == first_due
+        follow_up_id = follow_ups[0].id
+    assert client.get(due_url, headers=owner_headers).json()["data"] == []
+    assert (
+        client.post(
+            f"/api/v1/adoption-posts/follow-ups/{follow_up_id}/answer",
+            headers=owner_headers,
+            json={"answer": "yes"},
+        ).status_code
+        == 409
+    )
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_up = session.get(schema.AdoptionFollowUp, follow_up_id)
+        follow_up.due_at = datetime.now(UTC) - timedelta(seconds=1)
+    assert len(client.get(due_url, headers=owner_headers).json()["data"]) == 1
+    answer_url = f"/api/v1/adoption-posts/follow-ups/{follow_up_id}/answer"
+    assert (
+        client.post(answer_url, headers=contact_headers, json={"answer": "yes"}).status_code == 403
+    )
+    no_response = client.post(answer_url, headers=owner_headers, json={"answer": "no"})
+    assert no_response.status_code == 200
+    assert no_response.json()["data"]["is_resolved"] is False
+    assert client.post(answer_url, headers=owner_headers, json={"answer": "yes"}).status_code == 409
+    assert client.post(contact_url, headers=contact_headers).status_code == 204
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_ups = (
+            session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).all()
+        )
+        assert len(follow_ups) == 2
+        assert follow_ups[0].completed_at is not None
+        assert follow_ups[1].completed_at is None
+        assert (
+            len(
+                session.query(schema.AdoptionContactEvent).filter_by(adoption_post_id=post_id).all()
+            )
+            == 3
+        )
+        follow_ups[1].due_at = datetime.now(UTC) - timedelta(seconds=1)
+        next_id = follow_ups[1].id
+    yes_response = client.post(
+        f"/api/v1/adoption-posts/follow-ups/{next_id}/answer",
+        headers=owner_headers,
+        json={"answer": "yes"},
+    )
+    assert yes_response.status_code == 200
+    assert yes_response.json()["data"]["is_resolved"] is True
+    assert client.post(contact_url, headers=contact_headers).status_code == 404
+    assert str(post_id) not in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    assert str(post_id) not in [
+        item["id"] for item in client.get("/api/v1/adoption-posts").json()["data"]["items"]
+    ]
+    mine = client.get("/api/v1/adoption-posts/mine", headers=owner_headers)
+    assert mine.status_code == 200
+    assert [item["id"] for item in mine.json()["data"]["items"]] == [str(post_id)]
+    assert mine.json()["data"]["items"][0]["is_resolved"] is True
+    assert client.get(f"/api/v1/adoption-posts/{post_id}").json()["data"]["is_resolved"] is True
+    assert (
+        client.get("/api/v1/adoption-posts/mine", headers=contact_headers).json()["data"]["items"]
+        == []
+    )
+    assert client.delete(f"/api/v1/adoption-posts/{post_id}",
+                         headers=owner_headers).status_code == 204
+    with feed_runtime.db_session_manager.session_scope() as session:
+        completed = session.query(schema.AdoptionFollowUp).filter_by(
+            adoption_post_id=post_id).all()
+        assert len(completed) == 2
+        assert all(item.completed_at is not None for item in completed)
+        assert session.query(schema.AdoptionContactEvent).filter_by(
+            adoption_post_id=post_id).count() == 3
+
+
+@pytest.mark.integration
+def test_adoption_follow_up_due_at_exact_boundary(feed_runtime) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-boundary-owner@example.com",
+    )
+    contact, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-boundary-contact@example.com",
+    )
+    post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+    service = AdoptionPostsService(
+        db_session_manager=feed_runtime.db_session_manager,
+        repository_factory=SqlAlchemyAdoptionPostRepository,
+    )
+    service.contact_owner(post_id, contact)
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_up = session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).one()
+        due_at = follow_up.due_at
+        repository = SqlAlchemyAdoptionPostRepository(session)
+        assert repository.list_due_follow_ups(owner.id, due_at - timedelta(microseconds=1)) == []
+        due = repository.list_due_follow_ups(owner.id, due_at)
+        assert [item.id for item in due] == [follow_up.id]
+
+
+@pytest.mark.integration
+def test_concurrent_adoption_contacts_use_first_recorded_time(feed_runtime) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-race-owner@example.com",
+    )
+    contact_a, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-race-a@example.com",
+    )
+    contact_b, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-race-b@example.com",
+    )
+    post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+    first_entered = Event()
+    release_first = Event()
+
+    class DelayedRepository(SqlAlchemyAdoptionPostRepository):
+        def record_contact(self, adoption_post_id: UUID, contacting_user_id: UUID) -> bool:
+            if contacting_user_id == contact_a.id:
+                first_entered.set()
+                assert release_first.wait(timeout=10)
+            return super().record_contact(adoption_post_id, contacting_user_id)
+
+    service = AdoptionPostsService(
+        db_session_manager=feed_runtime.db_session_manager, repository_factory=DelayedRepository
+    )
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(service.contact_owner, post_id, contact_a)
+        assert first_entered.wait(timeout=10)
+        try:
+            pool.submit(service.contact_owner, post_id, contact_b).result(timeout=10)
+        finally:
+            release_first.set()
+        first.result(timeout=10)
+    with feed_runtime.db_session_manager.session_scope() as session:
+        events = (
+            session.query(schema.AdoptionContactEvent).filter_by(adoption_post_id=post_id).all()
+        )
+        follow_ups = (
+            session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).all()
+        )
+        assert len(events) == 2
+        assert len(follow_ups) == 1
+        assert follow_ups[0].due_at == min(event.created_at for event in events) + timedelta(
+            hours=1
+        )
+
+
+@pytest.mark.integration
+def test_conflicting_concurrent_adoption_answers_complete_only_once(feed_runtime) -> None:
+    owner, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-answer-owner@example.com",
+    )
+    contact, _ = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-answer-contact@example.com",
+    )
+    post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+    service = AdoptionPostsService(
+        db_session_manager=feed_runtime.db_session_manager,
+        repository_factory=SqlAlchemyAdoptionPostRepository,
+    )
+    service.contact_owner(post_id, contact)
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_up = session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).one()
+        follow_up.due_at = datetime.now(UTC) - timedelta(seconds=1)
+        follow_up_id = follow_up.id
+    start = Barrier(3)
+
+    def answer(value: str) -> bool | int:
+        start.wait(timeout=10)
+        try:
+            return service.answer_follow_up(
+                follow_up_id,
+                owner,
+                AdoptionFollowUpAnswer(answer=value),
+            ).is_resolved
+        except HTTPException as exc:
+            return exc.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        yes = pool.submit(answer, "yes")
+        no = pool.submit(answer, "no")
+        start.wait(timeout=10)
+        results = {yes.result(timeout=10), no.result(timeout=10)}
+    assert 409 in results
+    with feed_runtime.db_session_manager.session_scope() as session:
+        follow_up = session.get(schema.AdoptionFollowUp, follow_up_id)
+        post = session.get(schema.AdoptionPost, post_id)
+        assert follow_up.completed_at is not None
+        assert post.is_resolved is follow_up.answer_yes
+
+
+@pytest.mark.integration
+def test_adoption_edit_preserves_follow_up_and_delete_removes_pending(
+    client: TestClient,
+    feed_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-edit-owner@example.com",
+    )
+    contact, contact_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="adoption-edit-contact@example.com",
+    )
+    post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    contact_headers = {"Authorization": f"Bearer {contact_token}"}
+    assert (
+        client.post(
+            f"/api/v1/adoption-posts/{post_id}/contact", headers=contact_headers
+        ).status_code
+        == 204
+    )
+    with feed_runtime.db_session_manager.session_scope() as session:
+        due_at = (
+            session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).one().due_at
+        )
+    url = f"/api/v1/adoption-posts/{post_id}"
+    assert client.patch(url, json={"pet_name": "Other"}).status_code == 401
+    assert client.patch(url, headers=contact_headers, json={"pet_name": "Other"}).status_code == 403
+    assert client.patch(url, headers=owner_headers, json={"is_resolved": True}).status_code == 422
+    assert (
+        client.patch(url, headers=owner_headers, json={"user_id": str(contact.id)}).status_code
+        == 422
+    )
+    edited = client.patch(url, headers=owner_headers, json={"pet_name": "New name"})
+    assert edited.status_code == 200
+    assert edited.json()["data"]["pet_name"] == "New name"
+    assert edited.json()["data"]["is_resolved"] is False
+    with feed_runtime.db_session_manager.session_scope() as session:
+        assert (
+            session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).one().due_at
+            == due_at
+        )
+        assert (
+            session.query(schema.AdoptionContactEvent).filter_by(adoption_post_id=post_id).count()
+            == 1
+        )
+    assert client.delete(url).status_code == 401
+    assert client.delete(url, headers=contact_headers).status_code == 403
+    assert client.delete(url, headers=owner_headers).status_code == 204
+    assert client.post(f"{url}/contact", headers=contact_headers).status_code == 404
+    assert str(post_id) not in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    with feed_runtime.db_session_manager.session_scope() as session:
+        post = session.get(schema.AdoptionPost, post_id)
+        assert post.deleted_at is not None
+        assert (
+            session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).count() == 0
+        )
+        assert (
+            session.query(schema.AdoptionContactEvent).filter_by(adoption_post_id=post_id).count()
+            == 1
+        )

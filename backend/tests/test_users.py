@@ -471,9 +471,7 @@ def test_delete_me_removes_unanswerable_lost_pet_follow_up_and_keeps_history(
             contact.id,
         )
 
-    response = client.delete(
-        "/api/v1/users/me", headers={"Authorization": f"Bearer {token}"}
-    )
+    response = client.delete("/api/v1/users/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 204
 
     with users_runtime.db_session_manager.session_scope() as session:
@@ -488,6 +486,82 @@ def test_delete_me_removes_unanswerable_lost_pet_follow_up_and_keeps_history(
         assert completed.answer_yes is False
         assert completed.owner_id is None
         event = session.get(schema.LostPetContactEvent, event_id)
+        assert event is not None
+        assert event.owner_id is None
+        assert event.contacting_user_id == contact_id
+
+
+def test_delete_me_removes_pending_adoption_follow_up_and_keeps_history(
+    client: TestClient,
+    users_runtime,
+) -> None:
+    owner, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="delete-adoption-owner@example.com",
+    )
+    with users_runtime.db_session_manager.session_scope() as session:
+        contact = schema.User(email="delete-adoption-contact@example.com", name="Contact")
+        session.add(contact)
+        session.flush()
+        post = schema.AdoptionPost(
+            user_id=owner.id,
+            pet_name="Mittens",
+            owner_phone_number="+998 90 123 45 67",
+            owner_phone_publication_consent=True,
+        )
+        post.photos = [
+            schema.AdoptionPostPhoto(
+                photo_url="https://example.com/adoption.jpg",
+                position=0,
+            )
+        ]
+        session.add(post)
+        session.flush()
+        now = datetime.now(UTC)
+        event = schema.AdoptionContactEvent(
+            adoption_post_id=post.id,
+            owner_id=owner.id,
+            contacting_user_id=contact.id,
+            created_at=now,
+        )
+        completed = schema.AdoptionFollowUp(
+            adoption_post_id=post.id,
+            owner_id=owner.id,
+            due_at=now - timedelta(hours=2),
+            completed_at=now - timedelta(hours=1),
+            answer_yes=False,
+        )
+        pending = schema.AdoptionFollowUp(
+            adoption_post_id=post.id,
+            owner_id=owner.id,
+            due_at=now + timedelta(hours=1),
+        )
+        session.add_all([event, completed, pending])
+        session.flush()
+        post_id, event_id, completed_id, pending_id, contact_id = (
+            post.id,
+            event.id,
+            completed.id,
+            pending.id,
+            contact.id,
+        )
+    response = client.delete(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 204
+    with users_runtime.db_session_manager.session_scope() as session:
+        post = session.get(schema.AdoptionPost, post_id)
+        assert post.user_id is None
+        assert post.deleted_at is not None
+        assert post.is_public is False
+        assert session.get(schema.AdoptionFollowUp, pending_id) is None
+        completed = session.get(schema.AdoptionFollowUp, completed_id)
+        assert completed is not None
+        assert completed.owner_id is None
+        assert completed.answer_yes is False
+        event = session.get(schema.AdoptionContactEvent, event_id)
         assert event is not None
         assert event.owner_id is None
         assert event.contacting_user_id == contact_id

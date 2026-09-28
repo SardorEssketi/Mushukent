@@ -231,7 +231,16 @@ Users without a profile phone number may view adoption posts, but must add a pho
 
 Profile phone numbers used for adoption contact shall use the Uzbekistan format `+998 XX XXX XXXX`. Invalid or non-Uzbek phone numbers shall be rejected with a clear validation message.
 
-Adoption posts shall include a Contact Owner action that initiates a phone call to the stored owner phone number.
+Adoption posts shall include a Contact Owner action that opens the existing phone or Telegram contact method after recording the action.
+Contact Owner requires sign-in and records the contact event before opening the
+existing phone or Telegram action. One hour after the first contact in a pending
+cycle, an in-app owner follow-up asks "Did your pet find a new home?" with only
+Yes and No. Additional contacts are recorded without changing the one pending
+follow-up or its due time. Yes marks the post rehomed and removes it from Feed;
+No leaves it active and permits a later contact to start a new cycle. Rehomed
+posts remain in the owner's profile Rehoming history. Owners may edit or soft
+delete active and rehomed posts. A mandatory phone publication checkbox is not
+part of this flow; a usable profile phone number remains required.
 Cat Records
 
 Dedicated cat profile pages are not required for MVP. Cat records remain

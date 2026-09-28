@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_create_screen.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_detail_screen.dart';
+import '../../features/adoption_posts/presentation/screens/adoption_post_edit_screen.dart';
+import '../../features/adoption_posts/presentation/screens/my_adoption_posts_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_details_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_location_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
@@ -19,6 +21,7 @@ import '../../features/leaderboards/presentation/screens/leaderboard_screen.dart
 import '../../features/legal/presentation/screens/legal_document_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_create_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_detail_screen.dart';
+import '../../features/lost_pets/presentation/screens/lost_pet_edit_screen.dart';
 import '../../features/lost_pets/presentation/screens/my_lost_pets_screen.dart';
 import '../../features/map/presentation/screens/map_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_report_detail_screen.dart';
@@ -264,6 +267,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     builder: (context, state) => const MyLostPetsScreen(),
                   ),
                   GoRoute(
+                    path: 'adoption-posts',
+                    builder: (context, state) => const MyAdoptionPostsScreen(),
+                  ),
+                  GoRoute(
                     path: 'settings',
                     builder: (context, state) => const SettingsScreen(),
                     routes: [
@@ -352,9 +359,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/lost-pets/:lostPetId/edit',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => LostPetEditScreen(
+          lostPetId: state.pathParameters['lostPetId'] ?? '',
+        ),
+      ),
+      GoRoute(
         path: '/adoption-posts/:adoptionPostId',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => AdoptionPostDetailScreen(
+          adoptionPostId: state.pathParameters['adoptionPostId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/adoption-posts/:adoptionPostId/edit',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => AdoptionPostEditScreen(
           adoptionPostId: state.pathParameters['adoptionPostId'] ?? '',
         ),
       ),

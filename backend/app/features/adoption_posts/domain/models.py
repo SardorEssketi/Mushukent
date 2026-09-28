@@ -29,6 +29,7 @@ class AdoptionPostRecord:
     photos: list[AdoptionPostPhotoRecord]
     additional_info: str | None
     is_public: bool
+    is_resolved: bool
     comment_count: int
     created_at: datetime
     updated_at: datetime
@@ -61,3 +62,21 @@ class AdoptionPostCreateDraft:
     owner_phone_publication_consent: bool
     additional_info: str | None
     photos: list[AdoptionPostPhotoDraft]
+
+
+@dataclass(slots=True)
+class AdoptionPostUpdateDraft:
+    pet_name: str
+    owner_phone_number: str
+    owner_telegram_username: str | None
+    additional_info: str | None
+    photos: list[AdoptionPostPhotoDraft] | None
+    updated_at: datetime
+
+
+@dataclass(slots=True)
+class AdoptionFollowUpRecord:
+    id: UUID
+    adoption_post_id: UUID
+    pet_name: str
+    due_at: datetime

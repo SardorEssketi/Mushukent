@@ -109,6 +109,7 @@ class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
             ).where(
                 schema.AdoptionPost.deleted_at.is_(None),
                 schema.AdoptionPost.is_public.is_(True),
+                schema.AdoptionPost.is_resolved.is_(False),
             )
             source_indexes.append(adoption_index)
 

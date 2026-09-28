@@ -258,7 +258,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               Text(strings.lastSeen,
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
-              _LostPetLocationPicker(
+              LostPetLocationPicker(
                 strings: strings,
                 selectedLocation: _selectedLocation,
                 onSelected: (location) {
@@ -320,8 +320,9 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   }
 }
 
-class _LostPetLocationPicker extends StatefulWidget {
-  const _LostPetLocationPicker({
+class LostPetLocationPicker extends StatefulWidget {
+  const LostPetLocationPicker({
+    super.key,
     required this.strings,
     required this.selectedLocation,
     required this.onSelected,
@@ -332,10 +333,10 @@ class _LostPetLocationPicker extends StatefulWidget {
   final ValueChanged<GeoPoint> onSelected;
 
   @override
-  State<_LostPetLocationPicker> createState() => _LostPetLocationPickerState();
+  State<LostPetLocationPicker> createState() => _LostPetLocationPickerState();
 }
 
-class _LostPetLocationPickerState extends State<_LostPetLocationPicker> {
+class _LostPetLocationPickerState extends State<LostPetLocationPicker> {
   static const _initialCenter = LatLng(41.3111, 69.2797);
   final MapController _mapController = MapController();
   bool _locating = false;

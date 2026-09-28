@@ -25,6 +25,8 @@ def test_metadata_discovers_all_mvp_tables() -> None:
         "lost_pet_follow_ups",
         "adoption_post_photos",
         "adoption_posts",
+        "adoption_contact_events",
+        "adoption_follow_ups",
         "reports",
         "user_blocks",
         "leaderboard_cache",

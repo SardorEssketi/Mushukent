@@ -1660,11 +1660,11 @@ class AppStrings {
   String get adoptionPhoneHelp {
     return switch (this) {
       _UzbekStrings() =>
-        'Odamlar asrab olish haqida bogʻlanishi uchun profilingizdagi telefon raqami kerak.',
+        'Asrab olish posti uchun profilingizdagi telefon raqami kerak. Kirgan foydalanuvchilar «Egasi bilan bogʻlanish» orqali sizga qoʻngʻiroq qilishi mumkin.',
       _RussianStrings() =>
-        'Людям нужен телефон из вашего профиля, чтобы связаться по поводу пристройства.',
+        'Для объявления нужен номер телефона из профиля. Вошедшие пользователи смогут позвонить вам через «Связаться с владельцем».',
       _ =>
-        'People need your profile phone number to contact you about adoption.',
+        'Your profile phone number is required. Signed-in users can call you through Contact Owner.',
     };
   }
 
@@ -2611,6 +2611,60 @@ class AppStrings {
         _ => 'Did you find your pet?',
       };
 
+  String get didYourPetFindNewHome => switch (this) {
+        _UzbekStrings() => 'Uy hayvoningiz yangi uy topdimi?',
+        _RussianStrings() => 'Ваш питомец нашёл новый дом?',
+        _ => 'Did your pet find a new home?',
+      };
+
+  String get myAdoptionPosts => switch (this) {
+        _UzbekStrings() => 'Mening asrab olish postlarim',
+        _RussianStrings() => 'Мои объявления о пристройстве',
+        _ => 'My rehoming posts',
+      };
+
+  String get editAdoptionPost => switch (this) {
+        _UzbekStrings() => 'Asrab olish postini tahrirlash',
+        _RussianStrings() => 'Редактировать объявление о пристройстве',
+        _ => 'Edit rehoming post',
+      };
+
+  String get deleteAdoptionPost => switch (this) {
+        _UzbekStrings() => 'Asrab olish postini o‘chirish',
+        _RussianStrings() => 'Удалить объявление о пристройстве',
+        _ => 'Delete rehoming post',
+      };
+
+  String get deleteAdoptionPostMessage => switch (this) {
+        _UzbekStrings() => 'Bu asrab olish posti olib tashlanadi.',
+        _RussianStrings() => 'Это объявление о пристройстве будет удалено.',
+        _ => 'This rehoming post will be removed.',
+      };
+
+  String get activeAdoptionPost => switch (this) {
+        _UzbekStrings() => 'Yangi uy qidirmoqda',
+        _RussianStrings() => 'Ищет новый дом',
+        _ => 'Looking for a home',
+      };
+
+  String get rehomedAdoptionPost => switch (this) {
+        _UzbekStrings() => 'Yangi uy topdi',
+        _RussianStrings() => 'Нашёл новый дом',
+        _ => 'Rehomed',
+      };
+
+  String get noAdoptionPostsYet => switch (this) {
+        _UzbekStrings() => 'Hozircha asrab olish postlari yo‘q.',
+        _RussianStrings() => 'Пока нет объявлений о пристройстве.',
+        _ => 'No rehoming posts yet.',
+      };
+
+  String get loadMoreAdoptionPosts => switch (this) {
+        _UzbekStrings() => 'Yana postlarni yuklash',
+        _RussianStrings() => 'Загрузить ещё объявления',
+        _ => 'Load more rehoming posts',
+      };
+
   String get followUpYes => switch (this) {
         _UzbekStrings() => 'Ha',
         _RussianStrings() => 'Да',
@@ -2627,6 +2681,24 @@ class AppStrings {
         _UzbekStrings() => 'Mening yo‘qolgan uy hayvonlarim',
         _RussianStrings() => 'Мои потерянные питомцы',
         _ => 'My lost pets',
+      };
+
+  String get editLostPet => switch (this) {
+        _UzbekStrings() => 'Yo‘qolgan jonivor postini tahrirlash',
+        _RussianStrings() => 'Редактировать объявление о питомце',
+        _ => 'Edit lost pet',
+      };
+
+  String get deleteLostPet => switch (this) {
+        _UzbekStrings() => 'Yo‘qolgan jonivor postini o‘chirish',
+        _RussianStrings() => 'Удалить объявление о питомце',
+        _ => 'Delete lost pet',
+      };
+
+  String get deleteLostPetMessage => switch (this) {
+        _UzbekStrings() => 'Bu yo‘qolgan jonivor posti olib tashlanadi.',
+        _RussianStrings() => 'Это объявление о питомце будет удалено.',
+        _ => 'This lost pet post will be removed.',
       };
 
   String get activeLostPet => switch (this) {

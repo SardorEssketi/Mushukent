@@ -132,7 +132,7 @@ class FeedService:
                     lost_pet_ids, active_only=True
                 )
                 adoption_posts = self.adoption_post_repository_factory(session).get_by_ids(
-                    adoption_ids
+                    adoption_ids, active_only=True
                 )
                 item_by_key: dict[tuple[FeedItemType, UUID], FeedListItem] = {
                     **{

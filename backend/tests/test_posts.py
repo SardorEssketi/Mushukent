@@ -1004,6 +1004,135 @@ def test_owner_can_replace_post_photos_and_history_preserves_versions(
     assert history[0]["after"]["photo_urls"] == payload["photo_urls"]
 
 
+def test_owner_can_replace_lost_pet_photos_without_partial_update_on_failure(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="lost-pet-photo-editor@example.com",
+    )
+    with posts_runtime.db_session_manager.session_scope() as session:
+        pet = schema.LostPet(
+            user_id=owner.id,
+            pet_name="Photo Mittens",
+            owner_phone_number="+998 90 123 4567",
+            owner_phone_publication_consent=True,
+            last_seen_location=WKTElement("POINT(69.25 41.3)", srid=4326),
+            is_public=True,
+            is_resolved=False,
+        )
+        pet.photos = [schema.LostPetPhoto(photo_url="https://example.com/old.jpg")]
+        session.add(pet)
+        session.flush()
+        pet_id = pet.id
+
+    headers = {"Authorization": f"Bearer {owner_token}"}
+    path = f"/api/v1/lost-pets/{pet_id}"
+    replaced = client.patch(
+        path,
+        headers=headers,
+        files=[("photos", ("new.jpg", _jpeg_bytes(), "image/jpeg"))],
+    )
+    assert replaced.status_code == 200, replaced.text
+    replacement_urls = replaced.json()["data"]["photo_urls"]
+    assert len(replacement_urls) == 1
+    assert replacement_urls[0].startswith("https://storage.example/lost-pets/")
+
+    invalid = client.patch(
+        path,
+        headers=headers,
+        files=[("photos", ("invalid.jpg", b"not-an-image", "image/jpeg"))],
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["error"]["code"] == "INVALID_IMAGE"
+
+    with posts_runtime.db_session_manager.session_scope() as session:
+        stored = session.get(schema.LostPet, pet_id)
+        assert [photo.photo_url for photo in stored.photos] == replacement_urls
+        assert stored.pet_name == "Photo Mittens"
+
+
+def test_adoption_create_needs_contact_phone_but_no_publication_checkbox(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="adoption-create-owner@example.com",
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    files = [("photos", ("pet.jpg", _jpeg_bytes(), "image/jpeg"))]
+    no_phone = client.post(
+        "/api/v1/adoption-posts",
+        headers=headers,
+        data={"pet_name": "Mittens"},
+        files=files,
+    )
+    assert no_phone.status_code == 403
+    assert no_phone.json()["error"]["code"] == "PHONE_NUMBER_REQUIRED"
+    with posts_runtime.db_session_manager.session_scope() as session:
+        session.get(schema.User, owner.id).phone_number = "+998 90 123 45 67"
+    created = client.post(
+        "/api/v1/adoption-posts",
+        headers=headers,
+        data={"pet_name": "Mittens"},
+        files=files,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["data"]["is_resolved"] is False
+
+
+def test_owner_can_replace_adoption_photos_without_partial_update_on_failure(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="adoption-photo-editor@example.com",
+    )
+    with posts_runtime.db_session_manager.session_scope() as session:
+        post = schema.AdoptionPost(
+            user_id=owner.id,
+            pet_name="Photo Mittens",
+            owner_phone_number="+998 90 123 4567",
+            owner_phone_publication_consent=True,
+            is_public=True,
+            is_resolved=False,
+        )
+        post.photos = [schema.AdoptionPostPhoto(photo_url="https://example.com/old.jpg")]
+        session.add(post)
+        session.flush()
+        post_id = post.id
+
+    headers = {"Authorization": f"Bearer {owner_token}"}
+    path = f"/api/v1/adoption-posts/{post_id}"
+    replaced = client.patch(
+        path,
+        headers=headers,
+        files=[("photos", ("new.jpg", _jpeg_bytes(), "image/jpeg"))],
+    )
+    assert replaced.status_code == 200, replaced.text
+    replacement_urls = replaced.json()["data"]["photo_urls"]
+    assert len(replacement_urls) == 1
+    assert replacement_urls[0].startswith("https://storage.example/adoption/")
+
+    invalid = client.patch(
+        path,
+        headers=headers,
+        files=[("photos", ("invalid.jpg", b"not-an-image", "image/jpeg"))],
+    )
+    assert invalid.status_code == 422
+    assert invalid.json()["error"]["code"] == "INVALID_IMAGE"
+    with posts_runtime.db_session_manager.session_scope() as session:
+        stored = session.get(schema.AdoptionPost, post_id)
+        assert [photo.photo_url for photo in stored.photos] == replacement_urls
+        assert stored.pet_name == "Photo Mittens"
+
+
 def test_post_delete_authorization_and_moderator_audit(
     client: TestClient,
     posts_runtime,

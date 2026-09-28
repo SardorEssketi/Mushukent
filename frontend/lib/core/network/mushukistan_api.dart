@@ -19,6 +19,19 @@ final postMutationRevisionProvider = StateProvider<int>((ref) => 0);
 /// Lost Pets resolved in this app session stay hidden while Map refreshes.
 final resolvedLostPetIdsProvider = StateProvider<Set<String>>((ref) => {});
 
+/// Successful Lost Pet mutations stay visible locally if refreshes fail.
+final lostPetMutationOverridesProvider =
+    StateProvider<Map<String, LostPetData>>((ref) => const {});
+final deletedLostPetIdsProvider = StateProvider<Set<String>>((ref) => const {});
+
+/// Successful Rehoming mutations stay visible locally if refreshes fail.
+final adoptionMutationOverridesProvider =
+    StateProvider<Map<String, AdoptionPostData>>((ref) => const {});
+final deletedAdoptionIdsProvider =
+    StateProvider<Set<String>>((ref) => const {});
+final resolvedAdoptionIdsProvider =
+    StateProvider<Set<String>>((ref) => const {});
+
 class MushukistanApi {
   MushukistanApi({required MushukistanApiClient client}) : _client = client;
 
@@ -180,6 +193,43 @@ class MushukistanApi {
       'adoption-posts/$adoptionPostId',
       authenticated: false,
       decoder: (json) => AdoptionPostData.fromJson(json),
+    );
+  }
+
+  Future<void> contactAdoptionOwner(String adoptionPostId) async {
+    await _client.postJson<Object?>(
+      'adoption-posts/$adoptionPostId/contact',
+      decoder: (_) => null,
+    );
+  }
+
+  Future<List<AdoptionFollowUpData>> listDueAdoptionFollowUps() {
+    return _client.get<List<AdoptionFollowUpData>>(
+      'adoption-posts/follow-ups/due',
+      decoder: (json) => _readList(json)
+          .map((item) => AdoptionFollowUpData.fromJson(item))
+          .toList(growable: false),
+    );
+  }
+
+  Future<AdoptionPostData> answerAdoptionFollowUp(String followUpId,
+      {required bool yes}) {
+    return _client.postJson<AdoptionPostData>(
+      'adoption-posts/follow-ups/$followUpId/answer',
+      body: {'answer': yes ? 'yes' : 'no'},
+      decoder: (json) => AdoptionPostData.fromJson(json),
+    );
+  }
+
+  Future<ApiPage<AdoptionPostData>> listMyAdoptionPosts(
+      {int limit = 50, String? cursor}) {
+    return _client.get<ApiPage<AdoptionPostData>>(
+      'adoption-posts/mine',
+      queryParameters: {'limit': limit, if (cursor != null) 'cursor': cursor},
+      decoder: (json) => ApiPage.fromJson(
+        json,
+        (item) => AdoptionPostData.fromJson(item),
+      ),
     );
   }
 
@@ -752,16 +802,71 @@ class MushukistanApi {
     );
   }
 
+  Future<LostPetData> updateLostPet({
+    required String lostPetId,
+    required String petName,
+    required String phoneNumber,
+    required String? telegramUsername,
+    required GeoPoint lastSeenLocation,
+    required String? additionalInfo,
+    List<LostPetPhotoUpload>? replacementPhotos,
+  }) {
+    final trimmedTelegram = telegramUsername?.trim();
+    final normalizedTelegram =
+        trimmedTelegram != null && trimmedTelegram.startsWith('@')
+            ? trimmedTelegram.substring(1)
+            : trimmedTelegram;
+    final fields = <String, Object?>{
+      'pet_name': petName.trim(),
+      'owner_phone_number': phoneNumber.trim(),
+      'owner_telegram_username':
+          normalizedTelegram?.isEmpty == true ? null : normalizedTelegram,
+      'last_seen_location': lastSeenLocation.toJson(),
+      'additional_info': additionalInfo?.trim().isEmpty == true
+          ? null
+          : additionalInfo?.trim(),
+    };
+    if (replacementPhotos == null) {
+      return _client.patchJson<LostPetData>(
+        'lost-pets/$lostPetId',
+        body: fields,
+        decoder: (json) => LostPetData.fromJson(json),
+      );
+    }
+    final formData = FormData.fromMap(<String, dynamic>{
+      ...fields,
+      'owner_telegram_username': normalizedTelegram ?? '',
+      'additional_info': additionalInfo?.trim() ?? '',
+      'last_seen_location': jsonEncode(lastSeenLocation.toJson()),
+      'photos': replacementPhotos
+          .map(
+            (photo) => MultipartFile.fromBytes(
+              photo.bytes,
+              filename: photo.filename,
+              contentType: MediaType.parse(photo.contentType),
+            ),
+          )
+          .toList(growable: false),
+    });
+    return _client.patchMultipart<LostPetData>(
+      'lost-pets/$lostPetId',
+      formData: formData,
+      decoder: (json) => LostPetData.fromJson(json),
+    );
+  }
+
+  Future<void> deleteLostPet(String lostPetId) {
+    return _client.delete('lost-pets/$lostPetId');
+  }
+
   Future<AdoptionPostData> createAdoptionPost({
     required List<LostPetPhotoUpload> photos,
     required String petName,
-    required bool ownerPhonePublicationConsent,
     String? additionalInfo,
   }) {
     final formData = FormData.fromMap(
       <String, dynamic>{
         'pet_name': petName.trim(),
-        'owner_phone_publication_consent': ownerPhonePublicationConsent,
         if (additionalInfo != null && additionalInfo.trim().isNotEmpty)
           'additional_info': additionalInfo.trim(),
         'photos': photos
@@ -781,6 +886,40 @@ class MushukistanApi {
       formData: formData,
       decoder: (json) => AdoptionPostData.fromJson(json),
     );
+  }
+
+  Future<AdoptionPostData> updateAdoptionPost({
+    required String adoptionPostId,
+    required String petName,
+    required String phoneNumber,
+    required String telegramUsername,
+    required String additionalInfo,
+    List<LostPetPhotoUpload>? replacementPhotos,
+  }) {
+    final fields = <String, dynamic>{
+      'pet_name': petName.trim(),
+      'owner_phone_number': phoneNumber.trim(),
+      'owner_telegram_username': telegramUsername.trim(),
+      'additional_info': additionalInfo.trim(),
+    };
+    if (replacementPhotos != null) {
+      fields['photos'] = replacementPhotos
+          .map((photo) => MultipartFile.fromBytes(
+                photo.bytes,
+                filename: photo.filename,
+                contentType: MediaType.parse(photo.contentType),
+              ))
+          .toList(growable: false);
+    }
+    return _client.patchMultipart<AdoptionPostData>(
+      'adoption-posts/$adoptionPostId',
+      formData: FormData.fromMap(fields),
+      decoder: (json) => AdoptionPostData.fromJson(json),
+    );
+  }
+
+  Future<void> deleteAdoptionPost(String adoptionPostId) {
+    return _client.delete('adoption-posts/$adoptionPostId');
   }
 }
 
@@ -1296,6 +1435,30 @@ class LostPetMapData extends FeedItem {
   }
 }
 
+class AdoptionFollowUpData {
+  const AdoptionFollowUpData({
+    required this.id,
+    required this.adoptionPostId,
+    required this.petName,
+    required this.dueAt,
+  });
+
+  final String id;
+  final String adoptionPostId;
+  final String petName;
+  final DateTime dueAt;
+
+  factory AdoptionFollowUpData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return AdoptionFollowUpData(
+      id: _readString(map['id']),
+      adoptionPostId: _readString(map['adoption_post_id']),
+      petName: _readString(map['pet_name']),
+      dueAt: _readDateTime(map['due_at']),
+    );
+  }
+}
+
 class AdoptionPostData extends FeedItem {
   const AdoptionPostData({
     required this.id,
@@ -1309,6 +1472,7 @@ class AdoptionPostData extends FeedItem {
     this.author,
     this.thumbUrl,
     this.additionalInfo,
+    this.isResolved = false,
   }) : super();
 
   @override
@@ -1323,6 +1487,7 @@ class AdoptionPostData extends FeedItem {
   final String? thumbUrl;
   final List<String> photoUrls;
   final String? additionalInfo;
+  final bool isResolved;
   final int commentCount;
   @override
   final DateTime createdAt;
@@ -1345,6 +1510,7 @@ class AdoptionPostData extends FeedItem {
       thumbUrl: _readStringOrNull(map['thumb_url']),
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
       additionalInfo: _readStringOrNull(map['additional_info']),
+      isResolved: map['is_resolved'] == true,
       commentCount: _readInt(map['comment_count']),
       createdAt: _readDateTime(map['created_at']),
     );

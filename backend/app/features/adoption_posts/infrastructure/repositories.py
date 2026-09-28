@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -10,10 +10,12 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.features.adoption_posts.domain.models import (
+    AdoptionFollowUpRecord,
     AdoptionPostCreateDraft,
     AdoptionPostPage,
     AdoptionPostPhotoRecord,
     AdoptionPostRecord,
+    AdoptionPostUpdateDraft,
 )
 from app.features.posts.domain.models import PostAuthorSummary
 from app.infrastructure.db.models import schema
@@ -32,6 +34,7 @@ class SqlAlchemyAdoptionPostRepository:
             owner_telegram_username=draft.owner_telegram_username,
             owner_phone_publication_consent=draft.owner_phone_publication_consent,
             additional_info=draft.additional_info,
+            is_resolved=False,
             is_public=True,
         )
         adoption_post.photos = [
@@ -50,8 +53,10 @@ class SqlAlchemyAdoptionPostRepository:
             raise RuntimeError("Created adoption post could not be loaded.")
         return created
 
-    def get_by_id(self, adoption_post_id: UUID) -> AdoptionPostRecord | None:
-        item = self.session.scalar(
+    def get_by_id(
+        self, adoption_post_id: UUID, *, for_update: bool = False, include_deleted: bool = False
+    ) -> AdoptionPostRecord | None:
+        statement = (
             select(schema.AdoptionPost)
             .options(
                 selectinload(schema.AdoptionPost.photos),
@@ -59,16 +64,23 @@ class SqlAlchemyAdoptionPostRepository:
             )
             .where(
                 schema.AdoptionPost.id == adoption_post_id,
-                schema.AdoptionPost.deleted_at.is_(None),
                 schema.AdoptionPost.is_public.is_(True),
             )
         )
+        if not include_deleted:
+            statement = statement.where(schema.AdoptionPost.deleted_at.is_(None))
+        statement = statement.execution_options(populate_existing=True)
+        if for_update:
+            statement = statement.with_for_update()
+        item = self.session.scalar(statement)
         return self._model_to_record(item) if item is not None else None
 
-    def get_by_ids(self, adoption_post_ids: list[UUID]) -> list[AdoptionPostRecord]:
+    def get_by_ids(
+        self, adoption_post_ids: list[UUID], *, active_only: bool = False
+    ) -> list[AdoptionPostRecord]:
         if not adoption_post_ids:
             return []
-        items = self.session.scalars(
+        statement = (
             select(schema.AdoptionPost)
             .options(
                 selectinload(schema.AdoptionPost.photos),
@@ -79,8 +91,157 @@ class SqlAlchemyAdoptionPostRepository:
                 schema.AdoptionPost.deleted_at.is_(None),
                 schema.AdoptionPost.is_public.is_(True),
             )
-        ).all()
+        )
+        if active_only:
+            statement = statement.where(schema.AdoptionPost.is_resolved.is_(False))
+        items = self.session.scalars(statement).all()
         return [self._model_to_record(item) for item in items]
+
+    def update(self, adoption_post_id: UUID, draft: AdoptionPostUpdateDraft) -> AdoptionPostRecord:
+        item = self.session.get(schema.AdoptionPost, adoption_post_id)
+        if item is None:
+            raise RuntimeError("Locked adoption post could not be loaded for update.")
+        item.pet_name = draft.pet_name
+        item.owner_phone_number = draft.owner_phone_number
+        item.owner_telegram_username = draft.owner_telegram_username
+        item.additional_info = draft.additional_info
+        item.updated_at = draft.updated_at
+        if draft.photos is not None:
+            item.photos = [
+                schema.AdoptionPostPhoto(
+                    id=photo.id,
+                    photo_url=photo.photo_url,
+                    thumb_url=photo.thumb_url,
+                    position=photo.position,
+                )
+                for photo in draft.photos
+            ]
+        self.session.flush()
+        return self._model_to_record(item)
+
+    def soft_delete(self, adoption_post_id: UUID, deleted_at: datetime) -> None:
+        item = self.session.get(schema.AdoptionPost, adoption_post_id)
+        if item is None:
+            raise RuntimeError("Locked adoption post could not be loaded for deletion.")
+        item.deleted_at = deleted_at
+        item.updated_at = deleted_at
+        pending = self.session.scalar(
+            select(schema.AdoptionFollowUp)
+            .where(
+                schema.AdoptionFollowUp.adoption_post_id == adoption_post_id,
+                schema.AdoptionFollowUp.completed_at.is_(None),
+            )
+            .with_for_update()
+        )
+        if pending is not None:
+            self.session.delete(pending)
+        self.session.flush()
+
+    def record_contact(self, adoption_post_id: UUID, contacting_user_id: UUID) -> bool:
+        post = self.session.scalar(
+            select(schema.AdoptionPost)
+            .where(schema.AdoptionPost.id == adoption_post_id)
+            .with_for_update()
+        )
+        if (
+            post is None
+            or post.deleted_at is not None
+            or not post.is_public
+            or post.is_resolved
+            or post.user_id is None
+        ):
+            return False
+        if post.user_id == contacting_user_id:
+            raise PermissionError("Owners cannot contact themselves through this flow.")
+        now = datetime.now(UTC)
+        self.session.add(
+            schema.AdoptionContactEvent(
+                adoption_post_id=post.id,
+                owner_id=post.user_id,
+                contacting_user_id=contacting_user_id,
+                created_at=now,
+            )
+        )
+        pending = self.session.scalar(
+            select(schema.AdoptionFollowUp).where(
+                schema.AdoptionFollowUp.adoption_post_id == post.id,
+                schema.AdoptionFollowUp.completed_at.is_(None),
+            )
+        )
+        if pending is None:
+            self.session.add(
+                schema.AdoptionFollowUp(
+                    adoption_post_id=post.id,
+                    owner_id=post.user_id,
+                    due_at=now + timedelta(hours=1),
+                    created_at=now,
+                )
+            )
+        self.session.flush()
+        return True
+
+    def list_due_follow_ups(self, owner_id: UUID, now: datetime) -> list[AdoptionFollowUpRecord]:
+        rows = self.session.execute(
+            select(schema.AdoptionFollowUp, schema.AdoptionPost.pet_name)
+            .join(
+                schema.AdoptionPost,
+                schema.AdoptionFollowUp.adoption_post_id == schema.AdoptionPost.id,
+            )
+            .where(
+                schema.AdoptionFollowUp.owner_id == owner_id,
+                schema.AdoptionFollowUp.completed_at.is_(None),
+                schema.AdoptionFollowUp.due_at <= now,
+                schema.AdoptionPost.user_id == owner_id,
+                schema.AdoptionPost.deleted_at.is_(None),
+                schema.AdoptionPost.is_public.is_(True),
+                schema.AdoptionPost.is_resolved.is_(False),
+            )
+            .order_by(schema.AdoptionFollowUp.due_at.asc())
+        ).all()
+        return [
+            AdoptionFollowUpRecord(
+                id=follow_up.id,
+                adoption_post_id=follow_up.adoption_post_id,
+                pet_name=pet_name,
+                due_at=follow_up.due_at,
+            )
+            for follow_up, pet_name in rows
+        ]
+
+    def answer_follow_up(
+        self, follow_up_id: UUID, owner_id: UUID, answer_yes: bool, now: datetime
+    ) -> tuple[str, UUID | None]:
+        follow_up = self.session.get(schema.AdoptionFollowUp, follow_up_id)
+        if follow_up is None:
+            return "not_found", None
+        post = self.session.scalar(
+            select(schema.AdoptionPost)
+            .where(schema.AdoptionPost.id == follow_up.adoption_post_id)
+            .with_for_update()
+        )
+        follow_up = self.session.scalar(
+            select(schema.AdoptionFollowUp)
+            .where(schema.AdoptionFollowUp.id == follow_up_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if follow_up is None or post is None:
+            return "not_found", None
+        if follow_up.owner_id != owner_id or post.user_id != owner_id:
+            return "forbidden", None
+        if follow_up.completed_at is not None:
+            return "completed", None
+        if follow_up.due_at > now:
+            return "not_due", None
+        if post.deleted_at is not None or not post.is_public or post.is_resolved:
+            return "unavailable", None
+        follow_up.completed_at = now
+        follow_up.answer_yes = answer_yes
+        if answer_yes:
+            post.is_resolved = True
+            post.updated_at = now
+        self.session.flush()
+        return "answered", post.id
 
     def list_public(
         self,
@@ -97,6 +258,7 @@ class SqlAlchemyAdoptionPostRepository:
             .where(
                 schema.AdoptionPost.deleted_at.is_(None),
                 schema.AdoptionPost.is_public.is_(True),
+                schema.AdoptionPost.is_resolved.is_(False),
             )
         )
 
@@ -121,6 +283,42 @@ class SqlAlchemyAdoptionPostRepository:
         items = [self._model_to_record(row) for row in rows[:limit]]
         next_cursor = self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None
         return AdoptionPostPage(items=items, next_cursor=next_cursor, limit=limit)
+
+    def list_owned(
+        self, owner_id: UUID, *, limit: int, cursor: str | None = None
+    ) -> AdoptionPostPage:
+        statement = (
+            select(schema.AdoptionPost)
+            .options(
+                selectinload(schema.AdoptionPost.photos), selectinload(schema.AdoptionPost.author)
+            )
+            .where(
+                schema.AdoptionPost.user_id == owner_id,
+                schema.AdoptionPost.deleted_at.is_(None),
+                schema.AdoptionPost.is_public.is_(True),
+            )
+        )
+        if cursor is not None:
+            cursor_created_at, cursor_id = self._decode_cursor(cursor)
+            statement = statement.where(
+                or_(
+                    schema.AdoptionPost.created_at < cursor_created_at,
+                    and_(
+                        schema.AdoptionPost.created_at == cursor_created_at,
+                        schema.AdoptionPost.id < cursor_id,
+                    ),
+                )
+            )
+        rows = self.session.scalars(
+            statement.order_by(
+                schema.AdoptionPost.created_at.desc(), schema.AdoptionPost.id.desc()
+            ).limit(limit + 1)
+        ).all()
+        return AdoptionPostPage(
+            items=[self._model_to_record(row) for row in rows[:limit]],
+            next_cursor=self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None,
+            limit=limit,
+        )
 
     def _model_to_record(self, item: schema.AdoptionPost) -> AdoptionPostRecord:
         photos = sorted(item.photos, key=lambda photo: photo.position)
@@ -148,6 +346,7 @@ class SqlAlchemyAdoptionPostRepository:
             photos=photo_records,
             additional_info=item.additional_info,
             is_public=item.is_public,
+            is_resolved=item.is_resolved,
             comment_count=int(item.comment_count or 0),
             created_at=item.created_at,
             updated_at=item.updated_at,

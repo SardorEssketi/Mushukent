@@ -840,6 +840,9 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         server_default=text("false"),
     )
     additional_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_resolved: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     is_public: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -874,6 +877,47 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("idx_adoption_posts_user_id", "user_id"),
+    )
+
+
+class AdoptionContactEvent(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "adoption_contact_events"
+
+    adoption_post_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("adoption_posts.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    contacting_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (Index("idx_adoption_contacts_post_id", "adoption_post_id"),)
+
+
+class AdoptionFollowUp(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "adoption_follow_ups"
+
+    adoption_post_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("adoption_posts.id", ondelete="CASCADE"), nullable=False
+    )
+    owner_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    answer_yes: Mapped[bool | None] = mapped_column(Boolean)
+
+    __table_args__ = (
+        Index("uq_adoption_follow_ups_pending", "adoption_post_id", unique=True,
+              postgresql_where=text("completed_at IS NULL")),
+        Index("idx_adoption_follow_ups_owner_due", "owner_id", "due_at"),
+        CheckConstraint(
+            "(completed_at IS NULL AND answer_yes IS NULL) OR "
+            "(completed_at IS NOT NULL AND answer_yes IS NOT NULL)",
+            name="adoption_follow_ups_answer_state",
+        ),
     )
 
 

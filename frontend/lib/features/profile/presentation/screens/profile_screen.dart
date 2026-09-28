@@ -117,6 +117,14 @@ class ProfileScreen extends ConsumerWidget {
               const Divider(height: 1),
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.home_outlined),
+                title: Text(strings.myAdoptionPosts),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/profile/adoption-posts'),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.settings_outlined),
                 title: Text(strings.settings),
                 trailing: const Icon(Icons.chevron_right),

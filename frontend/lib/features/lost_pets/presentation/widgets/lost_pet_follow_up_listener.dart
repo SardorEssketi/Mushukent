@@ -7,6 +7,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../adoption_posts/presentation/screens/adoption_post_detail_screen.dart';
 import '../screens/lost_pet_detail_screen.dart';
 
 /// Checks the server for due prompts while the owner is using Mushukistan.
@@ -62,9 +63,13 @@ class _LostPetFollowUpListenerState
     _checking = true;
     var recheck = false;
     try {
-      final due =
-          await ref.read(mushukistanApiProvider).listDueLostPetFollowUps();
-      if (!mounted || due.isEmpty) {
+      List<LostPetFollowUpData> due;
+      try {
+        due = await ref.read(mushukistanApiProvider).listDueLostPetFollowUps();
+      } catch (_) {
+        due = const [];
+      }
+      if (!mounted) {
         return;
       }
       _showing = true;
@@ -75,6 +80,19 @@ class _LostPetFollowUpListenerState
         if (await _showFollowUp(followUp)) {
           recheck = true;
           break;
+        }
+      }
+      if (!recheck && mounted) {
+        final adoptionDue =
+            await ref.read(mushukistanApiProvider).listDueAdoptionFollowUps();
+        for (final followUp in adoptionDue) {
+          if (!mounted || !ref.read(authControllerProvider).isAuthenticated) {
+            break;
+          }
+          if (await _showAdoptionFollowUp(followUp)) {
+            recheck = true;
+            break;
+          }
         }
       }
     } catch (_) {
@@ -94,9 +112,19 @@ class _LostPetFollowUpListenerState
           builder: (dialogContext) => PopScope(
             canPop: false,
             child: _FollowUpDialog(
-              followUp: followUp,
+              petName: followUp.petName,
+              question: strings.didYouFindYourPet,
               strings: strings,
-              onAnswered: (pet) {
+              answer: (yes) => ref
+                  .read(mushukistanApiProvider)
+                  .answerLostPetFollowUp(followUp.id, yes: yes),
+              onAnswered: (result) {
+                if (!mounted) return;
+                final pet = result as LostPetData;
+                ref.read(lostPetMutationOverridesProvider.notifier).state = {
+                  ...ref.read(lostPetMutationOverridesProvider),
+                  pet.id: pet,
+                };
                 ref.invalidate(lostPetDetailProvider(pet.id));
                 if (pet.isResolved) {
                   ref.read(resolvedLostPetIdsProvider.notifier).state = {
@@ -107,7 +135,50 @@ class _LostPetFollowUpListenerState
                 ref.read(postMutationRevisionProvider.notifier).state++;
               },
               onAlreadyCompleted: () {
+                if (!mounted) return;
                 ref.invalidate(lostPetDetailProvider(followUp.lostPetId));
+                ref.read(postMutationRevisionProvider.notifier).state++;
+              },
+            ),
+          ),
+        ) ??
+        false;
+  }
+
+  Future<bool> _showAdoptionFollowUp(AdoptionFollowUpData followUp) async {
+    final strings = ref.read(appStringsProvider);
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => PopScope(
+            canPop: false,
+            child: _FollowUpDialog(
+              petName: followUp.petName,
+              question: strings.didYourPetFindNewHome,
+              strings: strings,
+              answer: (yes) => ref
+                  .read(mushukistanApiProvider)
+                  .answerAdoptionFollowUp(followUp.id, yes: yes),
+              onAnswered: (result) {
+                if (!mounted) return;
+                final post = result as AdoptionPostData;
+                ref.read(adoptionMutationOverridesProvider.notifier).state = {
+                  ...ref.read(adoptionMutationOverridesProvider),
+                  post.id: post,
+                };
+                ref.invalidate(adoptionPostDetailProvider(post.id));
+                if (post.isResolved) {
+                  ref.read(resolvedAdoptionIdsProvider.notifier).state = {
+                    ...ref.read(resolvedAdoptionIdsProvider),
+                    post.id,
+                  };
+                }
+                ref.read(postMutationRevisionProvider.notifier).state++;
+              },
+              onAlreadyCompleted: () {
+                if (!mounted) return;
+                ref.invalidate(
+                    adoptionPostDetailProvider(followUp.adoptionPostId));
                 ref.read(postMutationRevisionProvider.notifier).state++;
               },
             ),
@@ -130,15 +201,19 @@ class _LostPetFollowUpListenerState
 
 class _FollowUpDialog extends ConsumerStatefulWidget {
   const _FollowUpDialog({
-    required this.followUp,
+    required this.petName,
+    required this.question,
+    required this.answer,
     required this.strings,
     required this.onAnswered,
     required this.onAlreadyCompleted,
   });
 
-  final LostPetFollowUpData followUp;
+  final String petName;
+  final String question;
+  final Future<Object> Function(bool yes) answer;
   final AppStrings strings;
-  final ValueChanged<LostPetData> onAnswered;
+  final ValueChanged<Object> onAnswered;
   final VoidCallback onAlreadyCompleted;
 
   @override
@@ -152,14 +227,12 @@ class _FollowUpDialogState extends ConsumerState<_FollowUpDialog> {
     if (_submitting) return;
     setState(() => _submitting = true);
     try {
-      final pet = await ref.read(mushukistanApiProvider).answerLostPetFollowUp(
-            widget.followUp.id,
-            yes: yes,
-          );
+      final pet = await widget.answer(yes);
       widget.onAnswered(pet);
       if (mounted) Navigator.of(context).pop(false);
     } on MushukistanApiException catch (error) {
-      if (error.code == 'FOLLOW_UP_COMPLETED') {
+      if (error.code == 'FOLLOW_UP_COMPLETED' ||
+          error.code == 'FOLLOW_UP_NOT_FOUND') {
         widget.onAlreadyCompleted();
         if (mounted) Navigator.of(context).pop(true);
         return;
@@ -183,8 +256,8 @@ class _FollowUpDialogState extends ConsumerState<_FollowUpDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.strings.didYouFindYourPet),
-      content: Text(widget.followUp.petName),
+      title: Text(widget.question),
+      content: Text(widget.petName),
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => _answer(false),

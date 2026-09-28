@@ -10,13 +10,24 @@ from app.features.lost_pets.domain.models import (
     LostPetMapPage,
     LostPetPage,
     LostPetRecord,
+    LostPetUpdateDraft,
 )
 
 
 class LostPetRepository(Protocol):
     def create(self, draft: LostPetCreateDraft) -> LostPetRecord: ...
 
-    def get_by_id(self, lost_pet_id: UUID) -> LostPetRecord | None: ...
+    def get_by_id(
+        self,
+        lost_pet_id: UUID,
+        *,
+        for_update: bool = False,
+        include_deleted: bool = False,
+    ) -> LostPetRecord | None: ...
+
+    def update(self, lost_pet_id: UUID, draft: LostPetUpdateDraft) -> LostPetRecord: ...
+
+    def soft_delete(self, lost_pet_id: UUID, deleted_at: datetime) -> None: ...
 
     def get_by_ids(
         self, lost_pet_ids: list[UUID], *, active_only: bool = False

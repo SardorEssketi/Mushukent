@@ -296,6 +296,7 @@ Feature: Users
   - delete the user's likes;
   - hide and anonymize owned posts, comments, and lost-pet posts;
   - remove pending Lost Pet owner follow-ups that can no longer be answered, retain completed follow-ups, and clear deleted-user links in Lost Pet contact history;
+  - apply the same pending follow-up cleanup and history anonymization to Rehoming posts;
   - redact owned-post history descriptions, locations, and media URLs, and remove the deleted user from history actor links;
   - remove copied lost-pet phone numbers;
   - remove the user from cat creator, report reporter, and report handler links where possible;
@@ -655,7 +656,6 @@ Feature: Lost Pets
   - photos: one or more image files
   - pet_name: required text, max 100 chars
   - last_seen_location: JSON string {"latitude":41.3,"longitude":69.2}
-  - owner_phone_publication_consent: required true
   - additional_info: optional text, max 2000 chars
 - Validation:
   - authenticated user must have a non-empty phone_number on their profile
@@ -663,7 +663,7 @@ Feature: Lost Pets
   - pet_name is required
   - at least one photo is required
   - last_seen_location is required
-  - owner_phone_publication_consent must be true because the profile phone number is displayed publicly
+  - the profile phone number is copied to the post for Contact Owner; no mandatory publication checkbox
   - photo files use the same image constraints as observation uploads
   - maximum 5 photos
 - Response model: LostPetResponse (201)
@@ -712,6 +712,19 @@ Feature: Lost Pets
 - Query: limit, cursor.
 - Response: the owner's public, non-deleted active and resolved Lost Pets, for the profile's Lost Pets section.
 
+9) PATCH /api/v1/lost-pets/{lost_pet_id}
+- Purpose: Update the owner's Lost Pet description, photos, last-seen location, or published phone/Telegram contact.
+- Auth: Bearer required; owner only (403 otherwise). Guests receive 401.
+- Request: JSON or multipart/form-data. Mutable fields are `pet_name`, `additional_info`, `last_seen_location`, `owner_phone_number`, and `owner_telegram_username`; multipart requests may replace `photos` with 1-5 image files.
+- Resolution state, owner identity, visibility, counters, history, and timestamps are not writable. Updating a resolved Lost Pet leaves it resolved and preserves contact/follow-up history and any pending follow-up due time.
+- Response: Updated LostPetResponse.
+
+10) DELETE /api/v1/lost-pets/{lost_pet_id}
+- Purpose: Soft-delete the owner's Lost Pet.
+- Auth: Bearer required; owner only (403 otherwise). Guests receive 401.
+- Behavior: Set `deleted_at`, remove any pending unanswerable follow-up, and retain contact events and completed follow-ups. The deleted record is omitted from public Feed, Map, and My Lost Pets queries.
+- Response: 204.
+
 The public Lost Pet list and mixed Feed contain only unresolved posts. Resolved posts remain accessible by detail ID and in the owner's profile history; Map already excludes them.
 
 Feature: Adoption Posts
@@ -742,16 +755,43 @@ Feature: Adoption Posts
   - 422 INVALID_IMAGE
 
 2) GET /api/v1/adoption-posts
-- Purpose: List public adoption posts.
+- Purpose: List active public adoption posts. Rehomed and deleted posts are excluded.
 - Auth: optional
 - Query params: limit, cursor
 - Response: GenericListResponse[AdoptionPostListItem]
 
 3) GET /api/v1/adoption-posts/{adoption_post_id}
-- Purpose: Retrieve one adoption post with all photo URLs and contact phone number.
+- Purpose: Retrieve one public, non-deleted adoption post, including a rehomed archive record.
 - Auth: optional
 - Response: AdoptionPostResponse
 - Errors: 404 ADOPTION_POST_NOT_FOUND
+
+4) GET /api/v1/adoption-posts/mine
+- Auth: Bearer required; returns only the owner's non-deleted posts, active and rehomed.
+
+5) POST /api/v1/adoption-posts/{adoption_post_id}/contact
+- Auth: Bearer required; only another user may contact an active post owner.
+- Response: 204. Each accepted action stores a contact event. The first contact
+  in a cycle creates one owner follow-up due one hour later.
+
+6) GET /api/v1/adoption-posts/follow-ups/due
+- Auth: Bearer required; lists only the owner's due, pending follow-ups.
+
+7) POST /api/v1/adoption-posts/follow-ups/{follow_up_id}/answer
+- Auth: Bearer required; only the owner may answer.
+- Request: `{"answer":"yes"}` or `{"answer":"no"}`.
+- Yes sets `is_resolved=true`; No leaves it false. Both complete the cycle.
+- A repeated answer returns 409 `FOLLOW_UP_COMPLETED`.
+
+8) PATCH /api/v1/adoption-posts/{adoption_post_id}
+- Auth: Bearer required; owner only.
+- JSON or multipart mutable fields: pet_name, additional_info,
+  owner_phone_number, owner_telegram_username; optional replacement photos.
+- Resolution, ownership, timestamps, contact events, and follow-ups are immutable here.
+
+9) DELETE /api/v1/adoption-posts/{adoption_post_id}
+- Auth: Bearer required; owner only. Soft-deletes the post and removes an
+  unanswerable pending follow-up; completed history remains.
 
 Feature: Places
 ---------------

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.features.cats.domain.models import GeoPoint
 from app.features.lost_pets.domain.models import LostPetMapPage, LostPetPage, LostPetRecord
@@ -25,6 +26,43 @@ class LostPetCreateRequest(BaseModel):
         if not -90 <= float(value.latitude) <= 90 or not -180 <= float(value.longitude) <= 180:
             raise ValueError("Invalid last_seen_location coordinates.")
         return value
+
+
+class LostPetUpdateRequest(BaseModel):
+    """Mutable public Lost Pet fields; ownership and resolution stay internal."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    last_seen_location: GeoPoint | None = None
+    pet_name: str | None = Field(default=None, min_length=1, max_length=100)
+    additional_info: str | None = Field(default=None, max_length=2000)
+    owner_phone_number: str | None = Field(default=None, max_length=32)
+    owner_telegram_username: str | None = Field(default=None, max_length=32)
+
+    @field_validator("last_seen_location")
+    @classmethod
+    def _validate_last_seen_location(cls, value: GeoPoint | None) -> GeoPoint | None:
+        if value is not None and (
+            not -90 <= float(value.latitude) <= 90
+            or not -180 <= float(value.longitude) <= 180
+        ):
+            raise ValueError("Invalid last_seen_location coordinates.")
+        return value
+
+    @field_validator("owner_telegram_username")
+    @classmethod
+    def _validate_telegram_username(cls, value: str | None) -> str | None:
+        if value is not None and value and not re.fullmatch(r"[A-Za-z0-9_]{5,32}", value):
+            raise ValueError("Invalid Telegram username.")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_explicit_values(self) -> "LostPetUpdateRequest":
+        if "last_seen_location" in self.model_fields_set and self.last_seen_location is None:
+            raise ValueError("last_seen_location must be provided.")
+        if "owner_phone_number" in self.model_fields_set and not self.owner_phone_number:
+            raise ValueError("owner_phone_number must not be empty.")
+        return self
 
 
 class LostPetListItem(BaseModel):

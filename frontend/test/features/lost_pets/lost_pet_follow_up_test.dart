@@ -12,6 +12,183 @@ import 'package:mushukistan_frontend/features/lost_pets/presentation/widgets/los
 import '../../support/fakes.dart';
 
 void main() {
+  testWidgets('rehoming follow-up Yes removes Feed item locally',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'lost-pets/follow-ups/due', (_) => []);
+    apiClient.setHandler(
+        'GET',
+        'adoption-posts/follow-ups/due',
+        (_) => [
+              {
+                'id': 'adoption-follow-up',
+                'adoption_post_id': 'adoption-1',
+                'pet_name': 'Mittens',
+                'due_at': '2026-09-28T10:00:00Z',
+              }
+            ]);
+    apiClient.setHandler(
+        'POST',
+        'adoption-posts/follow-ups/adoption-follow-up/answer',
+        (_) => {
+              'id': 'adoption-1',
+              'pet_name': 'Mittens',
+              'owner_phone_number': '+998 90 123 45 67',
+              'photo_url': 'https://example.com/pet.jpg',
+              'photo_urls': ['https://example.com/pet.jpg'],
+              'created_at': '2026-09-28T09:00:00Z',
+              'is_resolved': true,
+              'comment_count': 0,
+            });
+    final container = ProviderContainer(overrides: [
+      mushukistanApiProvider
+          .overrideWithValue(MushukistanApi(client: apiClient)),
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+      )),
+      googleIdentityTokenProvider.overrideWithValue(
+        FakeGoogleIdentityTokenProvider(),
+      ),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: LostPetFollowUpListener(
+        child: Scaffold(body: Text('Home')),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Did your pet find a new home?'), findsOneWidget);
+    expect(find.text('Yes'), findsOneWidget);
+    expect(find.text('No'), findsOneWidget);
+    await tester.tap(find.text('Yes'));
+    await tester.pumpAndSettle();
+    expect(container.read(resolvedAdoptionIdsProvider), contains('adoption-1'));
+    expect(container.read(postMutationRevisionProvider), 1);
+    expect(find.text('Did your pet find a new home?'), findsNothing);
+  });
+
+  testWidgets('stale rehoming follow-up closes after completed response',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    var reads = 0;
+    apiClient.setHandler('GET', 'lost-pets/follow-ups/due', (_) => []);
+    apiClient.setHandler('GET', 'adoption-posts/follow-ups/due', (_) {
+      reads++;
+      if (reads > 1) return [];
+      return [
+        {
+          'id': 'stale-adoption',
+          'adoption_post_id': 'adoption-1',
+          'pet_name': 'Mittens',
+          'due_at': '2026-09-28T10:00:00Z',
+        }
+      ];
+    });
+    apiClient.setHandler(
+        'POST', 'adoption-posts/follow-ups/stale-adoption/answer', (_) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.conflict,
+        statusCode: 409,
+        code: 'FOLLOW_UP_COMPLETED',
+        message: 'Already answered.',
+      );
+    });
+    final container = ProviderContainer(overrides: [
+      mushukistanApiProvider
+          .overrideWithValue(MushukistanApi(client: apiClient)),
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+      )),
+      googleIdentityTokenProvider.overrideWithValue(
+        FakeGoogleIdentityTokenProvider(),
+      ),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: LostPetFollowUpListener(
+        child: Scaffold(body: Text('Home')),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('No'));
+    await tester.pumpAndSettle();
+    expect(reads, 2);
+    expect(find.text('Did your pet find a new home?'), findsNothing);
+  });
+
+  testWidgets('rehoming follow-up No leaves the post active', (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'lost-pets/follow-ups/due', (_) => []);
+    apiClient.setHandler(
+        'GET',
+        'adoption-posts/follow-ups/due',
+        (_) => [
+              {
+                'id': 'adoption-no',
+                'adoption_post_id': 'adoption-1',
+                'pet_name': 'Mittens',
+                'due_at': '2026-09-28T10:00:00Z',
+              }
+            ]);
+    apiClient.setHandler(
+        'POST',
+        'adoption-posts/follow-ups/adoption-no/answer',
+        (_) => {
+              'id': 'adoption-1',
+              'pet_name': 'Mittens',
+              'owner_phone_number': '+998 90 123 45 67',
+              'photo_url': 'https://example.com/pet.jpg',
+              'photo_urls': ['https://example.com/pet.jpg'],
+              'created_at': '2026-09-28T09:00:00Z',
+              'is_resolved': false,
+              'comment_count': 0,
+            });
+    final container = ProviderContainer(overrides: [
+      mushukistanApiProvider
+          .overrideWithValue(MushukistanApi(client: apiClient)),
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+      )),
+      googleIdentityTokenProvider.overrideWithValue(
+        FakeGoogleIdentityTokenProvider(),
+      ),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: LostPetFollowUpListener(
+        child: Scaffold(body: Text('Home')),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('No'));
+    await tester.pumpAndSettle();
+    expect(container.read(resolvedAdoptionIdsProvider), isEmpty);
+    expect(
+        container
+            .read(adoptionMutationOverridesProvider)['adoption-1']
+            ?.isResolved,
+        isFalse);
+    expect(
+        apiClient.calls
+            .where((call) =>
+                call.path == 'adoption-posts/follow-ups/adoption-no/answer')
+            .single
+            .body,
+        {'answer': 'no'});
+  });
+
   testWidgets(
       'owner answer updates shared post revision and sends only Yes or No',
       (tester) async {

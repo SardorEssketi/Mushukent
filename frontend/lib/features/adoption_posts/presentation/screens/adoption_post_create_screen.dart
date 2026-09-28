@@ -29,7 +29,6 @@ class _AdoptionPostCreateScreenState
   final List<LostPetPhotoUpload> _photos = [];
   bool _isSubmitting = false;
   bool _isPickingPhotos = false;
-  bool _phonePublicationConsent = false;
   String? _error;
 
   @override
@@ -102,13 +101,6 @@ class _AdoptionPostCreateScreenState
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
-    if (!_phonePublicationConsent) {
-      setState(() {
-        _error = strings.confirmPhonePublic;
-      });
-      return;
-    }
-
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -118,7 +110,6 @@ class _AdoptionPostCreateScreenState
       await ref.read(mushukistanApiProvider).createAdoptionPost(
             photos: _photos,
             petName: _petNameController.text,
-            ownerPhonePublicationConsent: _phonePublicationConsent,
             additionalInfo: _infoController.text,
           );
       ref.invalidate(feedPostsProvider);
@@ -246,21 +237,7 @@ class _AdoptionPostCreateScreenState
                   alignLabelWithHint: true,
                 ),
               ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _phonePublicationConsent,
-                onChanged: _isSubmitting
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _phonePublicationConsent = value ?? false;
-                          _error = null;
-                        });
-                      },
-                title: Text(strings.showPhonePublicly),
-                subtitle: Text(strings.adoptionPhoneHelp),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
+              Text(strings.adoptionPhoneHelp),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(

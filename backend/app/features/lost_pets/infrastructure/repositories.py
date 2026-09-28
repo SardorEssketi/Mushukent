@@ -20,6 +20,7 @@ from app.features.lost_pets.domain.models import (
     LostPetPage,
     LostPetPhotoRecord,
     LostPetRecord,
+    LostPetUpdateDraft,
 )
 from app.features.posts.domain.models import PostAuthorSummary
 from app.infrastructure.db.models import schema
@@ -61,17 +62,69 @@ class SqlAlchemyLostPetRepository:
             raise RuntimeError("Created lost pet could not be loaded.")
         return created
 
-    def get_by_id(self, lost_pet_id: UUID) -> LostPetRecord | None:
-        item = self.session.scalar(
-            select(schema.LostPet)
-            .options(selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author))
-            .where(
-                schema.LostPet.id == lost_pet_id,
-                schema.LostPet.deleted_at.is_(None),
-                schema.LostPet.is_public.is_(True),
-            )
+    def get_by_id(
+        self,
+        lost_pet_id: UUID,
+        *,
+        for_update: bool = False,
+        include_deleted: bool = False,
+    ) -> LostPetRecord | None:
+        statement = select(schema.LostPet).options(
+            selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author)
+        ).where(
+            schema.LostPet.id == lost_pet_id,
+            schema.LostPet.is_public.is_(True),
         )
+        if not include_deleted:
+            statement = statement.where(schema.LostPet.deleted_at.is_(None))
+        statement = statement.execution_options(populate_existing=True)
+        if for_update:
+            statement = statement.with_for_update()
+        item = self.session.scalar(statement)
         return self._model_to_record(item) if item is not None else None
+
+    def update(self, lost_pet_id: UUID, draft: LostPetUpdateDraft) -> LostPetRecord:
+        item = self.session.get(schema.LostPet, lost_pet_id)
+        if item is None:
+            raise RuntimeError("Locked lost pet could not be loaded for update.")
+        item.pet_name = draft.pet_name
+        item.owner_phone_number = draft.owner_phone_number
+        item.owner_telegram_username = draft.owner_telegram_username
+        item.last_seen_location = WKTElement(
+            f"POINT({draft.last_seen_longitude} {draft.last_seen_latitude})", srid=4326
+        )
+        item.additional_info = draft.additional_info
+        item.updated_at = draft.updated_at
+        if draft.photos is not None:
+            item.photos = [
+                schema.LostPetPhoto(
+                    id=photo.id,
+                    photo_url=photo.photo_url,
+                    thumb_url=photo.thumb_url,
+                    position=photo.position,
+                )
+                for photo in draft.photos
+            ]
+        self.session.flush()
+        return self._model_to_record(item)
+
+    def soft_delete(self, lost_pet_id: UUID, deleted_at: datetime) -> None:
+        item = self.session.get(schema.LostPet, lost_pet_id)
+        if item is None:
+            raise RuntimeError("Locked lost pet could not be loaded for deletion.")
+        item.deleted_at = deleted_at
+        item.updated_at = deleted_at
+        pending = self.session.scalar(
+            select(schema.LostPetFollowUp)
+            .where(
+                schema.LostPetFollowUp.lost_pet_id == lost_pet_id,
+                schema.LostPetFollowUp.completed_at.is_(None),
+            )
+            .with_for_update()
+        )
+        if pending is not None:
+            self.session.delete(pending)
+        self.session.flush()
 
     def get_by_ids(
         self, lost_pet_ids: list[UUID], *, active_only: bool = False

@@ -18,6 +18,11 @@ final feedPopularPeriodProvider = StateProvider<String>((ref) => 'day');
 final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
   (ref) => const {},
 );
+final feedPageCacheProvider =
+    StateProvider<Map<String, ApiPage<FeedItem>>>((ref) => const {});
+
+String _feedCacheKey(String mode, String popularPeriod) =>
+    '$mode:${mode == 'popular' ? popularPeriod : ''}';
 
 const _mobileFeedBreakpoint = 700.0;
 
@@ -36,25 +41,79 @@ void setPostLikeOverride(
 final feedPostsProvider =
     FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
   ref.watch(postMutationRevisionProvider);
+  final lostPetOverrides = ref.watch(lostPetMutationOverridesProvider);
+  final deletedLostPetIds = ref.watch(deletedLostPetIdsProvider);
+  final resolvedLostPetIds = ref.watch(resolvedLostPetIdsProvider);
+  final adoptionOverrides = ref.watch(adoptionMutationOverridesProvider);
+  final deletedAdoptionIds = ref.watch(deletedAdoptionIdsProvider);
+  final resolvedAdoptionIds = ref.watch(resolvedAdoptionIdsProvider);
   final api = ref.watch(mushukistanApiProvider);
   final mode = ref.watch(feedModeProvider);
   final popularPeriod = ref.watch(feedPopularPeriodProvider);
+  final cacheKey = _feedCacheKey(mode, popularPeriod);
   final includeViewerContext = ref.watch(
     authControllerProvider.select((state) => state.isAuthenticated),
   );
-  if (mode == 'lost_pets') {
-    return api.listLostPets(limit: 30);
-  }
-  if (mode == 'adoption') {
-    return api.listAdoptionPosts(limit: 30);
-  }
-  return api.listFeed(
-    filter: mode,
-    popularPeriod: mode == 'popular' ? popularPeriod : null,
-    limit: 30,
-    includeViewerContext: includeViewerContext,
+  final page = mode == 'lost_pets'
+      ? await api.listLostPets(limit: 30)
+      : mode == 'adoption'
+          ? await api.listAdoptionPosts(limit: 30)
+          : await api.listFeed(
+              filter: mode,
+              popularPeriod: mode == 'popular' ? popularPeriod : null,
+              limit: 30,
+              includeViewerContext: includeViewerContext,
+            );
+  final projectedPage = ApiPage<FeedItem>(
+    items: _applyPostMutations(
+      page.items,
+      overrides: lostPetOverrides,
+      deletedIds: deletedLostPetIds,
+      resolvedIds: resolvedLostPetIds,
+      adoptionOverrides: adoptionOverrides,
+      deletedAdoptionIds: deletedAdoptionIds,
+      resolvedAdoptionIds: resolvedAdoptionIds,
+    ),
+    nextCursor: page.nextCursor,
+    limit: page.limit,
   );
+  ref.read(feedPageCacheProvider.notifier).state = {
+    ...ref.read(feedPageCacheProvider),
+    cacheKey: projectedPage,
+  };
+  return projectedPage;
 });
+
+List<FeedItem> _applyPostMutations(
+  List<FeedItem> items, {
+  required Map<String, LostPetData> overrides,
+  required Set<String> deletedIds,
+  required Set<String> resolvedIds,
+  required Map<String, AdoptionPostData> adoptionOverrides,
+  required Set<String> deletedAdoptionIds,
+  required Set<String> resolvedAdoptionIds,
+}) {
+  final result = <FeedItem>[];
+  for (final item in items) {
+    if (item is AdoptionPostData) {
+      if (deletedAdoptionIds.contains(item.id) ||
+          resolvedAdoptionIds.contains(item.id)) {
+        continue;
+      }
+      final updated = adoptionOverrides[item.id] ?? item;
+      if (!updated.isResolved) result.add(updated);
+      continue;
+    }
+    if (item is! LostPetData) {
+      result.add(item);
+      continue;
+    }
+    if (deletedIds.contains(item.id) || resolvedIds.contains(item.id)) continue;
+    final updated = overrides[item.id] ?? item;
+    if (!updated.isResolved) result.add(updated);
+  }
+  return result;
+}
 
 class FeedScreen extends ConsumerWidget {
   const FeedScreen({super.key});
@@ -65,6 +124,9 @@ class FeedScreen extends ConsumerWidget {
     final popularPeriod = ref.watch(feedPopularPeriodProvider);
     final postsAsync = ref.watch(feedPostsProvider);
     final strings = ref.watch(appStringsProvider);
+    final cachedPage = ref
+        .watch(feedPageCacheProvider)[_feedCacheKey(feedMode, popularPeriod)];
+    final visiblePage = postsAsync.valueOrNull ?? cachedPage;
     final isAuthenticated = ref.watch(
       authControllerProvider.select((state) => state.isAuthenticated),
     );
@@ -110,42 +172,82 @@ class FeedScreen extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: AppSpacing.md),
-              postsAsync.when(
-                data: (page) {
-                  if (page.items.isEmpty) {
-                    return _EmptyFeed(strings: strings);
-                  }
-                  return ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: page.items.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpacing.md),
-                    itemBuilder: (context, index) => _FeedItemCard(
-                      item: page.items[index],
-                      strings: strings,
+              visiblePage != null
+                  ? _buildFeedItems(
+                      context,
+                      strings,
+                      _applyPostMutations(
+                        visiblePage.items,
+                        overrides: ref.watch(lostPetMutationOverridesProvider),
+                        deletedIds: ref.watch(deletedLostPetIdsProvider),
+                        resolvedIds: ref.watch(resolvedLostPetIdsProvider),
+                        adoptionOverrides:
+                            ref.watch(adoptionMutationOverridesProvider),
+                        deletedAdoptionIds:
+                            ref.watch(deletedAdoptionIdsProvider),
+                        resolvedAdoptionIds:
+                            ref.watch(resolvedAdoptionIdsProvider),
+                      ),
+                    )
+                  : postsAsync.when(
+                      data: (page) {
+                        return _buildFeedItems(
+                          context,
+                          strings,
+                          _applyPostMutations(
+                            page.items,
+                            overrides:
+                                ref.watch(lostPetMutationOverridesProvider),
+                            deletedIds: ref.watch(deletedLostPetIdsProvider),
+                            resolvedIds: ref.watch(resolvedLostPetIdsProvider),
+                            adoptionOverrides:
+                                ref.watch(adoptionMutationOverridesProvider),
+                            deletedAdoptionIds:
+                                ref.watch(deletedAdoptionIdsProvider),
+                            resolvedAdoptionIds:
+                                ref.watch(resolvedAdoptionIdsProvider),
+                          ),
+                        );
+                      },
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (error, stackTrace) {
+                        return AppStatePanel(
+                          icon: Icons.error_outline,
+                          title: strings.couldNotLoadSection,
+                          action: FilledButton(
+                            onPressed: () => ref.invalidate(feedPostsProvider),
+                            child: Text(strings.retry),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-                loading: () => const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 64),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (error, stackTrace) => AppStatePanel(
-                  icon: Icons.error_outline,
-                  title: strings.couldNotLoadSection,
-                  action: FilledButton(
-                    onPressed: () => ref.invalidate(feedPostsProvider),
-                    child: Text(strings.retry),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+Widget _buildFeedItems(
+  BuildContext context,
+  AppStrings strings,
+  List<FeedItem> items,
+) {
+  if (items.isEmpty) return _EmptyFeed(strings: strings);
+  return ListView.separated(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    itemCount: items.length,
+    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
+    itemBuilder: (context, index) => _FeedItemCard(
+      item: items[index],
+      strings: strings,
+    ),
+  );
 }
 
 class _FeedItemCard extends StatelessWidget {
