@@ -92,13 +92,12 @@ class AppStrings {
     required this.leaderboard,
     required this.mostActive,
     required this.mostPopular,
-    required this.topHelpers,
     required this.day,
     required this.week,
+    required this.thisMonth,
     required this.noLeaderboardData,
     required this.unnamedUser,
     required this.observations,
-    required this.score,
     required this.settings,
     required this.editProfile,
     required this.logout,
@@ -200,13 +199,12 @@ class AppStrings {
   final String leaderboard;
   final String mostActive;
   final String mostPopular;
-  final String topHelpers;
   final String day;
   final String week;
+  final String thisMonth;
   final String noLeaderboardData;
   final String unnamedUser;
   final String observations;
-  final String score;
   final String settings;
   final String editProfile;
   final String logout;
@@ -2915,6 +2913,42 @@ class AppStrings {
     };
   }
 
+  String get mapAnimals => switch (this) {
+        _UzbekStrings() => 'Hayvonlar',
+        _RussianStrings() => 'Животные',
+        _ => 'Animals',
+      };
+
+  String get mapPlaces => switch (this) {
+        _UzbekStrings() => 'Joylar',
+        _RussianStrings() => 'Места',
+        _ => 'Places',
+      };
+
+  String get mapShowAll => switch (this) {
+        _UzbekStrings() => 'Barchasini ko‘rsatish',
+        _RussianStrings() => 'Показать все',
+        _ => 'Show all',
+      };
+
+  String get mapHideAll => switch (this) {
+        _UzbekStrings() => 'Barchasini yashirish',
+        _RussianStrings() => 'Скрыть все',
+        _ => 'Hide all',
+      };
+
+  String get mapPostedOn => switch (this) {
+        _UzbekStrings() => 'E’lon qilingan',
+        _RussianStrings() => 'Опубликовано',
+        _ => 'Posted',
+      };
+
+  String get mapMoreDetails => switch (this) {
+        _UzbekStrings() => 'Batafsil',
+        _RussianStrings() => 'Подробнее',
+        _ => 'More details',
+      };
+
   String get applyFilters {
     return switch (this) {
       _UzbekStrings() => 'Filtrlarni qo‘llash',
@@ -3070,15 +3104,14 @@ class _EnglishStrings extends AppStrings {
           viewCommentsSuffix: ' comments',
           likes: 'likes',
           leaderboard: 'Leaderboard',
-          mostActive: 'Most active',
-          mostPopular: 'Most popular',
-          topHelpers: 'Top helpers',
+          mostActive: 'Active',
+          mostPopular: 'Popular',
           day: 'Day',
           week: 'Week',
+          thisMonth: 'This month',
           noLeaderboardData: 'No leaderboard data yet.',
           unnamedUser: 'Unnamed user',
           observations: 'observations',
-          score: 'score',
           settings: 'Settings',
           editProfile: 'Edit profile',
           logout: 'Logout',
@@ -3188,15 +3221,14 @@ class _UzbekStrings extends AppStrings {
           viewCommentsSuffix: ' ta izohni ko‘rish',
           likes: 'layk',
           leaderboard: 'Yetakchilar',
-          mostActive: 'Eng faol',
-          mostPopular: 'Eng mashhur',
-          topHelpers: 'Eng yaxshi yordamchilar',
+          mostActive: 'Faol',
+          mostPopular: 'Mashhur',
           day: 'Kun',
           week: 'Hafta',
+          thisMonth: 'Shu oy',
           noLeaderboardData: 'Hali yetakchilar ma’lumoti yo‘q.',
           unnamedUser: 'Nomsiz foydalanuvchi',
           observations: 'kuzatuvlar',
-          score: 'ball',
           settings: 'Sozlamalar',
           editProfile: 'Profilni tahrirlash',
           logout: 'Chiqish',
@@ -3304,15 +3336,14 @@ class _RussianStrings extends AppStrings {
           viewCommentsSuffix: '',
           likes: 'лайков',
           leaderboard: 'Лидеры',
-          mostActive: 'Самые активные',
-          mostPopular: 'Самые популярные',
-          topHelpers: 'Лучшие помощники',
+          mostActive: 'Активные',
+          mostPopular: 'Популярные',
           day: 'День',
           week: 'Неделя',
+          thisMonth: 'В этом месяце',
           noLeaderboardData: 'Данных лидерборда пока нет.',
           unnamedUser: 'Пользователь без имени',
           observations: 'наблюдений',
-          score: 'баллы',
           settings: 'Настройки',
           editProfile: 'Редактировать профиль',
           logout: 'Выйти',

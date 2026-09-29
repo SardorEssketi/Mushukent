@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.features.cats.domain.models import CatStatus
 from app.features.leaderboards.domain.models import (
     LeaderboardPeriod,
     LeaderboardRecord,
@@ -31,16 +30,13 @@ class SqlAlchemyLeaderboardRepository(LeaderboardRepository):
     ) -> LeaderboardPage:
         visible_posts = self._visible_posts_statement(cutoff=self._cutoff_for_period(period))
 
-        if leaderboard_type == LeaderboardType.MOST_ACTIVE:
-            score_expr = func.count(visible_posts.c.post_id).label("score")
-        elif leaderboard_type == LeaderboardType.MOST_POPULAR:
-            score_expr = func.coalesce(func.sum(visible_posts.c.like_count), 0).label("score")
-        else:
-            score_expr = (
-                func.count(visible_posts.c.post_id)
-                .filter(visible_posts.c.status.in_([CatStatus.NEEDS_HELP, CatStatus.INJURED]))
-                .label("score")
-            )
+        observation_count_expr = func.count(visible_posts.c.post_id).label("observation_count")
+        like_count_expr = func.coalesce(func.sum(visible_posts.c.like_count), 0).label("like_count")
+        ranking_expr = (
+            observation_count_expr
+            if leaderboard_type == LeaderboardType.MOST_ACTIVE
+            else like_count_expr
+        )
 
         statement = (
             select(
@@ -48,7 +44,8 @@ class SqlAlchemyLeaderboardRepository(LeaderboardRepository):
                 schema.User.name.label("user_name"),
                 schema.User.avatar_url.label("avatar_url"),
                 schema.User.registered_at.label("registered_at"),
-                score_expr,
+                observation_count_expr,
+                like_count_expr,
             )
             .select_from(visible_posts)
             .join(schema.User, schema.User.id == visible_posts.c.user_id)
@@ -58,7 +55,7 @@ class SqlAlchemyLeaderboardRepository(LeaderboardRepository):
                 schema.User.avatar_url,
                 schema.User.registered_at,
             )
-            .order_by(score_expr.desc(), schema.User.id.asc())
+            .order_by(ranking_expr.desc(), schema.User.id.asc())
             .limit(limit)
         )
         rows = self.session.execute(statement).mappings().all()
@@ -70,7 +67,6 @@ class SqlAlchemyLeaderboardRepository(LeaderboardRepository):
                 schema.Post.id.label("post_id"),
                 schema.Post.user_id.label("user_id"),
                 schema.Post.like_count.label("like_count"),
-                schema.Post.status.label("status"),
                 schema.Post.created_at.label("created_at"),
             )
             .select_from(schema.Post)
@@ -100,7 +96,6 @@ class SqlAlchemyLeaderboardRepository(LeaderboardRepository):
     def _rows_to_records(self, rows: Sequence[Any]) -> list[LeaderboardRecord]:
         items: list[LeaderboardRecord] = []
         for index, row in enumerate(rows, start=1):
-            score = int(row["score"] or 0)
             items.append(
                 LeaderboardRecord(
                     rank=index,
@@ -109,9 +104,9 @@ class SqlAlchemyLeaderboardRepository(LeaderboardRepository):
                         name=row["user_name"],
                         avatar_url=row["avatar_url"],
                         registered_at=row["registered_at"],
-                        observation_count=score,
                     ),
-                    score=score,
+                    observation_count=int(row["observation_count"] or 0),
+                    like_count=int(row["like_count"] or 0),
                 )
             )
         return items

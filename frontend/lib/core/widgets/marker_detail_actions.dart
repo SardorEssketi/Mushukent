@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../localization/app_strings.dart';
 import '../network/mushukistan_api.dart';
+import '../theme/app_design_tokens.dart';
 import '../validation/phone_numbers.dart';
 
 enum MapDirectionsProvider { googleMaps, yandexMaps }
@@ -82,6 +83,7 @@ Future<void> showDirectionsChooser(
   final provider = await showModalBottomSheet<MapDirectionsProvider>(
     context: context,
     showDragHandle: true,
+    constraints: const BoxConstraints(maxWidth: AppWidths.compact),
     builder: (sheetContext) {
       return SafeArea(
         child: Column(

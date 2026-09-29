@@ -13,7 +13,6 @@ import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
-import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../application/map_viewport.dart';
 
@@ -74,6 +73,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
   final ViewportRequestGuard _viewportRequestGuard = ViewportRequestGuard();
   bool _mapReady = false;
   bool _refreshingMap = false;
+  bool _requestingLocation = false;
+  String? _selectedMarkerKey;
 
   @override
   void initState() {
@@ -266,84 +267,92 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _centerOnLocation(targetCenter, 15.5);
   }
 
+  void _setLayers(Set<_MapLayer> layers) {
+    ref.read(_mapLayersProvider.notifier).state = layers;
+    if (_currentCamera != null) {
+      _onCameraChanged(_currentCamera!, false);
+    }
+  }
+
   Future<void> _openLayerFilterSheet(AppStrings strings) async {
-    final currentLayers = ref.read(_mapLayersProvider);
-    final selectedLayers = await showModalBottomSheet<Set<_MapLayer>>(
+    await showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: AppWidths.compact),
       builder: (sheetContext) {
-        var draftLayers = {...currentLayers};
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            return SafeArea(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.sizeOf(context).height * 0.82,
-                ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        strings.filters,
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      for (final layer in _MapLayer.values)
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          secondary: Icon(layer.icon),
-                          title: Text(_layerLabel(layer, strings)),
-                          value: draftLayers.contains(layer),
-                          onChanged: (isSelected) {
-                            setSheetState(() {
-                              if (isSelected ?? false) {
-                                draftLayers.add(layer);
-                              } else {
-                                draftLayers.remove(layer);
-                              }
-                            });
-                          },
+        return Consumer(builder: (context, sheetRef, _) {
+          final selected = sheetRef.watch(_mapLayersProvider);
+          final colors = Theme.of(context).colorScheme;
+          return SafeArea(
+            child: ConstrainedBox(
+              key: const ValueKey('map-layer-sheet'),
+              constraints: BoxConstraints(
+                maxWidth: AppWidths.compact,
+                maxHeight: MediaQuery.sizeOf(context).height * 0.8,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                            child: Text(strings.filters,
+                                style: Theme.of(context).textTheme.titleLarge)),
+                        TextButton(
+                          onPressed: () => _setLayers(
+                            selected.length == _MapLayer.values.length
+                                ? <_MapLayer>{}
+                                : _MapLayer.values.toSet(),
+                          ),
+                          child: Text(selected.length == _MapLayer.values.length
+                              ? strings.mapHideAll
+                              : strings.mapShowAll),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    for (final group in [
+                      (strings.mapAnimals, _MapLayer.values.take(3)),
+                      (strings.mapPlaces, _MapLayer.values.skip(3)),
+                    ]) ...[
+                      Text(group.$1,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleSmall
+                              ?.copyWith(color: colors.onSurfaceVariant)),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(),
-                              child: Text(strings.cancel),
-                            ),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final layer in group.$2)
+                          FilterChip(
+                            key: ValueKey('layer:${layer.name}'),
+                            avatar: Icon(layer.icon,
+                                size: 18,
+                                color: selected.contains(layer)
+                                    ? colors.onSecondaryContainer
+                                    : colors.onSurfaceVariant),
+                            label: Text(_layerLabel(layer, strings)),
+                            selected: selected.contains(layer),
+                            onSelected: (value) {
+                              final next = {...selected};
+                              value ? next.add(layer) : next.remove(layer);
+                              _setLayers(next);
+                            },
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: () => Navigator.of(sheetContext).pop(
-                                draftLayers,
-                              ),
-                              child: Text(strings.applyFilters),
-                            ),
-                          ),
-                        ],
-                      ),
+                      ]),
+                      const SizedBox(height: 16),
                     ],
-                  ),
+                  ],
                 ),
               ),
-            );
-          },
-        );
+            ),
+          );
+        });
       },
     );
-
-    if (!mounted || selectedLayers == null) {
-      return;
-    }
-    ref.read(_mapLayersProvider.notifier).state = selectedLayers;
-    if (_currentCamera != null) {
-      _onCameraChanged(_currentCamera!, true);
-    }
   }
 
   Future<void> _refreshMap() async {
@@ -357,10 +366,28 @@ class _MapScreenState extends ConsumerState<MapScreen>
   }
 
   Future<void> _requestAndCenterOnUser() async {
+    if (_requestingLocation) return;
+    final known = ref.read(_mapSearchLocationProvider);
+    if (known != null) {
+      if (_isInsideTashkent(known)) {
+        _centerOnUser(known);
+      } else {
+        _centerOnLocation(
+          LatLng(LocationService.fallbackLocation.latitude,
+              LocationService.fallbackLocation.longitude),
+          13.6,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(ref.read(appStringsProvider).locationOutsideMap)));
+      }
+      return;
+    }
+    setState(() => _requestingLocation = true);
     final location = await LocationService().resolveCurrentLocation();
     if (!mounted) {
       return;
     }
+    setState(() => _requestingLocation = false);
     if (location == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -425,6 +452,15 @@ class _MapScreenState extends ConsumerState<MapScreen>
     _centerOnLocation(point, math.min(camera.zoom + 2, 16));
   }
 
+  void _selectMarker(String key, Future<void> Function() openSheet) {
+    setState(() => _selectedMarkerKey = key);
+    unawaited(openSheet().whenComplete(() {
+      if (mounted && _selectedMarkerKey == key) {
+        setState(() => _selectedMarkerKey = null);
+      }
+    }));
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedLayers = ref.watch(_mapLayersProvider);
@@ -477,7 +513,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           point: center,
           width: 52,
           height: 52,
-          child: const _FocusedLostPetMarker(),
+          child: const IgnorePointer(child: _FocusedLostPetMarker()),
         ),
     ];
     final normalCatSpecs = <_MapMarkerSpec>[];
@@ -495,16 +531,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
       final spec = _MapMarkerSpec(
         id: cat.id,
         point: LatLng(location.latitude, location.longitude),
-        width: 44,
-        height: 44,
-        child: _CatMarker(
-          needsHelp: needsHelp,
-          onTap: () => _showCatSheet(
-            context,
-            cat,
-            strings,
-            onOpenPost: () => unawaited(_openLatestCatPost(cat)),
-          ),
+        width: 52,
+        height: 52,
+        child: _MapItemMarker(
+          kind: needsHelp
+              ? _MapClusterKind.needsHelp
+              : _MapClusterKind.observations,
+          label: needsHelp ? strings.needsHelp : strings.cats,
+          selected: _selectedMarkerKey == 'cat:${cat.id}',
+          onTap: () => _selectMarker(
+              'cat:${cat.id}',
+              () => _showCatSheet(
+                    context,
+                    cat,
+                    strings,
+                    onOpenPost: () => unawaited(_openLatestCatPost(cat)),
+                  )),
         ),
       );
       (needsHelp ? needsHelpSpecs : normalCatSpecs).add(spec);
@@ -535,10 +577,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
               visiblePet.lastSeenLocation.latitude,
               visiblePet.lastSeenLocation.longitude,
             ),
-            width: 48,
-            height: 48,
-            child: _MapLostPetMarker(
-              onTap: () => _showLostPetSheet(context, visiblePet, strings),
+            width: 52,
+            height: 52,
+            child: _MapItemMarker(
+              kind: _MapClusterKind.lostPets,
+              label: strings.lostPets,
+              selected: _selectedMarkerKey == 'pet:${visiblePet.id}',
+              onTap: () => _selectMarker('pet:${visiblePet.id}',
+                  () => _showLostPetSheet(context, visiblePet, strings)),
             ),
           ),
         );
@@ -554,16 +600,20 @@ class _MapScreenState extends ConsumerState<MapScreen>
             _MapMarkerSpec(
               id: place.id,
               point: LatLng(place.location.latitude, place.location.longitude),
-              width: 44,
-              height: 44,
-              child: _PlaceMarker(
-                category: place.category,
-                onTap: () => _showPlaceSheet(
-                  context,
-                  place,
-                  strings,
-                  ref.read(mushukistanApiProvider),
-                ),
+              width: 52,
+              height: 52,
+              child: _MapItemMarker(
+                kind: _placeClusterKind(place.category),
+                label: _placeCategoryLabel(place.category, strings),
+                selected: _selectedMarkerKey == 'place:${place.id}',
+                onTap: () => _selectMarker(
+                    'place:${place.id}',
+                    () => _showPlaceSheet(
+                          context,
+                          place,
+                          strings,
+                          ref.read(mushukistanApiProvider),
+                        )),
               ),
             ),
           );
@@ -574,18 +624,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
         normalCatSpecs,
         camera: _currentCamera,
         clusterKind: _MapClusterKind.observations,
+        label: strings.cats,
         onClusterTap: _zoomIntoCluster,
       ),
       ..._clusterMarkerSpecs(
         needsHelpSpecs,
         camera: _currentCamera,
         clusterKind: _MapClusterKind.needsHelp,
+        label: strings.needsHelp,
         onClusterTap: _zoomIntoCluster,
       ),
       ..._clusterMarkerSpecs(
         lostPetSpecs,
         camera: _currentCamera,
         clusterKind: _MapClusterKind.lostPets,
+        label: strings.lostPets,
         onClusterTap: _zoomIntoCluster,
       ),
       for (final entry in placeSpecsByCategory.entries)
@@ -593,6 +646,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
           entry.value,
           camera: _currentCamera,
           clusterKind: _placeClusterKind(entry.key),
+          label: _placeCategoryLabel(entry.key, strings),
           onClusterTap: _zoomIntoCluster,
         ),
     ];
@@ -634,46 +688,57 @@ class _MapScreenState extends ConsumerState<MapScreen>
           ),
           Positioned(
             left: 12,
-            top: 12,
-            child: SafeArea(
-              child: _MapControlButton(
-                tooltip: strings.refresh,
-                icon: _refreshingMap ? Icons.hourglass_top : Icons.refresh,
-                onPressed: _refreshMap,
-              ),
-            ),
-          ),
-          Positioned(
             right: 12,
-            top: 12,
+            top: 8,
             child: SafeArea(
-              child: _LayerFilterButton(
-                strings: strings,
-                onPressed: () => _openLayerFilterSheet(strings),
+              bottom: false,
+              child: Align(
+                alignment: Alignment.topRight,
+                child: _MapToolbar(
+                  strings: strings,
+                  selectedCount: selectedLayers.length,
+                  loading: _refreshingMap,
+                  onFilters: () => _openLayerFilterSheet(strings),
+                  onRefresh: _refreshMap,
+                ),
               ),
             ),
           ),
           if (_mapError != null)
             Positioned(
               left: 12,
-              right: 76,
-              bottom: 24,
+              right: 12,
+              top: 74,
               child: SafeArea(
-                child: _MapLoadError(
-                  message: strings.couldNotLoadSection,
-                  retryLabel: strings.retry,
-                  onRetry: _refreshMap,
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(maxWidth: AppWidths.compact),
+                    child: _MapLoadError(
+                      message: strings.couldNotLoadSection,
+                      retryLabel: strings.retry,
+                      onRetry: _refreshMap,
+                    ),
+                  ),
                 ),
               ),
             ),
           Positioned(
             right: 12,
             bottom: 24,
-            child: FloatingActionButton(
-              heroTag: 'map-center-on-user',
-              tooltip: strings.centerOnUser,
-              onPressed: _requestAndCenterOnUser,
-              child: const Icon(Icons.my_location),
+            child: SafeArea(
+              top: false,
+              child: _MapControlButton(
+                tooltip: strings.centerOnUser,
+                icon: _requestingLocation
+                    ? Icons.location_searching
+                    : mapLocation != null
+                        ? Icons.my_location
+                        : Icons.location_searching_outlined,
+                active: mapLocation != null,
+                onPressed: _requestAndCenterOnUser,
+              ),
             ),
           ),
         ],
@@ -740,6 +805,7 @@ List<Marker> _clusterMarkerSpecs(
   List<_MapMarkerSpec> specs, {
   required MapCamera? camera,
   required _MapClusterKind clusterKind,
+  required String label,
   required void Function(LatLng point) onClusterTap,
 }) {
   if (specs.isEmpty) {
@@ -788,6 +854,7 @@ List<Marker> _clusterMarkerSpecs(
           child: _MapClusterMarker(
             count: entry.value.length,
             kind: clusterKind,
+            label: label,
             onTap: () => onClusterTap(_clusterCenter(entry.value)),
           ),
         ),
@@ -808,106 +875,22 @@ class _MapClusterMarker extends StatelessWidget {
   const _MapClusterMarker({
     required this.count,
     required this.kind,
+    required this.label,
     required this.onTap,
   });
 
   final int count;
   final _MapClusterKind kind;
+  final String label;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final isPlace = switch (kind) {
-      _MapClusterKind.veterinary ||
-      _MapClusterKind.petShop ||
-      _MapClusterKind.shelter =>
-        true,
-      _ => false,
-    };
-    final alert =
-        kind == _MapClusterKind.needsHelp || kind == _MapClusterKind.lostPets;
-    final color = switch (kind) {
-      _MapClusterKind.needsHelp => colors.tertiary,
-      _MapClusterKind.lostPets => colors.error,
-      _MapClusterKind.veterinary => AppPalette.lost,
-      _MapClusterKind.shelter => AppPalette.sageDark,
-      _MapClusterKind.petShop => AppPalette.adoption,
-      _MapClusterKind.observations => colors.secondary,
-    };
-    final icon = switch (kind) {
-      _MapClusterKind.needsHelp =>
-        mapMarkerIconForKind(MapMarkerKind.needsHelp),
-      _MapClusterKind.lostPets => mapMarkerIconForKind(MapMarkerKind.lostPet),
-      _MapClusterKind.veterinary => Icons.local_hospital,
-      _MapClusterKind.shelter => Icons.home_work,
-      _MapClusterKind.petShop => Icons.storefront,
-      _MapClusterKind.observations => Icons.pets,
-    };
-    final decoration = isPlace
-        ? BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                color.withValues(alpha: 0.96),
-                color.withValues(alpha: 0.72),
-              ],
-            ),
-            shape: BoxShape.circle,
-            border: Border.all(color: colors.surface, width: 3),
-            boxShadow: const [
-              BoxShadow(
-                blurRadius: 7,
-                color: Color(0x55000000),
-                offset: Offset(0, 3),
-              ),
-            ],
-          )
-        : BoxDecoration(
-            color: color.withValues(alpha: alert ? 0.94 : 0.88),
-            shape: BoxShape.circle,
-            border: Border.all(color: colors.surface, width: 2),
-            boxShadow: const [
-              BoxShadow(
-                blurRadius: 5,
-                color: Color(0x44000000),
-                offset: Offset(0, 2),
-              ),
-            ],
-          );
-    return GestureDetector(
+    return _MapItemMarker(
+      kind: kind,
+      label: '$label: $count',
+      count: count,
       onTap: onTap,
-      child: DecoratedBox(
-        decoration: decoration,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Icon(icon, color: colors.onPrimary, size: isPlace ? 23 : 21),
-            Positioned(
-              right: 0,
-              top: 0,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: colors.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: color, width: 1.5),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Text(
-                    '$count',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -919,27 +902,36 @@ Future<void> _openOsmCopyright() async {
   );
 }
 
-Future<void> _launchPlaceUri(Uri uri) async {
+Future<void> _launchPlaceUri(Uri? uri) async {
+  if (uri == null) return;
   await launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
-Uri _webUri(String value) {
-  final parsed = Uri.tryParse(value);
-  if (parsed != null && parsed.hasScheme) {
-    return parsed;
+Uri? _webUri(String value) {
+  final trimmed = value.trim();
+  final parsed = Uri.tryParse(
+      trimmed.startsWith('http://') || trimmed.startsWith('https://')
+          ? trimmed
+          : 'https://$trimmed');
+  if (parsed == null ||
+      (parsed.scheme != 'http' && parsed.scheme != 'https') ||
+      parsed.host.isEmpty) {
+    return null;
   }
-  return Uri.parse('https://$value');
+  return parsed;
 }
 
-Uri _telegramUri(String value) {
+Uri? _telegramUri(String value) {
   final trimmed = value.trim();
   if (trimmed.startsWith('@')) {
-    return Uri.parse('https://t.me/${trimmed.substring(1)}');
+    final username = trimmed.substring(1);
+    if (!RegExp(r'^[a-zA-Z0-9_]{5,32}$').hasMatch(username)) return null;
+    return Uri.https('t.me', '/$username');
   }
   return _webUri(trimmed);
 }
 
-void _showCatSheet(
+Future<void> _showCatSheet(
   BuildContext context,
   CatSummary cat,
   AppStrings strings, {
@@ -949,9 +941,10 @@ void _showCatSheet(
   final title = cat.name?.trim().isNotEmpty == true
       ? cat.name!.trim()
       : strings.unnamedCat;
-  showModalBottomSheet<void>(
+  return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    constraints: const BoxConstraints(maxWidth: AppWidths.compact),
     builder: (sheetContext) {
       final theme = Theme.of(sheetContext);
       return SafeArea(
@@ -967,6 +960,9 @@ void _showCatSheet(
                     backgroundColor: markerKind == MapMarkerKind.needsHelp
                         ? theme.colorScheme.tertiaryContainer
                         : theme.colorScheme.secondaryContainer,
+                    foregroundImage: cat.coverPhotoUrl == null
+                        ? null
+                        : NetworkImage(cat.coverPhotoUrl!),
                     child: Icon(
                       mapMarkerIconForKind(markerKind),
                       color: markerKind == MapMarkerKind.needsHelp
@@ -989,8 +985,13 @@ void _showCatSheet(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (cat.lastSeenAt != null) ...[
+                const SizedBox(height: 6),
+                Text('${strings.lastSeen}: ${_formatDate(cat.lastSeenAt!)}',
+                    style: theme.textTheme.bodySmall),
+              ],
               const SizedBox(height: 16),
-              OutlinedButton.icon(
+              FilledButton.icon(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
                   onOpenPost();
@@ -1013,16 +1014,18 @@ String _formatDate(DateTime dateTime) {
       '${local.day.toString().padLeft(2, '0')}';
 }
 
-void _showPlaceSheet(
+Future<void> _showPlaceSheet(
   BuildContext context,
   PlaceSummary place,
   AppStrings strings,
   MushukistanApi api,
 ) {
   final markerPlace = place;
-  showModalBottomSheet<void>(
+  return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: AppWidths.compact),
     builder: (sheetContext) {
       return FutureBuilder<PlaceSummary>(
         future: api.getPlace(markerPlace.id),
@@ -1083,36 +1086,6 @@ void _showPlaceSheet(
                         text: place.address!,
                       ),
                     ],
-                    if (place.phone != null &&
-                        publicPhoneUri(place.phone) != null) ...[
-                      const SizedBox(height: 8),
-                      _PlaceDetailRow(
-                        icon: Icons.phone_outlined,
-                        text: place.phone!,
-                        onTap: () => unawaited(
-                          launchPublicPhone(
-                            sheetContext,
-                            phone: place.phone!,
-                            strings: strings,
-                          ),
-                        ),
-                      ),
-                    ],
-                    if (place.phone2 != null &&
-                        publicPhoneUri(place.phone2) != null) ...[
-                      const SizedBox(height: 8),
-                      _PlaceDetailRow(
-                        icon: Icons.phone_outlined,
-                        text: place.phone2!,
-                        onTap: () => unawaited(
-                          launchPublicPhone(
-                            sheetContext,
-                            phone: place.phone2!,
-                            strings: strings,
-                          ),
-                        ),
-                      ),
-                    ],
                     if (place.openingHours != null) ...[
                       const SizedBox(height: 8),
                       _PlaceDetailRow(
@@ -1127,41 +1100,78 @@ void _showPlaceSheet(
                         text: place.daysOff!,
                       ),
                     ],
-                    if (place.website != null) ...[
+                    if (place.phone != null ||
+                        place.phone2 != null ||
+                        place.website != null ||
+                        place.instagram != null ||
+                        place.telegram != null ||
+                        place.description != null) ...[
                       const SizedBox(height: 8),
-                      _PlaceDetailRow(
-                        icon: Icons.language_outlined,
-                        text: place.website!,
-                        onTap: () => unawaited(
-                          _launchPlaceUri(_webUri(place.website!)),
-                        ),
-                      ),
-                    ],
-                    if (place.instagram != null) ...[
-                      const SizedBox(height: 8),
-                      _PlaceDetailRow(
-                        icon: Icons.camera_alt_outlined,
-                        text: place.instagram!,
-                        onTap: () => unawaited(
-                          _launchPlaceUri(_webUri(place.instagram!)),
-                        ),
-                      ),
-                    ],
-                    if (place.telegram != null) ...[
-                      const SizedBox(height: 8),
-                      _PlaceDetailRow(
-                        icon: Icons.send_outlined,
-                        text: place.telegram!,
-                        onTap: () => unawaited(
-                          _launchPlaceUri(_telegramUri(place.telegram!)),
-                        ),
-                      ),
-                    ],
-                    if (place.description != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        place.description!,
-                        style: theme.textTheme.bodyMedium,
+                      ExpansionTile(
+                        title: Text(strings.mapMoreDetails),
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: EdgeInsets.zero,
+                        children: [
+                          if (place.phone != null &&
+                              publicPhoneUri(place.phone) != null) ...[
+                            _PlaceDetailRow(
+                              icon: Icons.phone_outlined,
+                              text: place.phone!,
+                              onTap: () => unawaited(launchPublicPhone(
+                                  sheetContext,
+                                  phone: place.phone!,
+                                  strings: strings)),
+                            ),
+                          ],
+                          if (place.phone2 != null &&
+                              publicPhoneUri(place.phone2) != null) ...[
+                            _PlaceDetailRow(
+                              icon: Icons.phone_outlined,
+                              text: place.phone2!,
+                              onTap: () => unawaited(launchPublicPhone(
+                                  sheetContext,
+                                  phone: place.phone2!,
+                                  strings: strings)),
+                            ),
+                          ],
+                          if (place.website != null) ...[
+                            const SizedBox(height: 8),
+                            _PlaceDetailRow(
+                              icon: Icons.language_outlined,
+                              text: place.website!,
+                              onTap: () => unawaited(
+                                _launchPlaceUri(_webUri(place.website!)),
+                              ),
+                            ),
+                          ],
+                          if (place.instagram != null) ...[
+                            const SizedBox(height: 8),
+                            _PlaceDetailRow(
+                              icon: Icons.camera_alt_outlined,
+                              text: place.instagram!,
+                              onTap: () => unawaited(
+                                _launchPlaceUri(_webUri(place.instagram!)),
+                              ),
+                            ),
+                          ],
+                          if (place.telegram != null) ...[
+                            const SizedBox(height: 8),
+                            _PlaceDetailRow(
+                              icon: Icons.send_outlined,
+                              text: place.telegram!,
+                              onTap: () => unawaited(
+                                _launchPlaceUri(_telegramUri(place.telegram!)),
+                              ),
+                            ),
+                          ],
+                          if (place.description != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              place.description!,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                     const SizedBox(height: 12),
@@ -1182,14 +1192,15 @@ void _showPlaceSheet(
   );
 }
 
-void _showLostPetSheet(
+Future<void> _showLostPetSheet(
   BuildContext context,
   LostPetMapData lostPet,
   AppStrings strings,
 ) {
-  showModalBottomSheet<void>(
+  return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    constraints: const BoxConstraints(maxWidth: AppWidths.compact),
     builder: (sheetContext) {
       final theme = Theme.of(sheetContext);
       return SafeArea(
@@ -1218,7 +1229,8 @@ void _showLostPetSheet(
                 ],
               ),
               const SizedBox(height: 12),
-              Text('${strings.lostPet} · ${_formatDate(lostPet.createdAt)}'),
+              Text(
+                  '${strings.lostPet} · ${strings.mapPostedOn} ${_formatDate(lostPet.createdAt)}'),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: () {
@@ -1263,6 +1275,128 @@ bool _isInsideTashkent(GeoPoint point) {
       point.latitude <= _tashkentBounds.north &&
       point.longitude >= _tashkentBounds.west &&
       point.longitude <= _tashkentBounds.east;
+}
+
+Color _markerColor(_MapClusterKind kind, ColorScheme colors) => switch (kind) {
+      _MapClusterKind.observations => colors.secondary,
+      _MapClusterKind.needsHelp => colors.tertiary,
+      _MapClusterKind.lostPets => colors.error,
+      _MapClusterKind.veterinary => colors.primary,
+      _MapClusterKind.petShop => colors.tertiary,
+      _MapClusterKind.shelter => colors.secondary,
+    };
+
+Color _markerForeground(_MapClusterKind kind, ColorScheme colors) =>
+    switch (kind) {
+      _MapClusterKind.observations ||
+      _MapClusterKind.shelter =>
+        colors.onSecondary,
+      _MapClusterKind.needsHelp || _MapClusterKind.petShop => colors.onTertiary,
+      _MapClusterKind.lostPets => colors.onError,
+      _MapClusterKind.veterinary => colors.onPrimary,
+    };
+
+IconData _markerIcon(_MapClusterKind kind) => switch (kind) {
+      _MapClusterKind.observations => Icons.pets,
+      _MapClusterKind.needsHelp => Icons.warning_amber_rounded,
+      _MapClusterKind.lostPets => Icons.search_rounded,
+      _MapClusterKind.veterinary => Icons.local_hospital_rounded,
+      _MapClusterKind.petShop => Icons.storefront_rounded,
+      _MapClusterKind.shelter => Icons.home_rounded,
+    };
+
+class _MapItemMarker extends StatelessWidget {
+  const _MapItemMarker({
+    required this.kind,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+    this.count,
+  });
+
+  final _MapClusterKind kind;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final color = _markerColor(kind, colors);
+    final urgent =
+        kind == _MapClusterKind.needsHelp || kind == _MapClusterKind.lostPets;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Center(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: urgent || count != null ? 44 : 40,
+                  height: urgent || count != null ? 44 : 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: colors.surface,
+                      width: selected ? 3 : 2.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.shadow.withValues(alpha: 0.35),
+                        blurRadius: selected ? 10 : 5,
+                        offset: const Offset(0, 2),
+                      ),
+                      if (selected)
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.5),
+                          blurRadius: 0,
+                          spreadRadius: 4,
+                        ),
+                    ],
+                  ),
+                  child: Icon(_markerIcon(kind),
+                      color: _markerForeground(kind, colors), size: 21),
+                ),
+                if (count != null)
+                  Positioned(
+                    right: -7,
+                    bottom: -5,
+                    child: Container(
+                      constraints:
+                          const BoxConstraints(minWidth: 22, minHeight: 22),
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(11),
+                        border: Border.all(color: color, width: 1.5),
+                      ),
+                      child: Text('$count',
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(
+                                  color: colors.onSurface,
+                                  fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _CurrentLocationMarker extends StatelessWidget {
@@ -1312,204 +1446,66 @@ class _FocusedLostPetMarker extends StatelessWidget {
               ),
             ],
           ),
-          child: _MarkerIcon(
-            icon: mapMarkerIconForKind(MapMarkerKind.lostPet),
-            color: colorScheme.onError,
-            size: 28,
-          ),
+          child: Icon(mapMarkerIconForKind(MapMarkerKind.lostPet),
+              color: colorScheme.onError, size: 28),
         ),
       ),
     );
   }
 }
 
-class _CatMarker extends StatelessWidget {
-  const _CatMarker({
-    required this.needsHelp,
-    required this.onTap,
-  });
-
-  final bool needsHelp;
-  final VoidCallback onTap;
-
-  Color _color(BuildContext context) {
-    return needsHelp
-        ? Theme.of(context).colorScheme.tertiary
-        : Theme.of(context).colorScheme.secondary;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _color(context);
-    final markerKind =
-        needsHelp ? MapMarkerKind.needsHelp : MapMarkerKind.observation;
-    final icon = mapMarkerIconForKind(markerKind);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Center(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Icon(
-              icon,
-              color: Theme.of(context).colorScheme.surface,
-              size: 31,
-            ),
-            _MarkerIcon(
-              icon: icon,
-              color: color,
-              size: 26,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceMarker extends StatelessWidget {
-  const _PlaceMarker({
-    required this.category,
-    required this.onTap,
-  });
-
-  final String category;
-  final VoidCallback onTap;
-
-  Color _color(BuildContext context) {
-    switch (category) {
-      case 'veterinary':
-        return AppPalette.lost;
-      case 'shelter':
-        return AppPalette.sageDark;
-      default:
-        return AppPalette.adoption;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _color(context);
-    final icon = _icon;
-    final colors = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.16),
-          shape: BoxShape.circle,
-          border: Border.all(color: color.withValues(alpha: 0.7), width: 2),
-          boxShadow: const [
-            BoxShadow(
-              blurRadius: 7,
-              color: Color(0x44000000),
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              border: Border.all(color: colors.surface, width: 1.5),
-            ),
-            child: Center(
-              child: _MarkerIcon(
-                icon: icon,
-                color: colors.onPrimary,
-                size: 19,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  IconData get _icon => switch (category) {
-        'veterinary' => Icons.local_hospital,
-        'shelter' => Icons.home_work,
-        _ => Icons.storefront,
-      };
-}
-
-class _MapLostPetMarker extends StatelessWidget {
-  const _MapLostPetMarker({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: colorScheme.error.withValues(alpha: 0.18),
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: colorScheme.error,
-              shape: BoxShape.circle,
-              boxShadow: const [
-                BoxShadow(
-                  blurRadius: 6,
-                  color: Color(0x33000000),
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: _MarkerIcon(
-              icon: mapMarkerIconForKind(MapMarkerKind.lostPet),
-              color: colorScheme.onError,
-              size: 26,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MarkerIcon extends StatelessWidget {
-  const _MarkerIcon({
-    required this.icon,
-    required this.color,
-    required this.size,
-  });
-
-  final IconData icon;
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Icon(icon, color: color, size: size),
-    );
-  }
-}
-
-class _LayerFilterButton extends StatelessWidget {
-  const _LayerFilterButton({
+class _MapToolbar extends StatelessWidget {
+  const _MapToolbar({
     required this.strings,
-    required this.onPressed,
+    required this.selectedCount,
+    required this.loading,
+    required this.onFilters,
+    required this.onRefresh,
   });
 
   final AppStrings strings;
-  final VoidCallback onPressed;
+  final int selectedCount;
+  final bool loading;
+  final VoidCallback onFilters;
+  final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return _MapControlButton(
-      tooltip: strings.filters,
-      icon: Icons.tune,
-      onPressed: onPressed,
+    final colors = Theme.of(context).colorScheme;
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+          maxWidth: math.min(320, MediaQuery.sizeOf(context).width - 24)),
+      child: Material(
+        color: colors.surface,
+        elevation: 3,
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        clipBehavior: Clip.antiAlias,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Flexible(
+                child: TextButton.icon(
+              key: const ValueKey('map-layers-button'),
+              onPressed: onFilters,
+              icon: const Icon(Icons.layers_outlined),
+              label: Text(
+                  '${strings.filters} · $selectedCount/${_MapLayer.values.length}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            )),
+            SizedBox(
+              width: 44,
+              height: 48,
+              child: IconButton(
+                tooltip: strings.refresh,
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh, size: 20),
+              ),
+            ),
+          ]),
+          if (loading)
+            const SizedBox(height: 2, child: LinearProgressIndicator()),
+        ]),
+      ),
     );
   }
 }
@@ -1519,27 +1515,30 @@ class _MapControlButton extends StatelessWidget {
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.active = false,
   });
 
   final String tooltip;
   final IconData icon;
   final VoidCallback onPressed;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Material(
-      color: colors.surface,
+      color: active ? colors.primaryContainer : colors.surface,
       elevation: 2,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadii.lg),
       child: Tooltip(
         message: tooltip,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadii.lg),
           child: SizedBox.square(
-            dimension: 48,
-            child: Icon(icon, color: colors.onSurface),
+            dimension: 52,
+            child: Icon(icon,
+                color: active ? colors.onPrimaryContainer : colors.onSurface),
           ),
         ),
       ),
@@ -1573,13 +1572,11 @@ class _PlaceBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = switch (category) {
-      'veterinary' => Icons.local_hospital,
-      'shelter' => Icons.home_work,
-      _ => Icons.storefront,
-    };
+    final kind = _placeClusterKind(category);
+    final colors = Theme.of(context).colorScheme;
     return CircleAvatar(
-      child: Icon(icon),
+      backgroundColor: _markerColor(kind, colors),
+      child: Icon(_markerIcon(kind), color: _markerForeground(kind, colors)),
     );
   }
 }
@@ -1676,73 +1673,6 @@ class _MapLoadError extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-// ignore: unused_element
-class _MapFooter extends StatelessWidget {
-  const _MapFooter({
-    required this.catCount,
-    required this.lostPetCount,
-    required this.placeCount,
-    required this.location,
-    required this.strings,
-  });
-
-  final int catCount;
-  final int lostPetCount;
-  final int placeCount;
-  final GeoPoint location;
-  final AppStrings strings;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Icon(Icons.location_on_outlined),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '${strings.showingMapItems(
-                  catCount: catCount,
-                  placeCount: placeCount,
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                )} · ${strings.lostPets}: $lostPetCount',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ignore: unused_element
-class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({
-    required this.title,
-    required this.message,
-    required this.retryLabel,
-    required this.onRetry,
-  });
-
-  final String title;
-  final String message;
-  final String retryLabel;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppStatePanel(
-      icon: Icons.map_outlined,
-      title: title,
-      message: message,
-      action: FilledButton(onPressed: onRetry, child: Text(retryLabel)),
     );
   }
 }

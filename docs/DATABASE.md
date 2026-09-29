@@ -242,10 +242,14 @@ CREATE TABLE leaderboard_cache (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     leaderboard_type leaderboard_type NOT NULL,
     period TEXT NOT NULL, -- e.g. "daily", "weekly", "monthly", or ISO range
-    data JSONB NOT NULL, -- array of leaderboard entries {user_id, score, rank, meta}
+    data JSONB NOT NULL, -- array of leaderboard entries with separate observation_count and like_count metrics
     computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_leaderboard_type_period ON leaderboard_cache (leaderboard_type, period);
+
+`top_helpers` remains only as a legacy value in the original database enum so
+existing cached/history data does not require a destructive enum migration. It
+is not accepted by the Leaderboard API or used by the current application.
 
 -- Places (free OSM/manual cat-support POIs)
 CREATE TYPE place_category AS ENUM ('pet_shop','veterinary','shelter');

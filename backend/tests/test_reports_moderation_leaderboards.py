@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -14,6 +14,7 @@ from app.core.container import AppContainer
 from app.features.auth.infrastructure.passwords import PasslibPasswordHasher
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 from app.features.cats.domain.models import CatStatus
+from app.features.leaderboards.application.schemas import LeaderboardQuery
 from app.features.reports.domain.models import ReportTargetType
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
@@ -131,6 +132,7 @@ def _create_post(
     comment_count: int = 0,
     status: CatStatus | None = None,
     deleted_at: datetime | None = None,
+    created_at: datetime | None = None,
 ):
     with db_session_manager.session_scope() as session:
         post = schema.Post(
@@ -146,6 +148,7 @@ def _create_post(
             like_count=like_count,
             comment_count=comment_count,
             deleted_at=deleted_at,
+            created_at=created_at,
         )
         session.add(post)
         session.flush()
@@ -687,6 +690,7 @@ def test_leaderboards_rankings_and_visibility_filters(
     client: TestClient,
     reports_runtime,
 ):
+    now = datetime.now(UTC)
     user1, _ = _create_user(
         reports_runtime.db_session_manager,
         reports_runtime.token_service,
@@ -720,6 +724,7 @@ def test_leaderboards_rankings_and_visibility_filters(
         user_id=user1.id,
         like_count=2,
         status=CatStatus.NEEDS_HELP,
+        created_at=now - timedelta(days=10),
     )
     _create_post(
         reports_runtime.db_session_manager,
@@ -728,14 +733,16 @@ def test_leaderboards_rankings_and_visibility_filters(
         user_id=user1.id,
         like_count=1,
         status=CatStatus.NEEDS_HELP,
+        created_at=now - timedelta(days=10),
     )
     _create_post(
         reports_runtime.db_session_manager,
         post_id=UUID("77777777-7777-4777-8777-777777777777"),
         cat_id=cat.id,
         user_id=user2.id,
-        like_count=2,
+        like_count=8,
         status=CatStatus.NEEDS_HELP,
+        created_at=now,
     )
     _create_post(
         reports_runtime.db_session_manager,
@@ -744,6 +751,16 @@ def test_leaderboards_rankings_and_visibility_filters(
         user_id=user2.id,
         like_count=1,
         status=CatStatus.NEEDS_HELP,
+        created_at=now,
+    )
+    _create_post(
+        reports_runtime.db_session_manager,
+        post_id=UUID("bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb"),
+        cat_id=cat.id,
+        user_id=user3.id,
+        like_count=0,
+        status=CatStatus.NEEDS_HELP,
+        created_at=now - timedelta(days=2),
     )
     _create_post(
         reports_runtime.db_session_manager,
@@ -770,7 +787,12 @@ def test_leaderboards_rankings_and_visibility_filters(
     )
     assert most_active.status_code == 200, most_active.text
     active_items = most_active.json()["data"]
-    assert active_items[0]["score"] >= active_items[1]["score"]
+    assert active_items[0]["observation_count"] == 2
+    assert active_items[0]["like_count"] == 3
+    assert active_items[0]["user"]["id"] == str(user1.id)
+    assert active_items[0]["user"].get("observation_count") is None
+    assert active_items[0]["observation_count"] >= active_items[1]["observation_count"]
+    assert "score" not in active_items[0]
     assert "email" not in active_items[0]["user"]
 
     tie_break = client.get(
@@ -778,7 +800,7 @@ def test_leaderboards_rankings_and_visibility_filters(
         params={"period": "all", "limit": 2},
     )
     tie_items = tie_break.json()["data"]
-    assert tie_items[0]["score"] == tie_items[1]["score"]
+    assert tie_items[0]["observation_count"] == tie_items[1]["observation_count"]
     assert tie_items[0]["user"]["id"] < tie_items[1]["user"]["id"]
 
     popular = client.get(
@@ -787,13 +809,27 @@ def test_leaderboards_rankings_and_visibility_filters(
     )
     assert popular.status_code == 200
     popular_items = popular.json()["data"]
-    assert popular_items[0]["score"] >= popular_items[1]["score"]
+    assert popular_items[0]["like_count"] == 9
+    assert popular_items[0]["observation_count"] == 2
+    assert popular_items[0]["user"]["id"] == str(user2.id)
+    assert popular_items[1]["like_count"] == 3
+    assert popular_items[1]["user"]["id"] == str(user1.id)
+    assert "score" not in popular_items[0]
 
     helpers = client.get(
         "/api/v1/leaderboards/top_helpers",
         params={"period": "all", "limit": 10},
     )
-    assert helpers.status_code == 200
-    helper_items = helpers.json()["data"]
-    assert helper_items[0]["score"] >= helper_items[1]["score"]
-    assert helper_items[0]["user"]["name"] is not None
+    assert helpers.status_code == 422
+
+    week = client.get(
+        "/api/v1/leaderboards/most_active",
+        params={"period": "week", "limit": 10},
+    )
+    assert week.status_code == 200
+    week_user_ids = {item["user"]["id"] for item in week.json()["data"]}
+    assert week_user_ids == {str(user2.id), str(user3.id)}
+
+
+def test_leaderboard_api_defaults_to_month_period():
+    assert LeaderboardQuery().period.value == "month"

@@ -174,32 +174,29 @@ Bottom navigation with 5 tabs:
 - Purpose: discover recently observed cats geographically.
 - Layout:
   - full-screen map canvas,
-  - compact filter button opening marker filters for Cats, Vets, Shops and Shelters,
-  - optional recenter location button,
-  - marker clusters or markers,
-  - bottom sheet preview on marker tap.
+  - compact floating layer control with active-layer count, subtle refresh and loading feedback,
+  - explicit recenter control that requests location only after a tap,
+  - category markers and zoom-aware clusters with a shared visual style,
+  - compact marker previews with clear actions and a bounded width on wide screens.
 - Visibility:
   - cats appear on the map only when their latest public observation is within the last 10 days.
 - older cats remain available through Feed posts.
 - Filters:
-  - Nearby Cats
-  - Recently Seen
-  - Needs Help
-  - Recently Added
-  - Pet Shops
-  - Veterinary Clinics
-  - Animal Shelters
+  - Animals: Cats, Needs Help, Lost Pets.
+  - Places: Veterinary Clinics, Pet Shops, Shelters.
+  - Multiple layers may be visible together; layer changes apply immediately.
+  - The layer sheet can show or hide all layers.
 - Interactions:
   - pan/zoom map,
-  - tap marker -> no detail page in MVP,
+  - tap a cat or Lost Pet marker -> select it and open a short preview with a post action,
   - recenter on the user's location with a smooth transition and north-up map orientation,
-  - tap vet/shop/shelter marker -> place preview with phone, website and opening hours when available,
-  - tap filter button -> choose visible marker types -> apply filters,
+  - tap vet/shop/shelter marker -> place preview with actions, address and hours first, then optional contact and description details,
+  - tap the layer control -> choose visible marker types without a confirmation step,
   - filter selection updates marker set.
 - Edge cases:
   - location permission denied -> show explanatory prompt and fallback to city-level default view.
   - no cats in visible area -> empty map helper message.
-  - map tiles load failure -> retry banner.
+  - viewport data request failure -> keep existing markers and show a compact retry banner.
 
 5.6 Cat Profiles
 - Cat profile pages are not part of the MVP.
@@ -354,9 +351,10 @@ Bottom navigation with 5 tabs:
 5.14 Leaderboard Screen
 - Purpose: community ranking and engagement motivation.
 - Layout:
-  - tabs/segmented control: Most Active, Most Popular, Top Helpers
-  - period switch: week/month/all
-  - ranked user list items with avatar, name, observation count, and score
+  - two-option segmented control: Active and Popular
+  - compact period selector: Day, Week, Month, All time; Month is the default
+  - modest emphasis for the top three users, followed by a clean list for later ranks
+  - show avatar, name, rank, and only the metric used for that ranking: observations for Active, likes for Popular
 - Interactions:
   - tap user -> User Profile
 - Edge cases:

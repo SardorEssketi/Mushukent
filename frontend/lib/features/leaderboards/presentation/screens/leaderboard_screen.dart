@@ -38,14 +38,9 @@ class LeaderboardScreen extends ConsumerWidget {
               maxWidth: AppWidths.readable,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      strings.leaderboard,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                  ],
+                child: Text(
+                  strings.leaderboard,
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
             ),
@@ -67,25 +62,18 @@ class LeaderboardScreen extends ConsumerWidget {
                 data: (entries) {
                   if (entries.isEmpty) {
                     return _EmptyLeaderboard(
-                        message: strings.noLeaderboardData);
+                      message: strings.noLeaderboardData,
+                    );
                   }
-                  return AppContentWidth(
-                    maxWidth: AppWidths.readable,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      itemCount: entries.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final entry = entries[index];
-                        return _LeaderboardTile(
-                          entry: entry,
-                          strings: strings,
-                        );
-                      },
-                    ),
+                  return _LeaderboardResults(
+                    entries: entries,
+                    type: type,
+                    strings: strings,
                   );
                 },
-                loading: () => const Center(child: CircularProgressIndicator()),
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
+                ),
                 error: (error, stackTrace) => AppStatePanel(
                   icon: Icons.error_outline,
                   title: strings.leaderboard,
@@ -121,190 +109,305 @@ class _LeaderboardControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final typeSelector = SegmentedButton<String>(
+      showSelectedIcon: false,
+      segments: [
+        ButtonSegment<String>(
+          value: 'most_active',
+          label: Text(strings.mostActive),
+        ),
+        ButtonSegment<String>(
+          value: 'most_popular',
+          label: Text(strings.mostPopular),
+        ),
+      ],
+      selected: {type},
+      onSelectionChanged: (selection) {
+        if (selection.isNotEmpty) onTypeChanged(selection.first);
+      },
+    );
+
+    final periodSelector = PopupMenuButton<String>(
+      initialValue: period,
+      onSelected: onPeriodChanged,
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'day', child: Text(strings.day)),
+        PopupMenuItem(value: 'week', child: Text(strings.week)),
+        PopupMenuItem(value: 'month', child: Text(strings.month)),
+        PopupMenuItem(value: 'all', child: Text(strings.allTime)),
+      ],
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border:
+              Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(AppRadii.md),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_periodLabel(period, strings)),
+              const SizedBox(width: 4),
+              const Icon(Icons.expand_more, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+
     return AppContentWidth(
       maxWidth: AppWidths.readable,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 460) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _FilterTab(
-                    label: strings.mostActive,
-                    selected: type == 'most_active',
-                    onTap: () => onTypeChanged('most_active'),
-                  ),
-                  _FilterTab(
-                    label: strings.mostPopular,
-                    selected: type == 'most_popular',
-                    onTap: () => onTypeChanged('most_popular'),
-                  ),
-                  _FilterTab(
-                    label: strings.topHelpers,
-                    selected: type == 'top_helpers',
-                    onTap: () => onTypeChanged('top_helpers'),
+                  typeSelector,
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: periodSelector,
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            DropdownButton<String>(
-              value: period,
-              isExpanded: true,
-              items: [
-                DropdownMenuItem(value: 'day', child: Text(strings.day)),
-                DropdownMenuItem(value: 'week', child: Text(strings.week)),
-                DropdownMenuItem(value: 'month', child: Text(strings.month)),
-                DropdownMenuItem(value: 'all', child: Text(strings.allTime)),
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: typeSelector),
+                const SizedBox(width: 12),
+                periodSelector,
               ],
-              onChanged: (value) {
-                if (value != null) onPeriodChanged(value);
-              },
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _FilterTab extends StatelessWidget {
-  const _FilterTab({
-    required this.label,
-    required this.selected,
-    required this.onTap,
+String _periodLabel(String period, AppStrings strings) => switch (period) {
+      'day' => strings.day,
+      'week' => strings.week,
+      'month' => strings.thisMonth,
+      _ => strings.allTime,
+    };
+
+class _LeaderboardResults extends StatelessWidget {
+  const _LeaderboardResults({
+    required this.entries,
+    required this.type,
+    required this.strings,
   });
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final List<LeaderboardEntryData> entries;
+  final String type;
+  final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 48),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: selected ? colors.primary : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: selected ? colors.primary : colors.onSurfaceVariant,
+    return AppContentWidth(
+      maxWidth: AppWidths.readable,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final topThree = entries.take(3).toList(growable: false);
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            children: [
+              _TopThree(
+                entries: topThree,
+                type: type,
+                strings: strings,
+                compact: constraints.maxWidth < 560,
               ),
-        ),
+              if (entries.length > 3) ...[
+                const SizedBox(height: 12),
+                Column(
+                  children: [
+                    for (var index = 3; index < entries.length; index++) ...[
+                      _LeaderboardListTile(
+                        entry: entries[index],
+                        type: type,
+                        strings: strings,
+                      ),
+                      if (index < entries.length - 1)
+                        const Divider(height: 1, indent: 48),
+                    ],
+                  ],
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 }
 
-class _LeaderboardTile extends StatelessWidget {
-  const _LeaderboardTile({required this.entry, required this.strings});
+class _TopThree extends StatelessWidget {
+  const _TopThree({
+    required this.entries,
+    required this.type,
+    required this.strings,
+    required this.compact,
+  });
+
+  final List<LeaderboardEntryData> entries;
+  final String type;
+  final AppStrings strings;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) {
+      return Column(
+        children: [
+          for (final entry in entries)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _TopLeaderboardCard(
+                entry: entry,
+                type: type,
+                strings: strings,
+                compact: true,
+              ),
+            ),
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in entries)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _TopLeaderboardCard(
+                entry: entry,
+                type: type,
+                strings: strings,
+                compact: false,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _TopLeaderboardCard extends StatelessWidget {
+  const _TopLeaderboardCard({
+    required this.entry,
+    required this.type,
+    required this.strings,
+    required this.compact,
+  });
 
   final LeaderboardEntryData entry;
+  final String type;
   final AppStrings strings;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final userName = entry.user.name ?? strings.unnamedUser;
-    return InkWell(
-      onTap: () => context.push('/users/${entry.user.id}'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        child: Row(
-          children: [
-            _RankBadge(rank: entry.rank),
-            const SizedBox(width: 12),
-            CircleAvatar(
-              radius: 22,
-              backgroundImage: entry.user.avatarUrl == null
-                  ? null
-                  : NetworkImage(entry.user.avatarUrl!),
-              backgroundColor: colors.secondaryContainer,
-              foregroundColor: colors.onSecondaryContainer,
-              child: entry.user.avatarUrl == null
-                  ? Text(_initials(userName))
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    userName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.photo_camera_outlined,
-                        size: 16,
-                        color: colors.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          '${entry.user.observationCount} ${strings.observations}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: colors.primaryContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                child: Column(
+    final name = entry.user.name ?? strings.unnamedUser;
+    final borderColor =
+        entry.rank == 1 ? colors.primary : colors.outlineVariant;
+    final metric = _metricText(entry, type, strings);
+
+    return Card(
+      margin: EdgeInsets.zero,
+      color: entry.rank == 1
+          ? colors.primaryContainer
+          : colors.surfaceContainerLow,
+      elevation: entry.rank == 1 ? 1 : 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        side: BorderSide(
+          color: borderColor,
+          width: entry.rank == 1 ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('/users/${entry.user.id}'),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: compact
+              ? Row(
                   children: [
-                    Text(
-                      '${entry.score}',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: colors.onPrimaryContainer,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      strings.score,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colors.onPrimaryContainer,
+                    _RankBadge(rank: entry.rank),
+                    const SizedBox(width: 10),
+                    _UserAvatar(user: entry.user, name: name, radius: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _UserName(name: name, textAlign: TextAlign.start),
+                          const SizedBox(height: 4),
+                          _MetricLabel(text: metric, align: TextAlign.start),
+                        ],
                       ),
                     ),
                   ],
+                )
+              : Column(
+                  children: [
+                    _RankBadge(rank: entry.rank),
+                    const SizedBox(height: 10),
+                    _UserAvatar(user: entry.user, name: name, radius: 25),
+                    const SizedBox(height: 10),
+                    _UserName(name: name, textAlign: TextAlign.center),
+                    const SizedBox(height: 6),
+                    _MetricLabel(text: metric, align: TextAlign.center),
+                  ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LeaderboardListTile extends StatelessWidget {
+  const _LeaderboardListTile({
+    required this.entry,
+    required this.type,
+    required this.strings,
+  });
+
+  final LeaderboardEntryData entry;
+  final String type;
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final name = entry.user.name ?? strings.unnamedUser;
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadii.md),
+      onTap: () => context.push('/users/${entry.user.id}'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+        child: Row(
+          children: [
+            _RankBadge(rank: entry.rank),
+            const SizedBox(width: 8),
+            _UserAvatar(user: entry.user, name: name, radius: 18),
+            const SizedBox(width: 10),
+            Expanded(child: _UserName(name: name, textAlign: TextAlign.start)),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 112),
+              child: _MetricLabel(
+                text: _metricText(entry, type, strings),
+                align: TextAlign.end,
+                color: colors.onSurfaceVariant,
               ),
             ),
           ],
@@ -312,6 +415,88 @@ class _LeaderboardTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _UserAvatar extends StatelessWidget {
+  const _UserAvatar({
+    required this.user,
+    required this.name,
+    required this.radius,
+  });
+
+  final LeaderboardUserData user;
+  final String name;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return CircleAvatar(
+      radius: radius,
+      backgroundImage:
+          user.avatarUrl == null ? null : NetworkImage(user.avatarUrl!),
+      backgroundColor: colors.secondaryContainer,
+      foregroundColor: colors.onSecondaryContainer,
+      child: user.avatarUrl == null ? Text(_initials(name)) : null,
+    );
+  }
+}
+
+class _UserName extends StatelessWidget {
+  const _UserName({required this.name, required this.textAlign});
+
+  final String name;
+  final TextAlign textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      name,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      textAlign: textAlign,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+    );
+  }
+}
+
+class _MetricLabel extends StatelessWidget {
+  const _MetricLabel({
+    required this.text,
+    required this.align,
+    this.color,
+  });
+
+  final String text;
+  final TextAlign align;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+      textAlign: align,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: color ?? Theme.of(context).colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+          ),
+    );
+  }
+}
+
+String _metricText(
+  LeaderboardEntryData entry,
+  String type,
+  AppStrings strings,
+) {
+  if (type == 'most_popular') {
+    return '${entry.likeCount} ${strings.likes}';
+  }
+  return '${entry.observationCount} ${strings.observations}';
 }
 
 class _RankBadge extends StatelessWidget {
@@ -323,15 +508,20 @@ class _RankBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final background = switch (rank) {
-      1 => const Color(0xFFFFD54F),
-      2 => const Color(0xFFCFD8DC),
-      3 => const Color(0xFFD7A86E),
+      1 => colors.primary,
+      2 => colors.secondaryContainer,
+      3 => colors.tertiaryContainer,
       _ => colors.surfaceContainerHighest,
     };
-    final foreground = rank <= 3 ? Colors.black87 : colors.onSurfaceVariant;
+    final foreground = switch (rank) {
+      1 => colors.onPrimary,
+      2 => colors.onSecondaryContainer,
+      3 => colors.onTertiaryContainer,
+      _ => colors.onSurfaceVariant,
+    };
     return Container(
-      width: 38,
-      height: 38,
+      width: 36,
+      height: 36,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: background,
@@ -339,7 +529,7 @@ class _RankBadge extends StatelessWidget {
       ),
       child: Text(
         '#$rank',
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: foreground,
               fontWeight: FontWeight.w800,
             ),

@@ -9,7 +9,6 @@ from uuid import UUID
 class LeaderboardType(StrEnum):
     MOST_ACTIVE = "most_active"
     MOST_POPULAR = "most_popular"
-    TOP_HELPERS = "top_helpers"
 
 
 class LeaderboardPeriod(StrEnum):
@@ -25,11 +24,11 @@ class LeaderboardUserSummary:
     name: str | None
     avatar_url: str | None
     registered_at: datetime
-    observation_count: int = 0
 
 
 @dataclass(slots=True)
 class LeaderboardRecord:
     rank: int
     user: LeaderboardUserSummary
-    score: int
+    observation_count: int
+    like_count: int

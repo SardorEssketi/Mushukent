@@ -343,7 +343,7 @@ class MushukistanApi {
 
   Future<List<LeaderboardEntryData>> listLeaderboard(
     String type, {
-    String period = 'week',
+    String period = 'month',
     int limit = 20,
   }) {
     return _client.get<List<LeaderboardEntryData>>(
@@ -1610,19 +1610,43 @@ class LeaderboardEntryData {
   const LeaderboardEntryData({
     required this.rank,
     required this.user,
-    required this.score,
+    required this.observationCount,
+    required this.likeCount,
   });
 
   final int rank;
-  final UserPublicData user;
-  final int score;
+  final LeaderboardUserData user;
+  final int observationCount;
+  final int likeCount;
 
   factory LeaderboardEntryData.fromJson(Object? json) {
     final map = _readMap(json);
     return LeaderboardEntryData(
       rank: _readInt(map['rank']),
-      user: UserPublicData.fromJson(map['user']),
-      score: _readInt(map['score']),
+      user: LeaderboardUserData.fromJson(map['user']),
+      observationCount: _readInt(map['observation_count']),
+      likeCount: _readInt(map['like_count']),
+    );
+  }
+}
+
+class LeaderboardUserData {
+  const LeaderboardUserData({
+    required this.id,
+    required this.name,
+    required this.avatarUrl,
+  });
+
+  final String id;
+  final String? name;
+  final String? avatarUrl;
+
+  factory LeaderboardUserData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return LeaderboardUserData(
+      id: _readString(map['id']),
+      name: _readStringOrNull(map['name']),
+      avatarUrl: _readStringOrNull(map['avatar_url']),
     );
   }
 }

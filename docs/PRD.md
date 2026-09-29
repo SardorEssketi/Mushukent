@@ -289,23 +289,17 @@ Users shall be able to delete their own account from Settings under About accoun
 MVP account deletion shall anonymize the account, deactivate login, end the current session, delete likes, and hide/anonymize user-owned posts, comments, lost-pet alerts, and adoption or rehoming posts according to the account lifecycle policy.
 Leaderboards
 
-The application shall include:
-
-Most Popular Users
-
-Most Active Users
-
-Top Animal Helpers
+The application shall include Active and Popular user rankings.
 
 MVP leaderboard definitions:
 
-- Most Popular Users: count of visible public posts.
-- Most Active Users: count of visible public posts.
-- Top Animal Helpers: count of visible public posts associated with cats whose status is `needs_help` or `injured`.
+- Active Users: count each user's eligible public observations/posts created during the selected period.
+- Popular Users: sum the likes received by each user's eligible public observations/posts created during the selected period.
+- Eligible posts are public, not deleted, and belong to active, non-deleted, non-merged cats.
 
-Supported periods: `day`, `week`, `month`, `all`.
+Supported periods: `day`, `week`, `month`, `all`; the frontend defaults to `month`.
 
-Tie-breaking is deterministic: score descending, then user ID ascending.
+Each ranking uses its own metric. Ties are ordered by user ID ascending.
 
 Moderation
 

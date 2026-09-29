@@ -957,23 +957,29 @@ Feature: Leaderboards
 1) GET /api/v1/leaderboards/{type}
 - Purpose: retrieve leaderboard
 - Auth: optional
-- Path param: type in [most_active, most_popular, top_helpers]
-- Query params: period=day|week|month|all (default week), limit
+- Path param: type in [most_active, most_popular]
+- Query params: period=day|week|month|all (default month), limit
 - Response: LeaderboardResponse
   Example:
   {
     "success": true,
     "data": [
-      {"rank":1,"user":{"id":"u1","name":"Alice"},"score":123},
+      {
+        "rank": 1,
+        "user": {"id": "u1", "name": "Alice", "avatar_url": null},
+        "observation_count": 37,
+        "like_count": 184
+      },
       {"rank":2,...}
     ]
   }
  - Notes: For MVP compute on read for small datasets; include optional leaderboard_cache for later optimization.
  - Definition:
-   - most_active: count of visible public posts
-   - most_popular: sum of like_count across visible public posts
-   - top_helpers: count of visible public posts associated with cats whose status is needs_help or injured
-   - deterministic tie-breaking: score descending, then user ID ascending
+   - most_active: count of eligible public observations/posts created in the selected period
+   - most_popular: total likes received by eligible public observations/posts created in the selected period
+   - both metrics are returned separately; the ranking type determines which metric is sorted and displayed
+   - eligible posts are public and not deleted, and belong to active, non-deleted, non-merged cats
+   - deterministic tie-breaking: the selected metric descending, then user ID ascending
 - Pydantic: LeaderboardResponse
 
 Feature: Moderation
