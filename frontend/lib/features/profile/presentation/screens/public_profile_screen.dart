@@ -9,35 +9,53 @@ import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../feed/presentation/screens/feed_screen.dart';
+import '../widgets/profile_components.dart';
 
 class PublicProfileBundle {
   const PublicProfileBundle({
     required this.profile,
     required this.posts,
+    required this.activityAvailable,
   });
 
   final UserPublicData profile;
   final ApiPage<PostSummary> posts;
+  final bool activityAvailable;
 }
 
 final publicProfileProvider =
-    FutureProvider.autoDispose.family<PublicProfileBundle?, String>(
+    FutureProvider.autoDispose.family<PublicProfileBundle, String>(
   (ref, userId) async {
     ref.watch(postMutationRevisionProvider);
     final api = ref.watch(mushukistanApiProvider);
     final profile = await api.getPublicProfile(userId);
-    ApiPage<PostSummary> posts;
-    try {
-      posts = await api.listPublicProfilePosts(userId, limit: 20);
-    } on MushukistanApiException catch (error) {
-      if (error.code != 'ACTIVITY_PRIVATE') {
-        rethrow;
-      }
-      posts = const ApiPage<PostSummary>(items: [], limit: 20);
+    if (!profile.allowPublicActivityView) {
+      return PublicProfileBundle(
+        profile: profile,
+        posts: const ApiPage<PostSummary>(items: [], limit: 4),
+        activityAvailable: false,
+      );
     }
-    return PublicProfileBundle(profile: profile, posts: posts);
+    try {
+      final posts = await api.listPublicProfilePosts(userId, limit: 4);
+      return PublicProfileBundle(
+        profile: profile,
+        posts: posts,
+        activityAvailable: true,
+      );
+    } on MushukistanApiException catch (error) {
+      if (error.code != 'ACTIVITY_PRIVATE') rethrow;
+      return PublicProfileBundle(
+        profile: profile,
+        posts: const ApiPage<PostSummary>(items: [], limit: 4),
+        activityAvailable: false,
+      );
+    }
   },
 );
+
+enum _PublicProfileAction { report, block }
 
 class PublicProfileScreen extends ConsumerStatefulWidget {
   const PublicProfileScreen({super.key, required this.userId});
@@ -51,183 +69,174 @@ class PublicProfileScreen extends ConsumerStatefulWidget {
 
 class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
   bool _isBlocking = false;
+  bool _blocked = false;
 
   @override
   Widget build(BuildContext context) {
-    final userId = widget.userId;
-    final profileAsync = ref.watch(publicProfileProvider(userId));
+    final profileAsync = ref.watch(publicProfileProvider(widget.userId));
     final strings = ref.watch(appStringsProvider);
+    final profile = profileAsync.valueOrNull?.profile;
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.profile)),
-      body: profileAsync.when(
-        data: (result) {
-          if (result == null) {
-            return AppStatePanel(
-              icon: Icons.person_off_outlined,
-              title: strings.profile,
-              message: strings.profileNotFound,
-            );
-          }
-          final profile = result.profile;
-          final posts = result.posts;
-          return AppContentWidth(
-            maxWidth: AppWidths.readable,
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundImage: profile.avatarUrl == null
-                          ? null
-                          : NetworkImage(profile.avatarUrl!),
-                      child: profile.avatarUrl == null
-                          ? Text(_initials(profile.name))
-                          : null,
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            profile.name ?? strings.unnamedUser,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            '${profile.observationCount} ${strings.observations}',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                const Divider(),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.pets_outlined),
-                  title: Text(strings.userObservations),
-                  trailing: const Icon(Icons.chevron_right),
-                  enabled: profile.allowPublicActivityView,
-                  onTap: profile.allowPublicActivityView
-                      ? () => context.push('/users/${profile.id}/observations')
-                      : null,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.chat_bubble_outline),
-                  title: Text(strings.userComments),
-                  trailing: const Icon(Icons.chevron_right),
-                  enabled: profile.allowPublicActivityView,
-                  onTap: profile.allowPublicActivityView
-                      ? () => context.push('/users/${profile.id}/comments')
-                      : null,
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.flag_outlined),
-                  title: Text(strings.report),
-                  onTap: () => context.push(
-                    Uri(
-                      path: '/report',
-                      queryParameters: {
-                        'type': 'user',
-                        'id': profile.id,
-                        'label': profile.name ?? strings.unnamedUser,
-                      },
-                    ).toString(),
-                  ),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: _isBlocking
-                      ? const SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.block_outlined),
-                  title: Text(strings.blockUser),
-                  enabled: !_isBlocking,
-                  onTap: _isBlocking
-                      ? null
-                      : () => _blockProfile(profile.id, strings),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                if (!profile.allowPublicActivityView)
-                  Text(strings.noActivityVisible)
-                else if (posts.items.isEmpty)
-                  Text(strings.noObservationsYet)
-                else
-                  ...posts.items.indexed.map(
-                    (indexedPost) {
-                      final index = indexedPost.$1;
-                      final post = indexedPost.$2;
-                      return Column(
-                        children: [
-                          if (index > 0) const Divider(height: 1),
-                          ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.image_outlined),
-                            title: Text(
-                              post.cat.name ?? strings.unnamedCat,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              post.description?.trim().isNotEmpty == true
-                                  ? post.description!.trim()
-                                  : strings.noDescription,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            isThreeLine: true,
-                            onTap: () => context.push('/posts/${post.id}'),
-                          ),
-                        ],
-                      );
+      appBar: AppBar(
+        title: Text(strings.profile),
+        actions: [
+          if (profile != null)
+            PopupMenuButton<_PublicProfileAction>(
+              tooltip: strings.profileActions,
+              onSelected: (action) {
+                if (action == _PublicProfileAction.report) {
+                  context.push(Uri(
+                    path: '/report',
+                    queryParameters: {
+                      'type': 'user',
+                      'id': profile.id,
+                      'label': profile.name ?? strings.unnamedUser,
                     },
-                  ),
+                  ).toString());
+                } else {
+                  _blockProfile(profile.id, strings);
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: _PublicProfileAction.report,
+                  child: Text(strings.report),
+                ),
+                PopupMenuItem(
+                  value: _PublicProfileAction.block,
+                  enabled: !_isBlocking && !_blocked,
+                  child:
+                      Text(_blocked ? strings.userBlocked : strings.blockUser),
+                ),
               ],
             ),
+        ],
+      ),
+      body: profileAsync.when(
+        skipLoadingOnRefresh: true,
+        data: (result) {
+          final profile = result.profile;
+          final activityAvailable = result.activityAvailable;
+          final summary = ProfileSummaryCard(
+            name: profile.name ?? strings.unnamedUser,
+            strings: strings,
+            avatarUrl: profile.avatarUrl,
+            bio: profile.bio,
+            observationCount: profile.observationCount,
+            likesReceived: profile.totalLikesReceived,
+            commentCount: profile.commentCount,
+            onObservationsTap: activityAvailable
+                ? () => context.push('/users/${profile.id}/observations')
+                : null,
+            onCommentsTap: activityAvailable
+                ? () => context.push('/users/${profile.id}/comments')
+                : null,
+          );
+          final recent = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ProfileSectionHeading(
+                title: strings.recentObservations,
+                action: activityAvailable && result.posts.items.isNotEmpty
+                    ? TextButton(
+                        onPressed: () =>
+                            context.push('/users/${profile.id}/observations'),
+                        child: Text(strings.seeAll),
+                      )
+                    : null,
+              ),
+              if (!activityAvailable)
+                AppCard(
+                  child: Row(children: [
+                    Icon(Icons.visibility_off_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: Text(strings.noActivityVisible)),
+                  ]),
+                )
+              else if (result.posts.items.isEmpty)
+                AppCard(
+                  child: Row(children: [
+                    Icon(Icons.pets_outlined,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: Text(strings.noObservationsYet)),
+                  ]),
+                )
+              else
+                for (final post in result.posts.items) ...[
+                  FeedPostCard(
+                    key: ValueKey(post.id),
+                    post: post,
+                    onTap: () => context.push('/posts/${post.id}'),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+            ],
+          );
+          return AppContentWidth(
+            maxWidth: AppWidths.wide,
+            child: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= AppWidths.readable;
+              return ListView(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                children: [
+                  if (wide)
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 5, child: summary),
+                          const SizedBox(width: AppSpacing.xl),
+                          Expanded(flex: 6, child: recent),
+                        ])
+                  else ...[
+                    summary,
+                    const SizedBox(height: AppSpacing.xl),
+                    recent,
+                  ],
+                ],
+              );
+            }),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => AppStatePanel(
-          icon: Icons.error_outline,
+          icon:
+              error is MushukistanApiException && error.code == 'USER_NOT_FOUND'
+                  ? Icons.person_off_outlined
+                  : Icons.error_outline,
           title: strings.profile,
-          message: strings.couldNotLoadProfile,
-          action: FilledButton(
-            onPressed: () => ref.invalidate(publicProfileProvider(userId)),
-            child: Text(strings.retry),
-          ),
+          message:
+              error is MushukistanApiException && error.code == 'USER_NOT_FOUND'
+                  ? strings.profileNotFound
+                  : strings.couldNotLoadProfile,
+          action:
+              error is MushukistanApiException && error.code == 'USER_NOT_FOUND'
+                  ? null
+                  : FilledButton(
+                      onPressed: () =>
+                          ref.invalidate(publicProfileProvider(widget.userId)),
+                      child: Text(strings.retry),
+                    ),
         ),
       ),
     );
   }
 
   Future<void> _blockProfile(String profileId, AppStrings strings) async {
+    if (_isBlocking || _blocked) return;
     if (!ref.read(authControllerProvider).isAuthenticated) {
       requestAuthentication(context);
       return;
     }
     final confirmed = await _confirmBlock(context, strings);
-    if (!confirmed || !mounted) {
-      return;
-    }
+    if (!confirmed || !mounted || _isBlocking || _blocked) return;
     setState(() => _isBlocking = true);
     try {
       await ref.read(mushukistanApiProvider).blockUser(profileId);
       if (mounted) {
+        setState(() => _blocked = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(strings.userBlocked)),
         );
@@ -239,9 +248,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _isBlocking = false);
-      }
+      if (mounted) setState(() => _isBlocking = false);
     }
   }
 }
@@ -265,11 +272,4 @@ Future<bool> _confirmBlock(BuildContext context, AppStrings strings) async {
     ),
   );
   return result ?? false;
-}
-
-String _initials(String? name) {
-  final source = (name ?? 'MU').trim();
-  final parts = source.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
-  final initials = parts.take(2).map((part) => part[0]).join();
-  return initials.isEmpty ? 'MU' : initials.toUpperCase();
 }

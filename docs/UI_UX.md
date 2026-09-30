@@ -174,9 +174,10 @@ Bottom navigation with 5 tabs:
 - Purpose: discover recently observed cats geographically.
 - Layout:
   - full-screen map canvas,
-  - compact floating layer control with active-layer count, subtle refresh and loading feedback,
-  - explicit recenter control that requests location only after a tap,
-  - category markers and zoom-aware clusters with a shared visual style,
+  - compact floating layer control with a count when filters differ from the default; manual refresh sits in the layer sheet,
+  - legible crosshair recenter control that requests location only after a tap,
+  - compact icon markers with round animal and rounded-square place shapes; alert markers use stronger fills,
+  - zoom-aware category clusters with counts inside their marker body,
   - compact marker previews with clear actions and a bounded width on wide screens.
 - Visibility:
   - cats appear on the map only when their latest public observation is within the last 10 days.
@@ -364,34 +365,37 @@ Bottom navigation with 5 tabs:
 5.15 User Profile Screen (Self)
 - Purpose: manage personal profile and view contribution stats.
 - Layout:
-  - avatar, display name, bio
-  - owner-only phone number
-  - stats: observations, likes received, comments count
-  - list: My Observations
-  - app bar actions, in order: Donate to author, Edit Profile, Settings, Logout
-  - donation dialog identifies Sardor Muxtorov as the recipient and shows the support card number from the welcome message as selectable text
-  - actions: Adoption help, Settings, Logout
-  - if moderator: Moderator Tools entry
+  - shared profile summary surface with large avatar, display name, short bio, and secondary owner-only email, phone, and Telegram details.
+  - compact stats: observations, likes received, comments. Observations and Comments open their existing activity screens.
+  - Your activity section: My lost pets and My rehoming posts.
+  - Resources and account section: adoption guidance and Settings.
+  - moderator-only Moderation reports section.
+  - app bar: Donate to author (icon only on compact screens), Edit Profile, and Logout in the overflow menu.
+  - donation dialog identifies Sardor Muxtorov as the recipient and shows the existing support card number as selectable text with a copy action.
+  - one column on phones; on wide screens, summary and actions sit side by side in a centered layout bounded by AppWidths.wide.
 - Interactions:
   - tap Adoption help -> opens informational guidance about adopting a cat in Uzbekistan, including veterinary checks, identification/passport, ownership transfer, apartment/common-area rules, and official source links
   - edit profile fields,
   - tap Observations to view the user's observation posts,
   - tap Comments to view the user's comments,
-  - open own posts list,
+  - open My lost pets and My rehoming posts from their existing routes,
   - logout confirmation.
 - Edge cases:
-  - avatar load failure -> fallback placeholder.
+  - missing or failed avatar -> initials fallback; load failure -> retry state.
 
 5.16 User Public Profile Screen
 - Purpose: view another contributor.
 - Layout:
-  - avatar, name, public stats
-  - posts list
+  - same identity and stats surface as the self profile, with name, avatar, short public bio, observations, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
+  - Recent observations shows up to four current Feed post cards and a See all action to the existing observations screen; comments open from the stat.
+  - Report and Block appear in the app bar overflow menu. A successful block disables the Block action for that screen session.
+  - one column on phones; on wide screens, identity/stats and recent observations sit side by side within AppWidths.wide.
 - Interactions:
-  - open their posts
-  - open their comments when public activity is enabled
+  - open observations and comments from stats when public activity is enabled; tap an observation card for its existing detail route.
+  - Report opens the existing report route. Block retains its sign-in requirement and confirmation.
 - Privacy:
-  - no private email shown.
+  - when public activity is disabled, the profile remains visible, the activity stats do not navigate, and a calm private-activity state replaces the preview. No preview request is sent when privacy is already known.
+  - a privacy response during a preview request also suppresses previews and navigation.
 
 5.17 Edit Profile Screen
 - Purpose: update display name, phone number, bio, avatar.

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/map/presentation/screens/map_screen.dart';
+import 'package:mushukistan_frontend/features/map/presentation/widgets/map_floating_controls.dart';
 
 import '../../support/fakes.dart';
 
@@ -42,14 +43,18 @@ void main() {
     await tester.pump();
     expect(lostPetReads, 1);
     expect(find.byTooltip('Center on user'), findsOneWidget);
-    expect(find.byIcon(Icons.my_location), findsNothing);
+    expect(
+        tester
+            .widget<MapLocationControl>(find.byType(MapLocationControl))
+            .active,
+        isFalse);
     expect(find.byKey(const ValueKey('marker:lostPets:pet-1')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('map-layers-button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('layer:lostPets')));
     await tester.pump();
-    expect(find.text('Filters · 5/6'), findsOneWidget);
+    expect(find.byTooltip('Filters · 5/6'), findsOneWidget);
     expect(find.byKey(const ValueKey('marker:lostPets:pet-1')), findsNothing);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
@@ -63,7 +68,7 @@ void main() {
 
     await tester.tap(find.text('Hide all'));
     await tester.pump();
-    expect(find.text('Filters · 0/6'), findsOneWidget);
+    expect(find.byTooltip('Filters · 0/6'), findsOneWidget);
     expect(find.byKey(const ValueKey('marker:lostPets:pet-1')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('layer:vets')));
     await tester.pump(const Duration(milliseconds: 500));
@@ -111,7 +116,9 @@ void main() {
     ));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
-    await tester.tap(find.byTooltip('Refresh'));
+    await tester.tap(find.byKey(const ValueKey('map-layers-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Refresh'));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
     expect(find.byKey(const ValueKey('marker:lostPets:pet-1')), findsOneWidget);

@@ -221,6 +221,36 @@ class AppStrings {
   final String changesSaved;
   final String couldNotSaveChanges;
 
+  String get yourActivity => switch (this) {
+        _UzbekStrings() => 'Faoliyatingiz',
+        _RussianStrings() => 'Ваша активность',
+        _ => 'Your activity',
+      };
+
+  String get resourcesAndAccount => switch (this) {
+        _UzbekStrings() => 'Foydali ma’lumotlar va hisob',
+        _RussianStrings() => 'Полезное и аккаунт',
+        _ => 'Resources and account',
+      };
+
+  String get recentObservations => switch (this) {
+        _UzbekStrings() => 'So‘nggi kuzatuvlar',
+        _RussianStrings() => 'Недавние наблюдения',
+        _ => 'Recent observations',
+      };
+
+  String get seeAll => switch (this) {
+        _UzbekStrings() => 'Barchasini ko‘rish',
+        _RussianStrings() => 'Посмотреть все',
+        _ => 'See all',
+      };
+
+  String get profileActions => switch (this) {
+        _UzbekStrings() => 'Profil amallari',
+        _RussianStrings() => 'Действия с профилем',
+        _ => 'Profile actions',
+      };
+
   String get unsavedChangesTitle {
     return switch (this) {
       _UzbekStrings() => 'Saqlanmagan o\'zgarishlar',

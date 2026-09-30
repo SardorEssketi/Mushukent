@@ -9,6 +9,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../widgets/profile_components.dart';
 
 final profileMeProvider =
     FutureProvider.autoDispose<UserProfileData>((ref) async {
@@ -30,14 +31,21 @@ class ProfileScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(strings.profile),
         actions: [
-          Tooltip(
-            message: strings.donateToAuthor,
-            child: TextButton.icon(
+          if (MediaQuery.sizeOf(context).width < AppWidths.compact)
+            IconButton(
+              tooltip: strings.donateToAuthor,
               onPressed: () => _showDonationDialog(context, strings),
               icon: const Icon(Icons.volunteer_activism_outlined),
-              label: Text(strings.donateToAuthor),
+            )
+          else
+            Tooltip(
+              message: strings.donateToAuthor,
+              child: TextButton.icon(
+                onPressed: () => _showDonationDialog(context, strings),
+                icon: const Icon(Icons.volunteer_activism_outlined),
+                label: Text(strings.donateToAuthor),
+              ),
             ),
-          ),
           IconButton(
             tooltip: strings.editProfile,
             onPressed: () => context.push('/profile/edit'),
@@ -77,72 +85,98 @@ class ProfileScreen extends ConsumerWidget {
         ],
       ),
       body: profileAsync.when(
-        data: (profile) => AppContentWidth(
-          maxWidth: AppWidths.readable,
-          child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+        data: (profile) {
+          final summary = ProfileSummaryCard(
+            name: profile.name ?? currentUser?.name ?? strings.unnamedUser,
+            strings: strings,
+            avatarUrl: profile.avatarUrl ?? currentUser?.avatarUrl,
+            bio: profile.bio,
+            email: profile.email,
+            phoneNumber: profile.phoneNumber,
+            telegramUsername: profile.telegramUsername,
+            observationCount: profile.observationCount,
+            likesReceived: profile.totalLikesReceived,
+            commentCount: profile.commentCount,
+            onObservationsTap: () => context.push('/profile/observations'),
+            onCommentsTap: () => context.push('/profile/comments'),
+          );
+          final actions = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _Header(
-                name: profile.name ?? currentUser?.name ?? strings.unnamedUser,
-                email: profile.email,
-                avatarUrl: profile.avatarUrl ?? currentUser?.avatarUrl,
-                phoneNumber: profile.phoneNumber,
-                telegramUsername: profile.telegramUsername,
-                bio: profile.bio,
+              ProfileSectionHeading(title: strings.yourActivity),
+              AppCard(
+                padding: EdgeInsets.zero,
+                child: Column(children: [
+                  ProfileActionRow(
+                    icon: Icons.search_outlined,
+                    title: strings.myLostPets,
+                    onTap: () => context.push('/profile/lost-pets'),
+                  ),
+                  const Divider(height: 1),
+                  ProfileActionRow(
+                    icon: Icons.home_outlined,
+                    title: strings.myAdoptionPosts,
+                    onTap: () => context.push('/profile/adoption-posts'),
+                  ),
+                ]),
               ),
-              const SizedBox(height: 16),
-              _StatGrid(
-                profile: profile,
-                strings: strings,
-                onObservationsTap: () => context.push('/profile/observations'),
-                onCommentsTap: () => context.push('/profile/comments'),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.home_outlined),
-                title: Text(strings.adoptionHelpTooltip),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/profile/adoption-help'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.search_outlined),
-                title: Text(strings.myLostPets),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/profile/lost-pets'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.home_outlined),
-                title: Text(strings.myAdoptionPosts),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/profile/adoption-posts'),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.settings_outlined),
-                title: Text(strings.settings),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('/profile/settings'),
+              const SizedBox(height: AppSpacing.xl),
+              ProfileSectionHeading(title: strings.resourcesAndAccount),
+              AppCard(
+                padding: EdgeInsets.zero,
+                child: Column(children: [
+                  ProfileActionRow(
+                    icon: Icons.menu_book_outlined,
+                    title: strings.adoptionHelpTooltip,
+                    onTap: () => context.push('/profile/adoption-help'),
+                  ),
+                  const Divider(height: 1),
+                  ProfileActionRow(
+                    icon: Icons.settings_outlined,
+                    title: strings.settings,
+                    onTap: () => context.push('/profile/settings'),
+                  ),
+                ]),
               ),
               if (profile.isModerator || currentUser?.isModerator == true) ...[
-                const Divider(height: 1),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.admin_panel_settings_outlined),
-                  title: Text(strings.moderationReports),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/moderation/reports'),
+                const SizedBox(height: AppSpacing.xl),
+                ProfileSectionHeading(title: strings.moderationReports),
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: ProfileActionRow(
+                    icon: Icons.admin_panel_settings_outlined,
+                    title: strings.moderationReports,
+                    onTap: () => context.push('/moderation/reports'),
+                  ),
                 ),
               ],
             ],
-          ),
-        ),
+          );
+          return AppContentWidth(
+            maxWidth: AppWidths.wide,
+            child: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= AppWidths.readable;
+              return ListView(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                children: [
+                  if (wide)
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(flex: 5, child: summary),
+                          const SizedBox(width: AppSpacing.xl),
+                          Expanded(flex: 6, child: actions),
+                        ])
+                  else ...[
+                    summary,
+                    const SizedBox(height: AppSpacing.xl),
+                    actions,
+                  ],
+                ],
+              );
+            }),
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => AppStatePanel(
           icon: Icons.error_outline,
@@ -239,172 +273,4 @@ Future<bool> _confirmLogout(BuildContext context, AppStrings strings) async {
   return confirmed ?? false;
 }
 
-class _Header extends StatelessWidget {
-  const _Header({
-    required this.name,
-    required this.email,
-    required this.avatarUrl,
-    required this.phoneNumber,
-    required this.telegramUsername,
-    required this.bio,
-  });
-
-  final String name;
-  final String email;
-  final String? avatarUrl;
-  final String? phoneNumber;
-  final String? telegramUsername;
-  final String? bio;
-
-  @override
-  Widget build(BuildContext context) {
-    final phone = phoneNumber?.trim();
-    final telegram = telegramUsername?.trim();
-    final profileBio = bio?.trim();
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 28,
-          backgroundImage: avatarUrl == null ? null : NetworkImage(avatarUrl!),
-          child: avatarUrl == null ? Text(_initials(name, email)) : null,
-        ),
-        const SizedBox(width: AppSpacing.md),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                email,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-              if (phone != null && phone.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(phone, style: Theme.of(context).textTheme.bodySmall),
-              ],
-              if (telegram != null && telegram.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text('@$telegram',
-                    style: Theme.of(context).textTheme.bodySmall),
-              ],
-              if (profileBio != null && profileBio.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(profileBio, maxLines: 3, overflow: TextOverflow.ellipsis),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatGrid extends StatelessWidget {
-  const _StatGrid({
-    required this.profile,
-    required this.strings,
-    required this.onObservationsTap,
-    required this.onCommentsTap,
-  });
-
-  final UserProfileData profile;
-  final AppStrings strings;
-  final VoidCallback onObservationsTap;
-  final VoidCallback onCommentsTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            label: strings.observations,
-            value: profile.observationCount.toString(),
-            onTap: onObservationsTap,
-          ),
-        ),
-        const SizedBox(
-          height: 44,
-          child: VerticalDivider(width: AppSpacing.xl),
-        ),
-        Expanded(
-          child: _StatCard(
-            label: strings.likesReceived,
-            value: profile.totalLikesReceived.toString(),
-          ),
-        ),
-        const SizedBox(
-          height: 44,
-          child: VerticalDivider(width: AppSpacing.xl),
-        ),
-        Expanded(
-          child: _StatCard(
-            label: strings.comments,
-            value: profile.commentCount.toString(),
-            onTap: onCommentsTap,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadii.sm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(value, style: theme.textTheme.titleLarge),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 enum _ProfileAction { logout }
-
-String _initials(String name, String email) {
-  final source = name.trim().isEmpty ? email : name;
-  final parts = source.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
-  final initials = parts.take(2).map((part) => part[0]).join();
-  return initials.isEmpty ? 'MU' : initials.toUpperCase();
-}

@@ -1577,17 +1577,21 @@ class UserPublicData {
     required this.id,
     required this.registeredAt,
     required this.observationCount,
+    required this.totalLikesReceived,
     required this.commentCount,
     required this.allowPublicActivityView,
     this.name,
     this.avatarUrl,
+    this.bio,
   });
 
   final String id;
   final String? name;
   final String? avatarUrl;
+  final String? bio;
   final DateTime registeredAt;
   final int observationCount;
+  final int totalLikesReceived;
   final int commentCount;
   final bool allowPublicActivityView;
 
@@ -1597,8 +1601,10 @@ class UserPublicData {
       id: _readString(map['id']),
       name: _readStringOrNull(map['name']),
       avatarUrl: _readStringOrNull(map['avatar_url']),
+      bio: _readStringOrNull(map['bio']),
       registeredAt: _readDateTime(map['registered_at']),
       observationCount: _readInt(map['observation_count']),
+      totalLikesReceived: _readInt(map['total_likes_received']),
       commentCount: _readInt(map['comment_count']),
       allowPublicActivityView:
           _readBoolOrNull(map['allow_public_activity_view']) ?? true,

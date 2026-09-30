@@ -987,9 +987,12 @@ def test_public_profile_visibility_and_private_field_exclusion(
     assert payload["name"] == "Profile User"
     assert "email" not in payload
     assert "phone_number" not in payload
-    assert "bio" not in payload
+    assert payload["bio"] == "Cat lover"
+    assert payload["total_likes_received"] == 2
     assert "is_active" not in payload
     assert "is_moderator" not in payload
+    assert "telegram_username" not in payload
+    assert "preferred_language" not in payload
     assert payload["observation_count"] == 2
 
 

@@ -46,8 +46,10 @@ class UserPublic(BaseModel):
     id: UUID
     name: str | None = None
     avatar_url: str | None = None
+    bio: str | None = None
     registered_at: datetime
     observation_count: int = 0
+    total_likes_received: int = 0
     comment_count: int = 0
     allow_public_activity_view: bool = True
 

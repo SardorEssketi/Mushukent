@@ -67,8 +67,10 @@ class UsersService:
                 id=user.id,
                 name=user.name,
                 avatar_url=user.avatar_url,
+                bio=user.bio,
                 registered_at=user.registered_at,
                 observation_count=observation_count,
+                total_likes_received=repository.count_likes_received(user.id),
                 comment_count=repository.count_comments(user.id),
                 allow_public_activity_view=user.allow_public_activity_view,
             )

@@ -15,6 +15,8 @@ import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../application/map_viewport.dart';
+import '../widgets/map_floating_controls.dart';
+import '../widgets/map_marker_visual.dart';
 
 final _tashkentBounds = LatLngBounds(
   const LatLng(41.1800, 69.0500),
@@ -345,6 +347,18 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       ]),
                       const SizedBox(height: 16),
                     ],
+                    const Divider(),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(sheetContext).pop();
+                          unawaited(_refreshMap());
+                        },
+                        icon: const Icon(Icons.refresh, size: 20),
+                        label: Text(strings.refresh),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -533,10 +547,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
         point: LatLng(location.latitude, location.longitude),
         width: 52,
         height: 52,
-        child: _MapItemMarker(
+        child: MapMarkerVisual(
           kind: needsHelp
-              ? _MapClusterKind.needsHelp
-              : _MapClusterKind.observations,
+              ? MapMarkerVisualKind.needsHelp
+              : MapMarkerVisualKind.observations,
           label: needsHelp ? strings.needsHelp : strings.cats,
           selected: _selectedMarkerKey == 'cat:${cat.id}',
           onTap: () => _selectMarker(
@@ -579,8 +593,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
             ),
             width: 52,
             height: 52,
-            child: _MapItemMarker(
-              kind: _MapClusterKind.lostPets,
+            child: MapMarkerVisual(
+              kind: MapMarkerVisualKind.lostPets,
               label: strings.lostPets,
               selected: _selectedMarkerKey == 'pet:${visiblePet.id}',
               onTap: () => _selectMarker('pet:${visiblePet.id}',
@@ -602,7 +616,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               point: LatLng(place.location.latitude, place.location.longitude),
               width: 52,
               height: 52,
-              child: _MapItemMarker(
+              child: MapMarkerVisual(
                 kind: _placeClusterKind(place.category),
                 label: _placeCategoryLabel(place.category, strings),
                 selected: _selectedMarkerKey == 'place:${place.id}',
@@ -623,21 +637,21 @@ class _MapScreenState extends ConsumerState<MapScreen>
       ..._clusterMarkerSpecs(
         normalCatSpecs,
         camera: _currentCamera,
-        clusterKind: _MapClusterKind.observations,
+        clusterKind: MapMarkerVisualKind.observations,
         label: strings.cats,
         onClusterTap: _zoomIntoCluster,
       ),
       ..._clusterMarkerSpecs(
         needsHelpSpecs,
         camera: _currentCamera,
-        clusterKind: _MapClusterKind.needsHelp,
+        clusterKind: MapMarkerVisualKind.needsHelp,
         label: strings.needsHelp,
         onClusterTap: _zoomIntoCluster,
       ),
       ..._clusterMarkerSpecs(
         lostPetSpecs,
         camera: _currentCamera,
-        clusterKind: _MapClusterKind.lostPets,
+        clusterKind: MapMarkerVisualKind.lostPets,
         label: strings.lostPets,
         onClusterTap: _zoomIntoCluster,
       ),
@@ -694,12 +708,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
               bottom: false,
               child: Align(
                 alignment: Alignment.topRight,
-                child: _MapToolbar(
-                  strings: strings,
+                child: MapLayersControl(
+                  key: const ValueKey('map-layers-button'),
+                  label: strings.filters,
                   selectedCount: selectedLayers.length,
+                  totalCount: _MapLayer.values.length,
                   loading: _refreshingMap,
-                  onFilters: () => _openLayerFilterSheet(strings),
-                  onRefresh: _refreshMap,
+                  onPressed: () => _openLayerFilterSheet(strings),
                 ),
               ),
             ),
@@ -729,14 +744,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
             bottom: 24,
             child: SafeArea(
               top: false,
-              child: _MapControlButton(
-                tooltip: strings.centerOnUser,
-                icon: _requestingLocation
-                    ? Icons.location_searching
-                    : mapLocation != null
-                        ? Icons.my_location
-                        : Icons.location_searching_outlined,
+              child: MapLocationControl(
+                label: strings.centerOnUser,
                 active: mapLocation != null,
+                busy: _requestingLocation,
                 onPressed: _requestAndCenterOnUser,
               ),
             ),
@@ -768,15 +779,6 @@ bool _placeSupportsRoute(String category) {
   return category == 'veterinary' || category == 'pet_shop';
 }
 
-enum _MapClusterKind {
-  observations,
-  needsHelp,
-  lostPets,
-  veterinary,
-  petShop,
-  shelter,
-}
-
 class _MapMarkerSpec {
   const _MapMarkerSpec({
     required this.id,
@@ -793,18 +795,18 @@ class _MapMarkerSpec {
   final Widget child;
 }
 
-_MapClusterKind _placeClusterKind(String category) {
+MapMarkerVisualKind _placeClusterKind(String category) {
   return switch (category) {
-    'veterinary' => _MapClusterKind.veterinary,
-    'shelter' => _MapClusterKind.shelter,
-    _ => _MapClusterKind.petShop,
+    'veterinary' => MapMarkerVisualKind.veterinary,
+    'shelter' => MapMarkerVisualKind.shelter,
+    _ => MapMarkerVisualKind.petShop,
   };
 }
 
 List<Marker> _clusterMarkerSpecs(
   List<_MapMarkerSpec> specs, {
   required MapCamera? camera,
-  required _MapClusterKind clusterKind,
+  required MapMarkerVisualKind clusterKind,
   required String label,
   required void Function(LatLng point) onClusterTap,
 }) {
@@ -849,9 +851,9 @@ List<Marker> _clusterMarkerSpecs(
         Marker(
           key: ValueKey<String>('cluster:${clusterKind.name}:${entry.key}'),
           point: _clusterCenter(entry.value),
-          width: 52,
+          width: 64,
           height: 52,
-          child: _MapClusterMarker(
+          child: MapClusterVisual(
             count: entry.value.length,
             kind: clusterKind,
             label: label,
@@ -869,30 +871,6 @@ LatLng _clusterCenter(List<_MapMarkerSpec> specs) {
     longitude += spec.point.longitude;
   }
   return LatLng(latitude / specs.length, longitude / specs.length);
-}
-
-class _MapClusterMarker extends StatelessWidget {
-  const _MapClusterMarker({
-    required this.count,
-    required this.kind,
-    required this.label,
-    required this.onTap,
-  });
-
-  final int count;
-  final _MapClusterKind kind;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return _MapItemMarker(
-      kind: kind,
-      label: '$label: $count',
-      count: count,
-      onTap: onTap,
-    );
-  }
 }
 
 Future<void> _openOsmCopyright() async {
@@ -1277,128 +1255,6 @@ bool _isInsideTashkent(GeoPoint point) {
       point.longitude <= _tashkentBounds.east;
 }
 
-Color _markerColor(_MapClusterKind kind, ColorScheme colors) => switch (kind) {
-      _MapClusterKind.observations => colors.secondary,
-      _MapClusterKind.needsHelp => colors.tertiary,
-      _MapClusterKind.lostPets => colors.error,
-      _MapClusterKind.veterinary => colors.primary,
-      _MapClusterKind.petShop => colors.tertiary,
-      _MapClusterKind.shelter => colors.secondary,
-    };
-
-Color _markerForeground(_MapClusterKind kind, ColorScheme colors) =>
-    switch (kind) {
-      _MapClusterKind.observations ||
-      _MapClusterKind.shelter =>
-        colors.onSecondary,
-      _MapClusterKind.needsHelp || _MapClusterKind.petShop => colors.onTertiary,
-      _MapClusterKind.lostPets => colors.onError,
-      _MapClusterKind.veterinary => colors.onPrimary,
-    };
-
-IconData _markerIcon(_MapClusterKind kind) => switch (kind) {
-      _MapClusterKind.observations => Icons.pets,
-      _MapClusterKind.needsHelp => Icons.warning_amber_rounded,
-      _MapClusterKind.lostPets => Icons.search_rounded,
-      _MapClusterKind.veterinary => Icons.local_hospital_rounded,
-      _MapClusterKind.petShop => Icons.storefront_rounded,
-      _MapClusterKind.shelter => Icons.home_rounded,
-    };
-
-class _MapItemMarker extends StatelessWidget {
-  const _MapItemMarker({
-    required this.kind,
-    required this.label,
-    required this.onTap,
-    this.selected = false,
-    this.count,
-  });
-
-  final _MapClusterKind kind;
-  final String label;
-  final VoidCallback onTap;
-  final bool selected;
-  final int? count;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final color = _markerColor(kind, colors);
-    final urgent =
-        kind == _MapClusterKind.needsHelp || kind == _MapClusterKind.lostPets;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: Tooltip(
-        message: label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          child: Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: urgent || count != null ? 44 : 40,
-                  height: urgent || count != null ? 44 : 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: colors.surface,
-                      width: selected ? 3 : 2.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colors.shadow.withValues(alpha: 0.35),
-                        blurRadius: selected ? 10 : 5,
-                        offset: const Offset(0, 2),
-                      ),
-                      if (selected)
-                        BoxShadow(
-                          color: color.withValues(alpha: 0.5),
-                          blurRadius: 0,
-                          spreadRadius: 4,
-                        ),
-                    ],
-                  ),
-                  child: Icon(_markerIcon(kind),
-                      color: _markerForeground(kind, colors), size: 21),
-                ),
-                if (count != null)
-                  Positioned(
-                    right: -7,
-                    bottom: -5,
-                    child: Container(
-                      constraints:
-                          const BoxConstraints(minWidth: 22, minHeight: 22),
-                      alignment: Alignment.center,
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        color: colors.surface,
-                        borderRadius: BorderRadius.circular(11),
-                        border: Border.all(color: color, width: 1.5),
-                      ),
-                      child: Text('$count',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                  color: colors.onSurface,
-                                  fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _CurrentLocationMarker extends StatelessWidget {
   const _CurrentLocationMarker();
 
@@ -1428,117 +1284,16 @@ class _FocusedLostPetMarker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.error.withValues(alpha: 0.18),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: colorScheme.error,
-            shape: BoxShape.circle,
-            boxShadow: const [
-              BoxShadow(
-                blurRadius: 8,
-                color: Color(0x44000000),
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Icon(mapMarkerIconForKind(MapMarkerKind.lostPet),
-              color: colorScheme.onError, size: 28),
-        ),
-      ),
-    );
-  }
-}
-
-class _MapToolbar extends StatelessWidget {
-  const _MapToolbar({
-    required this.strings,
-    required this.selectedCount,
-    required this.loading,
-    required this.onFilters,
-    required this.onRefresh,
-  });
-
-  final AppStrings strings;
-  final int selectedCount;
-  final bool loading;
-  final VoidCallback onFilters;
-  final VoidCallback onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-          maxWidth: math.min(320, MediaQuery.sizeOf(context).width - 24)),
-      child: Material(
-        color: colors.surface,
-        elevation: 3,
-        borderRadius: BorderRadius.circular(AppRadii.lg),
-        clipBehavior: Clip.antiAlias,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Flexible(
-                child: TextButton.icon(
-              key: const ValueKey('map-layers-button'),
-              onPressed: onFilters,
-              icon: const Icon(Icons.layers_outlined),
-              label: Text(
-                  '${strings.filters} · $selectedCount/${_MapLayer.values.length}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            )),
-            SizedBox(
-              width: 44,
-              height: 48,
-              child: IconButton(
-                tooltip: strings.refresh,
-                onPressed: onRefresh,
-                icon: const Icon(Icons.refresh, size: 20),
-              ),
-            ),
-          ]),
-          if (loading)
-            const SizedBox(height: 2, child: LinearProgressIndicator()),
-        ]),
-      ),
-    );
-  }
-}
-
-class _MapControlButton extends StatelessWidget {
-  const _MapControlButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.active = false,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: active ? colors.primaryContainer : colors.surface,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(AppRadii.lg),
-      child: Tooltip(
-        message: tooltip,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(AppRadii.lg),
-          child: SizedBox.square(
-            dimension: 52,
-            child: Icon(icon,
-                color: active ? colors.onPrimaryContainer : colors.onSurface),
+    return Center(
+      child: Container(
+        width: 47,
+        height: 47,
+        decoration: BoxDecoration(
+          color: colorScheme.error.withValues(alpha: 0.12),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: colorScheme.error.withValues(alpha: 0.55),
+            width: 1.5,
           ),
         ),
       ),
@@ -1575,8 +1330,8 @@ class _PlaceBadge extends StatelessWidget {
     final kind = _placeClusterKind(category);
     final colors = Theme.of(context).colorScheme;
     return CircleAvatar(
-      backgroundColor: _markerColor(kind, colors),
-      child: Icon(_markerIcon(kind), color: _markerForeground(kind, colors)),
+      backgroundColor: colors.surfaceContainer,
+      child: Icon(mapVisualIcon(kind), color: mapVisualAccent(kind, colors)),
     );
   }
 }

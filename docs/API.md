@@ -268,7 +268,8 @@ Feature: Users
 - Path param: user_id (UUID)
 - Response model: UserPublic
   Example:
-{"success":true, "data": {"id":"uuid","name":"Sardor","avatar_url":"...","registered_at":"...","observation_count":12,"comment_count":17,"allow_public_activity_view":true}}
+{"success":true, "data": {"id":"uuid","name":"Sardor","avatar_url":"...","bio":"Cat lover","registered_at":"...","observation_count":12,"total_likes_received":45,"comment_count":17,"allow_public_activity_view":true}}
+- Public bio and aggregate likes received are included; private email, phone, Telegram, language, and account fields are excluded.
 - Errors: 404 USER_NOT_FOUND
 - Sorting/Filtering: none
 - Rate limit: standard
