@@ -230,114 +230,153 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.create)),
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       body: AppContentWidth(
-        maxWidth: AppWidths.readable,
+        maxWidth: AppWidths.wide,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.all(
+              MediaQuery.sizeOf(context).width < AppWidths.compact
+                  ? AppSpacing.lg
+                  : AppSpacing.xl),
           children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              minVerticalPadding: AppSpacing.md,
-              leading: const Icon(Icons.add_a_photo_outlined),
-              title: Text(strings.catObservation),
-              subtitle: Text(strings.catObservationAddSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _preparingPhotos
-                  ? null
-                  : () => unawaited(
-                        _openObservationPhotoSource(
-                          context,
-                          ref,
-                          kind: 'observation',
-                        ),
-                      ),
+            Text(strings.createInMushukistan,
+                style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              strings.chooseShareType,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
             ),
-            const Divider(height: 1),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              minVerticalPadding: AppSpacing.md,
-              leading: const Icon(Icons.volunteer_activism_outlined),
-              title: Text(strings.needsHelp),
-              subtitle: Text(strings.needsHelpCreateSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _preparingPhotos
-                  ? null
-                  : () => unawaited(
-                        _openObservationPhotoSource(
-                          context,
-                          ref,
-                          kind: 'needs_help',
-                        ),
-                      ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              minVerticalPadding: AppSpacing.md,
-              leading: const Icon(Icons.search_outlined),
-              title: Text(strings.lostPetAlert),
-              subtitle: Text(strings.lostPetAlertSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => unawaited(
-                _openContactRequiredFlow(
-                  path: '/add/lost-pet',
-                  requirementMessage: strings.phoneNumberRequiredForAdoption,
+            const SizedBox(height: AppSpacing.xl),
+            LayoutBuilder(builder: (context, constraints) {
+              final colors = Theme.of(context).colorScheme;
+              final cards = [
+                _CreateActionCard(
+                  icon: Icons.add_a_photo_outlined,
+                  title: strings.catObservation,
+                  description: strings.catObservationAddSubtitle,
+                  accent: colors.primary,
+                  enabled: !_preparingPhotos,
+                  onTap: () => unawaited(_openObservationPhotoSource(
+                    context,
+                    ref,
+                    kind: 'observation',
+                  )),
                 ),
-              ),
-            ),
-            const Divider(height: 1),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              minVerticalPadding: AppSpacing.md,
-              leading: const Icon(Icons.home_outlined),
-              title: Text(strings.findANewHome),
-              subtitle: Text(strings.findANewHomeSubtitle),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => unawaited(
-                _openContactRequiredFlow(
-                  path: '/add/adoption',
-                  requirementMessage: strings.phoneNumberRequiredForAdoption,
+                _CreateActionCard(
+                  icon: Icons.volunteer_activism_outlined,
+                  title: strings.needsHelp,
+                  description: strings.needsHelpCreateSubtitle,
+                  accent: colors.secondary,
+                  enabled: !_preparingPhotos,
+                  onTap: () => unawaited(_openObservationPhotoSource(
+                    context,
+                    ref,
+                    kind: 'needs_help',
+                  )),
                 ),
-              ),
-            ),
+                _CreateActionCard(
+                  icon: Icons.search_outlined,
+                  title: strings.lostPet,
+                  description: strings.lostPetAlertSubtitle,
+                  accent: colors.error,
+                  onTap: () => unawaited(_openContactRequiredFlow(
+                    path: '/add/lost-pet',
+                    requirementMessage: strings.phoneNumberRequiredForLostPet,
+                  )),
+                ),
+                _CreateActionCard(
+                  icon: Icons.home_outlined,
+                  title: strings.findANewHome,
+                  description: strings.findANewHomeSubtitle,
+                  accent: AppPalette.adoption,
+                  onTap: () => unawaited(_openContactRequiredFlow(
+                    path: '/add/adoption',
+                    requirementMessage: strings.phoneNumberRequiredForAdoption,
+                  )),
+                ),
+              ];
+              if (constraints.maxWidth < AppWidths.readable - AppSpacing.xl) {
+                return Column(children: [
+                  for (final card in cards) ...[
+                    card,
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                ]);
+              }
+              return Column(children: [
+                for (var row = 0; row < 2; row++) ...[
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: cards[row * 2]),
+                        const SizedBox(width: AppSpacing.lg),
+                        Expanded(child: cards[row * 2 + 1]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                ],
+              ]);
+            }),
             if (_preparingPhotos) ...[
-              const SizedBox(height: AppSpacing.lg),
               const LinearProgressIndicator(),
-              const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.sm),
               Text(
                 strings.preparingPhotoForUpload,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              const SizedBox(height: AppSpacing.md),
             ],
             if (state.hasDraft) ...[
-              const SizedBox(height: AppSpacing.lg),
-              const Divider(),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.edit_note_outlined),
-                title: Text(strings.continueDraft),
-                subtitle: Text(strings.draftStatus),
-                trailing: const Icon(Icons.chevron_right),
-                onTap:
-                    state.hasPhoto ? () => context.go('/add/location') : null,
-              ),
-              TextButton.icon(
-                onPressed: () async {
-                  final shouldDelete =
-                      await _confirmDeleteDraft(context, strings);
-                  if (!shouldDelete) {
-                    return;
-                  }
-                  ref.read(addObservationControllerProvider.notifier).reset();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(strings.draftDeleted)),
+              const SizedBox(height: AppSpacing.xl),
+              Text(strings.continueDraft,
+                  style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              AppCard(
+                child: LayoutBuilder(builder: (context, constraints) {
+                  final content = Row(children: [
+                    const Icon(Icons.edit_note_outlined),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(child: Text(strings.draftStatus)),
+                  ]);
+                  final action = FilledButton.tonal(
+                    onPressed: state.hasPhoto
+                        ? () => context.go('/add/location')
+                        : null,
+                    child: Text(strings.continueAction),
+                  );
+                  if (constraints.maxWidth < AppWidths.compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        content,
+                        const SizedBox(height: AppSpacing.md),
+                        action,
+                      ],
                     );
                   }
-                },
-                icon: const Icon(Icons.delete_outline),
-                label: Text(strings.deleteDraft),
+                  return Row(children: [Expanded(child: content), action]);
+                }),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final shouldDelete =
+                        await _confirmDeleteDraft(context, strings);
+                    if (!shouldDelete) return;
+                    ref.read(addObservationControllerProvider.notifier).reset();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(strings.draftDeleted)),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.delete_outline),
+                  label: Text(strings.deleteDraft),
+                ),
               ),
             ],
           ],
@@ -415,6 +454,62 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
 }
 
 enum _ObservationPhotoSource { gallery, camera }
+
+class _CreateActionCard extends StatelessWidget {
+  const _CreateActionCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.accent,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final Color accent;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      onTap: enabled ? onTap : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.55,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 138),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppRadii.sm),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  child: Icon(icon, color: accent, size: 24),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Text(title,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: AppSpacing.xs),
+              Text(description,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 Future<bool> _confirmDeleteDraft(
     BuildContext context, AppStrings strings) async {

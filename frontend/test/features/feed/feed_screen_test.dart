@@ -46,7 +46,8 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
   });
 
-  testWidgets('feed post cards omit the publication date', (tester) async {
+  testWidgets('feed post cards show author and compact publication date',
+      (tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -79,6 +80,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Published: 2026-08-14'), findsNothing);
+    expect(find.text('Amina'), findsOneWidget);
     expect(find.byType(FeedPostCard), findsOneWidget);
   });
 

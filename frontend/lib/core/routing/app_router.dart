@@ -10,6 +10,7 @@ import '../../features/adoption_posts/presentation/screens/my_adoption_posts_scr
 import '../../features/add_observation/presentation/screens/add_observation_details_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_location_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
+import '../../features/add_observation/application/add_observation_controller.dart';
 import '../../features/add_observation/presentation/screens/publish_success_screen.dart';
 import '../../features/auth/presentation/screens/auth_gate_screen.dart';
 import '../../features/auth/presentation/screens/auth_required_screen.dart';
@@ -69,7 +70,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isProtectedRoute = location.startsWith('/add') ||
           location.startsWith('/profile') ||
           location == '/report' ||
-          (location.startsWith('/posts/') && location.endsWith('/edit'));
+          ((location.startsWith('/posts/') ||
+                  location.startsWith('/lost-pets/') ||
+                  location.startsWith('/adoption-posts/')) &&
+              location.endsWith('/edit'));
 
       if (isModeratorRoute) {
         if (!authState.isAuthenticated) {
@@ -411,7 +415,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   logStartupStage('Router ready');
 
-  ref.listen<AuthState>(authControllerProvider, (_, authState) {
+  ref.listen<AuthState>(authControllerProvider, (previous, authState) {
+    if (previous?.user?.id != authState.user?.id) {
+      ref.invalidate(profileMeProvider);
+      ref.invalidate(feedPostsProvider);
+      ref.invalidate(postLikeOverridesProvider);
+      ref.invalidate(addObservationControllerProvider);
+      ref.invalidate(lostPetMutationOverridesProvider);
+      ref.invalidate(deletedLostPetIdsProvider);
+      ref.invalidate(resolvedLostPetIdsProvider);
+      ref.invalidate(adoptionMutationOverridesProvider);
+      ref.invalidate(deletedAdoptionIdsProvider);
+      ref.invalidate(resolvedAdoptionIdsProvider);
+    }
+    if (previous?.isAuthenticated == true &&
+        (authState.phase == AuthPhase.unauthenticated ||
+            authState.phase == AuthPhase.failure)) {
+      router.go('/feed');
+      return;
+    }
     final currentUri = router.routeInformationProvider.value.uri;
     final isAuthEntryRoute = _isAuthenticationEntryRoute(currentUri.path) ||
         currentUri.path == '/verify-email';

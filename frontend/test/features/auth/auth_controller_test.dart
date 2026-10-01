@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mushukistan_frontend/core/storage/token_store.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
@@ -171,6 +172,57 @@ void main() {
 
     expect(controller.state.phase, AuthPhase.unauthenticated);
     expect(repo.logoutCalled, isTrue);
+  });
+
+  test('late startup restore cannot authenticate after logout', () async {
+    final pending = Completer<SessionRestoreResult>();
+    final repo = FakeAuthRepository()..restoreCompleter = pending;
+    final controller = AuthController(repo, FakeGoogleIdentityTokenProvider());
+    await Future<void>.delayed(Duration.zero);
+    await controller.logout();
+    pending.complete(SessionRestoreSuccess(AuthSession.restored(
+      accessToken: 'old-access',
+      user: testUser(),
+    )));
+    await settle();
+    expect(controller.state.phase, AuthPhase.unauthenticated);
+    expect(controller.state.user, isNull);
+  });
+
+  test('late password login cannot authenticate after logout', () async {
+    final pending = Completer<AuthSession>();
+    final repo = FakeAuthRepository()..loginCompleter = pending;
+    final controller = AuthController(repo, FakeGoogleIdentityTokenProvider());
+    await settle();
+    final login = controller.login(const AuthCredentials(
+        email: 'user@example.com', password: 'password1'));
+    await controller.logout();
+    pending.complete(
+        AuthSession.restored(accessToken: 'old-access', user: testUser()));
+    await login;
+    expect(controller.state.phase, AuthPhase.unauthenticated);
+    expect(controller.state.user, isNull);
+  });
+
+  test('revoked refresh discovered by API clears authenticated UI state',
+      () async {
+    final store = GuardedAuthTokenStore(InMemoryAuthTokenStore());
+    await store.writeTokens(accessToken: 'access-a', refreshToken: 'refresh-a');
+    final controller = AuthController(
+      FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(AuthSession.restored(
+          accessToken: 'access-a',
+          user: testUser(),
+        )),
+      ),
+      FakeGoogleIdentityTokenProvider(),
+      tokenStore: store,
+    );
+    await settle();
+    expect(controller.state.isAuthenticated, isTrue);
+    await store.deleteIfRevision(store.revision);
+    expect(controller.state.phase, AuthPhase.unauthenticated);
+    expect(controller.state.user, isNull);
   });
 
   test('register transitions to verification required', () async {

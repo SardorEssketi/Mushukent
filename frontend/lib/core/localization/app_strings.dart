@@ -546,16 +546,13 @@ class AppStrings {
     };
   }
 
-  String get catObservationAddSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Mushuk rasmlarini qo‘shing, keyin joriy joylashuvni tanlang, xaritada belgilang yoki joylashuvsiz davom eting.',
-      _RussianStrings() =>
-        'Добавьте фото кошки, затем выберите текущее место, отметьте на карте или продолжите без места.',
-      _ =>
-        'Add cat photos, then choose current location, mark on map, or skip location.',
-    };
-  }
+  String get catObservationAddSubtitle => switch (this) {
+        _UzbekStrings() =>
+          'Ko‘rgan mushugingiz haqida ulashing, kerak bo‘lsa joylashuvini qo‘shing.',
+        _RussianStrings() =>
+          'Расскажите о кошке, которую вы видели, и при желании укажите место.',
+        _ => 'Share a cat you saw and add its location if useful.',
+      };
 
   String get lostPetAddSubtitle {
     return switch (this) {
@@ -609,6 +606,34 @@ class AppStrings {
         },
     };
   }
+
+  String feedEmptyMessage(String mode) => switch (mode) {
+        'lost_pets' => noLostPetsYet,
+        'adoption' => noAdoptionPostsYet,
+        'needs_help' => switch (this) {
+            _UzbekStrings() => 'Hozir yordam so‘ralgan kuzatuvlar yo‘q.',
+            _RussianStrings() => 'Сейчас нет наблюдений с просьбой о помощи.',
+            _ => 'No observations need help right now.',
+          },
+        'popular' => switch (this) {
+            _UzbekStrings() => 'Bu davrda mashhur postlar yo‘q.',
+            _RussianStrings() => 'За этот период нет популярных публикаций.',
+            _ => 'No popular posts for this period.',
+          },
+        _ => noObservationsYet,
+      };
+
+  String get previousPhoto => switch (this) {
+        _UzbekStrings() => 'Oldingi surat',
+        _RussianStrings() => 'Предыдущее фото',
+        _ => 'Previous photo',
+      };
+
+  String get nextPhoto => switch (this) {
+        _UzbekStrings() => 'Keyingi surat',
+        _RussianStrings() => 'Следующее фото',
+        _ => 'Next photo',
+      };
 
   String feedSectionSubtitle(String mode) {
     return switch (mode) {
@@ -970,15 +995,13 @@ class AppStrings {
     };
   }
 
-  String get needsHelpCreateSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Yordam kerak bo‘lgan mushukni joylashuvi bilan ulashing.',
-      _RussianStrings() =>
-        'Опубликуйте кошку, которой нужна помощь, с местоположением.',
-      _ => 'Share a cat that needs assistance, with its location.',
-    };
-  }
+  String get needsHelpCreateSubtitle => switch (this) {
+        _UzbekStrings() =>
+          'Yordamga muhtoj mushuk haqida xabar bering. Joylashuvini ko‘rsatish shart.',
+        _RussianStrings() =>
+          'Сообщите о кошке, которой нужна помощь. Место нужно указать обязательно.',
+        _ => 'Share a cat that needs help. Its location is required.',
+      };
 
   String get needsHelpLocationRequired {
     return switch (this) {
@@ -1013,15 +1036,13 @@ class AppStrings {
     };
   }
 
-  String get lostPetAlertSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Jonivor rasmlari, oxirgi koʻrilgan joy, holat va egasining aloqasi.',
-      _RussianStrings() =>
-        'Фото питомца, последнее место, статус и контакт владельца.',
-      _ => 'Pet photos, last-seen map point, status, and owner contact.',
-    };
-  }
+  String get lostPetAlertSubtitle => switch (this) {
+        _UzbekStrings() =>
+          'Yo‘qolgan jonivor va u oxirgi marta qayerda ko‘rilgani haqida xabar bering.',
+        _RussianStrings() =>
+          'Сообщите о пропавшем питомце и месте, где его видели в последний раз.',
+        _ => 'Report a missing pet and where it was last seen.',
+      };
 
   String get findANewHome {
     return switch (this) {
@@ -1031,16 +1052,13 @@ class AppStrings {
     };
   }
 
-  String get findANewHomeSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Rasmlar, tavsif va egasining aloqasi bilan alohida uy topish posti. Xarita kerak emas.',
-      _RussianStrings() =>
-        'Отдельный пост о пристройстве с фото, описанием и контактом владельца. Карта не нужна.',
-      _ =>
-        'A separate rehoming post with photos, description, and owner contact. No map required.',
-    };
-  }
+  String get findANewHomeSubtitle => switch (this) {
+        _UzbekStrings() =>
+          'Rasm va ma’lumotlar bilan jonivorga yangi uy topishga yordam bering.',
+        _RussianStrings() =>
+          'Помогите питомцу найти новый дом: добавьте фото и сведения о нём.',
+        _ => 'Help a pet find a new home with a photo and details.',
+      };
 
   String get preparingPhotoForUpload {
     return switch (this) {
@@ -1882,6 +1900,31 @@ class AppStrings {
       _ => 'Change profile picture',
     };
   }
+
+  String get profilePhoto => switch (this) {
+        _UzbekStrings() => 'Profil rasmi',
+        _RussianStrings() => 'Фото профиля',
+        _ => 'Profile photo',
+      };
+
+  String get changePhoto => switch (this) {
+        _UzbekStrings() => 'Rasmni o‘zgartirish',
+        _RussianStrings() => 'Изменить фото',
+        _ => 'Change photo',
+      };
+
+  String get personalInformation => switch (this) {
+        _UzbekStrings() => 'Shaxsiy ma’lumotlar',
+        _RussianStrings() => 'Личные данные',
+        _ => 'Personal information',
+      };
+
+  String get invalidUzbekPhone => switch (this) {
+        _UzbekStrings() => 'O‘zbekiston telefon formati: +998 XX XXX XXXX.',
+        _RussianStrings() =>
+          'Используйте формат телефона Узбекистана: +998 XX XXX XXXX.',
+        _ => 'Use Uzbekistan phone format: +998 XX XXX XXXX.',
+      };
 
   String get useCamera {
     return switch (this) {

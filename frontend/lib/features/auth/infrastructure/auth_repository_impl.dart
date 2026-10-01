@@ -16,19 +16,21 @@ class MushukistanAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> login(AuthCredentials credentials) async {
+    final revision = _sessionRevision;
     final session = await _apiClient.postJson<AuthSession>(
       'auth/login',
       authenticated: false,
       body: credentials.toJson(),
       decoder: AuthSession.fromJson,
     );
-    await _persistSession(session);
+    await _persistSession(session, revision);
     return session;
   }
 
   @override
   Future<AuthSession> loginWithGoogleIdToken(String idToken,
       {String? password}) async {
+    final revision = _sessionRevision;
     final session = await _apiClient.postJson<AuthSession>(
       'auth/google',
       authenticated: false,
@@ -42,7 +44,7 @@ class MushukistanAuthRepository implements AuthRepository {
       },
       decoder: AuthSession.fromJson,
     );
-    await _persistSession(session);
+    await _persistSession(session, revision);
     return session;
   }
 
@@ -87,6 +89,7 @@ class MushukistanAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> refreshSession() async {
+    final revision = _sessionRevision;
     final refreshToken = await _tokenStore.readRefreshToken();
     if (refreshToken == null || refreshToken.trim().isEmpty) {
       throw const MushukistanApiException(
@@ -101,12 +104,13 @@ class MushukistanAuthRepository implements AuthRepository {
       body: <String, Object?>{'refresh_token': refreshToken},
       decoder: AuthSession.fromJson,
     );
-    await _persistSession(session);
+    await _persistSession(session, revision);
     return session;
   }
 
   @override
   Future<SessionRestoreResult> restoreSession() async {
+    final revision = _sessionRevision;
     final token = await _tokenStore.read();
     final refreshToken = await _tokenStore.readRefreshToken();
     if ((token == null || token.trim().isEmpty) &&
@@ -125,14 +129,20 @@ class MushukistanAuthRepository implements AuthRepository {
       final session = await refreshSession();
       return SessionRestoreSuccess(session);
     } on MushukistanApiException catch (error) {
+      if (error.code == 'SESSION_CHANGED') {
+        return const SessionRestoreMissing();
+      }
       if (error.isSessionInvalid) {
         if (refreshToken != null && refreshToken.trim().isNotEmpty) {
           try {
             final session = await refreshSession();
             return SessionRestoreSuccess(session);
           } on MushukistanApiException catch (refreshError) {
+            if (refreshError.code == 'SESSION_CHANGED') {
+              return const SessionRestoreMissing();
+            }
             if (refreshError.isSessionInvalid) {
-              await _tokenStore.delete();
+              await _deleteIfRevision(revision);
               return SessionRestoreInvalid(
                 message: _restoreInvalidMessage(refreshError),
               );
@@ -143,7 +153,7 @@ class MushukistanAuthRepository implements AuthRepository {
             );
           }
         } else {
-          await _tokenStore.delete();
+          await _deleteIfRevision(revision);
           return SessionRestoreInvalid(message: _restoreInvalidMessage(error));
         }
       }
@@ -156,24 +166,80 @@ class MushukistanAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {
-    final refreshToken = await _tokenStore.readRefreshToken();
+    final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
+    guarded?.invalidatePendingWrites();
+    String? accessToken;
+    String? refreshToken;
     try {
-      await _apiClient.postJson<Object?>(
-        'auth/logout',
-        body: refreshToken == null
-            ? null
-            : <String, Object?>{'refresh_token': refreshToken},
-        decoder: (_) => null,
-      );
+      accessToken = await _tokenStore.read();
+      refreshToken = await _tokenStore.readRefreshToken();
     } catch (_) {
-      // Client-side logout must still succeed locally.
-    } finally {
+      // Clear what is available even if a platform credential read fails.
+    }
+    await _tokenStore.delete();
+    if (accessToken == null && refreshToken == null) return;
+    try {
+      if (accessToken != null) {
+        await _revokeSession(accessToken, refreshToken);
+        return;
+      }
+    } on MushukistanApiException catch (error) {
+      if (!error.isSessionInvalid || refreshToken == null) return;
+    } catch (_) {
+      return;
+    }
+    if (refreshToken == null) return;
+    try {
+      final renewed = await _apiClient.postJson<AuthSession>(
+        'auth/refresh',
+        authenticated: false,
+        body: <String, Object?>{'refresh_token': refreshToken},
+        decoder: AuthSession.fromJson,
+      );
+      await _revokeSession(renewed.accessToken, refreshToken);
+    } catch (_) {
+      // Local credentials have already been removed. An unreachable server
+      // cannot confirm revocation; an invalid refresh token is unusable.
+    }
+  }
+
+  Future<void> _revokeSession(String accessToken, String? refreshToken) {
+    return _apiClient.postJson<Object?>(
+      'auth/logout',
+      authenticated: false,
+      bearerToken: accessToken,
+      body: refreshToken == null
+          ? null
+          : <String, Object?>{'refresh_token': refreshToken},
+      decoder: (_) => null,
+    );
+  }
+
+  int? get _sessionRevision =>
+      _tokenStore is GuardedAuthTokenStore ? _tokenStore.revision : null;
+
+  Future<void> _deleteIfRevision(int? revision) async {
+    if (_tokenStore is GuardedAuthTokenStore) {
+      await _tokenStore.deleteIfRevision(revision!);
+    } else {
       await _tokenStore.delete();
     }
   }
 
-  Future<void> _persistSession(AuthSession session) {
-    return _tokenStore.writeTokens(
+  Future<void> _persistSession(AuthSession session, int? revision) async {
+    if (_tokenStore is GuardedAuthTokenStore) {
+      final written = await _tokenStore.writeTokensIfRevision(revision!,
+          accessToken: session.accessToken, refreshToken: session.refreshToken);
+      if (!written) {
+        throw const MushukistanApiException(
+          kind: ApiFailureKind.unauthorized,
+          code: 'SESSION_CHANGED',
+          message: 'Session changed during sign-in.',
+        );
+      }
+      return;
+    }
+    await _tokenStore.writeTokens(
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
     );

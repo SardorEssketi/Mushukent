@@ -12,6 +12,7 @@ class ApiCall {
     required this.method,
     required this.path,
     required this.authenticated,
+    this.bearerToken,
     this.body,
     this.queryParameters,
   });
@@ -19,6 +20,7 @@ class ApiCall {
   final String method;
   final String path;
   final bool authenticated;
+  final String? bearerToken;
   final Object? body;
   final Map<String, dynamic>? queryParameters;
 }
@@ -45,11 +47,13 @@ class FakeApiClient implements MushukistanApiClient {
     Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     required bool authenticated,
+    String? bearerToken,
   }) async {
     final call = ApiCall(
       method: method,
       path: path,
       authenticated: authenticated,
+      bearerToken: bearerToken,
       body: body,
       queryParameters: queryParameters,
     );
@@ -103,6 +107,7 @@ class FakeApiClient implements MushukistanApiClient {
     Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     bool authenticated = true,
+    String? bearerToken,
   }) {
     return _handle<T>(
       'POST',
@@ -111,6 +116,7 @@ class FakeApiClient implements MushukistanApiClient {
       queryParameters: queryParameters,
       decoder: decoder,
       authenticated: authenticated,
+      bearerToken: bearerToken,
     );
   }
 
@@ -221,6 +227,7 @@ class FakeAuthRepository implements AuthRepository {
   RegisterCredentials? lastRegisterCredentials;
   AuthCredentials? lastLoginCredentials;
   bool logoutCalled = false;
+  Completer<void>? logoutCompleter;
   int restoreCalls = 0;
   int loginCalls = 0;
   int registerCalls = 0;
@@ -356,6 +363,7 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> logout() async {
     logoutCalled = true;
+    if (logoutCompleter case final pending?) await pending.future;
   }
 }
 

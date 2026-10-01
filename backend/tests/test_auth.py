@@ -1529,6 +1529,42 @@ def test_repeated_google_login_uses_the_existing_user_and_session_model(
         assert len(session.scalars(select(schema.AuthRefreshSession)).all()) == 2
 
 
+def test_google_account_switch_revokes_each_previous_session(
+    client: TestClient, auth_runtime
+) -> None:
+    identities = (
+        ("google-id-token", "google-subject"),
+        ("google-external-token", "external-google-subject"),
+        ("google-id-token", "google-subject"),
+    )
+    user_ids = []
+    for token, subject in identities:
+        login = client.post(
+            "/api/v1/auth/google",
+            json={"id_token": token, "accept_terms": True, "accept_privacy": True},
+        )
+        assert login.status_code == 200
+        data = login.json()["data"]
+        user_ids.append(data["user"]["id"])
+        with auth_runtime[1].db_session_manager.session_scope() as session:
+            user = session.scalar(select(schema.User).where(schema.User.google_subject == subject))
+            assert user is not None and str(user.id) == data["user"]["id"]
+
+        logout = client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {data['access_token']}"},
+            json={"refresh_token": data["refresh_token"]},
+        )
+        assert logout.status_code == 204
+        rejected = client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": data["refresh_token"]}
+        )
+        assert rejected.status_code == 401
+        assert rejected.json()["error"]["code"] == "INVALID_REFRESH_TOKEN"
+    assert user_ids[0] != user_ids[1]
+    assert user_ids[0] == user_ids[2]
+
+
 def test_google_only_account_has_no_unlink_operation(client: TestClient, auth_runtime) -> None:
     _, auth_service = auth_runtime
     login = client.post(

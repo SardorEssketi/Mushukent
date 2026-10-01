@@ -41,7 +41,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Change profile picture'));
+    await tester.tap(find.text('Change photo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Choose from gallery'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Save changes'),

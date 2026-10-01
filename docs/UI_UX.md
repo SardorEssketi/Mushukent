@@ -204,8 +204,12 @@ Bottom navigation with 5 tabs:
 - Cat records are still used internally to group observations, display cat names in posts, and support map markers.
 
 5.7 Add Observation Entry Screen
-- Purpose: start observation creation process.
+- Purpose: choose what kind of cat update or help to share.
 - Layout:
+- A short introduction sits above four compact, fully tappable action cards: Cat observation, Needs help, Lost Pet, and Find a new home.
+- Cards form a centered 2-by-2 grid on wide screens and one column on compact screens. Icons and restrained accents distinguish the types; Lost Pet has the strongest urgency cue.
+- An existing observation draft appears in a separate continuation section with Continue and Delete draft actions, not as a fifth creation type.
+- Photo preparation shows a compact progress indicator and temporarily disables the Observation and Needs help cards.
 - The Add tab still lets the user choose a post type. The cat-observation quick action opens the camera/gallery chooser directly.
 - Observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
 - Needs help: follows the observation flow with a required current or manually marked location.
@@ -219,7 +223,9 @@ Bottom navigation with 5 tabs:
 - Interactions:
 - permission prompts for camera/gallery.
 - map location picker shows user's current location, a recenter-on-user button, and a tappable observation marker.
-- tapping Lost Pet checks whether the current user has a phone number; if not, show a prompt to edit profile first.
+- tapping Lost Pet checks for a valid Uzbekistan phone number; if missing or invalid, show a Lost-Pet-specific prompt with an Edit Profile action.
+- Find a new home applies the same phone check with its own requirement message before opening the existing rehoming form.
+- Continue draft opens the location step when a photo is present; Delete draft asks for confirmation, resets the draft, and shows feedback.
 - Edge cases:
 - permission denied -> show system settings guidance.
 - user cancels image picker -> return to previous screen.
@@ -275,36 +281,29 @@ Bottom navigation with 5 tabs:
   - follow-up fetch failure when opening details -> show retry.
 
 5.10 Feed Screen
-- Purpose: browse observations in list format.
+- Purpose: browse recent community observations, lost pets, and rehoming posts.
 - Layout:
-  - on mobile, top filter chips: Popular, Needs help, Lost pets, Adoption; the standard Recent feed has no chip
-  - on wider layouts, top filter chips: Recent, Popular, Needs help, Lost pets, Adoption
-  - when Popular is selected, show period selector: Today, Month, All time
-  - vertically scrolling post cards
-  - on wide web screens, keep the feed column constrained and use shorter media previews so cards remain compact.
+  - one lazy scrolling column, nearly full width on mobile and centered at a readable maximum width on tablet/web; the title aligns with that column.
+  - horizontal filters: Popular, Needs help, Lost pets, Adoption on mobile, with Recent as the implicit default; wider layouts also show Recent.
+  - tapping the selected mobile filter returns to Recent.
+  - Popular alone shows compact Today, Month, All time period chips.
+  - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface.
+  - media uses a contained image in a neutral frame; its height is capped on tablet/web. Multiple photos have a count and quiet previous/next controls.
 - Post card contents:
-  - thumbnail image,
-  - Lost Pet tag for lost pet posts,
-  - author,
-  - cat summary,
-  - distance (if nearby),
-  - like count next to the like icon and comment count next to the comment icon,
-  - long descriptions show a compact preview with a `Read more` control and expand inline,
-  - Needs help observations have a calm, distinct kind badge; observation posts have no tags,
-  - quick like action.
+  - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.
+  - ordinary observations show a useful cat name and description without a kind badge; Needs help uses a small semantic badge and top accent.
+  - Lost Pet uses a restrained error accent and badge, pet name, additional information, comments, and View on Map.
+  - Adoption/Rehoming uses a tertiary accent and badge, pet name, additional information, and comments.
+  - observation actions show like/count and comments/count; other kinds only show supported actions.
+  - long descriptions are limited to three lines with localized Read more / Show less controls that expand inline.
 - Interactions:
-  - tap card -> Post Detail
-  - tap Lost Pet card -> Lost Pet Detail
-  - tap Contact Owner on Lost Pet card -> initiate phone call
-  - tap author name/avatar -> User Profile
-  - pull to refresh,
-  - infinite scroll pagination.
-  - filter selection is visible in the feed header, not hidden in an overflow menu.
-  - on mobile, tapping an inactive filter applies it; tapping the active filter again returns to the standard Recent feed.
-  - Today means the last 24 hours.
+  - tapping a card opens the matching Observation, Lost Pet, or Adoption/Rehoming detail.
+  - observation likes update optimistically, reconcile with the API, and restore the prior state on failure; guests use the authentication flow.
+  - pull to refresh replaces the loaded pages with a fresh first page.
+  - scrolling near the bottom requests the next server cursor; items append with identity/type deduplication. Filter and Popular period changes start a new page sequence.
 - Edge cases:
-  - empty feed -> helper CTA to add first observation.
-  - duplicate pagination response -> deduplicate by post id.
+  - initial loading shows quiet card placeholders; initial errors show Retry and empty filters show category-specific messages.
+  - a later-page error keeps loaded cards visible with a bottom Retry; no further page request occurs after a null cursor.
 
 5.11 Post Detail Screen
 - Purpose: full observation detail and discussion.
@@ -398,19 +397,23 @@ Bottom navigation with 5 tabs:
   - a privacy response during a preview request also suppresses previews and navigation.
 
 5.17 Edit Profile Screen
-- Purpose: update display name, phone number, bio, avatar.
+- Purpose: update display name, phone number, Telegram username, bio, and avatar.
 - Layout:
-  - avatar preview and "Change profile picture" button
-  - camera option for new profile picture
-  - editable fields
-  - save button
+  - a centered form no wider than AppWidths.readable, with comfortable mobile padding.
+  - compact profile-photo surface with an 88px avatar, initials fallback, and one Change photo action.
+  - Change photo opens a Material source sheet for gallery or camera; a selected photo previews immediately.
+  - Personal information groups name, optional Uzbekistan phone, Telegram username, and multiline bio.
+  - Save changes is the primary action, beside Cancel on wide screens and full width on mobile.
 - Validation:
   - name max 100,
   - phone number optional, owner-only for MVP and must use Uzbekistan format shown with placeholder digits: +998 xx xxx xx xx,
+  - Telegram username is 5–32 letters, numbers, or underscores; a leading @ is removed before saving,
   - bio max 1000,
   - avatar type/size constraints from media policy.
 - Edge cases:
-  - save conflict/network failure -> keep unsaved changes and retry option.
+  - back or Cancel with unsaved text or avatar changes asks whether to discard them.
+  - avatar uploads before profile details. If the avatar saves but details fail, keep the form, refresh profile data, and retry details without uploading that avatar again.
+  - save conflict/network failure -> keep unsaved details and retry option.
 
 5.17.1 Settings Screen
 - Purpose: manage application preferences.

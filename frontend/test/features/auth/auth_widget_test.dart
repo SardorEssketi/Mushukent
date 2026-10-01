@@ -17,6 +17,8 @@ import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_sign_in_entry_button.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
+import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
+import 'package:mushukistan_frontend/features/profile/presentation/screens/profile_screen.dart';
 
 import '../../support/fakes.dart';
 
@@ -386,10 +388,20 @@ void main() {
     await _pumpApp(tester, container);
     final router = container.read(appRouterProvider);
 
-    router.go('/profile');
-    await tester.pumpAndSettle();
-
-    expect(find.text('Account required'), findsOneWidget);
+    for (final path in [
+      '/profile',
+      '/profile/edit',
+      '/profile/settings/security',
+      '/add',
+      '/posts/example/edit',
+      '/lost-pets/example/edit',
+      '/adoption-posts/example/edit',
+    ]) {
+      router.go(path);
+      await tester.pumpAndSettle();
+      expect(router.routeInformationProvider.value.uri.path, '/auth-required');
+      expect(find.text('Account required'), findsOneWidget);
+    }
     expect(find.text('Continue browsing'), findsOneWidget);
   });
 
@@ -1017,5 +1029,65 @@ void main() {
       findsOneWidget,
     );
     expect(repo.logoutCalled, isTrue);
+  });
+
+  test('account switch clears cached profile and viewer overrides', () async {
+    final userA = testUser();
+    final userB = testUser(
+      id: '22222222-2222-4222-8222-222222222222',
+      email: 'b@example.com',
+      name: 'User B',
+    );
+    final repo = FakeAuthRepository(
+      restoreResult: SessionRestoreSuccess(
+        AuthSession.restored(accessToken: 'access-a', user: userA),
+      ),
+      loginResult: AuthSession.restored(accessToken: 'access-b', user: userB),
+    );
+    final api = FakeApiClient();
+    var activeProfile = userA;
+    api.setHandler('GET', 'users/me', (_) => activeProfile.toJson());
+    final container = _containerWithRepo(repo, apiClient: api);
+    addTearDown(container.dispose);
+    container.read(appRouterProvider);
+    final controller = container.read(authControllerProvider.notifier);
+    await controller.restoreSession();
+    expect((await container.read(profileMeProvider.future)).name, userA.name);
+    container.read(postLikeOverridesProvider.notifier).state = {
+      'post-1': const LikeData(liked: true, likeCount: 10),
+    };
+
+    await controller.logout();
+    expect(container.read(postLikeOverridesProvider), isEmpty);
+    activeProfile = userB;
+    await controller.login(
+        const AuthCredentials(email: 'b@example.com', password: 'Password123'));
+    expect(container.read(currentUserProvider)?.id, userB.id);
+    expect((await container.read(profileMeProvider.future)).name, userB.name);
+    expect(container.read(postLikeOverridesProvider), isEmpty);
+  });
+
+  testWidgets('slow logout immediately leaves protected profile',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: SessionRestoreSuccess(AuthSession.restored(
+        accessToken: 'access-a',
+        user: testUser(),
+      )),
+    )..logoutCompleter = Completer<void>();
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+    router.go('/profile');
+    await tester.pumpAndSettle();
+
+    final logout = container.read(authControllerProvider.notifier).logout();
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, '/feed');
+    expect(container.read(authControllerProvider).user, isNull);
+    repo.logoutCompleter!.complete();
+    await logout;
   });
 }

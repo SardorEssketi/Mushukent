@@ -75,7 +75,11 @@ MVP constraints:
   and error code. Both login methods use the same sessions.
 
 2.5 Logout
-- Client calls `POST /auth/logout` with the current refresh token when available, then deletes local credentials.
+- Client captures the current access and refresh tokens, deletes local
+  credentials, then calls `POST /auth/logout` with the captured access token
+  as Bearer proof and the refresh token when available. If the access token is
+  expired, it may use the captured refresh token once to obtain access proof
+  for revocation without storing the renewed credentials.
 - Backend revokes the matching refresh session only when it belongs to the authenticated user, or all active refresh sessions for that user when no token is provided.
 - Access-token blacklist remains out of MVP scope.
 
@@ -294,3 +298,18 @@ Compatibility and session audit (2026-09-27)
   expiry/refresh is a separate reliability follow-up. Real OAuth must be checked.
 - Reference: https://developers.google.com/identity/gsi/web/guides/verify-google-id-token
   explains stable sub and why non-hosted email_verified does not prove current ownership.
+
+Client logout race guard (2026-09-30)
+-------------------------------------
+- Logout clears local credentials even when the logout request fails or an
+  expired access token is refreshed while the logout request is retried.
+- Credential writes and protected responses from an older client session are
+  discarded after logout or account change. A late startup restore or login
+  response cannot restore authenticated UI state after logout.
+- A revoked refresh token discovered by an API request clears both credentials
+  and authenticated UI state. Leaving an authenticated route returns to Feed.
+- Account-scoped Flutter state, including profile, feed viewer state, mutation
+  overrides, and the in-memory observation draft, is cleared on user change.
+- Backend refresh tokens remain stable and access JWTs remain valid until
+  expiry as specified above. A failed network logout cannot confirm server
+  revocation; the client still removes its local credentials.

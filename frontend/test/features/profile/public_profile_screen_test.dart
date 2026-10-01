@@ -148,7 +148,7 @@ void main() {
         4);
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byTooltip('Open post'));
+    await tester.tap(find.textContaining('Momiq', findRichText: true));
     await tester.pumpAndSettle();
     expect(find.text('Post detail route'), findsOneWidget);
   });

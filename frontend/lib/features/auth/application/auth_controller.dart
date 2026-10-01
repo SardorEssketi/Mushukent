@@ -6,6 +6,7 @@ import '../../../core/config/app_environment.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/token_store_provider.dart';
+import '../../../core/storage/token_store.dart';
 import '../../../core/startup/startup_log.dart';
 import '../domain/auth_models.dart';
 import '../domain/auth_repository.dart';
@@ -118,6 +119,7 @@ final authControllerProvider =
   return AuthController(
     ref.watch(authRepositoryProvider),
     ref.watch(googleIdentityTokenProvider),
+    tokenStore: ref.watch(tokenStoreProvider),
   );
 });
 
@@ -130,8 +132,16 @@ class AuthController extends StateNotifier<AuthState> {
     this._repository,
     this._googleIdentityTokens, {
     Duration restoreTimeout = const Duration(seconds: 20),
+    AuthTokenStore? tokenStore,
   })  : _restoreTimeout = restoreTimeout,
         super(AuthState.restoring()) {
+    if (tokenStore is GuardedAuthTokenStore) {
+      _credentialInvalidations = tokenStore.invalidations.listen((_) {
+        if (!mounted) return;
+        _authEpoch++;
+        state = AuthState.unauthenticated();
+      });
+    }
     unawaited(restoreSession());
   }
 
@@ -140,6 +150,9 @@ class AuthController extends StateNotifier<AuthState> {
   final Duration _restoreTimeout;
   final Set<Timer> _restoreTimeoutTimers = <Timer>{};
   Future<void>? _restoreInFlight;
+  Future<void>? _logoutInFlight;
+  StreamSubscription<void>? _credentialInvalidations;
+  int _authEpoch = 0;
 
   Future<void> restoreSession({bool force = false}) async {
     if (!force && _restoreInFlight != null) {
@@ -158,12 +171,14 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _performRestoreSession() async {
+    final epoch = _authEpoch;
     logStartupStage('Authentication restore started');
     state = AuthState.restoring();
     late final SessionRestoreResult result;
     try {
       result = await _withRestoreTimeout(_repository.restoreSession());
     } on TimeoutException {
+      if (epoch != _authEpoch) return;
       logStartupStage('Authentication restore timed out; continuing as guest');
       state = AuthState.failure(
         message: 'Session check timed out. Please try again.',
@@ -171,6 +186,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
       return;
     } catch (_) {
+      if (epoch != _authEpoch) return;
       logStartupStage('Authentication restore failed; continuing as guest');
       state = AuthState.failure(
         message: 'Session check failed.',
@@ -178,6 +194,7 @@ class AuthController extends StateNotifier<AuthState> {
       );
       return;
     }
+    if (epoch != _authEpoch) return;
     switch (result) {
       case SessionRestoreMissing():
         logStartupStage('Authentication restore completed: guest');
@@ -231,11 +248,16 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> login(AuthCredentials credentials) async {
+    if (_logoutInFlight != null) return;
+    _authEpoch++;
+    final epoch = _authEpoch;
     state = AuthState.authenticating();
     try {
       final session = await _repository.login(credentials);
+      if (epoch != _authEpoch) return;
       state = AuthState.authenticated(session.user);
     } on MushukistanApiException catch (error) {
+      if (epoch != _authEpoch) return;
       if (error.code == 'EMAIL_NOT_VERIFIED') {
         state = AuthState.verificationRequired(
           email: credentials.email.trim(),
@@ -297,12 +319,17 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> loginWithGoogleIdToken(String idToken,
       {String? password}) async {
+    if (_logoutInFlight != null) return;
+    _authEpoch++;
+    final epoch = _authEpoch;
     state = AuthState.authenticating();
     try {
       final session =
           await _repository.loginWithGoogleIdToken(idToken, password: password);
+      if (epoch != _authEpoch) return;
       state = AuthState.authenticated(session.user);
     } on MushukistanApiException catch (error) {
+      if (epoch != _authEpoch) return;
       state = AuthState.unauthenticated(message: error.userMessage);
       rethrow;
     }
@@ -352,9 +379,15 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> logout() async {
-    await _repository.logout();
+  Future<void> logout() {
+    if (_logoutInFlight case final inFlight?) return inFlight;
+    _authEpoch++;
     state = AuthState.unauthenticated();
+    final future = _repository.logout();
+    _logoutInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_logoutInFlight, future)) _logoutInFlight = null;
+    });
   }
 
   void returnToLogin() {
@@ -386,6 +419,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   @override
   void dispose() {
+    unawaited(_credentialInvalidations?.cancel());
     for (final timer in _restoreTimeoutTimers) {
       timer.cancel();
     }

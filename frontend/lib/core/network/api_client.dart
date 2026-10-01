@@ -24,6 +24,7 @@ abstract class MushukistanApiClient {
     Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     bool authenticated = true,
+    String? bearerToken,
   });
 
   Future<T> patchJson<T>(
@@ -151,6 +152,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     bool authenticated = true,
+    String? bearerToken,
   }) {
     return _request<T>(
       'POST',
@@ -159,6 +161,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       queryParameters: queryParameters,
       decoder: decoder,
       authenticated: authenticated,
+      bearerToken: bearerToken,
     );
   }
 
@@ -221,8 +224,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     required Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     required bool authenticated,
+    String? bearerToken,
     bool retriedAfterRefresh = false,
   }) async {
+    final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
+    final revision = guarded?.revision;
     try {
       final requestBody = body is FormData ? body.clone() : body;
       final isMultipart = body is FormData;
@@ -235,10 +241,21 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           responseType: ResponseType.json,
           listFormat: ListFormat.multi,
           extra: {'skipAuth': !authenticated},
+          headers: bearerToken == null
+              ? null
+              : <String, String>{'Authorization': 'Bearer $bearerToken'},
           sendTimeout: isMultipart ? _uploadRequestTimeout : null,
           receiveTimeout: isMultipart ? _uploadRequestTimeout : null,
         ),
       );
+
+      if (authenticated && guarded != null && guarded.revision != revision) {
+        throw const MushukistanApiException(
+          kind: ApiFailureKind.unauthorized,
+          code: 'SESSION_CHANGED',
+          message: 'Session changed during request.',
+        );
+      }
 
       final payload = _normalizePayload(response.data);
       final normalizedPayload = _normalizeMediaUrls(payload);
@@ -264,6 +281,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
               queryParameters: queryParameters,
               decoder: decoder,
               authenticated: authenticated,
+              bearerToken: bearerToken,
               retriedAfterRefresh: true,
             );
           }
@@ -360,6 +378,8 @@ class DioMushukistanApiClient implements MushukistanApiClient {
   }
 
   Future<bool> _performRefreshAccessToken() async {
+    final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
+    final revision = guarded?.revision;
     final refreshToken = await _tokenStore.readRefreshToken();
     if (refreshToken == null || refreshToken.trim().isEmpty) {
       return false;
@@ -383,7 +403,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           statusCode: statusCode,
         );
         if (error.isSessionInvalid) {
-          await _tokenStore.delete();
+          if (guarded != null) {
+            await guarded.deleteIfRevision(revision!);
+          } else {
+            await _tokenStore.delete();
+          }
         }
         throw error;
       }
@@ -404,11 +428,17 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         );
       }
       final newRefreshToken = data['refresh_token'];
+      final resultingRefreshToken =
+          newRefreshToken is String && newRefreshToken.isNotEmpty
+              ? newRefreshToken
+              : refreshToken;
+      if (guarded != null) {
+        return guarded.writeTokensIfRevision(revision!,
+            accessToken: accessToken, refreshToken: resultingRefreshToken);
+      }
       await _tokenStore.writeTokens(
         accessToken: accessToken,
-        refreshToken: newRefreshToken is String && newRefreshToken.isNotEmpty
-            ? newRefreshToken
-            : refreshToken,
+        refreshToken: resultingRefreshToken,
       );
       return true;
     } on DioException catch (error) {

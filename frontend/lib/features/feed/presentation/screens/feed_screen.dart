@@ -3,28 +3,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
-import '../../../../core/localization/language_controller.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
-import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../widgets/feed_card_parts.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
 final feedPopularPeriodProvider = StateProvider<String>((ref) => 'day');
 final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
   (ref) => const {},
 );
-final feedPageCacheProvider =
-    StateProvider<Map<String, ApiPage<FeedItem>>>((ref) => const {});
 
-String _feedCacheKey(String mode, String popularPeriod) =>
-    '$mode:${mode == 'popular' ? popularPeriod : ''}';
-
+const _pageSize = 30;
 const _mobileFeedBreakpoint = 700.0;
+
+String _feedKey(String mode, String period, String? userId) =>
+    '$mode:${mode == 'popular' ? period : ''}:${userId ?? 'guest'}';
 
 void setPostLikeOverride(
   WidgetRef ref,
@@ -38,6 +37,28 @@ void setPostLikeOverride(
   };
 }
 
+Future<ApiPage<FeedItem>> _fetchFeedPage(
+  MushukistanApi api, {
+  required String mode,
+  required String period,
+  required bool includeViewerContext,
+  String? cursor,
+}) {
+  if (mode == 'lost_pets') {
+    return api.listLostPets(limit: _pageSize, cursor: cursor);
+  }
+  if (mode == 'adoption') {
+    return api.listAdoptionPosts(limit: _pageSize, cursor: cursor);
+  }
+  return api.listFeed(
+    filter: mode,
+    popularPeriod: mode == 'popular' ? period : null,
+    limit: _pageSize,
+    cursor: cursor,
+    includeViewerContext: includeViewerContext,
+  );
+}
+
 final feedPostsProvider =
     FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
   ref.watch(postMutationRevisionProvider);
@@ -49,22 +70,18 @@ final feedPostsProvider =
   final resolvedAdoptionIds = ref.watch(resolvedAdoptionIdsProvider);
   final api = ref.watch(mushukistanApiProvider);
   final mode = ref.watch(feedModeProvider);
-  final popularPeriod = ref.watch(feedPopularPeriodProvider);
-  final cacheKey = _feedCacheKey(mode, popularPeriod);
+  final period =
+      mode == 'popular' ? ref.watch(feedPopularPeriodProvider) : 'day';
   final includeViewerContext = ref.watch(
     authControllerProvider.select((state) => state.isAuthenticated),
   );
-  final page = mode == 'lost_pets'
-      ? await api.listLostPets(limit: 30)
-      : mode == 'adoption'
-          ? await api.listAdoptionPosts(limit: 30)
-          : await api.listFeed(
-              filter: mode,
-              popularPeriod: mode == 'popular' ? popularPeriod : null,
-              limit: 30,
-              includeViewerContext: includeViewerContext,
-            );
-  final projectedPage = ApiPage<FeedItem>(
+  final page = await _fetchFeedPage(
+    api,
+    mode: mode,
+    period: period,
+    includeViewerContext: includeViewerContext,
+  );
+  return ApiPage<FeedItem>(
     items: _applyPostMutations(
       page.items,
       overrides: lostPetOverrides,
@@ -77,11 +94,6 @@ final feedPostsProvider =
     nextCursor: page.nextCursor,
     limit: page.limit,
   );
-  ref.read(feedPageCacheProvider.notifier).state = {
-    ...ref.read(feedPageCacheProvider),
-    cacheKey: projectedPage,
-  };
-  return projectedPage;
 });
 
 List<FeedItem> _applyPostMutations(
@@ -102,40 +114,234 @@ List<FeedItem> _applyPostMutations(
       }
       final updated = adoptionOverrides[item.id] ?? item;
       if (!updated.isResolved) result.add(updated);
-      continue;
-    }
-    if (item is! LostPetData) {
+    } else if (item is LostPetData) {
+      if (deletedIds.contains(item.id) || resolvedIds.contains(item.id)) {
+        continue;
+      }
+      final updated = overrides[item.id] ?? item;
+      if (!updated.isResolved) result.add(updated);
+    } else {
       result.add(item);
-      continue;
     }
-    if (deletedIds.contains(item.id) || resolvedIds.contains(item.id)) continue;
-    final updated = overrides[item.id] ?? item;
-    if (!updated.isResolved) result.add(updated);
   }
   return result;
 }
 
-class FeedScreen extends ConsumerWidget {
+List<FeedItem> _deduplicate(List<FeedItem> items) {
+  final seen = <String>{};
+  return [
+    for (final item in items)
+      if (seen.add('${item.itemType}:${item.id}')) item,
+  ];
+}
+
+bool _samePageIdentity(ApiPage<FeedItem>? previous, ApiPage<FeedItem> next) {
+  if (previous == null ||
+      previous.nextCursor != next.nextCursor ||
+      previous.items.length != next.items.length) {
+    return false;
+  }
+  for (var index = 0; index < next.items.length; index++) {
+    final before = previous.items[index];
+    final after = next.items[index];
+    if (before.itemType != after.itemType || before.id != after.id) {
+      return false;
+    }
+  }
+  return true;
+}
+
+class FeedScreen extends ConsumerStatefulWidget {
   const FeedScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final feedMode = ref.watch(feedModeProvider);
-    final popularPeriod = ref.watch(feedPopularPeriodProvider);
-    final postsAsync = ref.watch(feedPostsProvider);
+  ConsumerState<FeedScreen> createState() => _FeedScreenState();
+}
+
+class _FeedScreenState extends ConsumerState<FeedScreen> {
+  final ScrollController _scrollController = ScrollController();
+  String _activeKey = '';
+  int _generation = 0;
+  ApiPage<FeedItem>? _firstPage;
+  ApiPage<FeedItem>? _observedFirstPage;
+  final List<FeedItem> _laterItems = [];
+  final Set<String> _requestedCursors = {};
+  String? _nextCursor;
+  bool _loadingMore = false;
+  bool _pageError = false;
+  bool _replaceOnNextPage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_checkLoadMore);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _resetForView(String key) {
+    _activeKey = key;
+    _generation++;
+    _firstPage = null;
+    _observedFirstPage = null;
+    _laterItems.clear();
+    _requestedCursors.clear();
+    _nextCursor = null;
+    _loadingMore = false;
+    _pageError = false;
+    _replaceOnNextPage = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+  }
+
+  void _acceptFirstPage(ApiPage<FeedItem> page) {
+    if (_replaceOnNextPage || !_samePageIdentity(_firstPage, page)) {
+      _laterItems.clear();
+      _requestedCursors.clear();
+      _nextCursor = page.nextCursor;
+      _pageError = false;
+    }
+    _firstPage = page;
+    _observedFirstPage = page;
+    _replaceOnNextPage = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _checkLoadMore();
+      }
+    });
+  }
+
+  void _checkLoadMore() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.extentAfter >= 700 ||
+        _nextCursor == null ||
+        _loadingMore ||
+        _replaceOnNextPage ||
+        _pageError) {
+      return;
+    }
+    _loadMore();
+  }
+
+  Future<void> _loadMore() async {
+    final cursor = _nextCursor;
+    if (cursor == null ||
+        _loadingMore ||
+        _replaceOnNextPage ||
+        _requestedCursors.contains(cursor)) {
+      return;
+    }
+    _requestedCursors.add(cursor);
+    final generation = _generation;
+    final mode = ref.read(feedModeProvider);
+    final period = ref.read(feedPopularPeriodProvider);
+    final userId = ref.read(currentUserProvider)?.id;
+    final authenticated = userId != null;
+    setState(() {
+      _loadingMore = true;
+      _pageError = false;
+    });
+    try {
+      final page = await _fetchFeedPage(
+        ref.read(mushukistanApiProvider),
+        mode: mode,
+        period: period,
+        includeViewerContext: authenticated,
+        cursor: cursor,
+      );
+      if (!mounted ||
+          generation != _generation ||
+          userId != ref.read(currentUserProvider)?.id) {
+        return;
+      }
+      setState(() {
+        _laterItems.addAll(page.items);
+        final next = page.nextCursor;
+        _nextCursor =
+            next == cursor || (next != null && _requestedCursors.contains(next))
+                ? null
+                : next;
+        _loadingMore = false;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _checkLoadMore();
+      });
+    } catch (_) {
+      if (!mounted || generation != _generation) return;
+      _requestedCursors.remove(cursor);
+      setState(() {
+        _loadingMore = false;
+        _pageError = true;
+      });
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _generation++;
+      _replaceOnNextPage = true;
+      _loadingMore = false;
+      _pageError = false;
+    });
+    try {
+      final refreshed = ref.refresh(feedPostsProvider.future);
+      await refreshed;
+    } catch (_) {
+      if (!mounted) return;
+      _replaceOnNextPage = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(ref.read(appStringsProvider).couldNotLoadSection)),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mode = ref.watch(feedModeProvider);
+    final period = ref.watch(feedPopularPeriodProvider);
+    final userId = ref.watch(currentUserProvider)?.id;
+    final authenticated = userId != null;
+    final key = _feedKey(mode, period, userId);
+    final pageAsync = ref.watch(feedPostsProvider);
     final strings = ref.watch(appStringsProvider);
-    final cachedPage = ref
-        .watch(feedPageCacheProvider)[_feedCacheKey(feedMode, popularPeriod)];
-    final visiblePage = postsAsync.valueOrNull ?? cachedPage;
-    final isAuthenticated = ref.watch(
-      authControllerProvider.select((state) => state.isAuthenticated),
-    );
+
+    if (_activeKey != key) _resetForView(key);
+    final received = pageAsync.isLoading ? null : pageAsync.valueOrNull;
+    if (received != null && !identical(received, _observedFirstPage)) {
+      _acceptFirstPage(received);
+    }
+    final items = _deduplicate(_applyPostMutations(
+      [...?_firstPage?.items, ..._laterItems],
+      overrides: ref.watch(lostPetMutationOverridesProvider),
+      deletedIds: ref.watch(deletedLostPetIdsProvider),
+      resolvedIds: ref.watch(resolvedLostPetIdsProvider),
+      adoptionOverrides: ref.watch(adoptionMutationOverridesProvider),
+      deletedAdoptionIds: ref.watch(deletedAdoptionIdsProvider),
+      resolvedAdoptionIds: ref.watch(resolvedAdoptionIdsProvider),
+    ));
 
     return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        title: Text(strings.feed),
+        titleSpacing: 0,
+        title: AppContentWidth(
+          maxWidth: AppWidths.readable,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: Align(
+                alignment: Alignment.centerLeft, child: Text(strings.feed)),
+          ),
+        ),
         actions: [
-          if (!isAuthenticated)
+          if (!authenticated)
             TextButton(
               onPressed: () => context.push('/login'),
               child: Text(strings.login),
@@ -143,87 +349,91 @@ class FeedScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          final refreshedPosts = ref.refresh(feedPostsProvider.future);
-          await refreshedPosts;
-        },
+        onRefresh: _refresh,
         child: AppContentWidth(
-          maxWidth: AppWidths.compact,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-            children: [
-              _FeedFilterBar(
-                selectedMode: feedMode,
-                strings: strings,
-                onSelected: (value) {
-                  ref.read(feedModeProvider.notifier).state = value;
-                  ref.invalidate(feedPostsProvider);
-                },
-              ),
-              if (feedMode == 'popular') ...[
-                const SizedBox(height: AppSpacing.sm),
-                _PopularPeriodBar(
-                  selectedPeriod: popularPeriod,
-                  strings: strings,
-                  onSelected: (value) {
-                    ref.read(feedPopularPeriodProvider.notifier).state = value;
-                    ref.invalidate(feedPostsProvider);
-                  },
+          maxWidth: AppWidths.readable,
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _FeedFilterBar(
+                        selectedMode: mode,
+                        strings: strings,
+                        onSelected: (value) =>
+                            ref.read(feedModeProvider.notifier).state = value,
+                      ),
+                      if (mode == 'popular') ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        _PopularPeriodBar(
+                          selectedPeriod: period,
+                          strings: strings,
+                          onSelected: (value) => ref
+                              .read(feedPopularPeriodProvider.notifier)
+                              .state = value,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ],
-              const SizedBox(height: AppSpacing.md),
-              visiblePage != null
-                  ? _buildFeedItems(
-                      context,
-                      strings,
-                      _applyPostMutations(
-                        visiblePage.items,
-                        overrides: ref.watch(lostPetMutationOverridesProvider),
-                        deletedIds: ref.watch(deletedLostPetIdsProvider),
-                        resolvedIds: ref.watch(resolvedLostPetIdsProvider),
-                        adoptionOverrides:
-                            ref.watch(adoptionMutationOverridesProvider),
-                        deletedAdoptionIds:
-                            ref.watch(deletedAdoptionIdsProvider),
-                        resolvedAdoptionIds:
-                            ref.watch(resolvedAdoptionIdsProvider),
-                      ),
-                    )
-                  : postsAsync.when(
-                      data: (page) {
-                        return _buildFeedItems(
-                          context,
-                          strings,
-                          _applyPostMutations(
-                            page.items,
-                            overrides:
-                                ref.watch(lostPetMutationOverridesProvider),
-                            deletedIds: ref.watch(deletedLostPetIdsProvider),
-                            resolvedIds: ref.watch(resolvedLostPetIdsProvider),
-                            adoptionOverrides:
-                                ref.watch(adoptionMutationOverridesProvider),
-                            deletedAdoptionIds:
-                                ref.watch(deletedAdoptionIdsProvider),
-                            resolvedAdoptionIds:
-                                ref.watch(resolvedAdoptionIdsProvider),
-                          ),
-                        );
-                      },
-                      loading: () => const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 64),
-                        child: Center(child: CircularProgressIndicator()),
-                      ),
-                      error: (error, stackTrace) {
-                        return AppStatePanel(
-                          icon: Icons.error_outline,
-                          title: strings.couldNotLoadSection,
-                          action: FilledButton(
-                            onPressed: () => ref.invalidate(feedPostsProvider),
-                            child: Text(strings.retry),
-                          ),
-                        );
-                      },
+              ),
+              if (_firstPage == null && pageAsync.isLoading)
+                const SliverToBoxAdapter(child: _FeedLoading())
+              else if (_firstPage == null && pageAsync.hasError)
+                SliverToBoxAdapter(
+                  child: AppStatePanel(
+                    icon: Icons.error_outline,
+                    title: strings.couldNotLoadSection,
+                    action: FilledButton(
+                      onPressed: () => ref.invalidate(feedPostsProvider),
+                      child: Text(strings.retry),
                     ),
+                  ),
+                )
+              else if (items.isEmpty)
+                SliverToBoxAdapter(
+                  child: AppStatePanel(
+                    icon: Icons.dynamic_feed_outlined,
+                    title: strings.feedEmptyMessage(mode),
+                    message: mode == 'recent' ? strings.emptyFeedMessage : null,
+                  ),
+                )
+              else
+                SliverList.builder(
+                  itemCount: items.length,
+                  itemBuilder: (context, index) => Padding(
+                    key:
+                        ValueKey('${items[index].itemType}:${items[index].id}'),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: _FeedItemCard(item: items[index], strings: strings),
+                  ),
+                ),
+              if (_loadingMore)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(AppSpacing.lg),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              if (_pageError)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    child: Row(children: [
+                      Expanded(child: Text(strings.couldNotLoadSection)),
+                      TextButton(
+                        onPressed: _loadMore,
+                        child: Text(strings.retry),
+                      ),
+                    ]),
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
           ),
         ),
@@ -232,43 +442,43 @@ class FeedScreen extends ConsumerWidget {
   }
 }
 
-Widget _buildFeedItems(
-  BuildContext context,
-  AppStrings strings,
-  List<FeedItem> items,
-) {
-  if (items.isEmpty) return _EmptyFeed(strings: strings);
-  return ListView.separated(
-    shrinkWrap: true,
-    physics: const NeverScrollableScrollPhysics(),
-    itemCount: items.length,
-    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-    itemBuilder: (context, index) => _FeedItemCard(
-      item: items[index],
-      strings: strings,
-    ),
-  );
-}
-
-class _FeedItemCard extends StatelessWidget {
-  const _FeedItemCard({required this.item, required this.strings});
-
-  final FeedItem item;
-  final AppStrings strings;
+class _FeedLoading extends StatelessWidget {
+  const _FeedLoading();
 
   @override
   Widget build(BuildContext context) {
-    final feedItem = item;
-    if (feedItem is LostPetData) {
-      return _LostPetCard(lostPet: feedItem, strings: strings);
-    }
-    if (feedItem is AdoptionPostData) {
-      return _AdoptionPostCard(adoptionPost: feedItem, strings: strings);
-    }
-    final post = feedItem as PostSummary;
-    return FeedPostCard(
-      post: post,
-      onTap: () => context.push('/posts/${post.id}'),
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: Column(children: [
+        for (var i = 0; i < 2; i++) ...[
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(AppRadii.card),
+            ),
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(children: [
+                  CircleAvatar(backgroundColor: colors.surfaceContainerHigh),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                        height: 12, color: colors.surfaceContainerHigh),
+                  ),
+                ]),
+              ),
+              SizedBox(
+                height: 170,
+                child: ColoredBox(color: colors.surfaceContainerLow),
+              ),
+              const SizedBox(height: 48),
+            ]),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+        ],
+      ]),
     );
   }
 }
@@ -287,48 +497,45 @@ class _FeedFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < _mobileFeedBreakpoint;
-
-    void selectMode(String value) {
-      onSelected(mobile && selectedMode == value ? 'recent' : value);
-    }
-
+    void select(String value) =>
+        onSelected(mobile && selectedMode == value ? 'recent' : value);
     return SizedBox(
       height: 48,
-      child: ListView(
+      child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        children: [
+        child: Row(children: [
           if (!mobile)
             _FilterTab(
               value: 'recent',
               selectedValue: selectedMode,
               label: strings.recent,
-              onSelected: selectMode,
+              onSelected: select,
             ),
           _FilterTab(
             value: 'popular',
             selectedValue: selectedMode,
             label: strings.popular,
-            onSelected: selectMode,
+            onSelected: select,
           ),
           _FilterTab(
             value: 'needs_help',
             selectedValue: selectedMode,
             label: strings.needsHelp,
-            onSelected: selectMode,
+            onSelected: select,
           ),
           _FilterTab(
             value: 'lost_pets',
             selectedValue: selectedMode,
             label: strings.lostPets,
-            onSelected: selectMode,
+            onSelected: select,
           ),
           _FilterTab(
             value: 'adoption',
             selectedValue: selectedMode,
             label: strings.adoption,
-            onSelected: selectMode,
+            onSelected: select,
           ),
-        ],
+        ]),
       ),
     );
   }
@@ -354,21 +561,21 @@ class _FilterTab extends StatelessWidget {
     return InkWell(
       onTap: () => onSelected(value),
       child: Container(
-        constraints: const BoxConstraints(minWidth: 64),
+        constraints: const BoxConstraints(minWidth: 64, minHeight: 48),
         padding: const EdgeInsets.symmetric(horizontal: 12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(
-              color: selected ? colors.primary : Colors.transparent,
-              width: 2,
-            ),
-          ),
+              bottom: BorderSide(
+            color: selected ? colors.primary : Colors.transparent,
+            width: 2,
+          )),
         ),
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 color: selected ? colors.primary : colors.onSurfaceVariant,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
         ),
       ),
@@ -389,17 +596,47 @@ class _PopularPeriodBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButton<String>(
-      value: selectedPeriod,
-      isExpanded: true,
-      items: [
-        DropdownMenuItem(value: 'day', child: Text(strings.today)),
-        DropdownMenuItem(value: 'month', child: Text(strings.month)),
-        DropdownMenuItem(value: 'all', child: Text(strings.allTime)),
-      ],
-      onChanged: (value) {
-        if (value != null) onSelected(value);
-      },
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (final (value, label) in [
+          ('day', strings.today),
+          ('month', strings.month),
+          ('all', strings.allTime),
+        ]) ...[
+          ChoiceChip(
+            label: Text(label),
+            selected: selectedPeriod == value,
+            showCheckmark: false,
+            onSelected: (_) => onSelected(value),
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+      ]),
+    );
+  }
+}
+
+class _FeedItemCard extends StatelessWidget {
+  const _FeedItemCard({required this.item, required this.strings});
+
+  final FeedItem item;
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    if (item is LostPetData) {
+      return _LostPetCard(lostPet: item as LostPetData, strings: strings);
+    }
+    if (item is AdoptionPostData) {
+      return _AdoptionPostCard(
+          post: item as AdoptionPostData, strings: strings);
+    }
+    final post = item as PostSummary;
+    return FeedPostCard(
+      post: post,
+      onTap: () => context.push('/posts/${post.id}'),
     );
   }
 }
@@ -410,448 +647,125 @@ class _LostPetCard extends StatelessWidget {
   final LostPetData lostPet;
   final AppStrings strings;
 
-  void _openMap(BuildContext context) {
-    final location = lostPet.lastSeenLocation;
-    context.go(
-      '/map?lat=${location.latitude}&lon=${location.longitude}&lostPetId=${lostPet.id}',
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final author = lostPet.author;
-    final authorId = author?.id;
-    final authorName = lostPet.author?.name ?? strings.anonymous;
+    final colors = Theme.of(context).colorScheme;
     final info = lostPet.additionalInfo?.trim();
-    final authorProfileTap =
-        authorId == null ? null : () => context.push('/users/$authorId');
-
-    return AppCard(
-      padding: EdgeInsets.zero,
-      onTap: () => context.push('/lost-pets/${lostPet.id}'),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            left: BorderSide(color: colorScheme.error, width: 4),
-          ),
+    final authorId = lostPet.author?.id;
+    void openPost() => context.push('/lost-pets/${lostPet.id}');
+    return FeedCardFrame(
+      onTap: openPost,
+      accent: colors.error,
+      children: [
+        FeedAuthorHeader(
+          author: lostPet.author,
+          createdAt: lostPet.createdAt,
+          strings: strings,
+          onAuthorTap:
+              authorId == null ? null : () => context.push('/users/$authorId'),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: authorProfileTap,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: colorScheme.primaryContainer,
-                        backgroundImage: author?.avatarUrl == null
-                            ? null
-                            : NetworkImage(author!.avatarUrl!),
-                        child: author?.avatarUrl == null
-                            ? Text(
-                                _avatarInitial(authorName),
-                                style: TextStyle(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _AuthorInline(
-                              authorName: authorName, onTap: authorProfileTap),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: strings.openPost,
-                      onPressed: () => context.push('/lost-pets/${lostPet.id}'),
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              _FeedMediaPreview(
-                imageUrl: lostPet.thumbUrl ?? lostPet.photoUrl,
-                imageUrls: lostPet.photoUrls,
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _CatNameLine(
-                      label: strings.catNameLabel,
-                      name: lostPet.petName,
-                      trailing: _LostPetBadge(label: strings.lostPet),
-                    ),
-                    if (info != null && info.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _LabeledBodyText(
-                        label: strings.descriptionLabel,
-                        text: info,
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 10),
-                    ] else
-                      const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: () => _openMap(context),
-                      icon: const Icon(Icons.map_outlined),
-                      label: Text(strings.viewOnMap),
-                    ),
-                    const SizedBox(height: 4),
-                    _IconCountAction(
-                      tooltip: strings.comments,
-                      icon: Icons.chat_bubble_outline,
-                      count: lostPet.commentCount,
-                      onPressed: () => context.push('/lost-pets/${lostPet.id}'),
-                    ),
-                  ],
-                ),
-              ),
+        FeedMedia(
+          photoUrl: lostPet.photoUrl,
+          thumbUrl: lostPet.thumbUrl,
+          photoUrls: lostPet.photoUrls,
+          strings: strings,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            FeedPetTitle(
+              name: lostPet.petName,
+              badge:
+                  FeedKindBadge(kind: FeedKind.lostPet, label: strings.lostPet),
+            ),
+            if (info != null && info.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              FeedBodyText(text: info, strings: strings),
             ],
-          ),
+          ]),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+          child: Row(children: [
+            FeedCountAction(
+              tooltip: strings.comments,
+              icon: Icons.chat_bubble_outline,
+              count: lostPet.commentCount,
+              onPressed: openPost,
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () {
+                final location = lostPet.lastSeenLocation;
+                context.go(
+                    '/map?lat=${location.latitude}&lon=${location.longitude}'
+                    '&lostPetId=${lostPet.id}');
+              },
+              icon: const Icon(Icons.map_outlined, size: 19),
+              label: Text(strings.viewOnMap),
+            ),
+          ]),
+        ),
+      ],
     );
   }
 }
 
 class _AdoptionPostCard extends StatelessWidget {
-  const _AdoptionPostCard({
-    required this.adoptionPost,
-    required this.strings,
-  });
+  const _AdoptionPostCard({required this.post, required this.strings});
 
-  final AdoptionPostData adoptionPost;
+  final AdoptionPostData post;
   final AppStrings strings;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final author = adoptionPost.author;
-    final authorId = author?.id;
-    final authorName = adoptionPost.author?.name ?? strings.anonymous;
-    final info = adoptionPost.additionalInfo?.trim();
-    final authorProfileTap =
-        authorId == null ? null : () => context.push('/users/$authorId');
-
-    return AppCard(
-      padding: EdgeInsets.zero,
-      onTap: () => context.push('/adoption-posts/${adoptionPost.id}'),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          border: Border(
-            left: BorderSide(color: AppPalette.adoption, width: 4),
-          ),
+    final colors = Theme.of(context).colorScheme;
+    final info = post.additionalInfo?.trim();
+    final authorId = post.author?.id;
+    void openPost() => context.push('/adoption-posts/${post.id}');
+    return FeedCardFrame(
+      onTap: openPost,
+      accent: colors.tertiary,
+      children: [
+        FeedAuthorHeader(
+          author: post.author,
+          createdAt: post.createdAt,
+          strings: strings,
+          onAuthorTap:
+              authorId == null ? null : () => context.push('/users/$authorId'),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: authorProfileTap,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: colorScheme.primaryContainer,
-                        backgroundImage: author?.avatarUrl == null
-                            ? null
-                            : NetworkImage(author!.avatarUrl!),
-                        child: author?.avatarUrl == null
-                            ? Text(
-                                _avatarInitial(authorName),
-                                style: TextStyle(
-                                  color: colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              )
-                            : null,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          _AuthorInline(
-                            authorName: authorName,
-                            onTap: authorProfileTap,
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: strings.openPost,
-                      onPressed: () =>
-                          context.push('/adoption-posts/${adoptionPost.id}'),
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              _FeedMediaPreview(
-                imageUrl: adoptionPost.thumbUrl ?? adoptionPost.photoUrl,
-                imageUrls: adoptionPost.photoUrls,
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _CatNameLine(
-                      label: strings.catNameLabel,
-                      name: adoptionPost.petName,
-                      trailing: _AdoptionBadge(label: strings.adoption),
-                    ),
-                    if (info != null && info.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _LabeledBodyText(
-                        label: strings.descriptionLabel,
-                        text: info,
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 10),
-                    ] else
-                      const SizedBox(height: 10),
-                    _IconCountAction(
-                      tooltip: strings.comments,
-                      icon: Icons.chat_bubble_outline,
-                      count: adoptionPost.commentCount,
-                      onPressed: () =>
-                          context.push('/adoption-posts/${adoptionPost.id}'),
-                    ),
-                  ],
-                ),
-              ),
+        FeedMedia(
+          photoUrl: post.photoUrl,
+          thumbUrl: post.thumbUrl,
+          photoUrls: post.photoUrls,
+          strings: strings,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            FeedPetTitle(
+              name: post.petName,
+              badge: FeedKindBadge(
+                  kind: FeedKind.rehoming, label: strings.adoption),
+            ),
+            if (info != null && info.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              FeedBodyText(text: info, strings: strings),
             ],
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+          child: FeedCountAction(
+            tooltip: strings.comments,
+            icon: Icons.chat_bubble_outline,
+            count: post.commentCount,
+            onPressed: openPost,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AdoptionBadge extends StatelessWidget {
-  const _AdoptionBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.home_outlined,
-                size: 15, color: colorScheme.onTertiaryContainer),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onTertiaryContainer,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LostPetBadge extends StatelessWidget {
-  const _LostPetBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-        border: Border.all(color: colorScheme.error.withValues(alpha: 0.32)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search, size: 15, color: colorScheme.onErrorContainer),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onErrorContainer,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ImageUnavailable extends StatelessWidget {
-  const _ImageUnavailable();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.image_not_supported_outlined,
-        color: colorScheme.onSurfaceVariant,
-        size: 40,
-      ),
-    );
-  }
-}
-
-class _CatNameLine extends StatelessWidget {
-  const _CatNameLine({
-    required this.label,
-    required this.name,
-    this.trailing,
-  });
-
-  final String label;
-  final String name;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: '$label: ',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                TextSpan(text: name),
-              ],
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (trailing != null) ...[
-          const SizedBox(width: 8),
-          trailing!,
-        ],
       ],
-    );
-  }
-}
-
-class _LabeledBodyText extends StatefulWidget {
-  const _LabeledBodyText({
-    required this.label,
-    required this.text,
-    this.maxLines,
-  });
-
-  final String label;
-  final String text;
-  final int? maxLines;
-
-  @override
-  State<_LabeledBodyText> createState() => _LabeledBodyTextState();
-}
-
-class _LabeledBodyTextState extends State<_LabeledBodyText> {
-  bool _expanded = false;
-
-  TextSpan _textSpan(BuildContext context) {
-    return TextSpan(
-      style: Theme.of(context).textTheme.bodyMedium,
-      children: [
-        TextSpan(
-          text: '${widget.label}: ',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        TextSpan(text: widget.text),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.forLanguage(
-      AppLanguage.fromCode(Localizations.localeOf(context).languageCode),
-    );
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: _textSpan(context),
-          textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
-          maxLines: widget.maxLines,
-          ellipsis: '…',
-        )..layout(maxWidth: constraints.maxWidth);
-        final isLong = widget.maxLines != null && painter.didExceedMaxLines;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RichText(
-              maxLines: _expanded ? null : widget.maxLines,
-              overflow: _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
-              textScaler: MediaQuery.textScalerOf(context),
-              text: _textSpan(context),
-            ),
-            if (isLong || _expanded)
-              TextButton(
-                onPressed: () => setState(() => _expanded = !_expanded),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  minimumSize: const Size(0, 32),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(_expanded ? strings.showLess : strings.readMore),
-              ),
-          ],
-        );
-      },
     );
   }
 }
@@ -887,543 +801,145 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
   }
 
   Future<void> _toggleLike() async {
-    if (_submittingLike) {
-      return;
-    }
+    if (_submittingLike) return;
     if (!ref.read(authControllerProvider).isAuthenticated) {
       requestAuthentication(context);
       return;
     }
-
-    final currentOverride = ref.read(postLikeOverridesProvider)[widget.post.id];
-    final currentlyLiked = currentOverride?.liked ?? _liked;
-    final currentLikeCount = currentOverride?.likeCount ?? _likeCount;
-
+    final current = ref.read(postLikeOverridesProvider)[widget.post.id];
+    final wasLiked = current?.liked ?? _liked;
+    final oldCount = current?.likeCount ?? _likeCount;
+    final newCount = (oldCount + (wasLiked ? -1 : 1)).clamp(0, 1 << 30);
     setState(() {
       _submittingLike = true;
+      _liked = !wasLiked;
+      _likeCount = newCount;
     });
-
+    setPostLikeOverride(ref, widget.post.id,
+        liked: !wasLiked, likeCount: newCount);
     try {
-      if (currentlyLiked) {
+      if (wasLiked) {
         await ref.read(mushukistanApiProvider).unlikePost(widget.post.id);
-        final nextCount = (currentLikeCount - 1).clamp(0, 1 << 30);
-        setState(() {
-          _liked = false;
-          _likeCount = nextCount;
-        });
-        setPostLikeOverride(
-          ref,
-          widget.post.id,
-          liked: false,
-          likeCount: nextCount,
-        );
       } else {
         final result =
             await ref.read(mushukistanApiProvider).likePost(widget.post.id);
+        if (!mounted) return;
         setState(() {
           _liked = result.liked;
           _likeCount = result.likeCount;
         });
-        setPostLikeOverride(
-          ref,
-          widget.post.id,
-          liked: result.liked,
-          likeCount: result.likeCount,
-        );
+        setPostLikeOverride(ref, widget.post.id,
+            liked: result.liked, likeCount: result.likeCount);
       }
-
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
       ref.invalidate(leaderboardProvider);
     } on MushukistanApiException catch (error) {
-      if (!currentlyLiked && error.code == 'ALREADY_LIKED') {
-        final nextCount = currentLikeCount + 1;
+      if (!mounted) return;
+      if (!wasLiked && error.code == 'ALREADY_LIKED') {
         setState(() {
           _liked = true;
-          _likeCount = nextCount;
+          _likeCount = newCount;
         });
-        setPostLikeOverride(
-          ref,
-          widget.post.id,
-          liked: true,
-          likeCount: nextCount,
-        );
+        setPostLikeOverride(ref, widget.post.id,
+            liked: true, likeCount: newCount);
       } else {
-        if (!mounted) {
-          return;
-        }
+        _restoreLike(wasLiked, oldCount);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.userMessage)),
         );
       }
+    } catch (_) {
+      if (!mounted) return;
+      _restoreLike(wasLiked, oldCount);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(ref.read(appStringsProvider).couldNotLoadSection)),
+      );
     } finally {
-      if (mounted) {
-        setState(() {
-          _submittingLike = false;
-        });
-      }
+      if (mounted) setState(() => _submittingLike = false);
     }
+  }
+
+  void _restoreLike(bool liked, int count) {
+    setState(() {
+      _liked = liked;
+      _likeCount = count;
+    });
+    setPostLikeOverride(ref, widget.post.id, liked: liked, likeCount: count);
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final colors = Theme.of(context).colorScheme;
     final strings = ref.watch(appStringsProvider);
-    final likeOverride = ref.watch(postLikeOverridesProvider)[widget.post.id];
-    final isLiked = likeOverride?.liked ?? _liked;
-    final likeCount = likeOverride?.likeCount ?? _likeCount;
-    final author = widget.post.author;
-    final authorId = author?.id;
-    final authorName = author?.name ?? strings.anonymous;
+    final override = ref.watch(postLikeOverridesProvider)[widget.post.id];
+    final liked = override?.liked ?? _liked;
+    final likeCount = override?.likeCount ?? _likeCount;
+    final authorId = widget.post.author?.id;
     final description = widget.post.description?.trim();
-    final catName = widget.post.cat.name ?? strings.unnamedCat;
-    final kindBadge =
-        widget.post.kind == 'needs_help' ? strings.needsHelp : null;
-    final authorProfileTap =
-        authorId == null ? null : () => context.push('/users/$authorId');
-
-    return AppCard(
-      padding: EdgeInsets.zero,
+    final catName = widget.post.cat.name?.trim();
+    final needsHelp = widget.post.kind == 'needs_help';
+    final hasName = catName != null && catName.isNotEmpty;
+    return FeedCardFrame(
       onTap: widget.onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  InkWell(
-                    borderRadius: BorderRadius.circular(20),
-                    onTap: authorProfileTap,
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundColor: colorScheme.primaryContainer,
-                      backgroundImage: author?.avatarUrl == null
-                          ? null
-                          : NetworkImage(author!.avatarUrl!),
-                      child: author?.avatarUrl == null
-                          ? Text(
-                              _avatarInitial(authorName),
-                              style: TextStyle(
-                                color: colorScheme.onPrimaryContainer,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _AuthorLine(
-                          authorName: authorName,
-                          onTap: authorProfileTap,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: strings.openPost,
-                    onPressed: widget.onTap,
-                    icon: const Icon(Icons.chevron_right),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            _FeedMediaPreview(
-              imageUrl: widget.post.thumbUrl ?? widget.post.photoUrl,
-              imageUrls: widget.post.photoUrls,
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      _IconCountAction(
-                        tooltip: isLiked ? strings.unlike : strings.like,
-                        icon: isLiked ? Icons.favorite : Icons.favorite_outline,
-                        count: likeCount,
-                        color: isLiked ? colorScheme.error : null,
-                        onPressed: _submittingLike ? null : _toggleLike,
-                      ),
-                      _IconCountAction(
-                        tooltip: strings.comments,
-                        icon: Icons.chat_bubble_outline,
-                        count: widget.post.commentCount,
-                        onPressed: widget.onTap,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _CatNameLine(
-                    label: strings.catNameLabel,
-                    name: catName,
-                    trailing: kindBadge == null
-                        ? null
-                        : _StatusBadge(label: kindBadge),
-                  ),
-                  if (description != null && description.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    _LabeledBodyText(
-                      label: strings.descriptionLabel,
-                      text: description,
-                      maxLines: 4,
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                ],
-              ),
-            ),
-          ],
+      accent: needsHelp ? colors.tertiary : null,
+      children: [
+        FeedAuthorHeader(
+          author: widget.post.author,
+          createdAt: widget.post.createdAt,
+          strings: strings,
+          onAuthorTap:
+              authorId == null ? null : () => context.push('/users/$authorId'),
         ),
-      ),
-    );
-  }
-}
-
-class _IconCountAction extends StatelessWidget {
-  const _IconCountAction({
-    required this.tooltip,
-    required this.icon,
-    required this.count,
-    required this.onPressed,
-    this.color,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final int count;
-  final VoidCallback? onPressed;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context)
-        .textTheme
-        .bodyMedium
-        ?.copyWith(fontWeight: FontWeight.w700);
-
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 4),
-              Text(count.toString(), style: style),
+        FeedMedia(
+          photoUrl: widget.post.photoUrl,
+          thumbUrl: widget.post.thumbUrl,
+          photoUrls: widget.post.photoUrls,
+          strings: strings,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (hasName)
+              FeedPetTitle(
+                name: catName,
+                badge: needsHelp
+                    ? FeedKindBadge(
+                        kind: FeedKind.needsHelp, label: strings.needsHelp)
+                    : null,
+              )
+            else if (needsHelp)
+              FeedKindBadge(kind: FeedKind.needsHelp, label: strings.needsHelp)
+            else if (description == null || description.isEmpty)
+              Text(strings.unnamedCat,
+                  style: Theme.of(context).textTheme.titleMedium),
+            if (description != null && description.isNotEmpty) ...[
+              if (hasName || needsHelp) const SizedBox(height: AppSpacing.sm),
+              FeedBodyText(text: description, strings: strings),
             ],
-          ),
+          ]),
         ),
-      ),
-    );
-  }
-}
-
-class _AuthorLine extends StatelessWidget {
-  const _AuthorLine({
-    required this.authorName,
-    required this.onTap,
-  });
-
-  final String authorName;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodySmall;
-    final colorScheme = Theme.of(context).colorScheme;
-    final child = Text(
-      authorName,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: onTap == null
-          ? style
-          : style?.copyWith(
-              color: colorScheme.primary,
-              fontWeight: FontWeight.w600,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+          child: Row(children: [
+            FeedCountAction(
+              tooltip: liked ? strings.unlike : strings.like,
+              icon: liked ? Icons.favorite : Icons.favorite_outline,
+              count: likeCount,
+              active: liked,
+              onPressed: _toggleLike,
             ),
-    );
-
-    if (onTap == null) {
-      return child;
-    }
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(4),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: child,
+            FeedCountAction(
+              tooltip: strings.comments,
+              icon: Icons.chat_bubble_outline,
+              count: widget.post.commentCount,
+              onPressed: widget.onTap,
+            ),
+          ]),
         ),
-      ),
-    );
-  }
-}
-
-class _AuthorInline extends StatelessWidget {
-  const _AuthorInline({
-    required this.authorName,
-    required this.onTap,
-  });
-
-  final String authorName;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final style = Theme.of(context).textTheme.bodySmall;
-    final child = Text(
-      authorName,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: onTap == null
-          ? style
-          : style?.copyWith(
-              color: colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
-    );
-
-    if (onTap == null) {
-      return child;
-    }
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(4),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: child,
-      ),
-    );
-  }
-}
-
-String _avatarInitial(String value) {
-  final trimmed = value.trim();
-  if (trimmed.isEmpty) {
-    return '?';
-  }
-  return trimmed.substring(0, 1).toUpperCase();
-}
-
-double _feedImageAspectRatio(BuildContext context) {
-  return MediaQuery.sizeOf(context).width >= _mobileFeedBreakpoint ? 4 / 3 : 1;
-}
-
-class _FeedMediaPreview extends StatefulWidget {
-  const _FeedMediaPreview({
-    required this.imageUrl,
-    this.imageUrls = const [],
-  });
-
-  final String imageUrl;
-  final List<String> imageUrls;
-
-  @override
-  State<_FeedMediaPreview> createState() => _FeedMediaPreviewState();
-}
-
-class _FeedMediaPreviewState extends State<_FeedMediaPreview> {
-  late final PageController _controller = PageController();
-  int _index = 0;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _move(int delta) {
-    final urls = _urls;
-    if (urls.length <= 1) {
-      return;
-    }
-    final next = (_index + delta).clamp(0, urls.length - 1);
-    _controller.animateToPage(
-      next,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  List<String> get _urls {
-    final urls = widget.imageUrls.where((url) => url.isNotEmpty).toList();
-    return urls.isEmpty ? [widget.imageUrl] : urls;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final urls = _urls;
-    final desktop = MediaQuery.sizeOf(context).width >= _mobileFeedBreakpoint;
-    return AspectRatio(
-      aspectRatio: _feedImageAspectRatio(context),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PageView.builder(
-            controller: _controller,
-            itemCount: urls.length,
-            onPageChanged: (value) => setState(() => _index = value),
-            itemBuilder: (context, index) {
-              return ColoredBox(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: Image.network(
-                  urls[index],
-                  fit: desktop ? BoxFit.contain : BoxFit.cover,
-                  width: double.infinity,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const _ImageUnavailable(),
-                ),
-              );
-            },
-          ),
-          if (urls.length > 1) ...[
-            Positioned(
-              top: 12,
-              right: 12,
-              child: _PhotoCountBadge(count: urls.length),
-            ),
-            Positioned(
-              left: 8,
-              top: 0,
-              bottom: 0,
-              child: _PhotoArrow(
-                icon: Icons.chevron_left,
-                onPressed: _index == 0 ? null : () => _move(-1),
-              ),
-            ),
-            Positioned(
-              right: 8,
-              top: 0,
-              bottom: 0,
-              child: _PhotoArrow(
-                icon: Icons.chevron_right,
-                onPressed: _index == urls.length - 1 ? null : () => _move(1),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PhotoArrow extends StatelessWidget {
-  const _PhotoArrow({required this.icon, required this.onPressed});
-
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: IconButton.filledTonal(
-        visualDensity: VisualDensity.compact,
-        onPressed: onPressed,
-        icon: Icon(icon),
-      ),
-    );
-  }
-}
-
-class _PhotoCountBadge extends StatelessWidget {
-  const _PhotoCountBadge({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.68),
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.photo_library_outlined,
-              color: Colors.white,
-              size: 16,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              count.toString(),
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSecondaryContainer,
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyFeed extends StatelessWidget {
-  const _EmptyFeed({required this.strings});
-
-  final AppStrings strings;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppStatePanel(
-      icon: Icons.dynamic_feed_outlined,
-      title: strings.noObservationsYet,
-      message: strings.emptyFeedMessage,
+      ],
     );
   }
 }
