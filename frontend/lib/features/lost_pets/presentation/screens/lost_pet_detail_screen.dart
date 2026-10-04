@@ -23,6 +23,8 @@ final lostPetDetailProvider =
   return ref.watch(mushukistanApiProvider).getLostPet(lostPetId);
 });
 
+enum _LostPetDetailAction { report }
+
 class LostPetDetailScreen extends ConsumerStatefulWidget {
   const LostPetDetailScreen({super.key, required this.lostPetId});
 
@@ -75,7 +77,13 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
       ref.read(postMutationRevisionProvider.notifier).state++;
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
-      if (context.mounted) context.pop(true);
+      if (context.mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        context.pop(true);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(strings.postDeleted)));
+      }
     } on MushukistanApiException catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -154,7 +162,34 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
     final strings = ref.watch(appStringsProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.lostPet)),
+      appBar: AppBar(
+        title: Text(strings.lostPet),
+        actions: [
+          if (lostPetAsync.valueOrNull != null)
+            PopupMenuButton<_LostPetDetailAction>(
+              tooltip: strings.postActions,
+              onSelected: (_) {
+                final pet = lostPetAsync.valueOrNull!;
+                context.push(
+                  Uri(
+                    path: '/report',
+                    queryParameters: {
+                      'type': 'lost_pet',
+                      'id': lostPetId,
+                      'label': pet.petName,
+                    },
+                  ).toString(),
+                );
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: _LostPetDetailAction.report,
+                  child: Text(strings.report),
+                ),
+              ],
+            ),
+        ],
+      ),
       body: lostPetAsync.when(
         data: (lostPet) {
           final info = lostPet.additionalInfo?.trim();
@@ -163,117 +198,103 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
           final canContact = !lostPet.isResolved &&
               lostPet.author?.id != null &&
               lostPet.author?.id != viewerId;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _LostPetPhotoGallery(photoUrls: lostPet.photoUrls),
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _LostPetDetailBadge(
-                  label: lostPet.isResolved
-                      ? strings.reunitedLostPet
-                      : strings.lostPet,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                lostPet.petName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 16),
-              if (!lostPet.isResolved) ...[
-                _DetailActionTile(
-                  icon: Icons.location_on_outlined,
-                  title: strings.lastSeen,
-                  subtitle: strings.viewOnMap,
-                  onTap: () => _openMap(context, lostPet),
-                ),
-              ],
-              if (canContact) ...[
-                const SizedBox(height: 10),
-                _DetailActionTile(
-                  icon: Icons.phone_outlined,
-                  title: strings.contactOwner,
-                  subtitle: lostPet.ownerPhoneNumber,
-                  onTap: () => _contactOwner(context, strings, lostPet),
-                ),
-              ],
-              if (canContact && lostPet.ownerTelegramUsername != null) ...[
-                const SizedBox(height: 10),
-                _DetailActionTile(
-                  icon: Icons.alternate_email,
-                  title: 'Telegram',
-                  subtitle: '@${lostPet.ownerTelegramUsername}',
-                  onTap: () => _contactOwner(
-                    context,
-                    strings,
-                    lostPet,
-                    telegram: true,
+          return AppContentWidth(
+            maxWidth: AppWidths.readable,
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              children: [
+                _LostPetPhotoGallery(photoUrls: lostPet.photoUrls),
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _LostPetDetailBadge(
+                    label: lostPet.isResolved
+                        ? strings.reunitedLostPet
+                        : strings.lostPet,
                   ),
                 ),
-              ],
-              if (info != null && info.isNotEmpty) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 Text(
-                  strings.additionalInformation,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  lostPet.petName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
-                const SizedBox(height: 6),
-                Text(info),
-              ],
-              if (isOwner) ...[
-                const SizedBox(height: 20),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _editLostPet(lostPet),
-                      icon: const Icon(Icons.edit_outlined),
-                      label: Text(strings.editLostPet),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () =>
-                          _deleteLostPet(context, strings, lostPet),
-                      icon: const Icon(Icons.delete_outline),
-                      label: Text(strings.deleteLostPet),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: () => context.push(
-                    Uri(
-                      path: '/report',
-                      queryParameters: {
-                        'type': 'lost_pet',
-                        'id': lostPetId,
-                        'label': lostPet.petName,
-                      },
-                    ).toString(),
+                const SizedBox(height: 16),
+                if (!lostPet.isResolved) ...[
+                  _DetailActionTile(
+                    icon: Icons.location_on_outlined,
+                    title: strings.lastSeen,
+                    subtitle: strings.viewOnMap,
+                    onTap: () => _openMap(context, lostPet),
                   ),
-                  icon: const Icon(Icons.flag_outlined),
-                  label: Text(strings.report),
+                ],
+                if (canContact) ...[
+                  const SizedBox(height: 10),
+                  _DetailActionTile(
+                    icon: Icons.phone_outlined,
+                    title: strings.contactOwner,
+                    subtitle: lostPet.ownerPhoneNumber,
+                    onTap: () => _contactOwner(context, strings, lostPet),
+                  ),
+                ],
+                if (canContact && lostPet.ownerTelegramUsername != null) ...[
+                  const SizedBox(height: 10),
+                  _DetailActionTile(
+                    icon: Icons.alternate_email,
+                    title: 'Telegram',
+                    subtitle: '@${lostPet.ownerTelegramUsername}',
+                    onTap: () => _contactOwner(
+                      context,
+                      strings,
+                      lostPet,
+                      telegram: true,
+                    ),
+                  ),
+                ],
+                if (info != null && info.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  Text(
+                    strings.additionalInformation,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(info),
+                ],
+                if (isOwner) ...[
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _editLostPet(lostPet),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: Text(strings.editLostPet),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () =>
+                            _deleteLostPet(context, strings, lostPet),
+                        icon: const Icon(Icons.delete_outline),
+                        label: Text(strings.deleteLostPet),
+                        style: FilledButton.styleFrom(
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 20),
+                const SizedBox(height: 24),
+                LostPetCommentsSection(
+                  lostPetId: lostPetId,
+                  padding: EdgeInsets.zero,
                 ),
-              ),
-              const SizedBox(height: 24),
-              LostPetCommentsSection(
-                lostPetId: lostPetId,
-                padding: EdgeInsets.zero,
-              ),
-            ],
+              ],
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),

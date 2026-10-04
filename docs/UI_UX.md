@@ -29,8 +29,10 @@ Bottom navigation with 5 tabs:
 
 3.2 Shared UI Elements
 - App bar on screens that need title/actions.
-- Bottom navigation always visible on main tabs.
-- Floating action button optional on map for quick "Add Observation".
+- Bottom navigation is visible on main tab roots and hidden after entering a creation workflow. `/add` remains a normal tab with navigation visible.
+- Selecting a different tab opens that tab's root route. Returning to a tab does not restore a nested edit or settings screen.
+- Re-tapping the active Feed root scrolls its existing feed to the top; returning to Feed from another tab preserves its scroll position.
+- Floating action button optional on map for quick "Cat post".
 - Consistent cards for cat/post summary.
 
 3.3 Global States
@@ -49,7 +51,7 @@ Bottom navigation with 5 tabs:
 
 4.2 Authenticated Main Flow
 - Default landing tab: Feed
-- User can switch tabs anytime.
+- User can switch between main tabs anytime; creation workflows hide bottom navigation until the user finishes or backs out.
 - Deep links to posts open details screens and preserve back stack.
 
 4.3 Add Observation Flow
@@ -225,7 +227,8 @@ Bottom navigation with 5 tabs:
 - map location picker shows user's current location, a recenter-on-user button, and a tappable observation marker.
 - tapping Lost Pet checks for a valid Uzbekistan phone number; if missing or invalid, show a Lost-Pet-specific prompt with an Edit Profile action.
 - Find a new home applies the same phone check with its own requirement message before opening the existing rehoming form.
-- Continue draft opens the location step when a photo is present; Delete draft asks for confirmation, resets the draft, and shows feedback.
+- The bottom navigation remains visible on the Add entry screen and is hidden in the ordinary post, needs-help, Lost Pet, and rehoming creation workflows. Back navigation remains available.
+- Continue draft returns to the shared form; Delete draft asks for confirmation, resets the draft, and shows feedback.
 - Edge cases:
 - permission denied -> show system settings guidance.
 - user cancels image picker -> return to previous screen.
@@ -251,6 +254,11 @@ Bottom navigation with 5 tabs:
   - maximum five photos
   - last-seen map point required
   - additional information max 2000 chars
+
+5.7.2 Lost Pet Detail Screen
+- Center the gallery, title, location/contact tiles, information, owner actions, and comments in a readable column bounded by AppWidths.readable; compact screens use normal page padding.
+- Keep Edit secondary and Delete clearly destructive. Put Report in the app-bar overflow menu.
+- After a successful delete, return to the destination and show a localized success message.
 
 5.8 Add Observation Details Screen
 - Purpose: complete metadata before submission.
@@ -284,8 +292,8 @@ Bottom navigation with 5 tabs:
 - Purpose: browse recent community observations, lost pets, and rehoming posts.
 - Layout:
   - one lazy scrolling column, nearly full width on mobile and centered at a readable maximum width on tablet/web; the title aligns with that column.
-  - horizontal filters: Popular, Needs help, Lost pets, Adoption on mobile, with Recent as the implicit default; wider layouts also show Recent.
-  - tapping the selected mobile filter returns to Recent.
+  - horizontal, scrollable filters: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default.
+  - tapping the selected filter keeps it selected.
   - Popular alone shows compact Today, Month, All time period chips.
   - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface.
   - media uses a contained image in a neutral frame; its height is capped on tablet/web. Multiple photos have a count and quiet previous/next controls.
@@ -387,6 +395,7 @@ Bottom navigation with 5 tabs:
 - Layout:
   - same identity and stats surface as the self profile, with name, avatar, short public bio, observations, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
   - Recent observations shows up to four current Feed post cards and a See all action to the existing observations screen; comments open from the stat.
+  - on wide screens, keep the summary fixed on the left while recent observations scroll within the available viewport; compact screens use one vertical page scroll.
   - Report and Block appear in the app bar overflow menu. A successful block disables the Block action for that screen session.
   - one column on phones; on wide screens, identity/stats and recent observations sit side by side within AppWidths.wide.
 - Interactions:
@@ -404,6 +413,7 @@ Bottom navigation with 5 tabs:
   - Change photo opens a Material source sheet for gallery or camera; a selected photo previews immediately.
   - Personal information groups name, optional Uzbekistan phone, Telegram username, and multiline bio.
   - Save changes is the primary action, beside Cancel on wide screens and full width on mobile.
+- Save changes is disabled until a field or avatar changes, and becomes disabled again if text values are restored to their initial values. The empty Bio field has no example placeholder.
 - Validation:
   - name max 100,
   - phone number optional, owner-only for MVP and must use Uzbekistan format shown with placeholder digits: +998 xx xxx xx xx,
@@ -414,6 +424,7 @@ Bottom navigation with 5 tabs:
   - back or Cancel with unsaved text or avatar changes asks whether to discard them.
   - avatar uploads before profile details. If the avatar saves but details fail, keep the form, refresh profile data, and retry details without uploading that avatar again.
   - save conflict/network failure -> keep unsaved details and retry option.
+- Successful Save changes returns to Profile with a localized confirmation.
 
 5.17.1 Settings Screen
 - Purpose: manage application preferences.

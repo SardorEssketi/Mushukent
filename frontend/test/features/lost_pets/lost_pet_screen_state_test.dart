@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
@@ -117,6 +118,133 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Edit lost pet'), findsNothing);
     expect(find.text('Delete lost pet'), findsNothing);
+  });
+
+  testWidgets('Lost Pet detail uses a readable column and Report overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'lost-pets/pet-1', (_) => _pet(resolved: true));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'owner-1');
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ListView).first).width, 760);
+    expect(find.widgetWithText(OutlinedButton, 'Report'), findsNothing);
+    expect(
+        find.widgetWithText(FilledButton, 'Delete lost pet'), findsOneWidget);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Report'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(800, 900);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ListView).first).width, 760);
+
+    tester.view.physicalSize = const Size(390, 844);
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(ListView).first).width, 390);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('non-owner Report menu keeps the Lost Pet target id',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler(
+        'GET', 'lost-pets/pet-1', (_) => _pet(resolved: false));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'another-user');
+    addTearDown(container.dispose);
+    final router = GoRouter(initialLocation: '/lost-pets/pet-1', routes: [
+      GoRoute(
+        path: '/lost-pets/:lostPetId',
+        builder: (_, state) => LostPetDetailScreen(
+          lostPetId: state.pathParameters['lostPetId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/report',
+        builder: (_, state) => Scaffold(
+          body: Text(
+            'Report ${state.uri.queryParameters['type']} '
+            '${state.uri.queryParameters['id']}',
+          ),
+        ),
+      ),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit lost pet'), findsNothing);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Report'));
+    await tester.pumpAndSettle();
+    expect(find.text('Report lost_pet pet-1'), findsOneWidget);
+  });
+
+  testWidgets('successful Lost Pet deletion confirms on the destination',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'lost-pets/pet-1', (_) => _pet(resolved: true));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    apiClient.setHandler('DELETE', 'lost-pets/pet-1', (_) => null);
+    final container = _container(apiClient, userId: 'owner-1');
+    addTearDown(container.dispose);
+    final router = GoRouter(initialLocation: '/destination', routes: [
+      GoRoute(
+        path: '/destination',
+        builder: (context, _) => Scaffold(
+          body: TextButton(
+            onPressed: () => context.push('/lost-pets/pet-1'),
+            child: const Text('Destination'),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/lost-pets/:lostPetId',
+        builder: (_, state) => LostPetDetailScreen(
+          lostPetId: state.pathParameters['lostPetId']!,
+        ),
+      ),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Destination'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Delete lost pet'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Delete lost pet'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete', skipOffstage: false).last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Destination'), findsOneWidget);
+    expect(find.text('Post deleted'), findsOneWidget);
+    expect(
+        apiClient.calls.where((call) => call.method == 'DELETE'), hasLength(1));
   });
 
   testWidgets('Lost Pet edit screen loads existing mutable values',

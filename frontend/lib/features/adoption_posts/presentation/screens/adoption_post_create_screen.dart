@@ -114,7 +114,11 @@ class _AdoptionPostCreateScreenState
           );
       ref.invalidate(feedPostsProvider);
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         context.go('/feed');
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(strings.postPublished)));
       }
     } on MushukistanApiException catch (error) {
       if (mounted) {

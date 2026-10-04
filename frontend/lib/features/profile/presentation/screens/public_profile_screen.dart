@@ -133,21 +133,18 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                 ? () => context.push('/users/${profile.id}/comments')
                 : null,
           );
-          final recent = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ProfileSectionHeading(
-                title: strings.recentObservations,
-                action: activityAvailable && result.posts.items.isNotEmpty
-                    ? TextButton(
-                        onPressed: () =>
-                            context.push('/users/${profile.id}/observations'),
-                        child: Text(strings.seeAll),
-                      )
-                    : null,
-              ),
-              if (!activityAvailable)
-                AppCard(
+          final recentHeading = ProfileSectionHeading(
+            title: strings.recentObservations,
+            action: activityAvailable && result.posts.items.isNotEmpty
+                ? TextButton(
+                    onPressed: () =>
+                        context.push('/users/${profile.id}/observations'),
+                    child: Text(strings.seeAll),
+                  )
+                : null,
+          );
+          final recentContent = !activityAvailable
+              ? AppCard(
                   child: Row(children: [
                     Icon(Icons.visibility_off_outlined,
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -155,46 +152,71 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                     Expanded(child: Text(strings.noActivityVisible)),
                   ]),
                 )
-              else if (result.posts.items.isEmpty)
-                AppCard(
-                  child: Row(children: [
-                    Icon(Icons.pets_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(child: Text(strings.noObservationsYet)),
-                  ]),
-                )
-              else
-                for (final post in result.posts.items) ...[
-                  FeedPostCard(
-                    key: ValueKey(post.id),
-                    post: post,
-                    onTap: () => context.push('/posts/${post.id}'),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+              : result.posts.items.isEmpty
+                  ? AppCard(
+                      child: Row(children: [
+                        Icon(Icons.pets_outlined,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(child: Text(strings.noObservationsYet)),
+                      ]),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      itemCount: result.posts.items.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: AppSpacing.md),
+                      itemBuilder: (context, index) {
+                        final post = result.posts.items[index];
+                        return FeedPostCard(
+                          key: ValueKey(post.id),
+                          post: post,
+                          onTap: () => context.push('/posts/${post.id}'),
+                        );
+                      },
+                    );
+          final recent = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              recentHeading,
+              Expanded(child: recentContent),
             ],
           );
           return AppContentWidth(
             maxWidth: AppWidths.wide,
             child: LayoutBuilder(builder: (context, constraints) {
               final wide = constraints.maxWidth >= AppWidths.readable;
+              if (wide) {
+                return Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 5, child: summary),
+                      const SizedBox(width: AppSpacing.xl),
+                      Expanded(flex: 6, child: recent),
+                    ],
+                  ),
+                );
+              }
               return ListView(
                 padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
-                  if (wide)
-                    Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(flex: 5, child: summary),
-                          const SizedBox(width: AppSpacing.xl),
-                          Expanded(flex: 6, child: recent),
-                        ])
-                  else ...[
-                    summary,
-                    const SizedBox(height: AppSpacing.xl),
-                    recent,
-                  ],
+                  summary,
+                  const SizedBox(height: AppSpacing.xl),
+                  recentHeading,
+                  if (!activityAvailable || result.posts.items.isEmpty)
+                    recentContent
+                  else
+                    ...result.posts.items.expand((post) => [
+                          FeedPostCard(
+                            key: ValueKey(post.id),
+                            post: post,
+                            onTap: () => context.push('/posts/${post.id}'),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                        ]),
                 ],
               );
             }),

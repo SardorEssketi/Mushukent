@@ -100,7 +100,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
         ref.invalidate(userPostsProvider(userId));
       }
       if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
         context.pop(true);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(strings.postDeleted)));
       }
     } on MushukistanApiException catch (error) {
       if (mounted) {

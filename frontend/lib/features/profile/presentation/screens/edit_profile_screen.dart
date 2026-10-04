@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/media/image_picker_options.dart';
 import '../../../../core/media/selected_image_pipeline.dart';
+import '../../../../core/navigation/settings_changes_guard.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
@@ -32,6 +33,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _bioController = TextEditingController();
   bool _initialised = false;
   bool _saving = false;
+  bool _detailsSavePending = false;
   bool _pickingAvatar = false;
   String? _error;
   Uint8List? _avatarBytes;
@@ -47,6 +49,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   @override
   void initState() {
     super.initState();
+    ref.read(editProfileHasUnsavedChangesProvider.notifier).state = false;
     for (final controller in [
       _nameController,
       _phoneController,
@@ -59,14 +62,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   bool get _hasChanges =>
       _initialised &&
-      (_avatarBytes != null ||
+      (_detailsSavePending ||
+          _avatarBytes != null ||
           _nameController.text != _initialName ||
           _phoneController.text != _initialPhone ||
           _telegramController.text != _initialTelegram ||
           _bioController.text != _initialBio);
 
   void _onInputChanged() {
-    if (_initialised && mounted) setState(() {});
+    if (!_initialised) return;
+    _syncUnsavedChanges();
+    if (mounted) setState(() {});
+  }
+
+  void _syncUnsavedChanges() {
+    final dirty = _hasChanges;
+    if (ref.read(editProfileHasUnsavedChangesProvider) != dirty) {
+      ref.read(editProfileHasUnsavedChangesProvider.notifier).state = dirty;
+    }
   }
 
   Future<void> _requestExit() async {
@@ -94,6 +107,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _confirmingExit = false;
       if (discard != true || !mounted) return;
     }
+    ref.read(editProfileHasUnsavedChangesProvider.notifier).state = false;
     setState(() => _exitApproved = true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.pop();
@@ -124,6 +138,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _initialTelegram = _telegramController.text;
       _initialBio = _bioController.text;
       _initialised = true;
+      _syncUnsavedChanges();
     }
 
     final mobile = MediaQuery.sizeOf(context).width < AppWidths.compact;
@@ -207,7 +222,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     controller: _bioController,
                     decoration: InputDecoration(
                       labelText: strings.bio,
-                      hintText: strings.bioHint,
                     ),
                     minLines: 3,
                     maxLines: 5,
@@ -222,7 +236,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   const SizedBox(height: AppSpacing.lg),
                   if (mobile) ...[
                     FilledButton(
-                      onPressed: _saving ? null : _saveProfile,
+                      onPressed: _saving || !_hasChanges ? null : _saveProfile,
                       child: _saveLabel(strings),
                     ),
                     TextButton(
@@ -237,7 +251,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       ),
                       const SizedBox(width: AppSpacing.md),
                       FilledButton(
-                        onPressed: _saving ? null : _saveProfile,
+                        onPressed:
+                            _saving || !_hasChanges ? null : _saveProfile,
                         child: _saveLabel(strings),
                       ),
                     ]),
@@ -344,6 +359,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         _avatarFilename = avatar.filename;
         _avatarContentType = avatar.contentType;
       });
+      _syncUnsavedChanges();
     } catch (error) {
       logPhotoPipelineFailure('avatar_gallery_picker', error);
       if (mounted) {
@@ -391,6 +407,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         _avatarFilename = avatar.filename;
         _avatarContentType = avatar.contentType;
       });
+      _syncUnsavedChanges();
     } catch (error) {
       logPhotoPipelineFailure('avatar_camera_picker', error);
       if (mounted) {
@@ -409,7 +426,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
-    if (_saving) {
+    if (_saving || !_hasChanges) {
       return;
     }
     if (!(_formKey.currentState?.validate() ?? true)) {
@@ -446,16 +463,22 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       );
       ref.invalidate(profileMeProvider);
       if (mounted) {
+        _detailsSavePending = false;
+        ref.read(editProfileHasUnsavedChangesProvider.notifier).state = false;
+        final messenger = ScaffoldMessenger.of(context);
+        final message = ref.read(appStringsProvider).changesSaved;
         setState(() => _exitApproved = true);
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) context.pop();
-        });
+        context.pop();
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (error) {
       if (mounted) {
         final strings = ref.read(appStringsProvider);
         setState(() {
           if (avatarSaved) {
+            _detailsSavePending = true;
             _avatarBytes = null;
             _avatarFilename = null;
             _avatarContentType = null;
@@ -468,6 +491,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       ? error.userMessage
                       : strings.couldNotSaveChanges;
         });
+        _syncUnsavedChanges();
         if (avatarSaved) {
           ref.invalidate(profileMeProvider);
         }

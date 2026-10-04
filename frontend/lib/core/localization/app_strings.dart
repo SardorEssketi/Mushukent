@@ -251,6 +251,30 @@ class AppStrings {
         _ => 'Profile actions',
       };
 
+  String get postActions => switch (this) {
+        _UzbekStrings() => 'Post amallari',
+        _RussianStrings() => 'Действия с публикацией',
+        _ => 'Post actions',
+      };
+
+  String get postPublished => switch (this) {
+        _UzbekStrings() => 'Post joylandi',
+        _RussianStrings() => 'Пост опубликован',
+        _ => 'Post published',
+      };
+
+  String get postDeleted => switch (this) {
+        _UzbekStrings() => 'Post o‘chirildi',
+        _RussianStrings() => 'Пост удалён',
+        _ => 'Post deleted',
+      };
+
+  String get helpRequestPublished => switch (this) {
+        _UzbekStrings() => 'Yordam so‘rovi joylandi',
+        _RussianStrings() => 'Просьба о помощи опубликована',
+        _ => 'Help request published',
+      };
+
   String get unsavedChangesTitle {
     return switch (this) {
       _UzbekStrings() => 'Saqlanmagan o\'zgarishlar',
@@ -1947,14 +1971,6 @@ class AppStrings {
       _UzbekStrings() => 'Bio',
       _RussianStrings() => 'О себе',
       _ => 'Bio',
-    };
-  }
-
-  String get bioHint {
-    return switch (this) {
-      _UzbekStrings() => 'Toshkentdan Aydos, mushuklarni yaxshi koʻradi',
-      _RussianStrings() => 'Айдос из Ташкента, любит кошек',
-      _ => 'Aydos from Tashkent, cat lover',
     };
   }
 

@@ -137,10 +137,11 @@ class _LostPetEditScreenState extends ConsumerState<LostPetEditScreen> {
         if (updated.isResolved) updated.id,
       };
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.changesSaved)),
-        );
+        final messenger = ScaffoldMessenger.of(context);
         context.pop(true);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(strings.changesSaved)));
       }
     } on MushukistanApiException catch (error) {
       if (mounted) {

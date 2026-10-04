@@ -40,6 +40,7 @@ import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/account_security_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
 import '../network/mushukistan_api.dart';
+import '../navigation/settings_changes_guard.dart';
 import '../startup/startup_log.dart';
 import '../widgets/app_shell_scaffold.dart';
 import 'auth_navigation.dart';
@@ -167,7 +168,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
-          return AppShellScaffold(navigationShell: navigationShell);
+          return AppShellScaffold(
+            navigationShell: navigationShell,
+            location: state.uri.path,
+          );
         },
         branches: [
           StatefulShellBranch(
@@ -417,6 +421,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   ref.listen<AuthState>(authControllerProvider, (previous, authState) {
     if (previous?.user?.id != authState.user?.id) {
+      ref.read(editProfileHasUnsavedChangesProvider.notifier).state = false;
       ref.invalidate(profileMeProvider);
       ref.invalidate(feedPostsProvider);
       ref.invalidate(postLikeOverridesProvider);

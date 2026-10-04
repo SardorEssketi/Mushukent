@@ -108,7 +108,13 @@ class _AdoptionPostEditScreenState
       ref.read(postMutationRevisionProvider.notifier).state++;
       ref.invalidate(adoptionPostDetailProvider(widget.adoptionPostId));
       ref.invalidate(feedPostsProvider);
-      if (mounted) context.pop(true);
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        context.pop(true);
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(strings.changesSaved)));
+      }
     } on MushukistanApiException catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

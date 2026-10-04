@@ -6,13 +6,17 @@ import '../localization/app_strings.dart';
 final settingsHasUnsavedChangesProvider = StateProvider<bool>((ref) => false);
 final settingsDiscardChangesProvider =
     StateProvider<VoidCallback?>((ref) => null);
+final editProfileHasUnsavedChangesProvider =
+    StateProvider<bool>((ref) => false);
 
 Future<bool> confirmLeavingSettings(
   BuildContext context,
   WidgetRef ref, {
   VoidCallback? onDiscard,
 }) async {
-  if (!ref.read(settingsHasUnsavedChangesProvider)) {
+  final settingsHaveChanges = ref.read(settingsHasUnsavedChangesProvider);
+  final editProfileHasChanges = ref.read(editProfileHasUnsavedChangesProvider);
+  if (!settingsHaveChanges && !editProfileHasChanges) {
     return true;
   }
 
@@ -36,8 +40,11 @@ Future<bool> confirmLeavingSettings(
   );
 
   if (shouldDiscard == true) {
-    (onDiscard ?? ref.read(settingsDiscardChangesProvider))?.call();
+    if (settingsHaveChanges) {
+      (onDiscard ?? ref.read(settingsDiscardChangesProvider))?.call();
+    }
     ref.read(settingsHasUnsavedChangesProvider.notifier).state = false;
+    ref.read(editProfileHasUnsavedChangesProvider.notifier).state = false;
     return true;
   }
   return false;

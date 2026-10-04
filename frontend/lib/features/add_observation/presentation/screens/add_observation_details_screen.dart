@@ -114,15 +114,24 @@ class AddObservationDetailsScreen extends ConsumerWidget {
                   ? null
                   : () async {
                       try {
-                        final post = await controller.submit(
+                        await controller.submit(
                           strings: strings,
                         );
                         ref.invalidate(feedPostsProvider);
                         ref.read(postMutationRevisionProvider.notifier).state++;
                         ref.invalidate(profileMeProvider);
                         ref.invalidate(leaderboardProvider);
+                        controller.reset();
                         if (context.mounted) {
-                          context.go('/add/success', extra: post);
+                          final messenger = ScaffoldMessenger.of(context);
+                          context.go('/feed');
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(SnackBar(
+                              content: Text(needsHelp
+                                  ? strings.helpRequestPublished
+                                  : strings.postPublished),
+                            ));
                         }
                       } catch (_) {
                         // Error is surfaced by controller state.

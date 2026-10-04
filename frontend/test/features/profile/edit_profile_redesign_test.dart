@@ -121,6 +121,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+      'Save is disabled until a real change and text restoration is clean',
+      (tester) async {
+    _size(tester, 800);
+    final client = FakeApiClient();
+    await _mount(tester, client);
+
+    final save = find.widgetWithText(FilledButton, 'Save changes');
+    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+    final bioField = find.byType(TextFormField).at(3);
+    final bio = tester.widget<TextField>(
+      find.descendant(of: bioField, matching: find.byType(TextField)),
+    );
+    expect(bio.decoration!.hintText, isNull);
+    expect(find.text('Aydos from Tashkent, cat lover'), findsNothing);
+
+    final name = find.byType(TextFormField).first;
+    await tester.enterText(name, 'Amina Updated');
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(save).onPressed, isNotNull);
+    await tester.enterText(name, 'Amina Catlover');
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+    expect(client.calls, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('camera choice uses the existing picker path', (tester) async {
     _size(tester, 360);
     final originalPicker = ImagePickerPlatform.instance;
@@ -196,6 +223,7 @@ void main() {
     expect(body['telegram_username'], 'new_amina');
     expect(body['bio'], 'New bio');
     expect(find.text('Profile home'), findsOneWidget);
+    expect(find.text('Changes saved.'), findsOneWidget);
   });
 
   testWidgets('clearing optional phone and Telegram sends empty values',
@@ -220,6 +248,7 @@ void main() {
     final client = FakeApiClient();
     client.setHandler('PATCH', 'users/me', (_) => pending.future);
     await _mount(tester, client);
+    await tester.enterText(find.byType(TextFormField).first, 'Amina Pending');
     await _save(tester);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,

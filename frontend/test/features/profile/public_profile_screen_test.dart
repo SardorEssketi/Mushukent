@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
+import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
@@ -18,6 +19,7 @@ void main() {
     required bool publicActivity,
     bool authenticated = false,
     bool withPost = true,
+    int postCount = 1,
     bool privatePostsResponse = false,
     String? avatarUrl,
   }) async {
@@ -50,21 +52,25 @@ void main() {
       }
       return {
         'items': withPost
-            ? [
-                {
-                  'id': 'post-1',
-                  'cat': {'id': 'cat-1', 'name': 'Momiq', 'status': 'unknown'},
-                  'author': {'id': 'other', 'name': 'Sardor Contributor'},
-                  'photo_url': 'invalid:',
-                  'photo_urls': <String>[],
-                  'description': 'Seen near the park',
-                  'kind': 'needs_help',
-                  'created_at': '2026-09-01T10:00:00Z',
-                  'like_count': 2,
-                  'comment_count': 1,
-                  'is_liked_by_me': false,
-                }
-              ]
+            ? List.generate(
+                postCount,
+                (index) => {
+                      'id': 'post-${index + 1}',
+                      'cat': {
+                        'id': 'cat-1',
+                        'name': 'Momiq',
+                        'status': 'unknown'
+                      },
+                      'author': {'id': 'other', 'name': 'Sardor Contributor'},
+                      'photo_url': 'invalid:',
+                      'photo_urls': <String>[],
+                      'description': 'Seen near the park. '.padRight(720, 'c'),
+                      'kind': 'needs_help',
+                      'created_at': '2026-09-01T10:00:00Z',
+                      'like_count': 2,
+                      'comment_count': 1,
+                      'is_liked_by_me': false,
+                    })
             : <Object>[],
         'limit': 4,
       };
@@ -165,6 +171,45 @@ void main() {
     await tester.tap(find.text('12'));
     await tester.pumpAndSettle();
     expect(find.text('Observations route'), findsNothing);
+  });
+
+  testWidgets('wide profile keeps summary fixed while recent posts scroll',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await mount(tester, publicActivity: true, postCount: 4);
+
+    final summary = find.byType(ProfileSummaryCard);
+    expect(summary, findsOneWidget);
+    expect(find.byType(ListView), findsOneWidget);
+    final summaryTopBefore = tester.getTopLeft(summary).dy;
+    final firstPostTopBefore =
+        tester.getTopLeft(find.byType(FeedPostCard).first).dy;
+    await tester.drag(find.byType(ListView).first, const Offset(0, -560));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(summary).dy, summaryTopBefore);
+    expect(tester.getTopLeft(find.byType(FeedPostCard).first).dy,
+        lessThan(firstPostTopBefore));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact profile keeps a single vertical scroll region',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 850);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await mount(tester, publicActivity: true, postCount: 4);
+
+    expect(find.byType(ListView), findsOneWidget);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -560));
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileSummaryCard), findsNothing);
+    expect(find.byType(FeedPostCard), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('privacy response hides a stale activity preview',

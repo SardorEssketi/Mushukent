@@ -20,8 +20,6 @@ final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
 );
 
 const _pageSize = 30;
-const _mobileFeedBreakpoint = 700.0;
-
 String _feedKey(String mode, String period, String? userId) =>
     '$mode:${mode == 'popular' ? period : ''}:${userId ?? 'guest'}';
 
@@ -305,6 +303,17 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(feedScrollToTopRequestsProvider, (previous, next) {
+      if (previous == null || previous == next) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        _scrollController.animateTo(
+          _scrollController.position.minScrollExtent,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    });
     final mode = ref.watch(feedModeProvider);
     final period = ref.watch(feedPopularPeriodProvider);
     final userId = ref.watch(currentUserProvider)?.id;
@@ -496,44 +505,40 @@ class _FeedFilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < _mobileFeedBreakpoint;
-    void select(String value) =>
-        onSelected(mobile && selectedMode == value ? 'recent' : value);
     return SizedBox(
       height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(children: [
-          if (!mobile)
-            _FilterTab(
-              value: 'recent',
-              selectedValue: selectedMode,
-              label: strings.recent,
-              onSelected: select,
-            ),
+          _FilterTab(
+            value: 'recent',
+            selectedValue: selectedMode,
+            label: strings.recent,
+            onSelected: onSelected,
+          ),
           _FilterTab(
             value: 'popular',
             selectedValue: selectedMode,
             label: strings.popular,
-            onSelected: select,
+            onSelected: onSelected,
           ),
           _FilterTab(
             value: 'needs_help',
             selectedValue: selectedMode,
             label: strings.needsHelp,
-            onSelected: select,
+            onSelected: onSelected,
           ),
           _FilterTab(
             value: 'lost_pets',
             selectedValue: selectedMode,
             label: strings.lostPets,
-            onSelected: select,
+            onSelected: onSelected,
           ),
           _FilterTab(
             value: 'adoption',
             selectedValue: selectedMode,
             label: strings.adoption,
-            onSelected: select,
+            onSelected: onSelected,
           ),
         ]),
       ),
