@@ -14,6 +14,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import 'profile_screen.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
@@ -562,7 +563,7 @@ class _AvatarEditor extends StatelessWidget {
     final url = avatarUrl?.trim();
     if (url == null || url.isEmpty) return fallback;
     return ClipOval(
-      child: Image.network(
+      child: AppRemoteImage(
         url,
         width: 88,
         height: 88,

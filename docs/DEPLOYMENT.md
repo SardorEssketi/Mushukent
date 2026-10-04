@@ -95,6 +95,38 @@ JSON, WebAssembly, and local CanvasKit files. Any Cloudflare cache rule must
 honor or be at least as strict as these origin headers for those paths. Do not
 add an edge rule that caches HTML or `main.dart.js` across releases.
 
+Uploaded media has unique object keys and may keep its one-year immutable cache
+header. Remote-image views retry once with a session-specific query only after
+an image from `media.mushukistan.uz` fails, so a bad response held in a
+browser's media cache can recover without clearing site data. Other hosts are
+never given a retry query. This retry does not provide offline media.
+
+Production cache audit (2026-10-04): successful media objects return
+`Cache-Control: public, max-age=31536000, immutable` from R2 object metadata.
+Before the Cloudflare correction, missing media returned `404` with
+`Cache-Control: max-age=14400` and repeat requests were edge cache hits. The
+operator then enabled a Cache Response Rule for errors, set Browser Cache TTL
+to Respect Existing Headers, and purged the media hostname. A live check
+confirmed a successful `200` retained the immutable header and a deliberately
+missing `404` returned `Cache-Control: no-store` with `cf-cache-status: BYPASS`
+on two consecutive requests.
+
+Keep a Cloudflare Cache Response Rule with expression
+`(http.host eq "media.mushukistan.uz" and http.response.code ge 400)`. Set the
+`no-store` Cache-Control directive with **Cloudflare only off**, and remove any
+`max-age`, `s-maxage`, `public`, `immutable`, or `stale-if-error` directives on
+matching responses. Place the rule after any broader Cache Response Rules.
+Add a Cache Rule matching `http.host eq "media.mushukistan.uz"` with cache
+eligibility **Eligible for cache** and Browser TTL **Respect origin** (or use
+zone-wide Browser Cache TTL **Respect Existing Headers** if appropriate). This
+keeps the R2 one-year header on successful media and prevents Cloudflare from
+inserting a four-hour browser lifetime on errors. Purge known
+cached error URLs individually (including their query strings), rather than
+purging the full media hostname. A status-only purge is not available; unknown
+cached error URLs must expire unless they can be identified in logs. Then
+verify repeated missing-object requests are not edge hits and successful
+objects retain their immutable header.
+
 ## Database backup and migration gate
 
 On the production VPS, before any migration or container replacement:

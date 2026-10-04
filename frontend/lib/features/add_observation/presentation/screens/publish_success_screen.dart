@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../application/add_observation_controller.dart';
 
 class PublishSuccessScreen extends ConsumerWidget {
@@ -55,7 +56,7 @@ class PublishSuccessScreen extends ConsumerWidget {
                         constraints: const BoxConstraints(maxHeight: 240),
                         child: AspectRatio(
                           aspectRatio: 1,
-                          child: Image.network(
+                          child: AppRemoteImage(
                             createdPost.thumbUrl ?? createdPost.photoUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {

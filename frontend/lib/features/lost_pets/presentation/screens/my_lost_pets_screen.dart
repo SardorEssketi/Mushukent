@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 
 class MyLostPetsScreen extends ConsumerStatefulWidget {
   const MyLostPetsScreen({super.key});
@@ -88,7 +89,7 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
             for (final pet in visibleItems)
               Card(
                 child: ListTile(
-                  leading: Image.network(
+                  leading: AppRemoteImage(
                     pet.thumbUrl ?? pet.photoUrl,
                     width: 52,
                     height: 52,

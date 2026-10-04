@@ -13,6 +13,7 @@ import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../application/map_viewport.dart';
 import '../widgets/map_floating_controls.dart';
@@ -938,15 +939,27 @@ Future<void> _showCatSheet(
                     backgroundColor: markerKind == MapMarkerKind.needsHelp
                         ? theme.colorScheme.tertiaryContainer
                         : theme.colorScheme.secondaryContainer,
-                    foregroundImage: cat.coverPhotoUrl == null
-                        ? null
-                        : NetworkImage(cat.coverPhotoUrl!),
-                    child: Icon(
-                      mapMarkerIconForKind(markerKind),
-                      color: markerKind == MapMarkerKind.needsHelp
-                          ? theme.colorScheme.onTertiaryContainer
-                          : theme.colorScheme.onSecondaryContainer,
-                    ),
+                    child: cat.coverPhotoUrl == null
+                        ? Icon(
+                            mapMarkerIconForKind(markerKind),
+                            color: markerKind == MapMarkerKind.needsHelp
+                                ? theme.colorScheme.onTertiaryContainer
+                                : theme.colorScheme.onSecondaryContainer,
+                          )
+                        : ClipOval(
+                            child: AppRemoteImage(
+                              cat.coverPhotoUrl!,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Icon(
+                                mapMarkerIconForKind(markerKind),
+                                color: markerKind == MapMarkerKind.needsHelp
+                                    ? theme.colorScheme.onTertiaryContainer
+                                    : theme.colorScheme.onSecondaryContainer,
+                              ),
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

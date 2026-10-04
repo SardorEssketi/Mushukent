@@ -12,6 +12,7 @@ import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import 'adoption_post_detail_screen.dart';
 
@@ -155,7 +156,7 @@ class _AdoptionPostEditScreenState
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadii.sm),
                         child: replacement == null
-                            ? Image.network(photoUrls[index],
+                            ? AppRemoteImage(photoUrls[index],
                                 width: 96,
                                 height: 96,
                                 fit: BoxFit.cover,

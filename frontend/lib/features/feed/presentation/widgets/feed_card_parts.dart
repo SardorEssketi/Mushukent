@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 
 class FeedCardFrame extends StatelessWidget {
   const FeedCardFrame({
@@ -132,7 +133,7 @@ class FeedAuthorAvatar extends StatelessWidget {
     final url = avatarUrl?.trim();
     if (url == null || url.isEmpty) return fallback;
     return ClipOval(
-      child: Image.network(
+      child: AppRemoteImage(
         url,
         width: 38,
         height: 38,
@@ -217,7 +218,7 @@ class _FeedMediaState extends State<FeedMedia> {
             onPageChanged: (index) => setState(() => _index = index),
             itemBuilder: (context, index) => ColoredBox(
               color: colors.surfaceContainerLow,
-              child: Image.network(
+              child: AppRemoteImage(
                 photos[index],
                 fit: BoxFit.contain,
                 width: double.infinity,

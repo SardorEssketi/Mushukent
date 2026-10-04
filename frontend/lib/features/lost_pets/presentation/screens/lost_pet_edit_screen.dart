@@ -12,6 +12,7 @@ import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import 'lost_pet_create_screen.dart';
@@ -199,7 +200,7 @@ class _LostPetEditScreenState extends ConsumerState<LostPetEditScreen> {
                         }
                         return ClipRRect(
                           borderRadius: BorderRadius.circular(AppRadii.sm),
-                          child: Image.network(
+                          child: AppRemoteImage(
                             photoUrls[index],
                             width: 96,
                             height: 96,

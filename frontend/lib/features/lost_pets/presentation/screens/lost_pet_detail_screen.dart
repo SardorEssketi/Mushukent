@@ -9,6 +9,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -334,7 +335,7 @@ class _LostPetPhotoGalleryState extends State<_LostPetPhotoGallery> {
             itemBuilder: (context, index) {
               return ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
+                child: AppRemoteImage(
                   widget.photoUrls[index],
                   fit: desktop ? BoxFit.contain : BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) =>

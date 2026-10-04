@@ -7,6 +7,7 @@ import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../../auth/application/auth_controller.dart';
 
 final commentsProvider = FutureProvider.autoDispose
@@ -774,10 +775,18 @@ class _CommentBubble extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundImage:
-                    avatarUrl == null ? null : NetworkImage(avatarUrl),
-                child:
-                    avatarUrl == null ? Text(_avatarInitial(userName)) : null,
+                child: avatarUrl == null
+                    ? Text(_avatarInitial(userName))
+                    : ClipOval(
+                        child: AppRemoteImage(
+                          avatarUrl,
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              Text(_avatarInitial(userName)),
+                        ),
+                      ),
               ),
               const SizedBox(width: 10),
               Expanded(

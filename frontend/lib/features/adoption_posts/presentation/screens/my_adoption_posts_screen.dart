@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 
 class MyAdoptionPostsScreen extends ConsumerStatefulWidget {
   const MyAdoptionPostsScreen({super.key});
@@ -88,7 +89,7 @@ class _MyAdoptionPostsScreenState extends ConsumerState<MyAdoptionPostsScreen> {
             for (final post in visibleItems)
               Card(
                 child: ListTile(
-                  leading: Image.network(
+                  leading: AppRemoteImage(
                     post.thumbUrl ?? post.photoUrl,
                     width: 52,
                     height: 52,

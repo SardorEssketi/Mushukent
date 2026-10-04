@@ -6,6 +6,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 
 final leaderboardTypeProvider = StateProvider<String>((ref) => 'most_active');
 final leaderboardPeriodProvider = StateProvider<String>((ref) => 'month');
@@ -433,11 +434,19 @@ class _UserAvatar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return CircleAvatar(
       radius: radius,
-      backgroundImage:
-          user.avatarUrl == null ? null : NetworkImage(user.avatarUrl!),
       backgroundColor: colors.secondaryContainer,
       foregroundColor: colors.onSecondaryContainer,
-      child: user.avatarUrl == null ? Text(_initials(name)) : null,
+      child: user.avatarUrl == null
+          ? Text(_initials(name))
+          : ClipOval(
+              child: AppRemoteImage(
+                user.avatarUrl!,
+                width: radius * 2,
+                height: radius * 2,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Text(_initials(name)),
+              ),
+            ),
     );
   }
 }

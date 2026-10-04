@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 
 class ProfileSummaryCard extends StatelessWidget {
   const ProfileSummaryCard({
@@ -153,7 +154,7 @@ class ProfileAvatar extends StatelessWidget {
     final url = avatarUrl?.trim();
     if (url == null || url.isEmpty) return fallback;
     return ClipOval(
-      child: Image.network(
+      child: AppRemoteImage(
         url,
         width: 72,
         height: 72,

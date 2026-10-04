@@ -8,6 +8,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/app_remote_image.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
@@ -489,7 +490,7 @@ class _PostDetailGalleryState extends State<_PostDetailGallery> {
             itemBuilder: (context, index) {
               return ColoredBox(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: Image.network(
+                child: AppRemoteImage(
                   widget.photoUrls[index],
                   fit: desktop ? BoxFit.contain : BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) => const Center(
