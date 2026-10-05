@@ -105,6 +105,20 @@ def test_parse_rows_accepts_combined_place_type() -> None:
     assert report.invalid_rows == []
 
 
+def test_veterinary_pharmacy_aliases_and_combined_type_priority() -> None:
+    for alias in ("veterinary pharmacy", "veterinary_pharmacy", "vet pharmacy"):
+        place = parse_manual_place_row(2, _valid_row(type=alias))
+        assert place.category.value == "veterinary_pharmacy"
+        assert [category.value for category in place.categories] == ["veterinary_pharmacy"]
+
+    place = parse_manual_place_row(2, _valid_row(type="pet store, veterinary pharmacy"))
+    assert place.category.value == "veterinary_pharmacy"
+    assert [category.value for category in place.categories] == [
+        "veterinary_pharmacy",
+        "pet_shop",
+    ]
+
+
 def test_parse_rows_reports_unknown_type() -> None:
     places, report = parse_manual_places([(2, _valid_row(type="grooming salon"))])
 

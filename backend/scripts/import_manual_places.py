@@ -36,6 +36,9 @@ TYPE_ALIASES = {
     "veterinary clinic": PlaceCategory.VETERINARY,
     "veterinary": PlaceCategory.VETERINARY,
     "vet": PlaceCategory.VETERINARY,
+    "veterinary pharmacy": PlaceCategory.VETERINARY_PHARMACY,
+    "veterinary_pharmacy": PlaceCategory.VETERINARY_PHARMACY,
+    "vet pharmacy": PlaceCategory.VETERINARY_PHARMACY,
     "animal shelter": PlaceCategory.SHELTER,
     "shelter": PlaceCategory.SHELTER,
 }
@@ -312,8 +315,9 @@ def _primary_category(categories: tuple[PlaceCategory, ...]) -> PlaceCategory:
 def _category_priority(category: PlaceCategory) -> int:
     priority = {
         PlaceCategory.VETERINARY: 0,
-        PlaceCategory.SHELTER: 1,
-        PlaceCategory.PET_SHOP: 2,
+        PlaceCategory.VETERINARY_PHARMACY: 1,
+        PlaceCategory.SHELTER: 2,
+        PlaceCategory.PET_SHOP: 3,
     }
     return priority[category]
 
