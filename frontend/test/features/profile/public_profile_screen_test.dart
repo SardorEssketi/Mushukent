@@ -139,7 +139,7 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('45'), findsOneWidget);
     expect(find.text('17'), findsOneWidget);
-    expect(find.text('Recent observations'), findsOneWidget);
+    expect(find.text('Recent posts'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, -450));
     await tester.pumpAndSettle();
     expect(find.textContaining('Momiq', findRichText: true), findsOneWidget);

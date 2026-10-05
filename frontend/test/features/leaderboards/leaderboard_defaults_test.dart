@@ -32,13 +32,13 @@ void main() {
     expect(entry.user.id, 'user-4');
   });
 
-  testWidgets('active shows observations and profile rows remain tappable', (
+  testWidgets('active shows posts and profile rows remain tappable', (
     tester,
   ) async {
     await _setWidth(tester, 390);
     await _pumpLeaderboard(tester, entries: _entries);
 
-    expect(find.text('37 observations'), findsOneWidget);
+    expect(find.text('37 posts'), findsOneWidget);
     expect(find.text('184 likes'), findsNothing);
     expect(find.text('Score'), findsNothing);
     expect(find.text('Top helpers'), findsNothing);
@@ -50,7 +50,7 @@ void main() {
     expect(find.text('Profile user-4'), findsOneWidget);
   });
 
-  testWidgets('popular shows likes without observations', (tester) async {
+  testWidgets('popular shows likes without posts', (tester) async {
     await _setWidth(tester, 1000);
     await _pumpLeaderboard(
       tester,
@@ -59,7 +59,7 @@ void main() {
     );
 
     expect(find.text('184 likes'), findsOneWidget);
-    expect(find.text('37 observations'), findsNothing);
+    expect(find.text('37 posts'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -77,7 +77,7 @@ void main() {
 
     result.complete(_entries);
     await tester.pumpAndSettle();
-    expect(find.text('37 observations'), findsOneWidget);
+    expect(find.text('37 posts'), findsOneWidget);
   });
 
   testWidgets('failed request shows retry state', (tester) async {

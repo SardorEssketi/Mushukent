@@ -133,7 +133,7 @@ void main() {
     await _pumpFeed(tester, client);
 
     expect(find.text('Milo'), findsOneWidget);
-    expect(find.text('Needs help'), findsWidgets);
+    expect(find.text('Cat needs help'), findsWidgets);
     expect(find.byType(FeedPostCard), findsWidgets);
     expect(find.byIcon(Icons.favorite_outline), findsWidgets);
     await tester.scrollUntilVisible(find.text('Lost Milo'), 350,
@@ -166,7 +166,7 @@ void main() {
     await _pumpFeed(tester, client);
     expect(client.calls.last.queryParameters?['filter'], 'recent');
     expect(find.text('Today'), findsNothing);
-    expect(find.text('No observations yet.'), findsOneWidget);
+    expect(find.text('No posts yet.'), findsOneWidget);
 
     await tester.tap(find.text('Popular'));
     await tester.pumpAndSettle();

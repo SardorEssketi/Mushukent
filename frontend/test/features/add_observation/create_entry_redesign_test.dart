@@ -9,8 +9,10 @@ import 'package:image/image.dart' as image;
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:mushukistan_frontend/core/localization/app_strings.dart';
 import 'package:mushukistan_frontend/core/localization/language_controller.dart';
+import 'package:mushukistan_frontend/core/location/location_service.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/add_observation/application/add_observation_controller.dart';
+import 'package:mushukistan_frontend/features/add_observation/presentation/screens/add_observation_details_screen.dart';
 import 'package:mushukistan_frontend/features/add_observation/presentation/screens/add_observation_screen.dart';
 
 import '../../support/fakes.dart';
@@ -45,9 +47,16 @@ Future<(ProviderContainer, GoRouter)> _mount(
   addTearDown(container.dispose);
   final router = GoRouter(initialLocation: '/add', routes: [
     GoRoute(
+      path: '/feed',
+      builder: (_, __) => const Scaffold(body: Text('Feed destination')),
+    ),
+    GoRoute(
       path: '/add',
       builder: (_, __) => const AddObservationScreen(),
       routes: [
+        GoRoute(
+            path: 'details',
+            builder: (_, __) => const AddObservationDetailsScreen()),
         GoRoute(
             path: 'location',
             builder: (_, __) => Consumer(builder: (context, ref, child) {
@@ -79,15 +88,15 @@ void main() {
   testWidgets('Create shows four cards in a compact wide grid', (tester) async {
     _size(tester, 1280);
     await _mount(tester, FakeApiClient());
-    expect(find.text('Cat observation'), findsOneWidget);
-    expect(find.text('Needs help'), findsOneWidget);
+    expect(find.text('Cat post'), findsOneWidget);
+    expect(find.text('Cat needs help'), findsOneWidget);
     expect(find.text('Lost Pet'), findsOneWidget);
     expect(find.text('Find a new home'), findsOneWidget);
     expect(
         find.text('Choose the kind of cat help or update you want to share.'),
         findsOneWidget);
-    final first = tester.getTopLeft(find.text('Cat observation'));
-    final second = tester.getTopLeft(find.text('Needs help'));
+    final first = tester.getTopLeft(find.text('Cat post'));
+    final second = tester.getTopLeft(find.text('Cat needs help'));
     final third = tester.getTopLeft(find.text('Lost Pet'));
     expect((first.dy - second.dy).abs(), lessThan(2));
     expect(second.dx, greaterThan(first.dx));
@@ -114,8 +123,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
       if (width == 360) {
-        expect(tester.getTopLeft(find.text('Needs help')).dy,
-            greaterThan(tester.getTopLeft(find.text('Cat observation')).dy));
+        expect(tester.getTopLeft(find.text('Cat needs help')).dy,
+            greaterThan(tester.getTopLeft(find.text('Cat post')).dy));
       }
       expect(tester.takeException(), isNull);
     }
@@ -142,7 +151,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Observation gallery keeps five-photo limit and kind',
+  testWidgets('Cat post gallery keeps five-photo limit and kind',
       (tester) async {
     _size(tester, 800);
     final original = ImagePickerPlatform.instance;
@@ -150,7 +159,7 @@ void main() {
     ImagePickerPlatform.instance = picker;
     addTearDown(() => ImagePickerPlatform.instance = original);
     final (container, _) = await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Cat observation'));
+    await tester.tap(find.text('Cat post'));
     await tester.pumpAndSettle();
     expect(find.text('Choose from gallery'), findsOneWidget);
     expect(find.text('Take a photo'), findsOneWidget);
@@ -158,24 +167,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(picker.galleryCalls, 1);
     expect(picker.lastLimit, 5);
-    expect(find.text('Location kind: observation'), findsOneWidget);
+    expect(find.text('Share a cat post'), findsOneWidget);
     expect(
         container.read(addObservationControllerProvider).photos, hasLength(1));
   });
 
-  testWidgets('Needs help camera keeps needs_help kind', (tester) async {
+  testWidgets('Cat needs help camera keeps needs_help kind', (tester) async {
     _size(tester, 800);
     final original = ImagePickerPlatform.instance;
     final picker = _EntryPicker();
     ImagePickerPlatform.instance = picker;
     addTearDown(() => ImagePickerPlatform.instance = original);
     final (container, _) = await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Needs help'));
+    await tester.tap(find.text('Cat needs help'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Take a photo'));
     await tester.pumpAndSettle();
     expect(picker.cameraCalls, 1);
-    expect(find.text('Location kind: needs_help'), findsOneWidget);
+    expect(find.text('Help this cat'), findsOneWidget);
     expect(container.read(addObservationControllerProvider).kind, 'needs_help');
   });
 
@@ -229,7 +238,7 @@ void main() {
     final controller =
         container.read(addObservationControllerProvider.notifier);
     controller.setPhoto(
-        bytes: Uint8List.fromList([1, 2, 3]),
+        bytes: _EntryPicker()._png(),
         filename: 'draft.jpg',
         contentType: 'image/jpeg');
     await tester.pumpAndSettle();
@@ -237,7 +246,7 @@ void main() {
     expect(find.text('Delete draft'), findsOneWidget);
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
-    expect(find.text('Location kind: observation'), findsOneWidget);
+    expect(find.text('Share a cat post'), findsOneWidget);
     router.go('/add');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete draft'));
@@ -255,7 +264,7 @@ void main() {
     expect(find.text('Continue draft'), findsNothing);
   });
 
-  testWidgets('draft without a photo cannot enter the location step',
+  testWidgets('draft without a photo opens the form for completion',
       (tester) async {
     _size(tester, 800);
     final (container, _) = await _mount(tester, FakeApiClient());
@@ -264,11 +273,9 @@ void main() {
         .setDescription('Unfinished description');
     await tester.pumpAndSettle();
     expect(find.text('Continue draft'), findsOneWidget);
-    expect(
-        tester
-            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Continue'))
-            .onPressed,
-        isNull);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Share a cat post'), findsOneWidget);
   });
 
   testWidgets('pending photo preparation prevents another picker action',
@@ -279,21 +286,221 @@ void main() {
     ImagePickerPlatform.instance = picker;
     addTearDown(() => ImagePickerPlatform.instance = original);
     await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Cat observation'));
+    await tester.tap(find.text('Cat post'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Choose from gallery'));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Preparing photo for upload...'), findsOneWidget);
-    expect(find.text('Add cat photos'), findsNothing);
-    await tester.tap(find.text('Needs help'));
+    expect(find.text('Share a cat post'), findsOneWidget);
+    await tester.tap(find.text('Choose from gallery'));
     await tester.pump();
     expect(picker.galleryCalls, 1);
-    expect(find.text('Add cat photos'), findsNothing);
+    expect(find.text('Preparing photo for upload...'), findsOneWidget);
     picker.completeDelayed();
     await tester.pumpAndSettle();
-    expect(find.text('Location kind: observation'), findsOneWidget);
+    expect(find.text('Share a cat post'), findsOneWidget);
   });
+
+  testWidgets('normal post publishes to Feed without a UUID page',
+      (tester) async {
+    _size(tester, 800);
+    final client = FakeApiClient();
+    client.setHandler(
+        'POST',
+        'posts',
+        (_) => {
+              'id': 'secret-post-id',
+              'cat': {'id': 'cat-1', 'status': 'unknown', 'name': 'Mimi'},
+              'photo_url': 'https://example.com/cat.jpg',
+              'photo_urls': ['https://example.com/cat.jpg'],
+              'location': null,
+              'kind': 'observation',
+              'created_at': '2026-10-01T00:00:00Z',
+              'like_count': 0,
+              'comment_count': 0,
+              'is_liked_by_me': false,
+            });
+    final (container, router) = await _mount(tester, client);
+    container.read(addObservationControllerProvider.notifier).setPhoto(
+          bytes: _EntryPicker()._png(),
+          filename: 'cat.png',
+          contentType: 'image/png',
+        );
+    router.go('/add/details');
+    await tester.pumpAndSettle();
+    expect(find.text('Add a note (optional)'), findsOneWidget);
+    await tester.ensureVisible(find.text('Publish post'));
+    await tester.tap(find.text('Publish post'));
+    await tester.pumpAndSettle();
+    expect(find.text('Feed destination'), findsOneWidget);
+    expect(find.text('Post published'), findsOneWidget);
+    expect(find.text('secret-post-id'), findsNothing);
+    expect(container.read(addObservationControllerProvider).hasDraft, isFalse);
+  });
+
+  testWidgets('help form validates location and text before upload',
+      (tester) async {
+    _size(tester, 800);
+    final client = FakeApiClient();
+    final (container, router) = await _mount(tester, client);
+    final controller =
+        container.read(addObservationControllerProvider.notifier);
+    controller.reset(kind: 'needs_help');
+    controller.setPhoto(
+      bytes: _EntryPicker()._png(),
+      filename: 'cat.png',
+      contentType: 'image/png',
+    );
+    router.go('/add/details');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Publish help request'));
+    await tester.tap(find.text('Publish help request'));
+    await tester.pumpAndSettle();
+    expect(find.text('A location is required for a Cat needs help post.'),
+        findsOneWidget);
+    controller.setLocation(const GeoPoint(latitude: 41.31, longitude: 69.28));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -250));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Publish help request'));
+    await tester.tap(find.text('Publish help request'));
+    await tester.pumpAndSettle();
+    expect(find.text('Describe what help the cat needs.'), findsOneWidget);
+    expect(client.calls.where((call) => call.path == 'posts'), isEmpty);
+  });
+
+  testWidgets('help request publishes and returns to Feed', (tester) async {
+    _size(tester, 800);
+    final client = FakeApiClient();
+    client.setHandler(
+        'POST',
+        'posts',
+        (_) => {
+              'id': 'secret-help-id',
+              'cat': {'id': 'cat-1', 'status': 'unknown', 'name': null},
+              'photo_url': 'https://example.com/cat.jpg',
+              'photo_urls': ['https://example.com/cat.jpg'],
+              'location': {'latitude': 41.31, 'longitude': 69.28},
+              'kind': 'needs_help',
+              'description': 'Injured paw',
+              'created_at': '2026-10-01T00:00:00Z',
+              'like_count': 0,
+              'comment_count': 0,
+              'is_liked_by_me': false,
+            });
+    final (container, router) = await _mount(tester, client);
+    final controller =
+        container.read(addObservationControllerProvider.notifier);
+    controller.reset(kind: 'needs_help');
+    controller.setPhoto(
+      bytes: _EntryPicker()._png(),
+      filename: 'cat.png',
+      contentType: 'image/png',
+    );
+    controller.setLocation(const GeoPoint(latitude: 41.31, longitude: 69.28));
+    controller.setDescription('Injured paw');
+    router.go('/add/details');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Publish help request'));
+    await tester.tap(find.text('Publish help request'));
+    await tester.pumpAndSettle();
+    expect(find.text('Feed destination'), findsOneWidget);
+    expect(find.text('Help request published'), findsOneWidget);
+    expect(find.text('secret-help-id'), findsNothing);
+  });
+
+  testWidgets('current location selection and removal keep form draft',
+      (tester) async {
+    _size(tester, 800);
+    final client = FakeApiClient();
+    final container = ProviderContainer(overrides: [
+      mushukistanApiProvider.overrideWithValue(MushukistanApi(client: client)),
+      locationServiceProvider.overrideWithValue(_TestLocationService()),
+    ]);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: AddObservationDetailsScreen()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Use current location'));
+    await tester.tap(find.text('Use current location'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(
+        container.read(addObservationControllerProvider).hasLocation, isTrue);
+    await tester.ensureVisible(find.byTooltip('Remove location'));
+    await tester.tap(find.byTooltip('Remove location'));
+    await tester.pumpAndSettle();
+    expect(
+        container.read(addObservationControllerProvider).hasLocation, isFalse);
+  });
+
+  testWidgets('back from map picker returns to the draft form', (tester) async {
+    _size(tester, 800);
+    final (container, router) = await _mount(tester, FakeApiClient());
+    final controller =
+        container.read(addObservationControllerProvider.notifier);
+    controller.setCatName('Mimi');
+    controller.setDescription('Sunny afternoon');
+    router.go('/add/details');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Choose on map'));
+    await tester.tap(find.text('Choose on map'));
+    await tester.pumpAndSettle();
+    expect(find.text('Location kind: observation'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Share a cat post'), findsOneWidget);
+    expect(container.read(addObservationControllerProvider).catName, 'Mimi');
+    expect(container.read(addObservationControllerProvider).description,
+        'Sunny afternoon');
+  });
+
+  testWidgets('shared form fits compact and wide EN/RU/UZ layouts',
+      (tester) async {
+    for (final (width, language, kind, dark) in [
+      (320.0, AppLanguage.english, 'observation', false),
+      (360.0, AppLanguage.russian, 'needs_help', true),
+      (800.0, AppLanguage.uzbek, 'observation', false),
+      (1280.0, AppLanguage.russian, 'needs_help', true),
+    ]) {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      final container = ProviderContainer(overrides: [
+        appLanguageProvider.overrideWith((ref) => language),
+      ]);
+      addTearDown(container.dispose);
+      container.read(addObservationControllerProvider.notifier).setKind(kind);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        key: ValueKey('$width-${language.code}-$kind'),
+        container: container,
+        child: MaterialApp(
+          theme: ThemeData(
+              useMaterial3: true,
+              brightness: dark ? Brightness.dark : Brightness.light),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(1.3)),
+            child: child!,
+          ),
+          home: const AddObservationDetailsScreen(),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  });
+}
+
+class _TestLocationService extends LocationService {
+  @override
+  Future<GeoPoint?> resolveCurrentLocation() async =>
+      const GeoPoint(latitude: 41.31, longitude: 69.28);
 }
 
 class _EntryPicker extends ImagePickerPlatform {

@@ -106,7 +106,7 @@ void main() {
     expect(find.byType(FeedPostCard), findsOneWidget);
   });
 
-  testWidgets('feed card distinguishes a needs-help observation by kind',
+  testWidgets('feed card distinguishes a Cat needs help post by kind',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1400);
     tester.view.devicePixelRatio = 1;
@@ -133,10 +133,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Needs help'), findsOneWidget);
+    expect(find.text('Cat needs help'), findsOneWidget);
   });
 
-  testWidgets('mobile feed hides Recent and toggles filters', (tester) async {
+  testWidgets('mobile Recent is visible and selected-filter taps are stable',
+      (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
