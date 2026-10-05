@@ -61,13 +61,22 @@ There is no separate backend integration with OpenStreetMap or any other map ren
 
 Map rendering is completely separated from the domain and API layers.
 
-Map data loading is viewport-driven: the Flutter client sends the visible
+Dynamic map data is viewport-driven: the Flutter client sends the visible
 south/west/north/east bbox after movement settles, and the backend applies
 indexed PostGIS spatial predicates before returning lightweight marker fields.
 The client keeps the previous marker set while a new viewport response is in
-flight, debounces camera changes, and ignores responses from older viewport
-requests. Dense normal observations and places use zoom-aware client clustering;
-needs-help and lost-pet markers remain in dedicated alert groups.
+flight, debounces camera changes, ignores older responses, and briefly reuses
+identical viewport responses. Needs-help and lost-pet markers remain in
+dedicated alert groups.
+
+Place pins are comparatively static. The client loads map-only place fields for
+the supported Tashkent bounds by category, splits a bbox if the API's 200-row
+limit is reached, and stores a versioned local snapshot for six hours. Cached
+pins appear before a stale snapshot is refreshed in the background; a manual
+Map refresh bypasses the age limit. Place details still come from the detail
+endpoint when a marker is opened. Static places and dynamic content use
+separate marker layers with zoom-aware clustering, so dynamic refreshes do not
+reproject all place pins.
 
 Future migration to Yandex Maps, Google Maps, MapLibre, or any other provider must require frontend changes only.
 
