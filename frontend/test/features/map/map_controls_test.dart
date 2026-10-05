@@ -54,7 +54,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('layer:lostPets')));
     await tester.pump();
-    expect(find.byTooltip('Filters · 5/6'), findsOneWidget);
+    expect(find.byTooltip('Filters · 6/7'), findsOneWidget);
     expect(find.byKey(const ValueKey('marker:lostPets:pet-1')), findsNothing);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump();
@@ -68,7 +68,7 @@ void main() {
 
     await tester.tap(find.text('Hide all'));
     await tester.pump();
-    expect(find.byTooltip('Filters · 0/6'), findsOneWidget);
+    expect(find.byTooltip('Filters · 0/7'), findsOneWidget);
     expect(find.byKey(const ValueKey('marker:lostPets:pet-1')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('layer:vets')));
     await tester.pump(const Duration(milliseconds: 500));

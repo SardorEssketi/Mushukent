@@ -1,13 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:mushukistan_frontend/features/map/application/map_viewport.dart';
 
 void main() {
-  final allowedBounds = LatLngBounds(
-    const LatLng(41.1800, 69.0500),
-    const LatLng(41.4300, 69.4200),
-  );
+  final allowedBounds = tashkentMapBounds;
 
   test('viewport bbox is clamped to the map bounds, including edges', () {
     final query = MapViewportQuery.fromBounds(
@@ -19,7 +18,11 @@ void main() {
       zoom: 13.6,
     );
 
-    expect(query.bbox, '69.05000,41.18000,69.42000,41.43000');
+    expect(query.bbox, '69.05000,41.18000,69.47000,41.43000');
+  });
+
+  test('eastern V2 place points remain inside the map viewport', () {
+    expect(allowedBounds.contains(const LatLng(41.402798, 69.450821)), isTrue);
   });
 
   test('zoom density tiers match marker scale', () {
@@ -141,5 +144,30 @@ void main() {
 
     expect(guard.isCurrent(first), isFalse);
     expect(guard.isCurrent(second), isTrue);
+  });
+
+  test('dynamic responses deduplicate in-flight and recent identical bounds',
+      () async {
+    var now = DateTime.utc(2026, 10, 4);
+    final cache = ViewportResponseCache<int>(clock: () => now);
+    final completer = Completer<int>();
+    var calls = 0;
+    Future<int> fetch() {
+      calls++;
+      return completer.future;
+    }
+
+    final first = cache.get('same-bbox', fetch);
+    final second = cache.get('same-bbox', fetch);
+    expect(identical(first, second), isTrue);
+    expect(calls, 1);
+    completer.complete(42);
+    expect(await first, 42);
+    expect(await cache.get('same-bbox', () async => 99), 42);
+    expect(calls, 1);
+
+    now = now.add(const Duration(seconds: 16));
+    expect(await cache.get('same-bbox', () async => ++calls), 2);
+    expect(await cache.get('same-bbox', () async => ++calls, force: true), 3);
   });
 }

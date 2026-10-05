@@ -114,8 +114,9 @@ void main() {
     };
     container.read(postMutationRevisionProvider.notifier).state++;
     await tester.pump();
-    final mapMarkers =
-        tester.widget<MarkerLayer>(find.byType(MarkerLayer)).markers;
+    final mapMarkers = tester
+        .widgetList<MarkerLayer>(find.byType(MarkerLayer))
+        .expand((layer) => layer.markers);
     final petMarker =
         mapMarkers.firstWhere((marker) => marker.key == markerKey);
     expect(petMarker.point.latitude, 41.305);
