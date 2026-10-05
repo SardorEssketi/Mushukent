@@ -23,8 +23,16 @@ class _AddObservationLocationScreenState
     extends ConsumerState<AddObservationLocationScreen> {
   final MapController _mapController = MapController();
   LatLng? _selectedPoint;
-  bool _showMapPicker = false;
   bool _resolvingCurrentLocation = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final location = ref.read(addObservationControllerProvider).location;
+    if (location != null) {
+      _selectedPoint = LatLng(location.latitude, location.longitude);
+    }
+  }
 
   Future<void> _useCurrentLocation() async {
     if (_resolvingCurrentLocation) {
@@ -37,7 +45,8 @@ class _AddObservationLocationScreenState
       _resolvingCurrentLocation = true;
     });
     try {
-      final location = await LocationService().resolveCurrentLocation();
+      final location =
+          await ref.read(locationServiceProvider).resolveCurrentLocation();
       if (location == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -52,7 +61,7 @@ class _AddObservationLocationScreenState
       }
       ref.read(addObservationControllerProvider.notifier).setLocation(location);
       if (mounted) {
-        context.go('/add/details');
+        _returnToForm();
       }
     } finally {
       if (mounted) {
@@ -74,15 +83,15 @@ class _AddObservationLocationScreenState
             longitude: selectedPoint.longitude,
           ),
         );
-    context.go('/add/details');
+    _returnToForm();
   }
 
-  void _skipLocation() {
-    if (ref.read(addObservationControllerProvider).kind == 'needs_help') {
-      return;
+  void _returnToForm() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/add/details');
     }
-    ref.read(addObservationControllerProvider.notifier).clearLocation();
-    context.go('/add/details');
   }
 
   Future<bool> _confirmCurrentLocationUse() async {
@@ -109,45 +118,19 @@ class _AddObservationLocationScreenState
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(addObservationControllerProvider);
     final strings = ref.watch(appStringsProvider);
-    final needsHelp = state.kind == 'needs_help';
-    if (!state.hasPhoto) {
-      return Scaffold(
-        appBar: AppBar(
-            title: Text(
-                needsHelp ? strings.needsHelp : strings.observationLocation)),
-        body: AppStatePanel(
-          icon: Icons.photo_library_outlined,
-          title: strings.choosePhotoFirst,
-          action: FilledButton(
-            onPressed: () => context.go('/add'),
-            child: Text(strings.backToAdd),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
-      appBar: AppBar(
-          title: Text(
-              needsHelp ? strings.needsHelp : strings.observationLocation)),
+      appBar: AppBar(title: Text(strings.chooseOnMap)),
       body: AppContentWidth(
         maxWidth: AppWidths.readable,
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
-            Text(
-              needsHelp
-                  ? strings.needsHelpLocationRequired
-                  : strings.attachLocationQuestion,
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text(strings.chooseOnMap,
+                style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              needsHelp
-                  ? strings.needsHelpLocationHelp
-                  : strings.attachLocationHelp,
+              strings.tapMapForLocation,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -165,40 +148,21 @@ class _AddObservationLocationScreenState
               label: Text(strings.useMyCurrentLocation),
             ),
             const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
-              onPressed: () {
+            _LocationPickerMap(
+              mapController: _mapController,
+              selectedPoint: _selectedPoint,
+              onTap: (point) {
                 setState(() {
-                  _showMapPicker = true;
+                  _selectedPoint = point;
                 });
               },
-              icon: const Icon(Icons.add_location_alt_outlined),
-              label: Text(strings.markOnMap),
             ),
             const SizedBox(height: AppSpacing.md),
-            if (!needsHelp)
-              TextButton.icon(
-                onPressed: _skipLocation,
-                icon: const Icon(Icons.location_off_outlined),
-                label: Text(strings.continueWithoutLocation),
-              ),
-            if (_showMapPicker) ...[
-              const SizedBox(height: AppSpacing.xl),
-              _LocationPickerMap(
-                mapController: _mapController,
-                selectedPoint: _selectedPoint,
-                onTap: (point) {
-                  setState(() {
-                    _selectedPoint = point;
-                  });
-                },
-              ),
-              const SizedBox(height: AppSpacing.md),
-              FilledButton.icon(
-                onPressed: _selectedPoint == null ? null : _useSelectedLocation,
-                icon: const Icon(Icons.check),
-                label: Text(strings.useThisLocation),
-              ),
-            ],
+            FilledButton.icon(
+              onPressed: _selectedPoint == null ? null : _useSelectedLocation,
+              icon: const Icon(Icons.check),
+              label: Text(strings.useThisLocation),
+            ),
           ],
         ),
       ),
@@ -244,6 +208,14 @@ class _LocationPickerMap extends StatelessWidget {
               options: MapOptions(
                 initialCenter: selectedPoint ?? const LatLng(41.3111, 69.2797),
                 initialZoom: selectedPoint == null ? 13.5 : 15.5,
+                cameraConstraint: CameraConstraint.contain(
+                  bounds: LatLngBounds(
+                    const LatLng(41.1800, 69.0500),
+                    const LatLng(41.4300, 69.4200),
+                  ),
+                ),
+                minZoom: 11,
+                maxZoom: 18,
                 onTap: (_, point) => onTap(point),
               ),
               children: [

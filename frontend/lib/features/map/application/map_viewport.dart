@@ -3,6 +3,13 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+
+/// Includes the eastern Tashkent settlements represented in Places V2.
+final tashkentMapBounds = LatLngBounds(
+  const LatLng(41.1800, 69.0500),
+  const LatLng(41.4300, 69.4700),
+);
 
 enum MapDensityTier { low, medium, high }
 
@@ -153,4 +160,50 @@ class ViewportRequestGuard {
   int begin() => ++_generation;
 
   bool isCurrent(int generation) => generation == _generation;
+}
+
+/// Reuses very recent viewport responses and coalesces identical requests.
+/// Dynamic map content gets a deliberately short lifetime.
+class ViewportResponseCache<T> {
+  ViewportResponseCache({
+    this.maxAge = const Duration(seconds: 15),
+    this.maxEntries = 8,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  final Duration maxAge;
+  final int maxEntries;
+  final DateTime Function() _clock;
+  final Map<String, (DateTime, T)> _completed = {};
+  final Map<String, Future<T>> _inFlight = {};
+
+  Future<T> get(
+    String key,
+    Future<T> Function() fetch, {
+    bool force = false,
+  }) {
+    final running = _inFlight[key];
+    if (running != null) return running;
+    final cached = _completed[key];
+    if (!force && cached != null && _clock().difference(cached.$1) < maxAge) {
+      return Future<T>.value(cached.$2);
+    }
+    final request = _fetch(key, fetch);
+    _inFlight[key] = request;
+    return request;
+  }
+
+  Future<T> _fetch(String key, Future<T> Function() fetch) async {
+    try {
+      final value = await fetch();
+      _completed.remove(key);
+      _completed[key] = (_clock(), value);
+      if (_completed.length > maxEntries) {
+        _completed.remove(_completed.keys.first);
+      }
+      return value;
+    } finally {
+      _inFlight.remove(key);
+    }
+  }
 }

@@ -919,7 +919,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
             else if (needsHelp)
               FeedKindBadge(kind: FeedKind.needsHelp, label: strings.needsHelp)
             else if (description == null || description.isEmpty)
-              Text(strings.unnamedCat,
+              Text(strings.catObservation,
                   style: Theme.of(context).textTheme.titleMedium),
             if (description != null && description.isNotEmpty) ...[
               if (hasName || needsHelp) const SizedBox(height: AppSpacing.sm),

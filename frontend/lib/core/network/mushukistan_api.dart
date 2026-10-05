@@ -37,6 +37,8 @@ class MushukistanApi {
 
   final MushukistanApiClient _client;
 
+  Uri? get baseUri => _client.baseUri;
+
   Future<ApiPage<CatSummary>> listCats({
     String filter = 'nearby',
     double? lat,

@@ -153,6 +153,12 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
       );
       return;
     }
+    if (_kind == 'needs_help' && _descriptionController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(strings.helpDetailsRequired)),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       await ref.read(mushukistanApiProvider).updateObservation(
@@ -228,8 +234,9 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                   maxLength: 2000,
                   maxLines: 4,
                   decoration: InputDecoration(
-                    labelText: strings.descriptionLabel,
-                    hintText: strings.descriptionHint,
+                    labelText: _kind == 'needs_help'
+                        ? strings.helpDetailsLabel
+                        : strings.addNoteOptional,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -248,8 +255,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                 DropdownButtonFormField<String>(
                   initialValue: _kind,
                   isExpanded: true,
-                  decoration:
-                      InputDecoration(labelText: strings.addObservation),
+                  decoration: InputDecoration(labelText: strings.post),
                   items: [
                     DropdownMenuItem(
                       value: 'observation',
@@ -286,7 +292,9 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                   leading: const Icon(Icons.my_location_outlined),
                   title: Text(strings.updateLocationFromDevice),
                   subtitle: Text(_location == null
-                      ? strings.continueWithoutLocation
+                      ? (_kind == 'needs_help'
+                          ? strings.needsHelpLocationHelp
+                          : strings.catPostLocationHelp)
                       : '${_location!.latitude.toStringAsFixed(5)}, ${_location!.longitude.toStringAsFixed(5)}'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _saving ? null : () => _useCurrentLocation(strings),

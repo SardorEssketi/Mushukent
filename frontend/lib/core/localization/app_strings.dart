@@ -53,6 +53,7 @@ class AppStrings {
     required this.centerOnUser,
     required this.cats,
     required this.vets,
+    required this.vetPharmacies,
     required this.shops,
     required this.shelters,
     required this.couldNotLoadPlaceMarkers,
@@ -160,6 +161,7 @@ class AppStrings {
   final String centerOnUser;
   final String cats;
   final String vets;
+  final String vetPharmacies;
   final String shops;
   final String shelters;
   final String couldNotLoadPlaceMarkers;
@@ -234,9 +236,9 @@ class AppStrings {
       };
 
   String get recentObservations => switch (this) {
-        _UzbekStrings() => 'So‘nggi kuzatuvlar',
-        _RussianStrings() => 'Недавние наблюдения',
-        _ => 'Recent observations',
+        _UzbekStrings() => 'So‘nggi postlar',
+        _RussianStrings() => 'Недавние публикации',
+        _ => 'Recent posts',
       };
 
   String get seeAll => switch (this) {
@@ -267,12 +269,6 @@ class AppStrings {
         _UzbekStrings() => 'Post o‘chirildi',
         _RussianStrings() => 'Пост удалён',
         _ => 'Post deleted',
-      };
-
-  String get helpRequestPublished => switch (this) {
-        _UzbekStrings() => 'Yordam so‘rovi joylandi',
-        _RussianStrings() => 'Просьба о помощи опубликована',
-        _ => 'Help request published',
       };
 
   String get unsavedChangesTitle {
@@ -321,9 +317,9 @@ class AppStrings {
 
   String get editObservation {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuvni tahrirlash',
-      _RussianStrings() => 'Редактировать наблюдение',
-      _ => 'Edit observation',
+      _UzbekStrings() => 'Postni tahrirlash',
+      _RussianStrings() => 'Редактировать публикацию',
+      _ => 'Edit post',
     };
   }
 
@@ -353,9 +349,9 @@ class AppStrings {
 
   String get deletePost {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuvni o‘chirish',
-      _RussianStrings() => 'Удалить наблюдение',
-      _ => 'Delete observation',
+      _UzbekStrings() => 'Postni o‘chirish',
+      _RussianStrings() => 'Удалить публикацию',
+      _ => 'Delete post',
     };
   }
 
@@ -369,17 +365,17 @@ class AppStrings {
 
   String get postHistory {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuv tarixi',
-      _RussianStrings() => 'История наблюдения',
-      _ => 'Observation history',
+      _UzbekStrings() => 'Post tarixi',
+      _RussianStrings() => 'История публикации',
+      _ => 'Post history',
     };
   }
 
   String get moderatorOnlyHistory {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuv tarixi faqat moderatorlar uchun mavjud.',
-      _RussianStrings() => 'История наблюдения доступна только модераторам.',
-      _ => 'Observation history is available only to moderators.',
+      _UzbekStrings() => 'Post tarixi faqat moderatorlar uchun mavjud.',
+      _RussianStrings() => 'История публикации доступна только модераторам.',
+      _ => 'Post history is available only to moderators.',
     };
   }
 
@@ -544,11 +540,11 @@ class AppStrings {
   String get communitySubtitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Mushuklarga kuzatuvlar, izohlar va yordam orqali hissa qo‘shayotganlar eʼtirofi.',
+        'Mushuklarga postlar, izohlar va yordam orqali hissa qo‘shayotganlar eʼtirofi.',
       _RussianStrings() =>
-        'Признание людей, которые помогают кошкам наблюдениями, комментариями и поддержкой.',
+        'Признание людей, которые помогают кошкам постами, комментариями и поддержкой.',
       _ =>
-        'Recognition for people helping cats through observations, comments, and support.',
+        'Recognition for people helping cats through posts, comments, and support.',
     };
   }
 
@@ -571,11 +567,9 @@ class AppStrings {
   }
 
   String get catObservationAddSubtitle => switch (this) {
-        _UzbekStrings() =>
-          'Ko‘rgan mushugingiz haqida ulashing, kerak bo‘lsa joylashuvini qo‘shing.',
-        _RussianStrings() =>
-          'Расскажите о кошке, которую вы видели, и при желании укажите место.',
-        _ => 'Share a cat you saw and add its location if useful.',
+        _UzbekStrings() => 'Mushuk rasmi, lahzasi yoki yangiligini ulashing.',
+        _RussianStrings() => 'Поделитесь фото кошки, моментом или новостью.',
+        _ => 'Share a cat photo, moment, or update.',
       };
 
   String get lostPetAddSubtitle {
@@ -635,9 +629,9 @@ class AppStrings {
         'lost_pets' => noLostPetsYet,
         'adoption' => noAdoptionPostsYet,
         'needs_help' => switch (this) {
-            _UzbekStrings() => 'Hozir yordam so‘ralgan kuzatuvlar yo‘q.',
-            _RussianStrings() => 'Сейчас нет наблюдений с просьбой о помощи.',
-            _ => 'No observations need help right now.',
+            _UzbekStrings() => 'Hozir yordam so‘ralgan postlar yo‘q.',
+            _RussianStrings() => 'Сейчас нет постов с просьбой о помощи.',
+            _ => 'No cats need help here right now.',
           },
         'popular' => switch (this) {
             _UzbekStrings() => 'Bu davrda mashhur postlar yo‘q.',
@@ -676,11 +670,9 @@ class AppStrings {
           _ => 'Separate rehoming posts for cats who need a good home.',
         },
       'needs_help' => switch (this) {
-          _UzbekStrings() =>
-            'Ko‘ngillilar eʼtiboriga muhtoj bo‘lishi mumkin bo‘lgan kuzatuvlar.',
-          _RussianStrings() =>
-            'Наблюдения сообщества, которым может понадобиться внимание волонтеров.',
-          _ => 'Community observations that may need volunteer attention.',
+          _UzbekStrings() => 'Yordamga muhtoj mushuklar haqidagi postlar.',
+          _RussianStrings() => 'Посты о кошках, которым нужна помощь.',
+          _ => 'Posts about cats that need help from the community.',
         },
       'popular' => switch (this) {
           _UzbekStrings() =>
@@ -690,11 +682,9 @@ class AppStrings {
         },
       _ => switch (this) {
           _UzbekStrings() =>
-            'Mushuklarga yordam berayotgan odamlardan so‘nggi kuzatuvlar, hikoyalar va yangiliklar.',
-          _RussianStrings() =>
-            'Свежие наблюдения, истории и обновления от людей, помогающих кошкам.',
-          _ =>
-            'Recent sightings, stories, and updates from people helping cats.',
+            'Mushuklar haqidagi so‘nggi postlar, hikoyalar va yangiliklar.',
+          _RussianStrings() => 'Новые посты, истории и новости о кошках.',
+          _ => 'Recent cat photos, stories, and updates from the community.',
         },
     };
   }
@@ -702,11 +692,11 @@ class AppStrings {
   String get emptyFeedMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Hamjamiyatni boshlashga yordam berish uchun kuzatuv, yo‘qolgan jonivor eʼloni yoki yangi uy topish postini ulashing.',
+        'Hamjamiyatni boshlash uchun mushuk posti, yo‘qolgan jonivor eʼloni yoki yangi uy topish postini ulashing.',
       _RussianStrings() =>
-        'Поделитесь наблюдением, объявлением о потерянном питомце или постом о пристройстве, чтобы помочь сообществу начать.',
+        'Поделитесь постом о кошке, объявлением о потерянном питомце или постом о пристройстве.',
       _ =>
-        'Share an observation, lost-pet alert, or rehoming post to help the community start here.',
+        'Share a cat post, lost-pet alert, or rehoming post to get the community started.',
     };
   }
 
@@ -1003,11 +993,97 @@ class AppStrings {
 
   String get catObservation {
     return switch (this) {
-      _UzbekStrings() => 'Mushuk kuzatuvi',
-      _RussianStrings() => 'Наблюдение за кошкой',
-      _ => 'Cat observation',
+      _UzbekStrings() => 'Mushuk posti',
+      _RussianStrings() => 'Пост о кошке',
+      _ => 'Cat post',
     };
   }
+
+  String get shareCatPost => switch (this) {
+        _UzbekStrings() => 'Mushuk haqida post ulashing',
+        _RussianStrings() => 'Поделитесь постом о кошке',
+        _ => 'Share a cat post',
+      };
+
+  String get shareCatPostSubtitle => switch (this) {
+        _UzbekStrings() => 'Mushuk haqida rasm, lahza yoki yangilik ulashing.',
+        _RussianStrings() => 'Поделитесь фото, моментом или новостью о кошке.',
+        _ => 'Share a photo, moment, or update about a cat.',
+      };
+
+  String get helpThisCat => switch (this) {
+        _UzbekStrings() => 'Bu mushukka yordam bering',
+        _RussianStrings() => 'Помогите этой кошке',
+        _ => 'Help this cat',
+      };
+
+  String get helpThisCatSubtitle => switch (this) {
+        _UzbekStrings() =>
+          'Mushuk qayerdaligini va unga qanday yordam kerakligini ayting.',
+        _RussianStrings() =>
+          'Покажите, где кошка, и расскажите, какая помощь ей нужна.',
+        _ => 'Show where the cat is and tell the community what help it needs.',
+      };
+
+  String get catPostLocationHelp => switch (this) {
+        _UzbekStrings() => 'Post xaritada chiqishi uchun joylashuv qo‘shing.',
+        _RussianStrings() => 'Добавьте место, чтобы пост появился на карте.',
+        _ => 'Add a location to show this post on the Map.',
+      };
+
+  String get locationSelected => switch (this) {
+        _UzbekStrings() => 'Joylashuv tanlandi',
+        _RussianStrings() => 'Место выбрано',
+        _ => 'Location selected',
+      };
+
+  String get chooseOnMap => switch (this) {
+        _UzbekStrings() => 'Xaritadan tanlash',
+        _RussianStrings() => 'Выбрать на карте',
+        _ => 'Choose on map',
+      };
+
+  String get tapMapForLocation => switch (this) {
+        _UzbekStrings() => 'Joylashuvni tanlash uchun xaritaga bosing.',
+        _RussianStrings() => 'Нажмите на карту, чтобы выбрать место.',
+        _ => 'Tap the map to choose a location.',
+      };
+
+  String get addNoteOptional => switch (this) {
+        _UzbekStrings() => 'Izoh qo‘shish (ixtiyoriy)',
+        _RussianStrings() => 'Добавить заметку (необязательно)',
+        _ => 'Add a note (optional)',
+      };
+
+  String get helpDetailsLabel => switch (this) {
+        _UzbekStrings() => 'Mushukka qanday yordam kerak?',
+        _RussianStrings() => 'Какая помощь нужна кошке?',
+        _ => 'What help does the cat need?',
+      };
+
+  String get helpNeededSection => switch (this) {
+        _UzbekStrings() => 'Qanday yordam kerak',
+        _RussianStrings() => 'Какая помощь нужна',
+        _ => 'What help is needed',
+      };
+
+  String get helpDetailsRequired => switch (this) {
+        _UzbekStrings() => 'Mushukka qanday yordam kerakligini yozing.',
+        _RussianStrings() => 'Расскажите, какая помощь нужна кошке.',
+        _ => 'Describe what help the cat needs.',
+      };
+
+  String get helpRequestPublished => switch (this) {
+        _UzbekStrings() => 'Yordam so‘rovi joylandi',
+        _RussianStrings() => 'Просьба о помощи опубликована',
+        _ => 'Help request published',
+      };
+
+  String get removePhoto => switch (this) {
+        _UzbekStrings() => 'Rasmni olib tashlash',
+        _RussianStrings() => 'Удалить фото',
+        _ => 'Remove photo',
+      };
 
   String get catObservationSubtitle {
     return switch (this) {
@@ -1021,17 +1097,17 @@ class AppStrings {
 
   String get needsHelpCreateSubtitle => switch (this) {
         _UzbekStrings() =>
-          'Yordamga muhtoj mushuk haqida xabar bering. Joylashuvini ko‘rsatish shart.',
+          'Yordamga muhtoj mushukni va uning joylashuvini ulashing.',
         _RussianStrings() =>
-          'Сообщите о кошке, которой нужна помощь. Место нужно указать обязательно.',
-        _ => 'Share a cat that needs help. Its location is required.',
+          'Расскажите о кошке, которой нужна помощь, и покажите, где она.',
+        _ => 'Share a cat that needs help and show where it is.',
       };
 
   String get needsHelpLocationRequired {
     return switch (this) {
-      _UzbekStrings() => 'Yordam kerak posti uchun joylashuv kerak.',
-      _RussianStrings() => 'Для поста «Нужна помощь» требуется местоположение.',
-      _ => 'A location is required for a Needs help post.',
+      _UzbekStrings() => 'Mushukka yordam kerak posti uchun joylashuv kerak.',
+      _RussianStrings() => 'Для поста «Кошке нужна помощь» укажите место.',
+      _ => 'A location is required for a Cat needs help post.',
     };
   }
 
@@ -1046,9 +1122,9 @@ class AppStrings {
 
   String get publishNeedsHelp {
     return switch (this) {
-      _UzbekStrings() => 'Yordam kerak postini joylash',
-      _RussianStrings() => 'Опубликовать «Нужна помощь»',
-      _ => 'Publish Needs help',
+      _UzbekStrings() => 'Yordam so‘rovini joylash',
+      _RussianStrings() => 'Опубликовать просьбу о помощи',
+      _ => 'Publish help request',
     };
   }
 
@@ -1291,11 +1367,11 @@ class AppStrings {
   String get useCurrentLocationMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Mushukistan joriy joylashuvingizni oʻqib, uni ushbu kuzatuvga biriktiradi. Postni joylasangiz, mushuk joylashuvi boshqa foydalanuvchilarga koʻrinishi mumkin.',
+        'Mushukistan joriy joylashuvingizni oʻqib, uni ushbu postga biriktiradi. Postni joylasangiz, mushuk joylashuvi boshqa foydalanuvchilarga koʻrinishi mumkin.',
       _RussianStrings() =>
-        'Mushukistan получит ваше текущее местоположение и прикрепит его к этому наблюдению. После публикации место кошки может быть видно другим пользователям.',
+        'Mushukistan получит ваше текущее местоположение и прикрепит его к этому посту. После публикации место кошки может быть видно другим пользователям.',
       _ =>
-        'Mushukistan will read your current location and attach it to this observation. If you publish the post, that cat location can be visible to other users.',
+        'Mushukistan will read your current location and attach it to this post. If you publish the post, that cat location can be visible to other users.',
     };
   }
 
@@ -1405,9 +1481,9 @@ class AppStrings {
 
   String get observationLocation {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuv joylashuvi',
-      _RussianStrings() => 'Место наблюдения',
-      _ => 'Observation location',
+      _UzbekStrings() => 'Post joylashuvi',
+      _RussianStrings() => 'Место публикации',
+      _ => 'Post location',
     };
   }
 
@@ -1429,12 +1505,9 @@ class AppStrings {
 
   String get attachLocationHelp {
     return switch (this) {
-      _UzbekStrings() =>
-        'Joylashuv kuzatuvni xaritada koʻrsatadi. Rasm eski boʻlsa yoki joy aniq boʻlmasa, oʻtkazib yuboring.',
-      _RussianStrings() =>
-        'Место делает наблюдение видимым на карте. Пропустите его, если фото старое или место неизвестно.',
-      _ =>
-        'A location makes the observation visible on the map. Skip it if the photo is old or the place is uncertain.',
+      _UzbekStrings() => 'Post xaritada chiqishi uchun joylashuv qo‘shing.',
+      _RussianStrings() => 'Добавьте место, чтобы пост появился на карте.',
+      _ => 'Add a location to show this post on the Map.',
     };
   }
 
@@ -1480,9 +1553,9 @@ class AppStrings {
 
   String get locatedObservation {
     return switch (this) {
-      _UzbekStrings() => 'Joylashuvli kuzatuv',
-      _RussianStrings() => 'Наблюдение с местом',
-      _ => 'Located observation',
+      _UzbekStrings() => 'Joylashuv qo‘shildi',
+      _RussianStrings() => 'Место добавлено',
+      _ => 'Location added',
     };
   }
 
@@ -1520,12 +1593,9 @@ class AppStrings {
 
   String get feedOnlyObservationHelp {
     return switch (this) {
-      _UzbekStrings() =>
-        'Bu galereya kuzatuvi faqat lentada chiqadi va xaritada marker yaratmaydi.',
-      _RussianStrings() =>
-        'Это наблюдение из галереи появится только в ленте и не создаст маркер на карте.',
-      _ =>
-        'This gallery observation will appear in the feed only and will not create a map marker.',
+      _UzbekStrings() => 'Post xaritada chiqishi uchun joylashuv qo‘shing.',
+      _RussianStrings() => 'Добавьте место, чтобы пост появился на карте.',
+      _ => 'Add a location to show this post on the Map.',
     };
   }
 
@@ -1573,9 +1643,9 @@ class AppStrings {
 
   String get publishObservation {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuvni joylash',
-      _RussianStrings() => 'Опубликовать наблюдение',
-      _ => 'Publish observation',
+      _UzbekStrings() => 'Postni joylash',
+      _RussianStrings() => 'Опубликовать пост',
+      _ => 'Publish post',
     };
   }
 
@@ -1613,25 +1683,17 @@ class AppStrings {
 
   String get observationPublished {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuv joylandi.',
-      _RussianStrings() => 'Наблюдение опубликовано.',
-      _ => 'Observation published.',
-    };
-  }
-
-  String postNowAvailable(String id) {
-    return switch (this) {
-      _UzbekStrings() => '$id posti endi lentada mavjud.',
-      _RussianStrings() => 'Пост $id теперь доступен в ленте.',
-      _ => 'Post $id is now available in the feed.',
+      _UzbekStrings() => 'Post joylandi',
+      _RussianStrings() => 'Пост опубликован',
+      _ => 'Post published',
     };
   }
 
   String get observationSentToBackend {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuvingiz backendga yuborildi.',
-      _RussianStrings() => 'Ваше наблюдение отправлено на backend.',
-      _ => 'Your observation has been sent to the backend.',
+      _UzbekStrings() => 'Postingiz joylandi.',
+      _RussianStrings() => 'Ваш пост опубликован.',
+      _ => 'Your post was published.',
     };
   }
 
@@ -1861,9 +1923,9 @@ class AppStrings {
 
   String get observation {
     return switch (this) {
-      _UzbekStrings() => 'Kuzatuv',
-      _RussianStrings() => 'Наблюдение',
-      _ => 'Observation',
+      _UzbekStrings() => 'Mushuk posti',
+      _RussianStrings() => 'Пост о кошке',
+      _ => 'Cat post',
     };
   }
 
@@ -2142,9 +2204,9 @@ class AppStrings {
   String get everythingCatsMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Kuzatuvlarni ulashing, yordam kerak mushuklarni belgilang, yoʻqolgan jonivorlarni qidiring, mushuklarga yangi uy toping va yaqin foydali joylarni toping.',
+        'Mushuklar haqida postlar ulashing, yordamga muhtoj mushuklarni ko‘rsating, yoʻqolgan jonivorlarni qidiring va mushuklarga yangi uy toping.',
       _RussianStrings() =>
-        'Делитесь наблюдениями, отмечайте кошек, которым нужна помощь, ищите потерянных питомцев, пристраивайте кошек и находите полезные места рядом.',
+        'Делитесь постами о кошках, помогайте кошкам в беде, ищите потерянных питомцев и находите кошкам новый дом.',
       _ =>
         'Share sightings, create Needs help posts, search for lost pets, rehome cats, and discover useful places nearby.',
     };
@@ -3146,7 +3208,7 @@ class _EnglishStrings extends AppStrings {
           add: 'Add',
           leaders: 'Leaders',
           profile: 'Profile',
-          addObservation: 'Add observation',
+          addObservation: 'Add post',
           chooseFromGallery: 'Choose from gallery',
           gallerySubtitle: 'Publishes to the feed without a map location.',
           takePhoto: 'Take photo',
@@ -3155,6 +3217,7 @@ class _EnglishStrings extends AppStrings {
           centerOnUser: 'Center on user',
           cats: 'Cats',
           vets: 'Vets',
+          vetPharmacies: 'Vet pharmacies',
           shops: 'Shops',
           shelters: 'Shelters',
           couldNotLoadPlaceMarkers: 'Could not load place markers.',
@@ -3165,22 +3228,22 @@ class _EnglishStrings extends AppStrings {
           recent: 'Recent',
           popular: 'Popular',
           nearby: 'Nearby',
-          needsHelp: 'Needs help',
+          needsHelp: 'Cat needs help',
           injured: 'Injured',
           lostPets: 'Lost pets',
           today: 'Today',
           month: 'Month',
           allTime: 'All time',
-          noObservationsYet: 'No observations yet.',
+          noObservationsYet: 'No posts yet.',
           anonymous: 'Anonymous',
           unnamedCat: 'Unnamed cat',
           openPost: 'Open post',
           like: 'Like',
           unlike: 'Unlike',
           comments: 'Comments',
-          myObservations: 'My observations',
+          myObservations: 'My posts',
           myComments: 'My comments',
-          userObservations: 'Observations',
+          userObservations: 'Posts',
           userComments: 'Comments',
           noCommentsYet: 'No comments yet.',
           noActivityVisible: 'This user has hidden their activity.',
@@ -3188,7 +3251,7 @@ class _EnglishStrings extends AppStrings {
           privacy: 'Privacy',
           allowPublicActivityView: 'Allow others to view my activity',
           allowPublicActivityViewSubtitle:
-              'People can open your observations and comments from your profile.',
+              'People can open your posts and comments from your profile.',
           viewCommentsPrefix: 'View ',
           viewCommentsSuffix: ' comments',
           likes: 'likes',
@@ -3200,7 +3263,7 @@ class _EnglishStrings extends AppStrings {
           thisMonth: 'This month',
           noLeaderboardData: 'No leaderboard data yet.',
           unnamedUser: 'Unnamed user',
-          observations: 'observations',
+          observations: 'posts',
           settings: 'Settings',
           editProfile: 'Edit profile',
           logout: 'Logout',
@@ -3262,7 +3325,7 @@ class _UzbekStrings extends AppStrings {
           add: 'Qo‘shish',
           leaders: 'Yetakchilar',
           profile: 'Profil',
-          addObservation: 'Kuzatuv qo‘shish',
+          addObservation: 'Post qo‘shish',
           chooseFromGallery: 'Galereyadan tanlash',
           gallerySubtitle: 'Xaritadagi joylashuvsiz lentaga joylanadi.',
           takePhoto: 'Rasmga olish',
@@ -3271,6 +3334,7 @@ class _UzbekStrings extends AppStrings {
           centerOnUser: 'Joylashuvimga olib borish',
           cats: 'Mushuklar',
           vets: 'Veterinarlar',
+          vetPharmacies: 'Veterinariya dorixonalari',
           shops: 'Do‘konlar',
           shelters: 'Shelterlar',
           couldNotLoadPlaceMarkers: 'Joy markerlarini yuklab bo‘lmadi.',
@@ -3281,22 +3345,22 @@ class _UzbekStrings extends AppStrings {
           recent: 'Yangi',
           popular: 'Mashhur',
           nearby: 'Yaqin',
-          needsHelp: 'Yordam kerak',
+          needsHelp: 'Mushukka yordam kerak',
           injured: 'Jarohatlangan',
           lostPets: 'Yo‘qolgan uy hayvonlari',
           today: 'Bugun',
           month: 'Oy',
           allTime: 'Hammasi',
-          noObservationsYet: 'Hali kuzatuvlar yo‘q.',
+          noObservationsYet: 'Hali postlar yo‘q.',
           anonymous: 'Anonim',
           unnamedCat: 'Nomsiz mushuk',
           openPost: 'Postni ochish',
           like: 'Layk',
           unlike: 'Laykni olish',
           comments: 'Izohlar',
-          myObservations: 'Kuzatuvlarim',
+          myObservations: 'Postlarim',
           myComments: 'Izohlarim',
-          userObservations: 'Kuzatuvlar',
+          userObservations: 'Postlar',
           userComments: 'Izohlar',
           noCommentsYet: 'Hali izohlar yo‘q.',
           noActivityVisible: 'Bu foydalanuvchi faolligini ko‘rsatishni yopgan.',
@@ -3305,7 +3369,7 @@ class _UzbekStrings extends AppStrings {
           allowPublicActivityView:
               'Boshqalar faolligimni ko‘rishiga ruxsat berish',
           allowPublicActivityViewSubtitle:
-              'Odamlar profilingizdan kuzatuvlaringiz va izohlaringizni ochishi mumkin.',
+              'Odamlar profilingizdan postlaringiz va izohlaringizni ochishi mumkin.',
           viewCommentsPrefix: '',
           viewCommentsSuffix: ' ta izohni ko‘rish',
           likes: 'layk',
@@ -3317,7 +3381,7 @@ class _UzbekStrings extends AppStrings {
           thisMonth: 'Shu oy',
           noLeaderboardData: 'Hali yetakchilar ma’lumoti yo‘q.',
           unnamedUser: 'Nomsiz foydalanuvchi',
-          observations: 'kuzatuvlar',
+          observations: 'postlar',
           settings: 'Sozlamalar',
           editProfile: 'Profilni tahrirlash',
           logout: 'Chiqish',
@@ -3378,7 +3442,7 @@ class _RussianStrings extends AppStrings {
           add: 'Добавить',
           leaders: 'Лидеры',
           profile: 'Профиль',
-          addObservation: 'Добавить наблюдение',
+          addObservation: 'Добавить пост',
           chooseFromGallery: 'Выбрать из галереи',
           gallerySubtitle: 'Публикуется в ленту без точки на карте.',
           takePhoto: 'Сделать фото',
@@ -3387,6 +3451,7 @@ class _RussianStrings extends AppStrings {
           centerOnUser: 'К моему местоположению',
           cats: 'Кошки',
           vets: 'Ветклиники',
+          vetPharmacies: 'Ветеринарные аптеки',
           shops: 'Магазины',
           shelters: 'Приюты',
           couldNotLoadPlaceMarkers: 'Не удалось загрузить места.',
@@ -3397,22 +3462,22 @@ class _RussianStrings extends AppStrings {
           recent: 'Новые',
           popular: 'Популярные',
           nearby: 'Рядом',
-          needsHelp: 'Нужна помощь',
+          needsHelp: 'Кошке нужна помощь',
           injured: 'Раненые',
           lostPets: 'Потерянные питомцы',
           today: 'Сегодня',
           month: 'Месяц',
           allTime: 'Все время',
-          noObservationsYet: 'Наблюдений пока нет.',
+          noObservationsYet: 'Постов пока нет.',
           anonymous: 'Аноним',
           unnamedCat: 'Кошка без имени',
           openPost: 'Открыть пост',
           like: 'Лайк',
           unlike: 'Убрать лайк',
           comments: 'Комментарии',
-          myObservations: 'Мои наблюдения',
+          myObservations: 'Мои посты',
           myComments: 'Мои комментарии',
-          userObservations: 'Наблюдения',
+          userObservations: 'Посты',
           userComments: 'Комментарии',
           noCommentsYet: 'Комментариев пока нет.',
           noActivityVisible: 'Этот пользователь скрыл свою активность.',
@@ -3420,7 +3485,7 @@ class _RussianStrings extends AppStrings {
           privacy: 'Приватность',
           allowPublicActivityView: 'Разрешить другим видеть мою активность',
           allowPublicActivityViewSubtitle:
-              'Люди смогут открывать ваши наблюдения и комментарии из профиля.',
+              'Люди смогут открывать ваши посты и комментарии из профиля.',
           viewCommentsPrefix: 'Показать комментарии: ',
           viewCommentsSuffix: '',
           likes: 'лайков',
@@ -3432,7 +3497,7 @@ class _RussianStrings extends AppStrings {
           thisMonth: 'В этом месяце',
           noLeaderboardData: 'Данных лидерборда пока нет.',
           unnamedUser: 'Пользователь без имени',
-          observations: 'наблюдений',
+          observations: 'постов',
           settings: 'Настройки',
           editProfile: 'Редактировать профиль',
           logout: 'Выйти',

@@ -43,9 +43,7 @@ class PublishSuccessScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    createdPost != null
-                        ? strings.postNowAvailable(createdPost.id)
-                        : strings.observationSentToBackend,
+                    strings.observationSentToBackend,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
@@ -78,10 +76,12 @@ class PublishSuccessScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _SummaryRow(
-                        label: strings.cats,
-                        value: createdPost.cat.name ?? strings.unnamedCat),
-                    const SizedBox(height: 24),
+                    if (createdPost.cat.name?.trim().isNotEmpty == true) ...[
+                      _SummaryRow(
+                          label: strings.cats,
+                          value: createdPost.cat.name!.trim()),
+                      const SizedBox(height: 24),
+                    ],
                   ],
                   FilledButton(
                     onPressed: () {

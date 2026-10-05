@@ -21,7 +21,6 @@ class AddObservationState {
     this.isPublic = true,
     this.submitting = false,
     this.errorMessage,
-    this.createdPostId,
   });
 
   final List<ObservationPhotoUpload> photos;
@@ -32,7 +31,6 @@ class AddObservationState {
   final bool isPublic;
   final bool submitting;
   final String? errorMessage;
-  final String? createdPostId;
 
   bool get hasPhoto => photos.isNotEmpty;
   bool get hasLocation => location != null;
@@ -54,7 +52,6 @@ class AddObservationState {
     bool? isPublic,
     bool? submitting,
     String? errorMessage,
-    String? createdPostId,
   }) {
     return AddObservationState(
       photos: photos ?? this.photos,
@@ -65,7 +62,6 @@ class AddObservationState {
       isPublic: isPublic ?? this.isPublic,
       submitting: submitting ?? this.submitting,
       errorMessage: errorMessage,
-      createdPostId: createdPostId ?? this.createdPostId,
     );
   }
 }
@@ -119,14 +115,17 @@ class AddObservationController extends StateNotifier<AddObservationState> {
 
   Future<PostDetail> submit({required AppStrings strings}) async {
     if (state.submitting) {
-      throw StateError('Observation submission is already in progress.');
+      throw StateError('Post submission is already in progress.');
     }
     final location = state.location;
     if (state.photos.isEmpty) {
-      throw StateError('Missing observation data.');
+      throw StateError('A post photo is required.');
     }
     if (state.kind == 'needs_help' && location == null) {
-      throw StateError('Needs-help observations require a location.');
+      throw StateError('Cat needs help posts require a location.');
+    }
+    if (state.kind == 'needs_help' && state.description.trim().isEmpty) {
+      throw StateError('Cat needs help posts require help details.');
     }
 
     state = state.copyWith(submitting: true, errorMessage: null);
@@ -140,10 +139,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
             state.description.trim().isEmpty ? null : state.description.trim(),
         isPublic: state.isPublic,
       );
-      state = state.copyWith(
-        submitting: false,
-        createdPostId: post.id,
-      );
+      state = state.copyWith(submitting: false);
       return post;
     } catch (error) {
       state = state.copyWith(

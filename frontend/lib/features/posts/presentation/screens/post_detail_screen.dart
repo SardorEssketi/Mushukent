@@ -202,7 +202,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     final currentUser = ref.watch(currentUserProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.observation)),
+      appBar: AppBar(
+        title: Text(postAsync.asData?.value.kind == 'needs_help'
+            ? strings.needsHelp
+            : strings.catObservation),
+      ),
       body: postAsync.when(
         data: (post) {
           final likeOverride = ref.watch(postLikeOverridesProvider)[post.id];
@@ -218,178 +222,208 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           final isEdited = post.isEdited;
           final kindBadge =
               post.kind == 'needs_help' ? strings.needsHelp : null;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _PostDetailGallery(photoUrls: post.photoUrls),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  post.cat.name ?? strings.unnamedCat,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style:
-                                      Theme.of(context).textTheme.headlineSmall,
-                                ),
-                              ),
-                              if (kindBadge != null) ...[
-                                const SizedBox(width: 8),
-                                _StatusBadge(label: kindBadge),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Text(post.description?.trim().isNotEmpty == true
-                              ? post.description!.trim()
-                              : strings.noDescription),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              _StatCard(
-                                label: strings.likes,
-                                value: likeCount.toString(),
-                              ),
-                              _StatCard(
-                                label: strings.comments,
-                                value: post.commentCount.toString(),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _AuthorLink(
-                                      authorName: authorName,
-                                      onTap: authorId == null
-                                          ? null
-                                          : () => context.push(
-                                                '/users/$authorId',
-                                              ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '${strings.published}: ${_formatDate(post.createdAt)}${isEdited ? ' • ${strings.edited}' : ''}',
-                                      softWrap: true,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (isOwner || isModerator) ...[
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    if (isOwner)
-                      OutlinedButton.icon(
-                        onPressed: () => _handlePostAction(
-                          action: _PostAction.edit,
-                          post: post,
-                          isOwner: isOwner,
-                          isModerator: isModerator,
-                          strings: strings,
-                        ),
-                        icon: const Icon(Icons.edit_outlined),
-                        label: Text(strings.editObservation),
-                      ),
-                    OutlinedButton.icon(
-                      onPressed: () => _handlePostAction(
-                        action: _PostAction.delete,
-                        post: post,
-                        isOwner: isOwner,
-                        isModerator: isModerator,
-                        strings: strings,
-                      ),
-                      icon: const Icon(Icons.delete_outline),
-                      label: Text(isOwner
-                          ? strings.deletePost
-                          : strings.removePostAsModerator),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                    if (isModerator)
-                      OutlinedButton.icon(
-                        onPressed: () => _handlePostAction(
-                          action: _PostAction.history,
-                          post: post,
-                          isOwner: isOwner,
-                          isModerator: isModerator,
-                          strings: strings,
-                        ),
-                        icon: const Icon(Icons.history),
-                        label: Text(strings.postHistory),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-              ],
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
+          final needsHelp = post.kind == 'needs_help';
+          final catName = post.cat.name?.trim();
+          final hasName = catName != null &&
+              catName.isNotEmpty &&
+              catName.toLowerCase() != strings.unnamedCat.toLowerCase() &&
+              catName.toLowerCase() != 'unknown';
+          final location = post.location;
+          final description = post.description?.trim();
+          return AppContentWidth(
+              maxWidth: AppWidths.readable,
+              child: ListView(
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
-                  FilledButton.icon(
-                    onPressed: _submittingLike ? null : () => _toggleLike(post),
-                    icon: Icon(
-                      isLiked ? Icons.favorite : Icons.favorite_outline,
-                    ),
-                    label: Text(isLiked ? strings.unlike : strings.like),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadii.lg),
+                        child: _PostDetailGallery(photoUrls: post.photoUrls),
+                      ),
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (kindBadge != null) ...[
+                              _StatusBadge(label: kindBadge),
+                              const SizedBox(height: AppSpacing.md),
+                            ],
+                            Text(
+                                hasName
+                                    ? catName
+                                    : needsHelp
+                                        ? strings.needsHelp
+                                        : strings.catObservation,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: AppSpacing.md),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _AuthorLink(
+                                        authorName: authorName,
+                                        onTap: authorId == null
+                                            ? null
+                                            : () => context.push(
+                                                  '/users/$authorId',
+                                                ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${strings.published}: ${_formatDate(post.createdAt)}${isEdited ? ' • ${strings.edited}' : ''}',
+                                        softWrap: true,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (location != null) ...[
+                              const SizedBox(height: AppSpacing.lg),
+                              Card(
+                                child: ListTile(
+                                  leading: Icon(Icons.location_on_outlined,
+                                      color: needsHelp
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .tertiary
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .primary),
+                                  title: Text(strings.location),
+                                  subtitle: Text(strings.viewOnMap),
+                                  trailing: const Icon(Icons.chevron_right),
+                                  onTap: () => context.go(
+                                    '/map?lat=${location.latitude}&lon=${location.longitude}',
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (description != null &&
+                                description.isNotEmpty) ...[
+                              const SizedBox(height: AppSpacing.lg),
+                              if (needsHelp) ...[
+                                Text(strings.helpNeededSection,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                                const SizedBox(height: AppSpacing.sm),
+                              ],
+                              Text(description),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => context.push(
-                      Uri(
-                        path: '/report',
-                        queryParameters: {
-                          'type': 'post',
-                          'id': widget.postId,
-                          'label': post.cat.name ?? post.description ?? '',
-                        },
-                      ).toString(),
+                  if (isOwner || isModerator) ...[
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        if (isOwner)
+                          OutlinedButton.icon(
+                            onPressed: () => _handlePostAction(
+                              action: _PostAction.edit,
+                              post: post,
+                              isOwner: isOwner,
+                              isModerator: isModerator,
+                              strings: strings,
+                            ),
+                            icon: const Icon(Icons.edit_outlined),
+                            label: Text(strings.editObservation),
+                          ),
+                        OutlinedButton.icon(
+                          onPressed: () => _handlePostAction(
+                            action: _PostAction.delete,
+                            post: post,
+                            isOwner: isOwner,
+                            isModerator: isModerator,
+                            strings: strings,
+                          ),
+                          icon: const Icon(Icons.delete_outline),
+                          label: Text(isOwner
+                              ? strings.deletePost
+                              : strings.removePostAsModerator),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor:
+                                Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                        if (isModerator)
+                          OutlinedButton.icon(
+                            onPressed: () => _handlePostAction(
+                              action: _PostAction.history,
+                              post: post,
+                              isOwner: isOwner,
+                              isModerator: isModerator,
+                              strings: strings,
+                            ),
+                            icon: const Icon(Icons.history),
+                            label: Text(strings.postHistory),
+                          ),
+                      ],
                     ),
-                    icon: const Icon(Icons.flag_outlined),
-                    label: Text(strings.report),
+                    const SizedBox(height: 24),
+                  ],
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton.icon(
+                        onPressed:
+                            _submittingLike ? null : () => _toggleLike(post),
+                        icon: Icon(
+                          isLiked ? Icons.favorite : Icons.favorite_outline,
+                        ),
+                        label: Text(
+                            '${isLiked ? strings.unlike : strings.like} $likeCount'),
+                      ),
+                      Chip(
+                        avatar:
+                            const Icon(Icons.mode_comment_outlined, size: 18),
+                        label: Text('${strings.comments} ${post.commentCount}'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push(
+                          Uri(
+                            path: '/report',
+                            queryParameters: {
+                              'type': 'post',
+                              'id': widget.postId,
+                              'label': post.cat.name ?? post.description ?? '',
+                            },
+                          ).toString(),
+                        ),
+                        icon: const Icon(Icons.flag_outlined),
+                        label: Text(strings.report),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 24),
+                  PostCommentsSection(
+                      postId: widget.postId, padding: EdgeInsets.zero),
                 ],
-              ),
-              const SizedBox(height: 24),
-              PostCommentsSection(
-                  postId: widget.postId, padding: EdgeInsets.zero),
-            ],
-          );
+              ));
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) => AppStatePanel(
@@ -560,7 +594,7 @@ class _StatusBadge extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colorScheme.secondaryContainer,
+        color: colorScheme.tertiaryContainer,
         borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
@@ -568,36 +602,9 @@ class _StatusBadge extends StatelessWidget {
         child: Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSecondaryContainer,
+                color: colorScheme.onTertiaryContainer,
                 fontWeight: FontWeight.w800,
               ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 120,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 6),
-              Text(value, style: Theme.of(context).textTheme.titleMedium),
-            ],
-          ),
         ),
       ),
     );

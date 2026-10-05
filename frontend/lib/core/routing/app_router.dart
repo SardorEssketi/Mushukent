@@ -11,7 +11,6 @@ import '../../features/add_observation/presentation/screens/add_observation_deta
 import '../../features/add_observation/presentation/screens/add_observation_location_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
 import '../../features/add_observation/application/add_observation_controller.dart';
-import '../../features/add_observation/presentation/screens/publish_success_screen.dart';
 import '../../features/auth/presentation/screens/auth_gate_screen.dart';
 import '../../features/auth/presentation/screens/auth_required_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
@@ -216,7 +215,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'entry',
                     builder: (context, state) =>
-                        const AddObservationScreen(observationOnly: true),
+                        const AddObservationDetailsScreen(),
                   ),
                   GoRoute(
                     path: 'details',
@@ -239,8 +238,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   ),
                   GoRoute(
                     path: 'success',
-                    builder: (context, state) =>
-                        PublishSuccessScreen(post: state.extra as PostDetail?),
+                    redirect: (context, state) => '/feed',
                   ),
                 ],
               ),

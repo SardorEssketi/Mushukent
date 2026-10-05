@@ -10,6 +10,9 @@ final currentLocationProvider = FutureProvider<GeoPoint?>((ref) async {
   return LocationService().resolveCurrentLocation();
 });
 
+final locationServiceProvider =
+    Provider<LocationService>((ref) => LocationService());
+
 class LocationService {
   static const GeoPoint fallbackLocation = GeoPoint(
     latitude: 41.2995,

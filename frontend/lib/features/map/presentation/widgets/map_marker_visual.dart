@@ -5,12 +5,14 @@ enum MapMarkerVisualKind {
   needsHelp,
   lostPets,
   veterinary,
+  veterinaryPharmacy,
   petShop,
   shelter,
 }
 
 bool _isPlace(MapMarkerVisualKind kind) => switch (kind) {
       MapMarkerVisualKind.veterinary ||
+      MapMarkerVisualKind.veterinaryPharmacy ||
       MapMarkerVisualKind.petShop ||
       MapMarkerVisualKind.shelter =>
         true,
@@ -26,6 +28,7 @@ IconData mapVisualIcon(MapMarkerVisualKind kind) => switch (kind) {
       MapMarkerVisualKind.needsHelp => Icons.warning_amber_rounded,
       MapMarkerVisualKind.lostPets => Icons.search_rounded,
       MapMarkerVisualKind.veterinary => Icons.medical_services_rounded,
+      MapMarkerVisualKind.veterinaryPharmacy => Icons.local_pharmacy_rounded,
       MapMarkerVisualKind.petShop => Icons.storefront_rounded,
       MapMarkerVisualKind.shelter => Icons.home_rounded,
     };
@@ -36,6 +39,7 @@ Color mapVisualAccent(MapMarkerVisualKind kind, ColorScheme colors) =>
       MapMarkerVisualKind.needsHelp => colors.tertiary,
       MapMarkerVisualKind.lostPets => colors.error,
       MapMarkerVisualKind.veterinary => colors.primary,
+      MapMarkerVisualKind.veterinaryPharmacy => colors.primary,
       MapMarkerVisualKind.petShop => colors.tertiary,
       MapMarkerVisualKind.shelter => colors.secondary,
     };
