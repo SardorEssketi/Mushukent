@@ -17,6 +17,7 @@ build/
 /frontend/.codex/
 .flutter-plugins
 .flutter-plugins-dependencies
+/frontend/android/.kotlin/
 
 # Env files
 .env
@@ -37,4 +38,12 @@ _chrome-*.png
 /.data/
 /.codex/
 /screens/
+/.release-build-*
+
+# Local research inputs, evidence, generated outputs, and release workspaces
+# Reusable Places V2 scripts and tests live under backend/.
+/data/places_review/
+/data/places_v2/
+/data/map_performance/
+/data/media_cache_release/
 
