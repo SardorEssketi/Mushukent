@@ -13,14 +13,14 @@ This document describes every MVP screen in detail, including navigation flows, 
 --------------------
 - Feed-first navigation and discovery, with map as a location view.
 - Minimal interactions to complete key tasks.
-- Clear distinction: cats are core entities, posts are observations.
+- Four contribution types: Cat post, Cat needs help, Lost Pet, and Find a new home. Cat records remain internal entities.
 - Fast perceived performance on mid-range Android devices.
 - Accessibility and readability over visual complexity.
 
 3. Global App Structure
 -----------------------
 3.1 Primary Navigation
-Bottom navigation with 5 tabs:
+Bottom navigation with 5 tabs on main tab roots:
 1. Feed
 2. Map
 3. Add
@@ -32,7 +32,6 @@ Bottom navigation with 5 tabs:
 - Bottom navigation is visible on main tab roots and hidden after entering a creation workflow. `/add` remains a normal tab with navigation visible.
 - Selecting a different tab opens that tab's root route. Returning to a tab does not restore a nested edit or settings screen.
 - Re-tapping the active Feed root scrolls its existing feed to the top; returning to Feed from another tab preserves its scroll position.
-- Floating action button optional on map for quick "Cat post".
 - Consistent cards for cat/post summary.
 
 3.3 Global States
@@ -54,13 +53,12 @@ Bottom navigation with 5 tabs:
 - User can switch between main tabs anytime; creation workflows hide bottom navigation until the user finishes or backs out.
 - Deep links to posts open details screens and preserve back stack.
 
-4.3 Add Observation Flow
-- User taps Add tab or map quick action
-- Cat Observation -> choose camera or gallery photos -> choose location behavior:
-  - Use current location -> observation details -> submit -> success.
-  - Mark on map -> user sees current location, can recenter on user, taps map to place observation marker -> observation details -> submit -> success.
-  - Continue without location -> feed-only observation details -> submit -> success.
-- Lost Pet -> require profile phone number -> choose one to five photos -> enter pet name -> point last-seen location on map or use current location -> submit -> feed.
+4.3 Create Flow
+- User taps Add.
+- Cat post opens one casual form for general cat content, including the user's own cat, a street cat, a photo, a moment, or an update. The form accepts 1–5 photos, an optional cat name, optional location, and optional note. Gallery and camera use the existing image preparation pipeline. A chosen location may show the post on Map under existing visibility rules.
+- Cat needs help opens the same form with a stronger help context. It requires 1–5 photos, a location, and a description of the help needed; cat name remains optional. Location can come from the current location service or a bounded map picker. Published help posts appear in Feed and Map under existing visibility rules.
+- Both ordinary post types publish through `/posts` with their existing internal `observation` or `needs_help` kind. Successful ordinary posts, Lost Pet posts, and rehoming posts return to Feed with a concise localized snackbar. The ordinary-post draft retains photos, kind, name, location, and text while using the map picker.
+- Lost Pet and Find a new home retain their existing creation and lifecycle flows.
 
 4.4 Moderation Flow (for moderators)
 - Profile -> Moderator tools -> Reports list -> report detail -> action (resolve/dismiss/remove content)
@@ -185,8 +183,8 @@ Bottom navigation with 5 tabs:
   - cats appear on the map only when their latest public observation is within the last 10 days.
 - older cats remain available through Feed posts.
 - Filters:
-  - Animals: Cats, Needs Help, Lost Pets.
-  - Places: Veterinary Clinics, Pet Shops, Shelters.
+  - Animals: Cats, Cat needs help, Lost Pets.
+  - Places: Veterinary Clinics, Veterinary Pharmacies, Pet Shops, Shelters.
   - Multiple layers may be visible together; layer changes apply immediately.
   - The layer sheet can show or hide all layers.
 - Interactions:
@@ -205,16 +203,15 @@ Bottom navigation with 5 tabs:
 - Cat profile pages are not part of the MVP.
 - Cat records are still used internally to group observations, display cat names in posts, and support map markers.
 
-5.7 Add Observation Entry Screen
+5.7 Create Entry Screen
 - Purpose: choose what kind of cat update or help to share.
 - Layout:
-- A short introduction sits above four compact, fully tappable action cards: Cat observation, Needs help, Lost Pet, and Find a new home.
+- A short introduction sits above four compact, fully tappable action cards: Cat post, Cat needs help, Lost Pet, and Find a new home.
 - Cards form a centered 2-by-2 grid on wide screens and one column on compact screens. Icons and restrained accents distinguish the types; Lost Pet has the strongest urgency cue.
-- An existing observation draft appears in a separate continuation section with Continue and Delete draft actions, not as a fifth creation type.
-- Photo preparation shows a compact progress indicator and temporarily disables the Observation and Needs help cards.
-- The Add tab still lets the user choose a post type. The cat-observation quick action opens the camera/gallery chooser directly.
-- Observation: user chooses camera or gallery photos, then explicitly chooses whether to attach current location, manually mark a location on the map, or continue without location.
-- Needs help: follows the observation flow with a required current or manually marked location.
+- An existing ordinary-post draft appears in a separate continuation section with Continue and Delete draft actions, not as a fifth creation type.
+- The Add tab lets the user choose a post type.
+- Cat post: casual content with 1–5 photos and optional name, location, and note.
+- Cat needs help: an actionable post with 1–5 photos, required location, and required help details.
 - Lost Pet: creates a lost pet post shown in the feed.
 - Lost Pet detail: another signed-in user can select Contact Owner to use the
   published phone number. Guests are asked to sign in before the contact event
@@ -224,7 +221,7 @@ Bottom navigation with 5 tabs:
   Lost Pets in the existing Profile area.
 - Interactions:
 - permission prompts for camera/gallery.
-- map location picker shows user's current location, a recenter-on-user button, and a tappable observation marker.
+- the ordinary-post form offers current location and a bounded, tappable Tashkent map picker.
 - tapping Lost Pet checks for a valid Uzbekistan phone number; if missing or invalid, show a Lost-Pet-specific prompt with an Edit Profile action.
 - Find a new home applies the same phone check with its own requirement message before opening the existing rehoming form.
 - The bottom navigation remains visible on the Add entry screen and is hidden in the ordinary post, needs-help, Lost Pet, and rehoming creation workflows. Back navigation remains available.
@@ -260,36 +257,15 @@ Bottom navigation with 5 tabs:
 - Keep Edit secondary and Delete clearly destructive. Put Report in the app-bar overflow menu.
 - After a successful delete, return to the destination and show a localized success message.
 
-5.8 Add Observation Details Screen
-- Purpose: complete metadata before submission.
-- Layout:
-- one to five image previews
-- optional cat name input (max 100 characters)
-- description input
-- located observations include an explicitly confirmed current location or manually selected map point.
-- submit button
-- The backend creates a new cat record automatically for each observation. Users may enter its optional name; when left blank, it remains unnamed and is displayed as `Unknown`.
-- The user is not asked to search for or select an existing cat; cat matching is not part of this flow.
-- Validation:
-  - image required,
-  - cat name optional, max 100 characters,
-- location optional for Observation and required for Needs help.
-- Edge cases:
-- GPS unavailable for current-location flow -> show error and retry or allow manual map placement / skip location.
-- observations without explicit location do not create map markers.
-- upload failure -> keep entered data in memory and allow retry.
-
-5.9 Observation Publish Success Screen/State
-- Purpose: confirm successful post creation.
-- Layout:
-  - success message,
-  - preview thumbnail,
-  - buttons: View feed, Add another.
-- Edge cases:
-  - follow-up fetch failure when opening details -> show retry.
+5.8 Cat Post and Cat Needs Help Form
+- A single shared form shows a type badge, purpose-specific heading, photo thumbnails with removal, optional cat name, compact location selection, and text input. Both types allow gallery and camera and require 1–5 photos. Photo processing disables duplicate picker actions.
+- Cat post uses “Add a note (optional)” and allows no location. Help text explains that a location can show the post on Map. No separate location decision page or prominent “Unnamed cat” label appears.
+- Cat needs help uses “What help does the cat need?” and requires both a location and nonblank help details, including for API callers. Both text types have a 2000-character maximum.
+- The location control uses the existing current-location service or opens a Tashkent-bounded map picker. The selected location can be changed; Cat post location can be removed.
+- The backend creates a cat record automatically; users do not match existing cats. Upload failure keeps the draft for retry. Successful publication returns to Feed with a localized snackbar; the legacy success URL redirects to Feed and no UUID is shown.
 
 5.10 Feed Screen
-- Purpose: browse recent community observations, lost pets, and rehoming posts.
+- Purpose: browse recent Cat posts, Cat needs help requests, Lost Pets, and rehoming posts.
 - Layout:
   - one lazy scrolling column, nearly full width on mobile and centered at a readable maximum width on tablet/web; the title aligns with that column.
   - horizontal, scrollable filters: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default.
@@ -299,14 +275,14 @@ Bottom navigation with 5 tabs:
   - media uses a contained image in a neutral frame; its height is capped on tablet/web. Multiple photos have a count and quiet previous/next controls.
 - Post card contents:
   - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.
-  - ordinary observations show a useful cat name and description without a kind badge; Needs help uses a small semantic badge and top accent.
+  - ordinary Cat posts remain neutral, showing a useful cat name and note without a kind badge; Cat needs help uses a calm semantic badge and top accent.
   - Lost Pet uses a restrained error accent and badge, pet name, additional information, comments, and View on Map.
   - Adoption/Rehoming uses a tertiary accent and badge, pet name, additional information, and comments.
-  - observation actions show like/count and comments/count; other kinds only show supported actions.
+  - ordinary post actions show like/count and comments/count; other kinds only show supported actions.
   - long descriptions are limited to three lines with localized Read more / Show less controls that expand inline.
 - Interactions:
-  - tapping a card opens the matching Observation, Lost Pet, or Adoption/Rehoming detail.
-  - observation likes update optimistically, reconcile with the API, and restore the prior state on failure; guests use the authentication flow.
+  - tapping a card opens the matching ordinary-post, Lost Pet, or Adoption/Rehoming detail.
+  - ordinary-post likes update optimistically, reconcile with the API, and restore the prior state on failure; guests use the authentication flow.
   - pull to refresh replaces the loaded pages with a fresh first page.
   - scrolling near the bottom requests the next server cursor; items append with identity/type deduplication. Filter and Popular period changes start a new page sequence.
 - Edge cases:
@@ -314,21 +290,21 @@ Bottom navigation with 5 tabs:
   - a later-page error keeps loaded cards visible with a bottom Retry; no further page request occurs after a null cursor.
 
 5.11 Post Detail Screen
-- Purpose: full observation detail and discussion.
+- Purpose: full Cat post or Cat needs help detail and discussion.
 - Layout:
-  - large image/gallery
-  - author info
-  - cat name
-  - publication date,
-  - description
-  - location mini-map
-  - likes/comments section
-  - comment input field (if logged in)
+  - photo gallery, then a quiet Cat post context or a stronger Cat needs help badge
+  - meaningful cat name if known, otherwise the natural contribution title
+  - author, publication date, and edited state
+  - compact “View on map” location action only when a location exists
+  - optional note for Cat post, or “What help is needed” section for Cat needs help
+  - compact like and comment counts, comments, and report action
+  - owner edit/delete and moderator delete/history controls remain available
 - Interactions:
   - tap author -> User Profile
   - like/unlike,
   - report content,
   - owner options menu: delete post.
+- A successful delete shows a localized confirmation on the destination screen; errors retain distinct error feedback.
 - Edge cases:
   - post removed by moderator -> show unavailable message and navigate back.
 
@@ -353,7 +329,7 @@ Bottom navigation with 5 tabs:
 5.12.1 Lost Pet Comments Section
 - Purpose: display and add comments inside the lost-pet detail screen.
 - Layout and behavior:
-  - same comment list and input behavior as observation posts.
+  - same comment list and input behavior as ordinary posts.
   - comments are visible only inside the Lost Pet detail screen.
 
 5.14 Leaderboard Screen
@@ -362,7 +338,7 @@ Bottom navigation with 5 tabs:
   - two-option segmented control: Active and Popular
   - compact period selector: Day, Week, Month, All time; Month is the default
   - modest emphasis for the top three users, followed by a clean list for later ranks
-  - show avatar, name, rank, and only the metric used for that ranking: observations for Active, likes for Popular
+  - show avatar, name, rank, and only the metric used for that ranking: posts for Active, likes for Popular
 - Interactions:
   - tap user -> User Profile
 - Edge cases:
@@ -373,7 +349,7 @@ Bottom navigation with 5 tabs:
 - Purpose: manage personal profile and view contribution stats.
 - Layout:
   - shared profile summary surface with large avatar, display name, short bio, and secondary owner-only email, phone, and Telegram details.
-  - compact stats: observations, likes received, comments. Observations and Comments open their existing activity screens.
+  - compact stats: posts, likes received, comments. Posts and Comments open their existing activity screens.
   - Your activity section: My lost pets and My rehoming posts.
   - Resources and account section: adoption guidance and Settings.
   - moderator-only Moderation reports section.
@@ -383,7 +359,7 @@ Bottom navigation with 5 tabs:
 - Interactions:
   - tap Adoption help -> opens informational guidance about adopting a cat in Uzbekistan, including veterinary checks, identification/passport, ownership transfer, apartment/common-area rules, and official source links
   - edit profile fields,
-  - tap Observations to view the user's observation posts,
+  - tap Posts to view the user's Cat posts and Cat needs help posts,
   - tap Comments to view the user's comments,
   - open My lost pets and My rehoming posts from their existing routes,
   - logout confirmation.
@@ -393,13 +369,13 @@ Bottom navigation with 5 tabs:
 5.16 User Public Profile Screen
 - Purpose: view another contributor.
 - Layout:
-  - same identity and stats surface as the self profile, with name, avatar, short public bio, observations, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
-  - Recent observations shows up to four current Feed post cards and a See all action to the existing observations screen; comments open from the stat.
-  - on wide screens, keep the summary fixed on the left while recent observations scroll within the available viewport; compact screens use one vertical page scroll.
+  - same identity and stats surface as the self profile, with name, avatar, short public bio, posts, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
+  - Recent posts shows up to four current Feed post cards and a See all action to the existing posts screen; comments open from the stat.
+  - on wide screens, the summary stays fixed in the left column while the recent-post list scrolls within the available viewport height; compact screens use one vertical page scroll.
   - Report and Block appear in the app bar overflow menu. A successful block disables the Block action for that screen session.
-  - one column on phones; on wide screens, identity/stats and recent observations sit side by side within AppWidths.wide.
+  - one column on phones; on wide screens, identity/stats and recent posts sit side by side within AppWidths.wide.
 - Interactions:
-  - open observations and comments from stats when public activity is enabled; tap an observation card for its existing detail route.
+  - open posts and comments from stats when public activity is enabled; tap a post card for its existing detail route.
   - Report opens the existing report route. Block retains its sign-in requirement and confirmation.
 - Privacy:
   - when public activity is disabled, the profile remains visible, the activity stats do not navigate, and a calm private-activity state replaces the preview. No preview request is sent when privacy is already known.
@@ -431,7 +407,7 @@ Bottom navigation with 5 tabs:
 - Layout:
   - theme selector
   - language selector: English, Uzbek, Russian
-  - privacy toggle: allow other people to view my observations and comments
+  - privacy toggle: allow other people to view my posts and comments
   - About account entry
   - Save changes button
 - Interaction:
@@ -545,9 +521,9 @@ Required screens:
 - Register
 - Verify Email
 - Map
-- Add Observation Entry
-- Add Observation Details
-- Publish Success State
+- Create Entry
+- Cat Post / Cat Needs Help Form
+- Ordinary Post Map Picker
 - Feed
 - Post Detail
 - Leaderboard
