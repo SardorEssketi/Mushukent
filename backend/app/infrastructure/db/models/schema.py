@@ -81,6 +81,7 @@ leaderboard_type_enum = ENUM(
 place_category_enum = ENUM(
     PlaceCategory.PET_SHOP.value,
     PlaceCategory.VETERINARY.value,
+    PlaceCategory.VETERINARY_PHARMACY.value,
     PlaceCategory.SHELTER.value,
     name="place_category",
 )

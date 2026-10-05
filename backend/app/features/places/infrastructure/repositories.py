@@ -162,7 +162,8 @@ def _primary_category(categories: list[PlaceCategory]) -> PlaceCategory:
 def _category_priority(category: PlaceCategory) -> int:
     priority = {
         PlaceCategory.VETERINARY: 0,
-        PlaceCategory.SHELTER: 1,
-        PlaceCategory.PET_SHOP: 2,
+        PlaceCategory.VETERINARY_PHARMACY: 1,
+        PlaceCategory.SHELTER: 2,
+        PlaceCategory.PET_SHOP: 3,
     }
     return priority[category]

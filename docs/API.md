@@ -800,7 +800,7 @@ Feature: Places
 - Purpose: fetch cat-support places for the map, sourced from free OpenStreetMap data and moderator/manual entries.
 - Auth: optional
 - Query params:
-  - category: repeatable, one or more of pet_shop|veterinary|shelter
+  - category: repeatable, one or more of pet_shop|veterinary|veterinary_pharmacy|shelter
   - lat, lon, radius_meters for nearby filtering
   - bbox=minLon,minLat,maxLon,maxLat for viewport filtering
   - map_only=true for compact marker fields; full details remain available from the detail endpoint

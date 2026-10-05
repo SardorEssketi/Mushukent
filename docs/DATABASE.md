@@ -43,7 +43,7 @@ High-level ER summary
 - posts 1 --- * post_history (immutable editable-field versions and deletion audit events)
 - posts * --- * likes (through likes table)
 - users * --- * reports (reporter -> report target)
-- places are independent map points used for pet shops, veterinary clinics and shelters
+- places are independent map points used for pet shops, veterinary clinics, veterinary pharmacies and shelters
 - place_category_links allows one real place to belong to multiple supported categories
 - lost_pets 1 --- * lost_pet_photos
 - lost_pets 1 --- * comments
@@ -252,7 +252,7 @@ existing cached/history data does not require a destructive enum migration. It
 is not accepted by the Leaderboard API or used by the current application.
 
 -- Places (free OSM/manual cat-support POIs)
-CREATE TYPE place_category AS ENUM ('pet_shop','veterinary','shelter');
+CREATE TYPE place_category AS ENUM ('pet_shop','veterinary','veterinary_pharmacy','shelter');
 CREATE TYPE place_source AS ENUM ('osm','manual');
 
 CREATE TABLE places (

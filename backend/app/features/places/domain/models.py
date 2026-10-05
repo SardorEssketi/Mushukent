@@ -11,6 +11,7 @@ from app.features.cats.domain.models import GeoPoint
 class PlaceCategory(StrEnum):
     PET_SHOP = "pet_shop"
     VETERINARY = "veterinary"
+    VETERINARY_PHARMACY = "veterinary_pharmacy"
     SHELTER = "shelter"
 
 
