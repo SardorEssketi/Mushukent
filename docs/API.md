@@ -482,6 +482,7 @@ Feature: Posts (Observations)
   - If new_cat is provided, create a new cat record for this observation; mobile clients do not search for or select an existing cat
   - latitude in [-90,90], longitude in [-180,180]
   - location may be omitted for a normal observation; it is required when `kind` is `needs_help`
+  - nonblank description is required when `kind` is `needs_help` on create and update; it remains optional for normal observations (maximum 2000 characters)
   - photo file: content-type image/jpeg|image/png, size<=10MB
 - Pydantic models: PostCreateMultipart (for docs), PostCreateJSON
 - Example request (JSON variant):

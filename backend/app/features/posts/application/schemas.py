@@ -119,6 +119,8 @@ class _PostCreateBase(BaseModel):
             raise ValueError("Provide either cat_id or new_cat, not both.")
         if self.kind == PostKind.NEEDS_HELP and self.location is None:
             raise ValueError("Location is required for needs-help observations.")
+        if self.kind == PostKind.NEEDS_HELP and not self.description:
+            raise ValueError("Help details are required for cat needs help posts.")
         return self
 
     @field_validator("location")

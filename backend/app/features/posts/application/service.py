@@ -356,12 +356,20 @@ class PostsService:
                         "Location is required for needs-help observations.",
                         details={"location": ["required_for_needs_help"]},
                     )
+                description = (
+                    (payload.description.strip() if payload.description else None)
+                    if "description" in payload.model_fields_set
+                    else current.description
+                )
+                if kind == PostKind.NEEDS_HELP and not (description and description.strip()):
+                    raise api_error(
+                        422,
+                        "VALIDATION_ERROR",
+                        "Help details are required for cat needs help posts.",
+                        details={"description": ["required_for_needs_help"]},
+                    )
                 draft = PostUpdateDraft(
-                    description=(
-                        (payload.description.strip() if payload.description else None)
-                        if "description" in payload.model_fields_set
-                        else current.description
-                    ),
+                    description=description,
                     kind=kind,
                     location_latitude=location.latitude if location is not None else None,
                     location_longitude=location.longitude if location is not None else None,
