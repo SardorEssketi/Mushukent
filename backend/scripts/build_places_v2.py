@@ -128,6 +128,24 @@ def distance_meters(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 6_371_000 * angular
 
 
+def reviewed_firm_distances(
+    link: dict, point: tuple[float, float], firm_suggestions_by_id: dict[str, dict]
+) -> list[float]:
+    """Require a reviewed 2GIS firm pin near an exact branch link."""
+    distances = []
+    for url in link["evidence_urls"]:
+        match = re.search(r"2gis\.uz/tashkent/firm/(\d+)", url)
+        if match and match.group(1) in firm_suggestions_by_id:
+            firm_point = firm_suggestions_by_id[match.group(1)]["coordinates"]
+            distance = distance_meters(point, tuple(firm_point))
+            if distance > 150:
+                raise ValueError(f"Candidate link is {distance:.0f} m from firm pin: {link}")
+            distances.append(round(distance, 1))
+    if not distances:
+        raise ValueError(f"Candidate link has no reviewed 2GIS firm pin: {link}")
+    return distances
+
+
 def same_entity(a: dict, b: dict) -> bool:
     """Conservative merge; matching names without branch/location evidence never merge."""
     names = SequenceMatcher(None, normal(a["name"]), normal(b["name"])).ratio()
@@ -515,17 +533,7 @@ def build() -> dict:
         }:
             raise ValueError(f"Candidate link category mismatch: {link}")
         point = item["fields"]["coordinates"]["value"]
-        firm_distances = []
-        for url in link["evidence_urls"]:
-            match = re.search(r"2gis\.uz/tashkent/firm/(\d+)", url)
-            if match and match.group(1) in firm_suggestions_by_id:
-                firm_point = firm_suggestions_by_id[match.group(1)]["coordinates"]
-                distance = distance_meters(tuple(point), tuple(firm_point))
-                if distance > 150:
-                    raise ValueError(f"Candidate link is {distance:.0f} m from firm pin: {link}")
-                firm_distances.append(round(distance, 1))
-        if not firm_distances:
-            raise ValueError(f"Candidate link has no reviewed 2GIS firm pin: {link}")
+        firm_distances = reviewed_firm_distances(link, tuple(point), firm_suggestions_by_id)
         item.setdefault("candidate_observation_ids", []).append(link["observation_id"])
         resolution_audit.append(
             {

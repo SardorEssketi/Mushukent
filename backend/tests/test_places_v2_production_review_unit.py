@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from scripts.compare_places_v2_production import candidates, category_compatible, strong_match
+from scripts.compare_places_v2_production import (
+    candidates,
+    category_compatible,
+    classify,
+    strong_match,
+)
 
 
 def test_veterinary_pharmacy_can_match_a_reviewed_shop_branch() -> None:
@@ -60,3 +65,40 @@ def test_same_name_at_distant_branch_is_not_a_candidate() -> None:
         "website": None,
     }
     assert candidates([old], [new]) == []
+
+
+def test_one_v2_branch_cannot_inherit_two_production_uuids() -> None:
+    old = {
+        "id": "legacy-clinic",
+        "name": "Example Vet",
+        "category": "veterinary",
+        "categories": ["veterinary"],
+        "latitude": 41.3,
+        "longitude": 69.2,
+        "address": "Example Street 2",
+        "phone": None,
+        "phone_2": None,
+        "website": None,
+    }
+    second_old = {**old, "id": "legacy-shop"}
+    new = {
+        "id": "v2-example",
+        "source_id": "places_v2:v2-example",
+        "name": "Example Vet",
+        "category": "veterinary_clinic",
+        "latitude": 41.3,
+        "longitude": 69.2,
+        "address": "Example Street 2",
+        "phones": [],
+        "website": None,
+    }
+
+    proposed, production_only, ambiguous_old, inserts, review = classify(
+        [old, second_old], [new], candidates([old, second_old], [new])
+    )
+
+    assert proposed == {}
+    assert production_only == set()
+    assert ambiguous_old == {"legacy-clinic", "legacy-shop"}
+    assert inserts == set()
+    assert review == {"v2-example"}
