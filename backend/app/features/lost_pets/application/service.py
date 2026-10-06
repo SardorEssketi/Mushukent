@@ -222,9 +222,11 @@ class LostPetsService:
                 payload.additional_info.strip() or None
                 if "additional_info" in payload.model_fields_set
                 and payload.additional_info is not None
-                else None
-                if "additional_info" in payload.model_fields_set
-                else existing.additional_info
+                else (
+                    None
+                    if "additional_info" in payload.model_fields_set
+                    else existing.additional_info
+                )
             )
 
             with self.db_session_manager.session_scope() as session:
@@ -266,9 +268,7 @@ class LostPetsService:
     def delete_lost_pet(self, lost_pet_id: UUID, user: AuthUser) -> None:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            current = repository.get_by_id(
-                lost_pet_id, for_update=True, include_deleted=True
-            )
+            current = repository.get_by_id(lost_pet_id, for_update=True, include_deleted=True)
             self._require_owner(current, user)
             if current.deleted_at is not None:
                 return
@@ -277,9 +277,7 @@ class LostPetsService:
     def contact_owner(self, lost_pet_id: UUID, user: AuthUser) -> None:
         with self.db_session_manager.session_scope() as session:
             try:
-                recorded = self.repository_factory(session).record_contact(
-                    lost_pet_id, user.id
-                )
+                recorded = self.repository_factory(session).record_contact(lost_pet_id, user.id)
             except PermissionError as exc:
                 raise api_error(
                     403, "CONTACT_OWNER_FORBIDDEN", "You own this lost pet post."

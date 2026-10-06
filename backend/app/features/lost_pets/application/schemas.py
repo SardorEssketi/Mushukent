@@ -43,8 +43,7 @@ class LostPetUpdateRequest(BaseModel):
     @classmethod
     def _validate_last_seen_location(cls, value: GeoPoint | None) -> GeoPoint | None:
         if value is not None and (
-            not -90 <= float(value.latitude) <= 90
-            or not -180 <= float(value.longitude) <= 180
+            not -90 <= float(value.latitude) <= 90 or not -180 <= float(value.longitude) <= 180
         ):
             raise ValueError("Invalid last_seen_location coordinates.")
         return value

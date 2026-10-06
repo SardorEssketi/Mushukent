@@ -19,14 +19,22 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    count = bind.execute(text("""
+    count = bind.execute(
+        text(
+            """
         SELECT (SELECT count(*) FROM places WHERE category = 'veterinary_pharmacy')
              + (SELECT count(*) FROM place_category_links WHERE category = 'veterinary_pharmacy')
-    """)).scalar_one()
+    """
+        )
+    ).scalar_one()
     if count:
         raise RuntimeError("Remove or recategorize veterinary pharmacy places before downgrading")
     op.execute("ALTER TYPE place_category RENAME TO place_category_old")
     op.execute("CREATE TYPE place_category AS ENUM ('pet_shop', 'veterinary', 'shelter')")
-    op.execute("ALTER TABLE places ALTER COLUMN category TYPE place_category USING category::text::place_category")
-    op.execute("ALTER TABLE place_category_links ALTER COLUMN category TYPE place_category USING category::text::place_category")
+    op.execute(
+        "ALTER TABLE places ALTER COLUMN category TYPE place_category USING category::text::place_category"
+    )
+    op.execute(
+        "ALTER TABLE place_category_links ALTER COLUMN category TYPE place_category USING category::text::place_category"
+    )
     op.execute("DROP TYPE place_category_old")

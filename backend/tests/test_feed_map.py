@@ -706,7 +706,9 @@ def test_lost_pet_soft_delete_hides_public_surfaces_and_closes_pending_follow_up
     map_items = client.get(
         "/api/v1/lost-pets/map",
         params={"bbox": "69.1,41.2,69.3,41.4"},
-    ).json()["data"]["items"]
+    ).json()[
+        "data"
+    ]["items"]
     assert str(pet_id) not in {item["id"] for item in mine}
     assert str(pet_id) not in {item["id"] for item in public}
     assert str(pet_id) not in {item["id"] for item in map_items}
@@ -2011,15 +2013,17 @@ def test_adoption_contact_follow_up_lifecycle_and_archive(
         client.get("/api/v1/adoption-posts/mine", headers=contact_headers).json()["data"]["items"]
         == []
     )
-    assert client.delete(f"/api/v1/adoption-posts/{post_id}",
-                         headers=owner_headers).status_code == 204
+    assert (
+        client.delete(f"/api/v1/adoption-posts/{post_id}", headers=owner_headers).status_code == 204
+    )
     with feed_runtime.db_session_manager.session_scope() as session:
-        completed = session.query(schema.AdoptionFollowUp).filter_by(
-            adoption_post_id=post_id).all()
+        completed = session.query(schema.AdoptionFollowUp).filter_by(adoption_post_id=post_id).all()
         assert len(completed) == 2
         assert all(item.completed_at is not None for item in completed)
-        assert session.query(schema.AdoptionContactEvent).filter_by(
-            adoption_post_id=post_id).count() == 3
+        assert (
+            session.query(schema.AdoptionContactEvent).filter_by(adoption_post_id=post_id).count()
+            == 3
+        )
 
 
 @pytest.mark.integration

@@ -22,7 +22,7 @@
 
   ## 2. Most important UI/UX problems
 
-   Priority    Problem                                                                             Required outcome                                                                 
+   Priority    Problem                                                                             Required outcome
   ━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    P0          GPS denial, disabled service, and errors silently become a fallback coordinate      Represent actual, denied, unavailable, and city-fallback states separately.
                                                                                                    Never show or publish fallback as measured location.
@@ -151,7 +151,7 @@
 
   ## 5. Recommended changes screen by screen
 
-   Screen or flow                    Implementation brief                                                                                                                           
+   Screen or flow                    Implementation brief
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    Native splash and Auth Gate       Keep the warm native background and brand image. Make the Flutter startup state visually continuous with it. Use one small status line.
                                      Failure should show a concise explanation and Retry; avoid a card-within-centered-panel composition.

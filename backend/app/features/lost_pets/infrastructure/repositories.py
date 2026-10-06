@@ -69,11 +69,13 @@ class SqlAlchemyLostPetRepository:
         for_update: bool = False,
         include_deleted: bool = False,
     ) -> LostPetRecord | None:
-        statement = select(schema.LostPet).options(
-            selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author)
-        ).where(
-            schema.LostPet.id == lost_pet_id,
-            schema.LostPet.is_public.is_(True),
+        statement = (
+            select(schema.LostPet)
+            .options(selectinload(schema.LostPet.photos), selectinload(schema.LostPet.author))
+            .where(
+                schema.LostPet.id == lost_pet_id,
+                schema.LostPet.is_public.is_(True),
+            )
         )
         if not include_deleted:
             statement = statement.where(schema.LostPet.deleted_at.is_(None))

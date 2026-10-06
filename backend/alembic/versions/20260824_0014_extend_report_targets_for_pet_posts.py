@@ -22,9 +22,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("ALTER TYPE report_target_type RENAME TO report_target_type_old")
-    op.execute(
-        "CREATE TYPE report_target_type AS ENUM ('post', 'comment', 'user', 'cat')"
-    )
+    op.execute("CREATE TYPE report_target_type AS ENUM ('post', 'comment', 'user', 'cat')")
     op.execute(
         """
         ALTER TABLE reports

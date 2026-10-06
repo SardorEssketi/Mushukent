@@ -911,8 +911,12 @@ class AdoptionFollowUp(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     answer_yes: Mapped[bool | None] = mapped_column(Boolean)
 
     __table_args__ = (
-        Index("uq_adoption_follow_ups_pending", "adoption_post_id", unique=True,
-              postgresql_where=text("completed_at IS NULL")),
+        Index(
+            "uq_adoption_follow_ups_pending",
+            "adoption_post_id",
+            unique=True,
+            postgresql_where=text("completed_at IS NULL"),
+        ),
         Index("idx_adoption_follow_ups_owner_due", "owner_id", "due_at"),
         CheckConstraint(
             "(completed_at IS NULL AND answer_yes IS NULL) OR "
