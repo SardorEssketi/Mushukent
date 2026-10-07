@@ -128,6 +128,32 @@ class SqlAlchemyLostPetRepository:
             self.session.delete(pending)
         self.session.flush()
 
+    def set_resolution(
+        self, lost_pet_id: UUID, *, is_resolved: bool, changed_at: datetime
+    ) -> LostPetRecord:
+        item = self.session.get(schema.LostPet, lost_pet_id)
+        if item is None:
+            raise RuntimeError("Locked lost pet could not be loaded for resolution.")
+        if item.is_resolved != is_resolved:
+            item.is_resolved = is_resolved
+            item.updated_at = changed_at
+        if is_resolved:
+            pending = self.session.scalar(
+                select(schema.LostPetFollowUp)
+                .where(
+                    schema.LostPetFollowUp.lost_pet_id == lost_pet_id,
+                    schema.LostPetFollowUp.completed_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pending is not None:
+                self.session.delete(pending)
+        self.session.flush()
+        result = self.get_by_id(lost_pet_id)
+        if result is None:
+            raise RuntimeError("Resolved lost pet could not be loaded.")
+        return result
+
     def get_by_ids(
         self, lost_pet_ids: list[UUID], *, active_only: bool = False
     ) -> list[LostPetRecord]:

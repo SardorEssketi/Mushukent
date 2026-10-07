@@ -219,11 +219,17 @@ Bottom navigation with 5 tabs on main tab roots:
 - A due owner follow-up appears in app with exactly Yes and No. Yes removes the
   resolved Lost Pet from Feed and Map. The owner can find active and resolved
   Lost Pets in the existing Profile area.
+- The owner can also mark a Lost Pet found directly, with confirmation, and
+  reopen it from its detail page. Found posts leave Feed and Map. Their detail
+  links remain available without public contact or exact last-seen location.
 - Interactions:
 - permission prompts for camera/gallery.
 - the ordinary-post form offers current location and a bounded, tappable Tashkent map picker.
 - tapping Lost Pet checks for a valid Uzbekistan phone number; if missing or invalid, show a Lost-Pet-specific prompt with an Edit Profile action.
 - Find a new home applies the same phone check with its own requirement message before opening the existing rehoming form.
+- The owner can mark a rehoming post complete directly, with confirmation, and
+  reopen it from its detail page. Rehomed posts leave Feed and remain in Profile;
+  their detail links remain available without public contact information.
 - The bottom navigation remains visible on the Add entry screen and is hidden in the ordinary post, needs-help, Lost Pet, and rehoming creation workflows. Back navigation remains available.
 - Continue draft returns to the shared form; Delete draft asks for confirmation, resets the draft, and shows feedback.
 - Edge cases:
@@ -237,7 +243,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - pet name field
   - last-seen location selected by pointing on a map
   - additional information text field
-  - owner phone preview from profile
+  - explicit consent to show the profile phone number publicly
   - submit button
 - Interactions:
   - add/remove photos

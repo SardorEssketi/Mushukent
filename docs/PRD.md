@@ -202,6 +202,9 @@ the owner's phone number from their profile.
 
 Users without a profile phone number may view lost pet posts, but must add a phone number before creating one.
 
+Publishing a Lost Pet also requires explicit confirmation that the profile phone
+number will be shown publicly on the post.
+
 Profile phone numbers used for lost pet contact shall use the Uzbekistan format `+998 XX XXX XXXX`. Invalid or non-Uzbek phone numbers shall be rejected with a clear validation message.
 
 Lost pet posts shall include a Contact Owner action that initiates a phone call to the stored owner phone number.
@@ -213,6 +216,12 @@ do not start more prompts. Yes resolves the post; No completes the prompt and
 leaves the post active. Resolved posts leave Feed and Map and remain in the
 owner's profile Lost Pets history. No message is delivered while the owner is
 offline; the app retrieves due prompts when used again.
+
+Owners may mark a Lost Pet found without an in-app contact and reopen an
+accidentally resolved alert from Profile. Resolving removes any pending
+follow-up while retaining contact events and completed follow-ups.
+The resolved detail link remains available, but only the owner can view the
+stored phone, Telegram handle, and exact last-seen location until reopening.
 
 Adoption Posts
 
@@ -241,6 +250,13 @@ No leaves it active and permits a later contact to start a new cycle. Rehomed
 posts remain in the owner's profile Rehoming history. Owners may edit or soft
 delete active and rehomed posts. A mandatory phone publication checkbox is not
 part of this flow; a usable profile phone number remains required.
+
+Owners may mark a pet rehomed outside the app and reopen a listing marked
+complete by mistake. Resolving removes any pending follow-up while retaining
+contact events and completed follow-ups.
+The resolved detail link remains available, but only the owner can view the
+stored phone and Telegram handle until reopening.
+
 Cat Records
 
 Dedicated cat profile pages are not required for MVP. Cat records remain

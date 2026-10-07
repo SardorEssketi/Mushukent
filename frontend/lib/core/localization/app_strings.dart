@@ -1792,11 +1792,11 @@ class AppStrings {
   String get adoptionPhoneHelp {
     return switch (this) {
       _UzbekStrings() =>
-        'Asrab olish posti uchun profilingizdagi telefon raqami kerak. Kirgan foydalanuvchilar «Egasi bilan bogʻlanish» orqali sizga qoʻngʻiroq qilishi mumkin.',
+        'Profilingizdagi telefon raqami bu postda ochiq ko‘rsatiladi. Kirgan foydalanuvchilar «Egasi bilan bogʻlanish» orqali qo‘ng‘iroq qilishi mumkin.',
       _RussianStrings() =>
-        'Для объявления нужен номер телефона из профиля. Вошедшие пользователи смогут позвонить вам через «Связаться с владельцем».',
+        'Номер телефона из профиля будет виден всем в этом объявлении. Вошедшие пользователи смогут позвонить через «Связаться с владельцем».',
       _ =>
-        'Your profile phone number is required. Signed-in users can call you through Contact Owner.',
+        'Your profile phone number is public on this post. Signed-in users can use Contact Owner to call you.',
     };
   }
 
@@ -2700,6 +2700,21 @@ class AppStrings {
     };
   }
 
+  String get createLostPetAlert => switch (this) {
+        _UzbekStrings() => 'Yo‘qolgan jonivor haqida eʼlon yaratish',
+        _RussianStrings() => 'Создать объявление о пропавшем питомце',
+        _ => 'Create a lost-pet alert',
+      };
+
+  String get createLostPetAlertHelp => switch (this) {
+        _UzbekStrings() =>
+          'Odamlar siz bilan tez bog‘lanishi uchun aniq suratlar, oxirgi ko‘rilgan joy va telefon raqamini ochiq ko‘rsatishga rozilik kiriting.',
+        _RussianStrings() =>
+          'Добавьте чёткие фото, место последнего обнаружения и согласие на публикацию номера телефона, чтобы с вами могли быстро связаться.',
+        _ =>
+          'Use clear photos, a last-seen point, and public contact consent so people can reach you quickly.',
+      };
+
   String get pointLastSeenLocation {
     return switch (this) {
       _UzbekStrings() => 'Xaritada oxirgi ko‘rilgan joyni belgilang.',
@@ -2764,6 +2779,66 @@ class AppStrings {
         _UzbekStrings() => 'Uy hayvoningiz yangi uy topdimi?',
         _RussianStrings() => 'Ваш питомец нашёл новый дом?',
         _ => 'Did your pet find a new home?',
+      };
+
+  String get markLostPetFound => switch (this) {
+        _UzbekStrings() => 'Topildi deb belgilash',
+        _RussianStrings() => 'Отметить как найденного',
+        _ => 'Mark as found',
+      };
+
+  String get reopenLostPet => switch (this) {
+        _UzbekStrings() => 'Qidiruvni qayta boshlash',
+        _RussianStrings() => 'Возобновить поиск',
+        _ => 'Reopen search',
+      };
+
+  String get markRehomed => switch (this) {
+        _UzbekStrings() => 'Yangi uy topdi deb belgilash',
+        _RussianStrings() => 'Отметить, что питомец нашёл дом',
+        _ => 'Mark as rehomed',
+      };
+
+  String get reopenRehoming => switch (this) {
+        _UzbekStrings() => 'Uy qidirishni qayta boshlash',
+        _RussianStrings() => 'Возобновить поиск дома',
+        _ => 'Reopen rehoming post',
+      };
+
+  String get lostPetResolutionMessage => switch (this) {
+        _UzbekStrings() =>
+          'Bu eʼlon lenta va xaritadan olib tashlanadi, ammo havola orqali ochiq qoladi. Uni profilingizda qayta ochishingiz yoki o‘chirishingiz mumkin.',
+        _RussianStrings() =>
+          'Объявление исчезнет из ленты и с карты, но останется доступным по ссылке. В профиле его можно снова открыть или удалить.',
+        _ =>
+          'This post will leave Feed and Map but remain accessible by link. You can reopen or delete it from your profile.',
+      };
+
+  String get adoptionResolutionMessage => switch (this) {
+        _UzbekStrings() =>
+          'Bu eʼlon lentadan olib tashlanadi, ammo havola orqali ochiq qoladi. Uni profilingizda qayta ochishingiz yoki o‘chirishingiz mumkin.',
+        _RussianStrings() =>
+          'Объявление исчезнет из ленты, но останется доступным по ссылке. В профиле его можно снова открыть или удалить.',
+        _ =>
+          'This post will leave Feed but remain accessible by link. You can reopen or delete it from your profile.',
+      };
+
+  String get foundPostPrivateDetails => switch (this) {
+        _UzbekStrings() =>
+          'Jonivor topilganidan so‘ng telefon raqami va oxirgi ko‘rilgan joy boshqalarga ko‘rsatilmaydi.',
+        _RussianStrings() =>
+          'После того как питомец найден, номер телефона и точное место последнего обнаружения скрыты от других.',
+        _ =>
+          'Now that the pet is found, the phone number and last-seen location are hidden from others.',
+      };
+
+  String get rehomedPostPrivateDetails => switch (this) {
+        _UzbekStrings() =>
+          'Jonivor yangi uy topganidan so‘ng aloqa maʼlumotlari boshqalarga ko‘rsatilmaydi.',
+        _RussianStrings() =>
+          'После того как питомец нашёл новый дом, контактные данные скрыты от других.',
+        _ =>
+          'Now that the pet has a new home, contact details are hidden from others.',
       };
 
   String get myAdoptionPosts => switch (this) {

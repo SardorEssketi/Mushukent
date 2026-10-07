@@ -8,7 +8,11 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, 
 from pydantic import ValidationError
 
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
-from app.core.dependencies import get_current_active_user, get_lost_pets_service
+from app.core.dependencies import (
+    get_current_active_user,
+    get_lost_pets_service,
+    get_optional_current_user,
+)
 from app.core.security import api_error
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
@@ -18,6 +22,7 @@ from app.features.lost_pets.application.schemas import (
     LostPetFollowUpItem,
     LostPetListItem,
     LostPetMapListItem,
+    LostPetResolutionRequest,
     LostPetResponse,
     LostPetUpdateRequest,
 )
@@ -215,6 +220,16 @@ def contact_owner(
     lost_pets_service.contact_owner(lost_pet_id, current_user)
 
 
+@router.patch("/{lost_pet_id}/resolution", response_model=ApiSuccess[LostPetResponse])
+def set_resolution(
+    lost_pet_id: UUID,
+    payload: LostPetResolutionRequest,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[LostPetResponse]:
+    return ApiSuccess(data=lost_pets_service.set_resolution(lost_pet_id, current_user, payload))
+
+
 @router.patch(
     "/{lost_pet_id}",
     response_model=ApiSuccess[LostPetResponse],
@@ -255,6 +270,7 @@ def delete_lost_pet(
 )
 def get_lost_pet(
     lost_pet_id: UUID,
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[LostPetResponse]:
-    return ApiSuccess(data=lost_pets_service.get_lost_pet(lost_pet_id))
+    return ApiSuccess(data=lost_pets_service.get_lost_pet(lost_pet_id, current_user))

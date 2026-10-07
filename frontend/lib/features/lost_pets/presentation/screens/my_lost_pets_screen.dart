@@ -76,7 +76,8 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
     });
     final visibleItems = _items
         .where((pet) => !deletedLostPetIds.contains(pet.id))
-        .map((pet) => lostPetOverrides[pet.id] ?? pet)
+        .map((pet) =>
+            _error || _loading ? (lostPetOverrides[pet.id] ?? pet) : pet)
         .toList(growable: false);
     return Scaffold(
       appBar: AppBar(title: Text(strings.myLostPets)),

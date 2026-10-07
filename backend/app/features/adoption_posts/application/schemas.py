@@ -55,6 +55,12 @@ class AdoptionFollowUpAnswer(BaseModel):
     answer: Literal["yes", "no"]
 
 
+class AdoptionResolutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_resolved: bool
+
+
 class AdoptionPostListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -76,7 +82,7 @@ class AdoptionPostListItem(BaseModel):
 
 
 class AdoptionPostResponse(AdoptionPostListItem):
-    pass
+    owner_phone_number: str | None
 
 
 def to_adoption_post_response(item: AdoptionPostRecord) -> AdoptionPostResponse:

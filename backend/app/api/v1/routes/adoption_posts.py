@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, 
 from pydantic import ValidationError
 
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
-from app.core.dependencies import get_adoption_posts_service, get_current_active_user
+from app.core.dependencies import (
+    get_adoption_posts_service,
+    get_current_active_user,
+    get_optional_current_user,
+)
 from app.core.security import api_error
 from app.features.adoption_posts.application.schemas import (
     AdoptionFollowUpAnswer,
@@ -16,6 +20,7 @@ from app.features.adoption_posts.application.schemas import (
     AdoptionPostListItem,
     AdoptionPostResponse,
     AdoptionPostUpdateRequest,
+    AdoptionResolutionRequest,
 )
 from app.features.adoption_posts.application.service import AdoptionPostsService
 from app.features.auth.application.schemas import ApiSuccess
@@ -128,6 +133,18 @@ def contact_owner(
     adoption_posts_service.contact_owner(adoption_post_id, current_user)
 
 
+@router.patch("/{adoption_post_id}/resolution", response_model=ApiSuccess[AdoptionPostResponse])
+def set_resolution(
+    adoption_post_id: UUID,
+    payload: AdoptionResolutionRequest,
+    current_user: AuthUser = Depends(get_current_active_user),
+    adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
+) -> ApiSuccess[AdoptionPostResponse]:
+    return ApiSuccess(
+        data=adoption_posts_service.set_resolution(adoption_post_id, current_user, payload)
+    )
+
+
 @router.patch(
     "/{adoption_post_id}",
     response_model=ApiSuccess[AdoptionPostResponse],
@@ -191,6 +208,7 @@ def delete_adoption_post(
 )
 def get_adoption_post(
     adoption_post_id: UUID,
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> ApiSuccess[AdoptionPostResponse]:
-    return ApiSuccess(data=adoption_posts_service.get_adoption_post(adoption_post_id))
+    return ApiSuccess(data=adoption_posts_service.get_adoption_post(adoption_post_id, current_user))

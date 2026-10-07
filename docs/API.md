@@ -665,7 +665,7 @@ Feature: Lost Pets
   - pet_name is required
   - at least one photo is required
   - last_seen_location is required
-  - the profile phone number is copied to the post for Contact Owner; no mandatory publication checkbox
+  - the profile phone number is copied to the post for Contact Owner; explicit phone publication consent is required
   - photo files use the same image constraints as observation uploads
   - maximum 5 photos
 - Response model: LostPetResponse (201)
@@ -673,6 +673,7 @@ Feature: Lost Pets
   - 401 UNAUTHORIZED
   - 403 PHONE_NUMBER_REQUIRED
   - 422 INVALID_PHONE_NUMBER
+  - 422 PHONE_PUBLICATION_CONSENT_REQUIRED
   - 400 INVALID_PAYLOAD
   - 422 INVALID_IMAGE
 
@@ -709,6 +710,18 @@ Feature: Lost Pets
 - Body: `{"answer":"yes"}` or `{"answer":"no"}`.
 - Response: LostPetResponse. Yes sets `is_resolved=true`; No leaves it false. The follow-up is completed atomically and cannot be answered twice.
 
+7a) PATCH /api/v1/lost-pets/{lost_pet_id}/resolution
+- Auth: Bearer required; owner only.
+- Request: `{"is_resolved":true}` to mark found, or `{"is_resolved":false}` to reopen.
+- Behavior: locks the Lost Pet row. Resolving removes any pending follow-up; completed follow-ups and contact events remain. Reopening permits a later contact to start a new cycle. Repeated requests for the current state are safe.
+- Response: LostPetResponse. Deleted posts cannot be reopened.
+
+The public `GET /api/v1/lost-pets/{lost_pet_id}` remains available after resolution,
+but omits `owner_phone_number`, `owner_telegram_username`, and
+`last_seen_location` for anonymous and non-owner viewers. An authenticated owner
+receives those fields for editing and reopening; `/mine` remains owner-only.
+Active public Lost Pet detail and list responses retain their existing fields.
+
 8) GET /api/v1/lost-pets/mine
 - Auth: Bearer required.
 - Query: limit, cursor.
@@ -737,7 +750,6 @@ Feature: Adoption Posts
 - Request: multipart/form-data
   - photos: one or more image files
   - pet_name: required text, max 100 chars
-  - owner_phone_publication_consent: required true
   - additional_info: optional text, max 2000 chars
 - Validation:
   - authenticated user must have a non-empty phone_number on their profile
@@ -745,7 +757,7 @@ Feature: Adoption Posts
   - pet_name is required
   - at least one photo is required
   - no location is accepted or required
-  - owner_phone_publication_consent must be true because the profile phone number is displayed publicly
+  - the profile phone number is copied to the public post; the current rehoming form explains this without a mandatory publication checkbox
   - photo files use the same image constraints as observation uploads
   - maximum 5 photos
 - Response model: AdoptionPostResponse (201)
@@ -784,6 +796,18 @@ Feature: Adoption Posts
 - Request: `{"answer":"yes"}` or `{"answer":"no"}`.
 - Yes sets `is_resolved=true`; No leaves it false. Both complete the cycle.
 - A repeated answer returns 409 `FOLLOW_UP_COMPLETED`.
+
+7a) PATCH /api/v1/adoption-posts/{adoption_post_id}/resolution
+- Auth: Bearer required; owner only.
+- Request: `{"is_resolved":true}` to mark rehomed, or `{"is_resolved":false}` to reopen.
+- Behavior: locks the post row. Resolving removes any pending follow-up; completed follow-ups and contact events remain. Reopening permits a later contact to start a new cycle. Repeated requests for the current state are safe.
+- Response: AdoptionPostResponse. Deleted posts cannot be reopened.
+
+The public `GET /api/v1/adoption-posts/{adoption_post_id}` remains available
+after resolution, but omits `owner_phone_number` and
+`owner_telegram_username` for anonymous and non-owner viewers. An authenticated
+owner receives those fields for editing and reopening; `/mine` remains
+owner-only. Active public responses retain their existing fields.
 
 8) PATCH /api/v1/adoption-posts/{adoption_post_id}
 - Auth: Bearer required; owner only.

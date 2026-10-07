@@ -706,9 +706,7 @@ def test_lost_pet_soft_delete_hides_public_surfaces_and_closes_pending_follow_up
     map_items = client.get(
         "/api/v1/lost-pets/map",
         params={"bbox": "69.1,41.2,69.3,41.4"},
-    ).json()[
-        "data"
-    ]["items"]
+    ).json()["data"]["items"]
     assert str(pet_id) not in {item["id"] for item in mine}
     assert str(pet_id) not in {item["id"] for item in public}
     assert str(pet_id) not in {item["id"] for item in map_items}
@@ -1910,6 +1908,170 @@ def test_places_map_payload_is_compact_and_detail_is_loaded_separately(
     detail = detail_response.json()["data"]
     assert detail["phone"] == "+998 90 123 45 67"
     assert detail["description"] == "Long detail that should not be sent with map markers."
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("kind", ["lost", "adoption"])
+def test_owner_can_resolve_without_contact_reopen_and_close_pending_cycle(
+    client: TestClient, feed_runtime, kind: str
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email=f"manual-resolution-{kind}-owner@example.com",
+    )
+    contact, contact_token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email=f"manual-resolution-{kind}-contact@example.com",
+    )
+    if kind == "lost":
+        post_id = _create_lost_pet(feed_runtime.db_session_manager, user_id=owner.id)
+        post_model = schema.LostPet
+        path = f"/api/v1/lost-pets/{post_id}"
+        mine_path = "/api/v1/lost-pets/mine"
+        list_path = "/api/v1/lost-pets"
+        follow_up_model = schema.LostPetFollowUp
+        contact_model = schema.LostPetContactEvent
+        target_column = follow_up_model.lost_pet_id
+        contact_target_column = contact_model.lost_pet_id
+    else:
+        post_id = _create_adoption_post(feed_runtime.db_session_manager, user_id=owner.id)
+        post_model = schema.AdoptionPost
+        path = f"/api/v1/adoption-posts/{post_id}"
+        mine_path = "/api/v1/adoption-posts/mine"
+        list_path = "/api/v1/adoption-posts"
+        follow_up_model = schema.AdoptionFollowUp
+        contact_model = schema.AdoptionContactEvent
+        target_column = follow_up_model.adoption_post_id
+        contact_target_column = contact_model.adoption_post_id
+
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    contact_headers = {"Authorization": f"Bearer {contact_token}"}
+    resolution_path = f"{path}/resolution"
+    with feed_runtime.db_session_manager.session_scope() as session:
+        session.get(post_model, post_id).owner_telegram_username = "mushuk_test"
+    active_public = client.get(path).json()["data"]
+    assert active_public["owner_phone_number"] == "+998 90 123 45 67"
+    assert active_public["owner_telegram_username"] == "mushuk_test"
+    if kind == "lost":
+        assert active_public["last_seen_location"] is not None
+    assert client.patch(resolution_path, json={"is_resolved": True}).status_code == 401
+    assert (
+        client.patch(
+            resolution_path, headers=contact_headers, json={"is_resolved": True}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.patch(resolution_path, headers=owner_headers, json={"is_resolved": True}).json()[
+            "data"
+        ]["is_resolved"]
+        is True
+    )
+    assert (
+        client.patch(resolution_path, headers=owner_headers, json={"is_resolved": True}).status_code
+        == 200
+    )
+    for headers in ({}, contact_headers):
+        resolved_public = client.get(path, headers=headers).json()["data"]
+        assert resolved_public["is_resolved"] is True
+        assert "owner_phone_number" not in resolved_public
+        assert "owner_telegram_username" not in resolved_public
+        if kind == "lost":
+            assert "last_seen_location" not in resolved_public
+    resolved_owner = client.get(path, headers=owner_headers).json()["data"]
+    assert resolved_owner["owner_phone_number"] == active_public["owner_phone_number"]
+    if kind == "lost":
+        assert resolved_owner["last_seen_location"] == active_public["last_seen_location"]
+    assert str(post_id) not in [
+        item["id"] for item in client.get(list_path).json()["data"]["items"]
+    ]
+    assert str(post_id) not in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    if kind == "lost":
+        map_items = client.get(
+            "/api/v1/lost-pets/map", params={"bbox": "69.2,41.2,69.3,41.4"}
+        ).json()["data"]["items"]
+        assert str(post_id) not in [item["id"] for item in map_items]
+    assert str(post_id) in [
+        item["id"] for item in client.get(mine_path, headers=owner_headers).json()["data"]["items"]
+    ]
+    mine_item = next(
+        item
+        for item in client.get(mine_path, headers=owner_headers).json()["data"]["items"]
+        if item["id"] == str(post_id)
+    )
+    assert mine_item["owner_phone_number"] == active_public["owner_phone_number"]
+    assert client.post(f"{path}/contact", headers=contact_headers).status_code == 404
+    assert (
+        client.patch(
+            resolution_path, headers=contact_headers, json={"is_resolved": False}
+        ).status_code
+        == 403
+    )
+    assert (
+        client.patch(resolution_path, headers=owner_headers, json={"is_resolved": False}).json()[
+            "data"
+        ]["is_resolved"]
+        is False
+    )
+    assert (
+        client.patch(
+            resolution_path, headers=owner_headers, json={"is_resolved": False}
+        ).status_code
+        == 200
+    )
+    reopened_public = client.get(path).json()["data"]
+    assert reopened_public["owner_phone_number"] == active_public["owner_phone_number"]
+    if kind == "lost":
+        assert reopened_public["last_seen_location"] == active_public["last_seen_location"]
+        map_items = client.get(
+            "/api/v1/lost-pets/map", params={"bbox": "69.2,41.2,69.3,41.4"}
+        ).json()["data"]["items"]
+        assert str(post_id) in [item["id"] for item in map_items]
+    assert str(post_id) in [
+        item["id"] for item in client.get("/api/v1/feed").json()["data"]["items"]
+    ]
+    assert client.post(f"{path}/contact", headers=contact_headers).status_code == 204
+    assert client.post(f"{path}/contact", headers=contact_headers).status_code == 204
+    with feed_runtime.db_session_manager.session_scope() as session:
+        pending = session.query(follow_up_model).filter(target_column == post_id).one()
+        pending_id = pending.id
+        pending.due_at = datetime.now(UTC) - timedelta(minutes=1)
+    if kind == "lost":
+        answer_path = f"/api/v1/lost-pets/follow-ups/{pending_id}/answer"
+    else:
+        answer_path = f"/api/v1/adoption-posts/follow-ups/{pending_id}/answer"
+    assert client.post(answer_path, headers=owner_headers, json={"answer": "no"}).status_code == 200
+    assert client.post(f"{path}/contact", headers=contact_headers).status_code == 204
+    with feed_runtime.db_session_manager.session_scope() as session:
+        cycles = session.query(follow_up_model).filter(target_column == post_id).all()
+        assert len(cycles) == 2
+        assert sum(item.completed_at is None for item in cycles) == 1
+        pending_id = next(item.id for item in cycles if item.completed_at is None)
+    assert (
+        client.patch(resolution_path, headers=owner_headers, json={"is_resolved": True}).status_code
+        == 200
+    )
+    with feed_runtime.db_session_manager.session_scope() as session:
+        completed = session.query(follow_up_model).filter(target_column == post_id).all()
+        assert len(completed) == 1
+        assert completed[0].completed_at is not None
+        assert session.query(contact_model).filter(contact_target_column == post_id).count() == 3
+    if kind == "lost":
+        answer_path = f"/api/v1/lost-pets/follow-ups/{pending_id}/answer"
+    else:
+        answer_path = f"/api/v1/adoption-posts/follow-ups/{pending_id}/answer"
+    assert client.post(answer_path, headers=owner_headers, json={"answer": "no"}).status_code == 404
+    assert client.delete(path, headers=owner_headers).status_code == 204
+    assert (
+        client.patch(
+            resolution_path, headers=owner_headers, json={"is_resolved": False}
+        ).status_code
+        == 404
+    )
 
 
 @pytest.mark.integration

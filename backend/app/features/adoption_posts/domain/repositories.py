@@ -30,6 +30,10 @@ class AdoptionPostRepository(Protocol):
 
     def soft_delete(self, adoption_post_id: UUID, deleted_at: datetime) -> None: ...
 
+    def set_resolution(
+        self, adoption_post_id: UUID, *, is_resolved: bool, changed_at: datetime
+    ) -> AdoptionPostRecord: ...
+
     def record_contact(self, adoption_post_id: UUID, contacting_user_id: UUID) -> bool: ...
 
     def list_due_follow_ups(

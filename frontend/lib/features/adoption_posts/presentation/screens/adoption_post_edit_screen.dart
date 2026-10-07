@@ -52,7 +52,7 @@ class _AdoptionPostEditScreenState
     _initialized = true;
     _name.text = post.petName;
     _info.text = post.additionalInfo ?? '';
-    _phone.text = post.ownerPhoneNumber;
+    _phone.text = post.ownerPhoneNumber ?? '';
     _telegram.text = post.ownerTelegramUsername ?? '';
   }
 

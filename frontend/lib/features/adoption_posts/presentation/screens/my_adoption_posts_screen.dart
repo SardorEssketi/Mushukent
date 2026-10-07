@@ -75,7 +75,7 @@ class _MyAdoptionPostsScreenState extends ConsumerState<MyAdoptionPostsScreen> {
     });
     final visibleItems = _items
         .where((post) => !deletedIds.contains(post.id))
-        .map((post) => overrides[post.id] ?? post)
+        .map((post) => _error || _loading ? (overrides[post.id] ?? post) : post)
         .toList(growable: false);
     return Scaffold(
       appBar: AppBar(title: Text(strings.myAdoptionPosts)),

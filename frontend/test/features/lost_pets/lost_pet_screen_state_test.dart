@@ -52,6 +52,93 @@ Map<String, Object?> _pet({required bool resolved}) => {
     };
 
 void main() {
+  testWidgets(
+      'resolved public Lost Pet detail works without contact or location',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler(
+        'GET',
+        'lost-pets/pet-1',
+        (_) => {
+              ..._pet(resolved: true),
+              'owner_phone_number': null,
+              'owner_telegram_username': null,
+              'last_seen_location': null,
+            });
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'viewer-1');
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Reunited'), findsOneWidget);
+    expect(find.textContaining('hidden from others'), findsOneWidget);
+    expect(find.text('Contact Owner'), findsNothing);
+    expect(find.text('View on Map'), findsNothing);
+    expect(find.text('Mark as found'), findsNothing);
+    expect(find.text('Reopen search'), findsNothing);
+  });
+
+  testWidgets('owner can mark a lost pet found and reopen the search',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    var resolved = false;
+    apiClient.setHandler(
+        'GET', 'lost-pets/pet-1', (_) => _pet(resolved: resolved));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    apiClient.setHandler('PATCH', 'lost-pets/pet-1/resolution', (call) {
+      resolved = (call.body as Map<String, dynamic>)['is_resolved'] as bool;
+      return _pet(resolved: resolved);
+    });
+    final container = _container(apiClient, userId: 'owner-1');
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Mark as found'), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Mark as found'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('leave Feed and Map'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Mark as found'));
+    await tester.pumpAndSettle();
+    expect(resolved, isTrue);
+    expect(container.read(resolvedLostPetIdsProvider), contains('pet-1'));
+    await tester.scrollUntilVisible(find.text('Reopen search'), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Reopen search'));
+    await tester.pumpAndSettle();
+    expect(resolved, isFalse);
+    expect(
+        container.read(resolvedLostPetIdsProvider), isNot(contains('pet-1')));
+  });
+
+  testWidgets('fresh detail response wins over a local edit override',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'lost-pets/pet-1', (_) => _pet(resolved: true));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'owner-1');
+    addTearDown(container.dispose);
+    container.read(lostPetMutationOverridesProvider.notifier).state = {
+      'pet-1': LostPetData.fromJson(_pet(resolved: false)),
+    };
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Reunited'), findsOneWidget);
+    expect(find.text('Mark as found'), findsNothing);
+  });
+
   testWidgets('only the owner sees Lost Pet edit and delete controls',
       (tester) async {
     final apiClient = FakeApiClient();
@@ -338,6 +425,42 @@ void main() {
         findsNothing);
   });
 
+  testWidgets('successful Feed refresh uses server state after a local edit',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    var serverName = 'Mittens';
+    apiClient.setHandler(
+        'GET',
+        'lost-pets',
+        (_) => {
+              'items': [
+                {..._pet(resolved: false), 'pet_name': serverName}
+              ],
+              'next_cursor': null,
+              'limit': 30,
+            });
+    final container = _container(apiClient);
+    addTearDown(container.dispose);
+    container.read(feedModeProvider.notifier).state = 'lost_pets';
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: FeedScreen()),
+    ));
+    await tester.pumpAndSettle();
+    container.read(lostPetMutationOverridesProvider.notifier).state = {
+      'pet-1': LostPetData.fromJson({
+        ..._pet(resolved: false),
+        'pet_name': 'Local edit',
+      }),
+    };
+    serverName = 'Updated on another device';
+    container.read(postMutationRevisionProvider.notifier).state++;
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Updated on another device', findRichText: true),
+        findsOneWidget);
+    expect(find.textContaining('Local edit', findRichText: true), findsNothing);
+  });
+
   testWidgets('My lost pets reloads after a mutation during an earlier request',
       (tester) async {
     final apiClient = FakeApiClient();
@@ -373,6 +496,35 @@ void main() {
       'next_cursor': null,
       'limit': 50,
     });
+    await tester.pumpAndSettle();
+    expect(find.text('Reunited'), findsOneWidget);
+    expect(find.text('Missing'), findsNothing);
+  });
+
+  testWidgets('successful My lost pets refresh uses server resolution',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    var resolved = false;
+    apiClient.setHandler(
+        'GET',
+        'lost-pets/mine',
+        (_) => {
+              'items': [_pet(resolved: resolved)],
+              'next_cursor': null,
+              'limit': 50,
+            });
+    final container = _container(apiClient);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: MyLostPetsScreen()),
+    ));
+    await tester.pumpAndSettle();
+    container.read(lostPetMutationOverridesProvider.notifier).state = {
+      'pet-1': LostPetData.fromJson(_pet(resolved: false)),
+    };
+    resolved = true;
+    container.read(postMutationRevisionProvider.notifier).state++;
     await tester.pumpAndSettle();
     expect(find.text('Reunited'), findsOneWidget);
     expect(find.text('Missing'), findsNothing);

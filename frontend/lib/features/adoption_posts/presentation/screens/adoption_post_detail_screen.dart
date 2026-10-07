@@ -16,10 +16,17 @@ import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 final adoptionPostDetailProvider = FutureProvider.autoDispose
-    .family<AdoptionPostData, String>((ref, adoptionPostId) {
-  final override = ref.watch(adoptionMutationOverridesProvider)[adoptionPostId];
-  if (override != null) return override;
-  return ref.watch(mushukistanApiProvider).getAdoptionPost(adoptionPostId);
+    .family<AdoptionPostData, String>((ref, adoptionPostId) async {
+  try {
+    return await ref
+        .watch(mushukistanApiProvider)
+        .getAdoptionPost(adoptionPostId);
+  } on MushukistanApiException catch (error) {
+    final override =
+        ref.read(adoptionMutationOverridesProvider)[adoptionPostId];
+    if (error.isRetryable && override != null) return override;
+    rethrow;
+  }
 });
 
 class AdoptionPostDetailScreen extends ConsumerStatefulWidget {
@@ -35,6 +42,73 @@ class AdoptionPostDetailScreen extends ConsumerStatefulWidget {
 class _AdoptionPostDetailScreenState
     extends ConsumerState<AdoptionPostDetailScreen> {
   bool _contactInFlight = false;
+  bool _statusInFlight = false;
+
+  Future<void> _setResolution(AdoptionPostData post, AppStrings strings) async {
+    if (_statusInFlight) return;
+    final resolving = !post.isResolved;
+    if (resolving) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(strings.markRehomed),
+          content: Text(strings.adoptionResolutionMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.markRehomed),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    setState(() => _statusInFlight = true);
+    try {
+      final updated =
+          await ref.read(mushukistanApiProvider).setAdoptionResolution(
+                post.id,
+                isResolved: resolving,
+              );
+      ref.read(adoptionMutationOverridesProvider.notifier).state = {
+        ...ref.read(adoptionMutationOverridesProvider),
+        updated.id: updated,
+      };
+      final resolvedIds = {...ref.read(resolvedAdoptionIdsProvider)};
+      if (updated.isResolved) {
+        resolvedIds.add(updated.id);
+      } else {
+        resolvedIds.remove(updated.id);
+      }
+      ref.read(resolvedAdoptionIdsProvider.notifier).state = resolvedIds;
+      ref.read(postMutationRevisionProvider.notifier).state++;
+      ref.invalidate(adoptionPostDetailProvider(post.id));
+      ref.invalidate(feedPostsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.changesSaved)),
+        );
+      }
+    } on MushukistanApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.userMessage)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _statusInFlight = false);
+    }
+  }
 
   Future<void> _contactOwner(
       BuildContext context, AppStrings strings, AdoptionPostData post,
@@ -52,7 +126,7 @@ class _AdoptionPostDetailScreenState
         await _openTelegram(post.ownerTelegramUsername!);
       } else {
         await launchPublicPhone(context,
-            phone: post.ownerPhoneNumber, strings: strings);
+            phone: post.ownerPhoneNumber!, strings: strings);
       }
     } on MushukistanApiException catch (error) {
       if (error.code == 'ADOPTION_POST_NOT_ACTIVE') {
@@ -151,6 +225,7 @@ class _AdoptionPostDetailScreenState
           final viewerId = ref.watch(currentUserProvider)?.id;
           final isOwner = viewerId != null && post.author?.id == viewerId;
           final canContact = !post.isResolved &&
+              post.ownerPhoneNumber != null &&
               post.author?.id != null &&
               post.author?.id != viewerId;
           return ListView(
@@ -175,12 +250,16 @@ class _AdoptionPostDetailScreenState
                     .headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w700),
               ),
+              if (post.isResolved) ...[
+                const SizedBox(height: 8),
+                Text(strings.rehomedPostPrivateDetails),
+              ],
               const SizedBox(height: 16),
               if (canContact)
                 _DetailActionTile(
                   icon: Icons.phone_outlined,
                   title: strings.contactOwner,
-                  subtitle: post.ownerPhoneNumber,
+                  subtitle: post.ownerPhoneNumber!,
                   onTap: () => _contactOwner(context, strings, post),
                 ),
               if (canContact && post.ownerTelegramUsername != null) ...[
@@ -205,6 +284,17 @@ class _AdoptionPostDetailScreenState
               if (isOwner) ...[
                 const SizedBox(height: 20),
                 Wrap(spacing: 12, runSpacing: 12, children: [
+                  OutlinedButton.icon(
+                    onPressed: _statusInFlight
+                        ? null
+                        : () => _setResolution(post, strings),
+                    icon: Icon(post.isResolved
+                        ? Icons.replay_outlined
+                        : Icons.check_circle_outline),
+                    label: Text(post.isResolved
+                        ? strings.reopenRehoming
+                        : strings.markRehomed),
+                  ),
                   OutlinedButton.icon(
                     onPressed: () => _editPost(post),
                     icon: const Icon(Icons.edit_outlined),

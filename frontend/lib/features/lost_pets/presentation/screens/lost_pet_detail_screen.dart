@@ -16,11 +16,15 @@ import '../../../auth/application/auth_controller.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 
-final lostPetDetailProvider =
-    FutureProvider.autoDispose.family<LostPetData, String>((ref, lostPetId) {
-  final override = ref.watch(lostPetMutationOverridesProvider)[lostPetId];
-  if (override != null) return override;
-  return ref.watch(mushukistanApiProvider).getLostPet(lostPetId);
+final lostPetDetailProvider = FutureProvider.autoDispose
+    .family<LostPetData, String>((ref, lostPetId) async {
+  try {
+    return await ref.watch(mushukistanApiProvider).getLostPet(lostPetId);
+  } on MushukistanApiException catch (error) {
+    final override = ref.read(lostPetMutationOverridesProvider)[lostPetId];
+    if (error.isRetryable && override != null) return override;
+    rethrow;
+  }
 });
 
 enum _LostPetDetailAction { report }
@@ -37,6 +41,73 @@ class LostPetDetailScreen extends ConsumerStatefulWidget {
 
 class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
   bool _contactInFlight = false;
+  bool _statusInFlight = false;
+
+  Future<void> _setResolution(LostPetData pet, AppStrings strings) async {
+    if (_statusInFlight) return;
+    final resolving = !pet.isResolved;
+    if (resolving) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(strings.markLostPetFound),
+          content: Text(strings.lostPetResolutionMessage),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.markLostPetFound),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    setState(() => _statusInFlight = true);
+    try {
+      final updated =
+          await ref.read(mushukistanApiProvider).setLostPetResolution(
+                pet.id,
+                isResolved: resolving,
+              );
+      ref.read(lostPetMutationOverridesProvider.notifier).state = {
+        ...ref.read(lostPetMutationOverridesProvider),
+        updated.id: updated,
+      };
+      final resolvedIds = {...ref.read(resolvedLostPetIdsProvider)};
+      if (updated.isResolved) {
+        resolvedIds.add(updated.id);
+      } else {
+        resolvedIds.remove(updated.id);
+      }
+      ref.read(resolvedLostPetIdsProvider.notifier).state = resolvedIds;
+      ref.read(postMutationRevisionProvider.notifier).state++;
+      ref.invalidate(lostPetDetailProvider(pet.id));
+      ref.invalidate(feedPostsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.changesSaved)),
+        );
+      }
+    } on MushukistanApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.userMessage)),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(strings.couldNotSaveChanges)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _statusInFlight = false);
+    }
+  }
 
   Future<void> _editLostPet(LostPetData lostPet) async {
     final result = await context.push<bool>('/lost-pets/${lostPet.id}/edit');
@@ -116,7 +187,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
       } else {
         await launchPublicPhone(
           context,
-          phone: lostPet.ownerPhoneNumber,
+          phone: lostPet.ownerPhoneNumber!,
           strings: strings,
         );
       }
@@ -149,7 +220,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
   }
 
   void _openMap(BuildContext context, LostPetData pet) {
-    final location = pet.lastSeenLocation;
+    final location = pet.lastSeenLocation!;
     context.go(
       '/map?lat=${location.latitude}&lon=${location.longitude}&lostPetId=${pet.id}',
     );
@@ -196,6 +267,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
           final viewerId = ref.watch(currentUserProvider)?.id;
           final isOwner = viewerId != null && lostPet.author?.id == viewerId;
           final canContact = !lostPet.isResolved &&
+              lostPet.ownerPhoneNumber != null &&
               lostPet.author?.id != null &&
               lostPet.author?.id != viewerId;
           return AppContentWidth(
@@ -223,8 +295,13 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                       .headlineSmall
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
+                if (lostPet.isResolved) ...[
+                  const SizedBox(height: 8),
+                  Text(strings.foundPostPrivateDetails),
+                ],
                 const SizedBox(height: 16),
-                if (!lostPet.isResolved) ...[
+                if (!lostPet.isResolved &&
+                    lostPet.lastSeenLocation != null) ...[
                   _DetailActionTile(
                     icon: Icons.location_on_outlined,
                     title: strings.lastSeen,
@@ -237,7 +314,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                   _DetailActionTile(
                     icon: Icons.phone_outlined,
                     title: strings.contactOwner,
-                    subtitle: lostPet.ownerPhoneNumber,
+                    subtitle: lostPet.ownerPhoneNumber!,
                     onTap: () => _contactOwner(context, strings, lostPet),
                   ),
                 ],
@@ -270,6 +347,17 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                     spacing: 12,
                     runSpacing: 12,
                     children: [
+                      OutlinedButton.icon(
+                        onPressed: _statusInFlight
+                            ? null
+                            : () => _setResolution(lostPet, strings),
+                        icon: Icon(lostPet.isResolved
+                            ? Icons.replay_outlined
+                            : Icons.check_circle_outline),
+                        label: Text(lostPet.isResolved
+                            ? strings.reopenLostPet
+                            : strings.markLostPetFound),
+                      ),
                       OutlinedButton.icon(
                         onPressed: () => _editLostPet(lostPet),
                         icon: const Icon(Icons.edit_outlined),

@@ -20,6 +20,7 @@ from app.features.lost_pets.application.schemas import (
     LostPetFollowUpItem,
     LostPetListItem,
     LostPetMapListItem,
+    LostPetResolutionRequest,
     LostPetResponse,
     LostPetUpdateRequest,
     to_lost_pet_map_page_response,
@@ -146,13 +147,22 @@ class LostPetsService:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise
 
-    def get_lost_pet(self, lost_pet_id: UUID) -> LostPetResponse:
+    def get_lost_pet(self, lost_pet_id: UUID, user: AuthUser | None = None) -> LostPetResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             item = repository.get_by_id(lost_pet_id)
             if item is None:
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
-            return to_lost_pet_response(item)
+            response = to_lost_pet_response(item)
+            if item.is_resolved and (user is None or user.id != item.user_id):
+                return response.model_copy(
+                    update={
+                        "owner_phone_number": None,
+                        "owner_telegram_username": None,
+                        "last_seen_location": None,
+                    }
+                )
+            return response
 
     def update_lost_pet(
         self,
@@ -273,6 +283,20 @@ class LostPetsService:
             if current.deleted_at is not None:
                 return
             repository.soft_delete(lost_pet_id, datetime.now(UTC))
+
+    def set_resolution(
+        self, lost_pet_id: UUID, user: AuthUser, payload: LostPetResolutionRequest
+    ) -> LostPetResponse:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            current = repository.get_by_id(lost_pet_id, for_update=True)
+            self._require_owner(current, user)
+            updated = repository.set_resolution(
+                lost_pet_id,
+                is_resolved=payload.is_resolved,
+                changed_at=datetime.now(UTC),
+            )
+            return to_lost_pet_response(updated)
 
     def contact_owner(self, lost_pet_id: UUID, user: AuthUser) -> None:
         with self.db_session_manager.session_scope() as session:

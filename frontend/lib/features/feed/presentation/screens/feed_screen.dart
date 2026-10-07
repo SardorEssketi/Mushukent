@@ -61,12 +61,6 @@ Future<ApiPage<FeedItem>> _fetchFeedPage(
 final feedPostsProvider =
     FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
   ref.watch(postMutationRevisionProvider);
-  final lostPetOverrides = ref.watch(lostPetMutationOverridesProvider);
-  final deletedLostPetIds = ref.watch(deletedLostPetIdsProvider);
-  final resolvedLostPetIds = ref.watch(resolvedLostPetIdsProvider);
-  final adoptionOverrides = ref.watch(adoptionMutationOverridesProvider);
-  final deletedAdoptionIds = ref.watch(deletedAdoptionIdsProvider);
-  final resolvedAdoptionIds = ref.watch(resolvedAdoptionIdsProvider);
   final api = ref.watch(mushukistanApiProvider);
   final mode = ref.watch(feedModeProvider);
   final period =
@@ -74,24 +68,11 @@ final feedPostsProvider =
   final includeViewerContext = ref.watch(
     authControllerProvider.select((state) => state.isAuthenticated),
   );
-  final page = await _fetchFeedPage(
+  return _fetchFeedPage(
     api,
     mode: mode,
     period: period,
     includeViewerContext: includeViewerContext,
-  );
-  return ApiPage<FeedItem>(
-    items: _applyPostMutations(
-      page.items,
-      overrides: lostPetOverrides,
-      deletedIds: deletedLostPetIds,
-      resolvedIds: resolvedLostPetIds,
-      adoptionOverrides: adoptionOverrides,
-      deletedAdoptionIds: deletedAdoptionIds,
-      resolvedAdoptionIds: resolvedAdoptionIds,
-    ),
-    nextCursor: page.nextCursor,
-    limit: page.limit,
   );
 });
 
@@ -212,9 +193,31 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     _replaceOnNextPage = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        _reconcileActiveIds(page.items);
         _checkLoadMore();
       }
     });
+  }
+
+  void _reconcileActiveIds(List<FeedItem> items) {
+    final activeLostPets =
+        items.whereType<LostPetData>().map((item) => item.id).toSet();
+    final activeAdoptions =
+        items.whereType<AdoptionPostData>().map((item) => item.id).toSet();
+    if (activeLostPets.isNotEmpty) {
+      final previous = ref.read(resolvedLostPetIdsProvider);
+      if (previous.any(activeLostPets.contains)) {
+        ref.read(resolvedLostPetIdsProvider.notifier).state =
+            previous.difference(activeLostPets);
+      }
+    }
+    if (activeAdoptions.isNotEmpty) {
+      final previous = ref.read(resolvedAdoptionIdsProvider);
+      if (previous.any(activeAdoptions.contains)) {
+        ref.read(resolvedAdoptionIdsProvider.notifier).state =
+            previous.difference(activeAdoptions);
+      }
+    }
   }
 
   void _checkLoadMore() {
@@ -269,6 +272,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 : next;
         _loadingMore = false;
       });
+      _reconcileActiveIds(page.items);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _checkLoadMore();
       });
@@ -330,10 +334,14 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     }
     final items = _deduplicate(_applyPostMutations(
       [...?_firstPage?.items, ..._laterItems],
-      overrides: ref.watch(lostPetMutationOverridesProvider),
+      overrides: pageAsync.isLoading || pageAsync.hasError || _pageError
+          ? ref.watch(lostPetMutationOverridesProvider)
+          : const {},
       deletedIds: ref.watch(deletedLostPetIdsProvider),
       resolvedIds: ref.watch(resolvedLostPetIdsProvider),
-      adoptionOverrides: ref.watch(adoptionMutationOverridesProvider),
+      adoptionOverrides: pageAsync.isLoading || pageAsync.hasError || _pageError
+          ? ref.watch(adoptionMutationOverridesProvider)
+          : const {},
       deletedAdoptionIds: ref.watch(deletedAdoptionIdsProvider),
       resolvedAdoptionIds: ref.watch(resolvedAdoptionIdsProvider),
     ));
@@ -701,16 +709,17 @@ class _LostPetCard extends StatelessWidget {
               onPressed: openPost,
             ),
             const Spacer(),
-            TextButton.icon(
-              onPressed: () {
-                final location = lostPet.lastSeenLocation;
-                context.go(
-                    '/map?lat=${location.latitude}&lon=${location.longitude}'
-                    '&lostPetId=${lostPet.id}');
-              },
-              icon: const Icon(Icons.map_outlined, size: 19),
-              label: Text(strings.viewOnMap),
-            ),
+            if (lostPet.lastSeenLocation != null)
+              TextButton.icon(
+                onPressed: () {
+                  final location = lostPet.lastSeenLocation!;
+                  context.go(
+                      '/map?lat=${location.latitude}&lon=${location.longitude}'
+                      '&lostPetId=${lostPet.id}');
+                },
+                icon: const Icon(Icons.map_outlined, size: 19),
+                label: Text(strings.viewOnMap),
+              ),
           ]),
         ),
       ],

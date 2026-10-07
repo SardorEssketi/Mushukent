@@ -53,7 +53,7 @@ class _LostPetEditScreenState extends ConsumerState<LostPetEditScreen> {
     _initialized = true;
     _petNameController.text = pet.petName;
     _infoController.text = pet.additionalInfo ?? '';
-    _phoneController.text = pet.ownerPhoneNumber;
+    _phoneController.text = pet.ownerPhoneNumber ?? '';
     _telegramController.text = pet.ownerTelegramUsername ?? '';
     _location = pet.lastSeenLocation;
   }

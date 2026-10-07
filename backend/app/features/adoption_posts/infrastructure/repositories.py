@@ -137,6 +137,32 @@ class SqlAlchemyAdoptionPostRepository:
             self.session.delete(pending)
         self.session.flush()
 
+    def set_resolution(
+        self, adoption_post_id: UUID, *, is_resolved: bool, changed_at: datetime
+    ) -> AdoptionPostRecord:
+        item = self.session.get(schema.AdoptionPost, adoption_post_id)
+        if item is None:
+            raise RuntimeError("Locked adoption post could not be loaded for resolution.")
+        if item.is_resolved != is_resolved:
+            item.is_resolved = is_resolved
+            item.updated_at = changed_at
+        if is_resolved:
+            pending = self.session.scalar(
+                select(schema.AdoptionFollowUp)
+                .where(
+                    schema.AdoptionFollowUp.adoption_post_id == adoption_post_id,
+                    schema.AdoptionFollowUp.completed_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if pending is not None:
+                self.session.delete(pending)
+        self.session.flush()
+        result = self.get_by_id(adoption_post_id)
+        if result is None:
+            raise RuntimeError("Resolved adoption post could not be loaded.")
+        return result
+
     def record_contact(self, adoption_post_id: UUID, contacting_user_id: UUID) -> bool:
         post = self.session.scalar(
             select(schema.AdoptionPost)

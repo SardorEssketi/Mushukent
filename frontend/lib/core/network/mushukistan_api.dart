@@ -148,7 +148,6 @@ class MushukistanApi {
   Future<LostPetData> getLostPet(String lostPetId) {
     return _client.get<LostPetData>(
       'lost-pets/$lostPetId',
-      authenticated: false,
       decoder: (json) => LostPetData.fromJson(json),
     );
   }
@@ -178,6 +177,15 @@ class MushukistanApi {
     );
   }
 
+  Future<LostPetData> setLostPetResolution(String lostPetId,
+      {required bool isResolved}) {
+    return _client.patchJson<LostPetData>(
+      'lost-pets/$lostPetId/resolution',
+      body: {'is_resolved': isResolved},
+      decoder: (json) => LostPetData.fromJson(json),
+    );
+  }
+
   Future<ApiPage<LostPetData>> listMyLostPets(
       {int limit = 50, String? cursor}) {
     return _client.get<ApiPage<LostPetData>>(
@@ -193,7 +201,6 @@ class MushukistanApi {
   Future<AdoptionPostData> getAdoptionPost(String adoptionPostId) {
     return _client.get<AdoptionPostData>(
       'adoption-posts/$adoptionPostId',
-      authenticated: false,
       decoder: (json) => AdoptionPostData.fromJson(json),
     );
   }
@@ -219,6 +226,15 @@ class MushukistanApi {
     return _client.postJson<AdoptionPostData>(
       'adoption-posts/follow-ups/$followUpId/answer',
       body: {'answer': yes ? 'yes' : 'no'},
+      decoder: (json) => AdoptionPostData.fromJson(json),
+    );
+  }
+
+  Future<AdoptionPostData> setAdoptionResolution(String adoptionPostId,
+      {required bool isResolved}) {
+    return _client.patchJson<AdoptionPostData>(
+      'adoption-posts/$adoptionPostId/resolution',
+      body: {'is_resolved': isResolved},
       decoder: (json) => AdoptionPostData.fromJson(json),
     );
   }
@@ -1368,12 +1384,12 @@ class LostPetData extends FeedItem {
   String get itemType => 'lost_pet';
   final PostAuthorData? author;
   final String petName;
-  final String ownerPhoneNumber;
+  final String? ownerPhoneNumber;
   final String? ownerTelegramUsername;
   final String photoUrl;
   final String? thumbUrl;
   final List<String> photoUrls;
-  final GeoPoint lastSeenLocation;
+  final GeoPoint? lastSeenLocation;
   final String? additionalInfo;
   final bool isResolved;
   final int commentCount;
@@ -1392,12 +1408,14 @@ class LostPetData extends FeedItem {
       petName: _readString(map['pet_name']),
       author:
           map['author'] == null ? null : PostAuthorData.fromJson(map['author']),
-      ownerPhoneNumber: _readString(map['owner_phone_number']),
+      ownerPhoneNumber: _readStringOrNull(map['owner_phone_number']),
       ownerTelegramUsername: _readStringOrNull(map['owner_telegram_username']),
       photoUrl: photoUrl,
       thumbUrl: _readStringOrNull(map['thumb_url']),
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
-      lastSeenLocation: GeoPoint.fromJson(map['last_seen_location']),
+      lastSeenLocation: map['last_seen_location'] == null
+          ? null
+          : GeoPoint.fromJson(map['last_seen_location']),
       additionalInfo: _readStringOrNull(map['additional_info']),
       isResolved: _readBool(map['is_resolved']),
       commentCount: _readInt(map['comment_count']),
@@ -1483,7 +1501,7 @@ class AdoptionPostData extends FeedItem {
   String get itemType => 'adoption';
   final PostAuthorData? author;
   final String petName;
-  final String ownerPhoneNumber;
+  final String? ownerPhoneNumber;
   final String? ownerTelegramUsername;
   final String photoUrl;
   final String? thumbUrl;
@@ -1506,7 +1524,7 @@ class AdoptionPostData extends FeedItem {
       petName: _readString(map['pet_name']),
       author:
           map['author'] == null ? null : PostAuthorData.fromJson(map['author']),
-      ownerPhoneNumber: _readString(map['owner_phone_number']),
+      ownerPhoneNumber: _readStringOrNull(map['owner_phone_number']),
       ownerTelegramUsername: _readStringOrNull(map['owner_telegram_username']),
       photoUrl: photoUrl,
       thumbUrl: _readStringOrNull(map['thumb_url']),

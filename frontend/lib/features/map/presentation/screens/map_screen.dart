@@ -174,6 +174,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return;
     }
     final requestGeneration = _viewportRequestGuard.begin();
+    final mutationRevision = ref.read(postMutationRevisionProvider);
     final force = _forceNextDynamicRefresh;
     _forceNextDynamicRefresh = false;
     final layers = ref.read(_mapLayersProvider);
@@ -216,6 +217,22 @@ class _MapScreenState extends ConsumerState<MapScreen>
       }
       final cats = results[0] as ApiPage<CatSummary>?;
       final lostPets = results[1] as ApiPage<LostPetMapData>?;
+      if (lostPets != null &&
+          mutationRevision == ref.read(postMutationRevisionProvider)) {
+        final serverIds = lostPets.items.map((pet) => pet.id).toSet();
+        final overrides = ref.read(lostPetMutationOverridesProvider);
+        if (overrides.keys.any(serverIds.contains)) {
+          ref.read(lostPetMutationOverridesProvider.notifier).state = {
+            for (final entry in overrides.entries)
+              if (!serverIds.contains(entry.key)) entry.key: entry.value,
+          };
+        }
+        final locallyResolved = ref.read(resolvedLostPetIdsProvider);
+        if (locallyResolved.any(serverIds.contains)) {
+          ref.read(resolvedLostPetIdsProvider.notifier).state =
+              locallyResolved.difference(serverIds);
+        }
+      }
       if ((cats != null && !identical(cats, _catPage)) ||
           (lostPets != null && !identical(lostPets, _lostPetPage))) {
         setState(() {
@@ -664,12 +681,12 @@ class _MapScreenState extends ConsumerState<MapScreen>
           continue;
         }
         final override = lostPetOverrides[lostPet.id];
-        final visiblePet = override == null
+        final visiblePet = override == null || override.lastSeenLocation == null
             ? lostPet
             : LostPetMapData(
                 id: override.id,
                 petName: override.petName,
-                lastSeenLocation: override.lastSeenLocation,
+                lastSeenLocation: override.lastSeenLocation!,
                 createdAt: lostPet.createdAt,
                 isResolved: override.isResolved,
               );

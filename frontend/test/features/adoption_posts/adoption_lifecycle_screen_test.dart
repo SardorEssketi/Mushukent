@@ -45,6 +45,72 @@ Map<String, Object?> _post({bool resolved = false}) => {
     };
 
 void main() {
+  testWidgets('resolved public rehoming detail works without contact data',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler(
+        'GET',
+        'adoption-posts/adoption-1',
+        (_) => {
+              ..._post(resolved: true),
+              'owner_phone_number': null,
+              'owner_telegram_username': null,
+            });
+    apiClient.setHandler('GET', 'adoption-posts/adoption-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'viewer-1');
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Rehomed'), findsOneWidget);
+    expect(find.textContaining('hidden from others'), findsOneWidget);
+    expect(find.text('Contact Owner'), findsNothing);
+    expect(find.text('Mark as rehomed'), findsNothing);
+    expect(find.text('Reopen rehoming post'), findsNothing);
+  });
+
+  testWidgets('owner can mark a rehoming post complete and reopen it',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    var resolved = false;
+    apiClient.setHandler(
+        'GET', 'adoption-posts/adoption-1', (_) => _post(resolved: resolved));
+    apiClient.setHandler('GET', 'adoption-posts/adoption-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    apiClient.setHandler('PATCH', 'adoption-posts/adoption-1/resolution',
+        (call) {
+      resolved = (call.body as Map<String, dynamic>)['is_resolved'] as bool;
+      return _post(resolved: resolved);
+    });
+    final container = _container(apiClient);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
+    ));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Mark as rehomed'), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Mark as rehomed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Mark as rehomed'));
+    await tester.pumpAndSettle();
+    expect(resolved, isTrue);
+    expect(container.read(resolvedAdoptionIdsProvider), contains('adoption-1'));
+    await tester.scrollUntilVisible(find.text('Reopen rehoming post'), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Reopen rehoming post'));
+    await tester.pumpAndSettle();
+    expect(resolved, isFalse);
+    expect(container.read(resolvedAdoptionIdsProvider),
+        isNot(contains('adoption-1')));
+  });
+
   testWidgets('creation explains contact without a mandatory checkbox',
       (tester) async {
     final container = _container(FakeApiClient());

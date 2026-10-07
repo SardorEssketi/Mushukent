@@ -85,7 +85,8 @@ class LostPetListItem(BaseModel):
 
 
 class LostPetResponse(LostPetListItem):
-    pass
+    owner_phone_number: str | None
+    last_seen_location: GeoPoint | None
 
 
 class LostPetMapListItem(BaseModel):
@@ -110,6 +111,12 @@ class LostPetFollowUpAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     answer: Literal["yes", "no"]
+
+
+class LostPetResolutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_resolved: bool
 
 
 def to_lost_pet_response(item: LostPetRecord) -> LostPetResponse:

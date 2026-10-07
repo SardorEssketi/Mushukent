@@ -20,6 +20,7 @@ from app.features.adoption_posts.application.schemas import (
     AdoptionPostListItem,
     AdoptionPostResponse,
     AdoptionPostUpdateRequest,
+    AdoptionResolutionRequest,
     to_adoption_post_page_response,
     to_adoption_post_response,
 )
@@ -136,13 +137,20 @@ class AdoptionPostsService:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise
 
-    def get_adoption_post(self, adoption_post_id: UUID) -> AdoptionPostResponse:
+    def get_adoption_post(
+        self, adoption_post_id: UUID, user: AuthUser | None = None
+    ) -> AdoptionPostResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             item = repository.get_by_id(adoption_post_id)
             if item is None:
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
-            return to_adoption_post_response(item)
+            response = to_adoption_post_response(item)
+            if item.is_resolved and (user is None or user.id != item.user_id):
+                return response.model_copy(
+                    update={"owner_phone_number": None, "owner_telegram_username": None}
+                )
+            return response
 
     def update_adoption_post(
         self,
@@ -248,6 +256,20 @@ class AdoptionPostsService:
             assert current is not None
             if current.deleted_at is None:
                 repository.soft_delete(adoption_post_id, datetime.now(UTC))
+
+    def set_resolution(
+        self, adoption_post_id: UUID, user: AuthUser, payload: AdoptionResolutionRequest
+    ) -> AdoptionPostResponse:
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            current = repository.get_by_id(adoption_post_id, for_update=True)
+            self._require_owner(current, user)
+            updated = repository.set_resolution(
+                adoption_post_id,
+                is_resolved=payload.is_resolved,
+                changed_at=datetime.now(UTC),
+            )
+            return to_adoption_post_response(updated)
 
     def contact_owner(self, adoption_post_id: UUID, user: AuthUser) -> None:
         with self.db_session_manager.session_scope() as session:

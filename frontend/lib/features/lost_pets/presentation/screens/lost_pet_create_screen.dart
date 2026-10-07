@@ -188,12 +188,12 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                'Create a lost-pet alert',
+                strings.createLostPetAlert,
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Use clear photos, a last-seen point, and public contact consent so people can reach you quickly.',
+                strings.createLostPetAlertHelp,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
