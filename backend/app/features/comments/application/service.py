@@ -51,11 +51,13 @@ class CommentsService:
         db_session_manager: DatabaseSessionManager,
         repository_factory: CommentRepositoryFactory,
         user_repository_factory: UserProfileRepositoryFactory,
+        notification_repository_factory=None,
     ) -> None:
         self.settings = settings
         self.db_session_manager = db_session_manager
         self.repository_factory = repository_factory
         self.user_repository_factory = user_repository_factory
+        self.notification_repository_factory = notification_repository_factory
 
     def create_comment(
         self,
@@ -68,7 +70,7 @@ class CommentsService:
             post = repository.lock_visible_post(post_id, viewer_user_id=user.id)
             if post is None or not self._can_view_post(post, user):
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")
-            self._validate_parent_comment(
+            parent = self._validate_parent_comment(
                 repository,
                 payload.parent_comment_id,
                 post_id=post_id,
@@ -85,6 +87,15 @@ class CommentsService:
                 )
             )
             repository.increment_post_comment_count(post_id)
+            self._notify_comment(
+                session,
+                created=created,
+                actor_id=user.id,
+                recipient_id=parent.user_id if parent else post.user_id,
+                target_kind="post",
+                target_id=post_id,
+                is_reply=parent is not None,
+            )
             logger.info(
                 "comment_created",
                 post_id=str(post_id),
@@ -106,7 +117,7 @@ class CommentsService:
             repository = self.repository_factory(session)
             if not repository.lost_pet_exists(lost_pet_id):
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
-            self._validate_parent_comment(
+            parent = self._validate_parent_comment(
                 repository,
                 payload.parent_comment_id,
                 lost_pet_id=lost_pet_id,
@@ -123,6 +134,17 @@ class CommentsService:
                 )
             )
             repository.increment_lost_pet_comment_count(lost_pet_id)
+            self._notify_comment(
+                session,
+                created=created,
+                actor_id=user.id,
+                recipient_id=(
+                    parent.user_id if parent else repository.lost_pet_owner_id(lost_pet_id)
+                ),
+                target_kind="lost_pet",
+                target_id=lost_pet_id,
+                is_reply=parent is not None,
+            )
             logger.info(
                 "lost_pet_comment_created",
                 lost_pet_id=str(lost_pet_id),
@@ -144,7 +166,7 @@ class CommentsService:
             repository = self.repository_factory(session)
             if not repository.adoption_post_exists(adoption_post_id):
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
-            self._validate_parent_comment(
+            parent = self._validate_parent_comment(
                 repository,
                 payload.parent_comment_id,
                 adoption_post_id=adoption_post_id,
@@ -161,6 +183,19 @@ class CommentsService:
                 )
             )
             repository.increment_adoption_post_comment_count(adoption_post_id)
+            self._notify_comment(
+                session,
+                created=created,
+                actor_id=user.id,
+                recipient_id=(
+                    parent.user_id
+                    if parent
+                    else repository.adoption_post_owner_id(adoption_post_id)
+                ),
+                target_kind="adoption_post",
+                target_id=adoption_post_id,
+                is_reply=parent is not None,
+            )
             logger.info(
                 "adoption_post_comment_created",
                 adoption_post_id=str(adoption_post_id),
@@ -461,9 +496,9 @@ class CommentsService:
         post_id: UUID | None = None,
         lost_pet_id: UUID | None = None,
         adoption_post_id: UUID | None = None,
-    ) -> None:
+    ):
         if parent_comment_id is None:
-            return
+            return None
 
         parent = repository.get_by_id(parent_comment_id)
         if parent is None or parent.deleted_at is not None:
@@ -480,6 +515,37 @@ class CommentsService:
                 "INVALID_PARENT_COMMENT",
                 "Reply must belong to the same post.",
             )
+        return parent
+
+    def _notify_comment(
+        self,
+        session,
+        *,
+        created,
+        actor_id: UUID,
+        recipient_id: UUID | None,
+        target_kind: str,
+        target_id: UUID,
+        is_reply: bool,
+    ) -> None:
+        if (
+            self.notification_repository_factory is None
+            or recipient_id is None
+            or recipient_id == actor_id
+        ):
+            return
+        notifications = self.notification_repository_factory(session)
+        preferences = notifications.preferences(recipient_id)
+        notifications.create_event(
+            recipient_id=recipient_id,
+            actor_id=actor_id,
+            kind="reply" if is_reply else "comment",
+            target_kind=target_kind,
+            target_id=target_id,
+            comment_id=created.id,
+            event_key=f"comment:{created.id}",
+            push_enabled=preferences.push_replies if is_reply else preferences.push_comments,
+        )
 
     @staticmethod
     def _can_view_post(post, current_user: AuthUser | None) -> bool:

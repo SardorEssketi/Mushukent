@@ -7,6 +7,7 @@ import '../navigation/tab_actions.dart';
 import '../navigation/settings_changes_guard.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
 import '../../features/lost_pets/presentation/widgets/lost_pet_follow_up_listener.dart';
+import '../../features/notifications/application/notification_push.dart';
 
 class AppShellScaffold extends ConsumerWidget {
   const AppShellScaffold({
@@ -46,7 +47,9 @@ class AppShellScaffold extends ConsumerWidget {
 
     return Scaffold(
       body: AuthenticatedOnboardingFlow(
-        child: LostPetFollowUpListener(child: navigationShell),
+        child: NotificationLifecycle(
+          child: LostPetFollowUpListener(child: navigationShell),
+        ),
       ),
       bottomNavigationBar: hideNavigation
           ? null

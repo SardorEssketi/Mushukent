@@ -51,10 +51,12 @@ class LostPetsService:
         db_session_manager: DatabaseSessionManager,
         repository_factory: LostPetRepositoryFactory,
         media_storage_service: MediaStorageService | None = None,
+        notification_repository_factory=None,
     ) -> None:
         self.db_session_manager = db_session_manager
         self.repository_factory = repository_factory
         self.media_storage_service = media_storage_service
+        self.notification_repository_factory = notification_repository_factory
 
     def create_lost_pet(
         self,
@@ -129,6 +131,16 @@ class LostPetsService:
                         photos=photo_drafts,
                     )
                 )
+                if self.notification_repository_factory is not None:
+                    notifications = self.notification_repository_factory(session)
+                    recipients = notifications.nearby_recipients(
+                        latitude=payload.last_seen_location.latitude,
+                        longitude=payload.last_seen_location.longitude,
+                        owner_id=user.id,
+                    )
+                    notifications.create_nearby_events(
+                        lost_pet_id=created.id, recipient_ids=recipients
+                    )
                 return to_lost_pet_response(created)
         except StorageValidationError as exc:
             self._cleanup_uploaded_objects(uploaded_keys)

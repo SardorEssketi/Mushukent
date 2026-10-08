@@ -284,6 +284,29 @@ class UsersService:
                 .values(revoked_at=now)
             )
             session.execute(
+                update(schema.Notification)
+                .where(schema.Notification.actor_id == user.id)
+                .values(actor_id=None)
+            )
+            session.execute(
+                delete(schema.NotificationPushJob).where(
+                    schema.NotificationPushJob.recipient_id == user.id
+                )
+            )
+            session.execute(
+                delete(schema.Notification).where(schema.Notification.recipient_id == user.id)
+            )
+            session.execute(
+                delete(schema.NotificationDevice).where(
+                    schema.NotificationDevice.user_id == user.id
+                )
+            )
+            session.execute(
+                delete(schema.NotificationPreference).where(
+                    schema.NotificationPreference.user_id == user.id
+                )
+            )
+            session.execute(
                 schema.Cat.__table__.update()
                 .where(schema.Cat.created_by == user.id)
                 .values(created_by=None)
@@ -315,6 +338,7 @@ class UsersService:
             user_model.is_active = False
             user_model.is_moderator = False
             user_model.last_login_at = None
+            user_model.last_active_at = None
 
             current.is_active = False
             session.flush()

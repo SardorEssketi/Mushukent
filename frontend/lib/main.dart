@@ -5,10 +5,13 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'app.dart';
 import 'core/config/app_environment.dart';
 import 'core/startup/startup_log.dart';
+import 'features/notifications/application/notification_push.dart';
 
-void main() {
+Future<void> main() async {
   logStartupStage('Dart entry reached');
   try {
+    WidgetsFlutterBinding.ensureInitialized();
+    await AndroidPushConfiguration.initialize();
     usePathUrlStrategy();
     final environment = AppEnvironment.fromBuildEnvironment();
     logStartupStage('Configuration initialized');

@@ -105,7 +105,7 @@ Posts
 Likes
 Comments
 Reports
-Notifications (future)
+Persistent notifications and Android push delivery
 
 PostGIS is used for:
 
@@ -489,7 +489,7 @@ Multiple cities
 
 without redesigning the core architecture.
 
-16. Future Expansion
+16. Notification Service and Future Expansion
 
 Future services may include:
 
@@ -497,7 +497,11 @@ AI Service
 
 ↓
 
-Notification Service
+Notification Service (implemented; delivery requires Firebase configuration)
+
+The authenticated notification API stores structured comment, direct-parent reply, and nearby Lost Pet events in PostgreSQL. It owns unread state, pagination, preferences, private alert points, and Android device-token registration. Comment and Lost Pet creation enqueue database delivery jobs in the same transaction as the source event; they do not call FCM. A separate Compose worker, running the same backend image, reads due follow-ups and seven-day inactivity cycles, claims delivery jobs with `FOR UPDATE SKIP LOCKED`, and calls FCM outside the originating action. Push retries are bounded to four attempts. Unknown/invalid tokens are retired. A restart may retry an ambiguously acknowledged send, so physical FCM delivery is best effort while event/job rows are deduplicated.
+
+Nearby alert points are explicitly chosen, private, and matched to newly published Lost Pets with PostGIS geography `ST_DWithin` at a fixed 500 m. No background location tracking is used. Coarse authenticated launch/resume activity updates `users.last_active_at` at most once per 15 minutes. The worker adds 15 minutes of grace to the seven-day threshold so a throttled write cannot cause an early reminder. Inactivity is push-only and marked once per inactivity period. The existing Lost Pet/Rehoming follow-up rows remain authoritative; the worker only surfaces due rows by push. Android push requires externally provisioned Firebase client configuration, a private backend service-account file, and a token encryption key. Android FCM auto-initialization starts disabled and is enabled after device notification permission. Web has the in-app inbox, without Web Push.
 
 ↓
 

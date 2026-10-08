@@ -1,6 +1,7 @@
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/storage/token_store.dart';
+import '../../notifications/application/notification_push.dart';
 import '../domain/auth_models.dart';
 import '../domain/auth_repository.dart';
 
@@ -175,6 +176,26 @@ class MushukistanAuthRepository implements AuthRepository {
       refreshToken = await _tokenStore.readRefreshToken();
     } catch (_) {
       // Clear what is available even if a platform credential read fails.
+    }
+    if (accessToken != null) {
+      try {
+        final pushToken = await AndroidPushService.tokenForLogout();
+        if (pushToken != null) {
+          await _apiClient.postJson<void>(
+            'notifications/devices/unregister',
+            bearerToken: accessToken,
+            body: {'platform': 'android', 'token': pushToken},
+            decoder: (_) {},
+          );
+        }
+      } catch (_) {
+        // Account switching rebinds the token and drops old queued jobs.
+      }
+    }
+    try {
+      await AndroidPushService.clearRegisteredToken();
+    } catch (_) {
+      // A secure-storage failure must not block account logout.
     }
     await _tokenStore.delete();
     if (accessToken == null && refreshToken == null) return;

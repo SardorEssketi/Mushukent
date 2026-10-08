@@ -85,6 +85,16 @@ class SqlAlchemyCommentRepository(CommentRepository):
         )
         return exists is not None
 
+    def lost_pet_owner_id(self, lost_pet_id: UUID) -> UUID | None:
+        return self.session.scalar(
+            select(schema.LostPet.user_id).where(schema.LostPet.id == lost_pet_id)
+        )
+
+    def adoption_post_owner_id(self, adoption_post_id: UUID) -> UUID | None:
+        return self.session.scalar(
+            select(schema.AdoptionPost.user_id).where(schema.AdoptionPost.id == adoption_post_id)
+        )
+
     def adoption_post_exists(self, adoption_post_id: UUID) -> bool:
         exists = self.session.scalar(
             select(schema.AdoptionPost.id).where(

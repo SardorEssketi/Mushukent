@@ -372,12 +372,20 @@ Profile settings and account lifecycle controls
 Leaderboards
 Reports
 Moderation
+Notification behavior
+
+- A top-level comment on a user's ordinary, Lost Pet, or Rehoming post creates one persistent in-app notification for the owner. A reply creates one for the direct parent-comment author. Self-actions create none; an owner who is also the parent author receives one reply event.
+- New Lost Pets create in-app alerts only for users who explicitly enabled alerts and saved a private point within 500 m. The owner is excluded. Android push follows the same eligibility when permission and a device token are available.
+- Existing one-hour Lost Pet/Rehoming follow-ups remain the sole lifecycle source. A due cycle can enqueue one Android push per device; the existing in-app follow-up dialog remains authoritative.
+- An inactivity reminder is push-only, disabled by default, and sent once after seven full days without coarse authenticated app activity. Returning resets the inactivity cycle.
+- Comments, replies, and existing follow-ups default to push enabled at product preference level, subject to Android permission. Nearby and inactivity start disabled. No permission prompt appears on first launch; the user requests it in notification settings.
+- The authenticated bell opens a paginated inbox. Opening an item marks only that item read; opening the inbox does not mark all read. Deleted or inaccessible targets show an unavailable-content message. Push and inbox text support English, Russian, and Uzbek.
+
 13. Out of Scope
 
 The following features are not included in MVP:
 
 AI recognition
-Push notifications
 Web application
 Multi-city support
 Video uploads
@@ -406,7 +414,7 @@ Similarity suggestions
 Cat movement history
 Version 2.0
 Web application
-Push notifications
+Web Push and iOS push
 Analytics dashboard
 Multi-city support
 15. Risks

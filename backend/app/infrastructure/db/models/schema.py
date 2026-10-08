@@ -148,6 +148,7 @@ class User(UUIDPrimaryKeyMixin, Base):
         server_default=text("now()"),
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_active_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_cats: Mapped[list["Cat"]] = relationship(
         back_populates="creator",
@@ -196,6 +197,11 @@ class User(UUIDPrimaryKeyMixin, Base):
             unique=True,
         ),
         Index("idx_users_registered_at", "registered_at"),
+        Index(
+            "idx_users_active_last_activity",
+            "last_active_at",
+            postgresql_where=text("is_active = true AND last_active_at IS NOT NULL"),
+        ),
     )
 
 
@@ -952,4 +958,147 @@ class AdoptionPostPhoto(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
             "adoption_post_id",
             "position",
         ),
+    )
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    push_comments: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    push_replies: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    push_followups: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("true")
+    )
+    nearby_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    inactivity_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    alert_location: Mapped[object | None] = mapped_column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=False), nullable=True
+    )
+    last_inactivity_cycle_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "NOT nearby_enabled OR alert_location IS NOT NULL",
+            name="notification_preferences_nearby_requires_location",
+        ),
+        Index(
+            "idx_notification_preferences_alert_geography",
+            text("(alert_location::geography)"),
+            postgresql_using="gist",
+            postgresql_where=text("nearby_enabled = true"),
+        ),
+    )
+
+
+class Notification(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "notifications"
+
+    recipient_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    actor_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    target_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    target_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    comment_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    event_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('comment', 'reply', 'nearby_lost_pet')", name="notifications_kind_valid"
+        ),
+        CheckConstraint(
+            "target_kind IN ('post', 'lost_pet', 'adoption_post')",
+            name="notifications_target_kind_valid",
+        ),
+        Index(
+            "idx_notifications_recipient_page",
+            "recipient_id",
+            text("created_at DESC"),
+            text("id DESC"),
+        ),
+        Index(
+            "idx_notifications_recipient_unread",
+            "recipient_id",
+            postgresql_where=text("read_at IS NULL"),
+        ),
+    )
+
+
+class NotificationDevice(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "notification_devices"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    platform: Mapped[str] = mapped_column(Text, nullable=False)
+    token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        CheckConstraint("platform = 'android'", name="notification_devices_platform_valid"),
+        Index("idx_notification_devices_user", "user_id"),
+    )
+
+
+class NotificationPushJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    __tablename__ = "notification_push_jobs"
+
+    recipient_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    device_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("notification_devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    notification_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("notifications.id", ondelete="CASCADE"), nullable=True
+    )
+    event_key: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    target_kind: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    activity_cycle_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("event_key", "device_id", name="uq_notification_push_event_device"),
+        CheckConstraint(
+            "status IN ('pending', 'sending', 'sent', 'failed', 'cancelled')",
+            name="notification_push_jobs_status_valid",
+        ),
+        CheckConstraint("attempts >= 0", name="notification_push_jobs_attempts_valid"),
+        Index(
+            "idx_notification_push_jobs_due",
+            "next_attempt_at",
+            postgresql_where=text("status IN ('pending', 'sending')"),
+        ),
+        Index("idx_notification_push_jobs_recipient", "recipient_id"),
     )

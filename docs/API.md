@@ -1081,6 +1081,18 @@ Common error response examples
 - 429 RATE_LIMIT_EXCEEDED
   {"success":false,"error":{"code":"RATE_LIMIT_EXCEEDED","message":"Too many requests."}}
 
+Notification API (authenticated)
+--------------------------------
+- `GET /api/v1/notifications?limit=20&cursor=...`: newest-first keyset page. Items contain `id`, structured `kind` (`comment`, `reply`, `nearby_lost_pet`), nullable actor name, `target_kind`, `target_id`, nullable `comment_id`, `created_at`, and nullable `read_at`. The cursor is opaque. Deleted actors display generically; unavailable targets remain in history.
+- `GET /api/v1/notifications/unread-count`: `{count}` for the current user.
+- `POST /api/v1/notifications/{id}/read`: mark one of the caller's items read; 404 for another user's or missing item.
+- `POST /api/v1/notifications/read-all`: mark unread items read, returning `{marked}`. Opening the inbox itself does not change read state.
+- `GET/PATCH /api/v1/notifications/preferences`: owner-only product preferences `push_comments`, `push_replies`, `push_followups` (default true), `nearby_enabled`, `inactivity_enabled` (default false), and private `alert_location` (`{latitude, longitude}` or null in the response). `push_available` reports server configuration. Enabling nearby without an alert point returns 422. Setting `nearby_enabled=false` removes the stored point. These fields are never included in public profile responses.
+- `POST /api/v1/notifications/activity`: coarse authenticated launch/resume signal; the server limits writes to once per 15 minutes. 204.
+- `POST /api/v1/notifications/devices` and `POST /api/v1/notifications/devices/unregister`: body `{platform:"android",token:"..."}`. Registration may also include `previous_token` to replace an older token belonging to the same authenticated user atomically. These endpoints require the current user. Registration returns 503 until private FCM configuration is provisioned. Tokens are encrypted at rest, hashed for uniqueness, and never returned by public APIs.
+
+The inbox works without Firebase. Android FCM payloads include only event kind, notification ID and allowlisted target identifiers; no contact details, full comment body, or precise coordinates. Due follow-ups and inactivity are push-only. The worker derives due follow-ups from existing records; it does not add an alternate follow-up API.
+
 Implementation notes for backend engineers
 ------------------------------------------
 - Use Pydantic models listed above to validate request/response shapes and generate OpenAPI later.

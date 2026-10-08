@@ -27,6 +27,8 @@ import '../../features/map/presentation/screens/map_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_report_detail_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_reports_screen.dart';
 import '../../features/moderation/presentation/screens/post_history_screen.dart';
+import '../../features/notifications/presentation/notification_center_screen.dart';
+import '../../features/notifications/presentation/notification_settings_screen.dart';
 import '../../features/moderation/presentation/screens/report_content_screen.dart';
 import '../../features/posts/presentation/screens/post_detail_screen.dart';
 import '../../features/posts/presentation/screens/post_edit_screen.dart';
@@ -69,6 +71,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isModeratorRoute = location.startsWith('/moderation');
       final isProtectedRoute = location.startsWith('/add') ||
           location.startsWith('/profile') ||
+          location.startsWith('/notifications') ||
           location == '/report' ||
           ((location.startsWith('/posts/') ||
                   location.startsWith('/lost-pets/') ||
@@ -318,6 +321,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
+        path: '/notifications',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const NotificationCenterScreen(),
+        routes: [
+          GoRoute(
+            path: 'settings',
+            builder: (context, state) => const NotificationSettingsScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
         path: '/users/:userId',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
@@ -348,8 +362,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/posts/:postId',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) =>
-            PostDetailScreen(postId: state.pathParameters['postId'] ?? ''),
+        builder: (context, state) => PostDetailScreen(
+          postId: state.pathParameters['postId'] ?? '',
+          focusComments: state.uri.queryParameters['comments'] == '1',
+        ),
       ),
       GoRoute(
         path: '/posts/:postId/edit',
@@ -362,6 +378,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => LostPetDetailScreen(
           lostPetId: state.pathParameters['lostPetId'] ?? '',
+          focusComments: state.uri.queryParameters['comments'] == '1',
         ),
       ),
       GoRoute(
@@ -376,6 +393,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => AdoptionPostDetailScreen(
           adoptionPostId: state.pathParameters['adoptionPostId'] ?? '',
+          focusComments: state.uri.queryParameters['comments'] == '1',
         ),
       ),
       GoRoute(

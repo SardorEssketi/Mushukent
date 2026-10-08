@@ -30,9 +30,11 @@ final adoptionPostDetailProvider = FutureProvider.autoDispose
 });
 
 class AdoptionPostDetailScreen extends ConsumerStatefulWidget {
-  const AdoptionPostDetailScreen({super.key, required this.adoptionPostId});
+  const AdoptionPostDetailScreen(
+      {super.key, required this.adoptionPostId, this.focusComments = false});
 
   final String adoptionPostId;
+  final bool focusComments;
 
   @override
   ConsumerState<AdoptionPostDetailScreen> createState() =>
@@ -329,9 +331,12 @@ class _AdoptionPostDetailScreenState
                 ),
               ),
               const SizedBox(height: 24),
-              AdoptionPostCommentsSection(
-                adoptionPostId: adoptionPostId,
-                padding: EdgeInsets.zero,
+              CommentDeepLinkFocus(
+                focus: widget.focusComments,
+                child: AdoptionPostCommentsSection(
+                  adoptionPostId: adoptionPostId,
+                  padding: EdgeInsets.zero,
+                ),
               ),
             ],
           );

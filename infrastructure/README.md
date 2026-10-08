@@ -12,7 +12,7 @@ This directory contains MVP infrastructure configuration.
 ## Out of scope (MVP)
 - Redis
 - RabbitMQ
-- Background workers
+- General-purpose job queues or workers (notification push uses one dedicated Compose worker)
 - Monitoring stack (Prometheus/Grafana/ELK)
 - AI services
 
@@ -21,6 +21,8 @@ This directory contains MVP infrastructure configuration.
 Copy-Item .env.example .env
 docker compose up --build
 ```
+
+Notification worker: see `docs/DEPLOYMENT.md` for the optional `notifications` Compose profile, private Firebase credential mount, encryption key, migration, and validation steps. It must be deployed from the same backend release image as the API.
 
 ## Production deployment
 1. Set real production values in `.env`.

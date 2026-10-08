@@ -8,7 +8,7 @@ Scope: image handling for cat observations and profile avatars
 1. Purpose
 ----------
 This document defines the canonical image upload and storage design for MVP. It aligns with `API.md`, `DATABASE.md`, and MVP constraints:
-- no background workers,
+- no background image-processing workers,
 - no AI processing,
 - no additional storage services beyond Cloudflare R2.
 

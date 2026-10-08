@@ -6,6 +6,11 @@ services:
       APP_DEBUG: "false"
       ENABLE_API_DOCS: "false"
 
+  notification-worker:
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+
   nginx:
     ports:
       - "80:80"

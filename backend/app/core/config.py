@@ -1,7 +1,9 @@
 from functools import lru_cache
 from ipaddress import IPv4Network, IPv6Network, ip_network
+from pathlib import Path
 from typing import Self
 
+from cryptography.fernet import Fernet
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -78,6 +80,9 @@ class Settings(BaseSettings):
     )
 
     google_oauth_client_id: str = Field(default="", alias="GOOGLE_OAUTH_CLIENT_ID")
+    firebase_credentials_file: str = Field(default="", alias="FIREBASE_CREDENTIALS_FILE")
+    firebase_project_id: str = Field(default="", alias="FIREBASE_PROJECT_ID")
+    push_token_encryption_key: str = Field(default="", alias="PUSH_TOKEN_ENCRYPTION_KEY")
 
     @property
     def google_oauth_client_ids(self) -> list[str]:
@@ -131,6 +136,35 @@ class Settings(BaseSettings):
             errors.append("Complete Cloudflare R2 credentials are required in production.")
         if not self.r2_public_base_url:
             errors.append("R2_PUBLIC_BASE_URL must be set to a client-readable media origin.")
+        push_values = (
+            self.firebase_credentials_file,
+            self.firebase_project_id,
+            self.push_token_encryption_key,
+        )
+        if any(push_values):
+            if not all(push_values):
+                errors.append(
+                    "FCM push requires its credential file, project ID, and encryption key."
+                )
+            else:
+                if not Path(self.firebase_credentials_file).is_file():
+                    errors.append("FIREBASE_CREDENTIALS_FILE must name an existing private file.")
+                else:
+                    try:
+                        from firebase_admin import credentials
+
+                        certificate = credentials.Certificate(self.firebase_credentials_file)
+                        if certificate.project_id != self.firebase_project_id:
+                            raise ValueError("Firebase project mismatch")
+                    except Exception:
+                        errors.append(
+                            "FIREBASE_CREDENTIALS_FILE must contain a valid service account "
+                            "for FIREBASE_PROJECT_ID."
+                        )
+                try:
+                    Fernet(self.push_token_encryption_key.encode())
+                except (ValueError, TypeError):
+                    errors.append("PUSH_TOKEN_ENCRYPTION_KEY must be a valid Fernet key.")
         if errors:
             raise ValueError("Invalid production configuration: " + " ".join(errors))
         return self

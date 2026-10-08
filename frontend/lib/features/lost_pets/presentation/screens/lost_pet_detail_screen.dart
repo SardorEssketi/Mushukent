@@ -30,9 +30,11 @@ final lostPetDetailProvider = FutureProvider.autoDispose
 enum _LostPetDetailAction { report }
 
 class LostPetDetailScreen extends ConsumerStatefulWidget {
-  const LostPetDetailScreen({super.key, required this.lostPetId});
+  const LostPetDetailScreen(
+      {super.key, required this.lostPetId, this.focusComments = false});
 
   final String lostPetId;
+  final bool focusComments;
 
   @override
   ConsumerState<LostPetDetailScreen> createState() =>
@@ -377,9 +379,12 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                 ],
                 const SizedBox(height: 20),
                 const SizedBox(height: 24),
-                LostPetCommentsSection(
-                  lostPetId: lostPetId,
-                  padding: EdgeInsets.zero,
+                CommentDeepLinkFocus(
+                  focus: widget.focusComments,
+                  child: LostPetCommentsSection(
+                    lostPetId: lostPetId,
+                    padding: EdgeInsets.zero,
+                  ),
                 ),
               ],
             ),

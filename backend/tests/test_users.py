@@ -634,6 +634,51 @@ def test_delete_me_cleans_user_references_and_counters(
         owned_history_id = owned_history.id
         moderator_history_id = moderator_history.id
 
+        user.last_active_at = datetime.now(UTC)
+        preference = schema.NotificationPreference(
+            user_id=user.id,
+            nearby_enabled=True,
+            alert_location=WKTElement("POINT(69.2797 41.3111)", srid=4326),
+            inactivity_enabled=True,
+        )
+        own_notification = schema.Notification(
+            recipient_id=user.id,
+            actor_id=other_user.id,
+            kind="comment",
+            target_kind="post",
+            target_id=liked_post.id,
+            event_key=f"delete-test-inbox:{user.id}",
+        )
+        actor_notification = schema.Notification(
+            recipient_id=other_user.id,
+            actor_id=user.id,
+            kind="reply",
+            target_kind="post",
+            target_id=liked_post.id,
+            event_key=f"delete-test-actor:{user.id}",
+        )
+        device = schema.NotificationDevice(
+            user_id=user.id,
+            platform="android",
+            token_hash="a" * 64,
+            token_encrypted="test-encrypted-token",
+        )
+        session.add_all([preference, own_notification, actor_notification, device])
+        session.flush()
+        session.add(
+            schema.NotificationPushJob(
+                recipient_id=user.id,
+                device_id=device.id,
+                notification_id=own_notification.id,
+                event_key=own_notification.event_key,
+                kind="comment",
+                target_kind="post",
+                target_id=liked_post.id,
+            )
+        )
+        own_notification_id = own_notification.id
+        actor_notification_id = actor_notification.id
+
         session.add_all(
             [
                 schema.Like(post_id=liked_post.id, user_id=user.id),
@@ -666,6 +711,27 @@ def test_delete_me_cleans_user_references_and_counters(
         assert deleted.is_active is False
         assert deleted.is_moderator is False
         assert deleted.preferred_language == "en"
+        assert deleted.last_active_at is None
+        assert session.get(schema.NotificationPreference, user.id) is None
+        assert session.get(schema.Notification, own_notification_id) is None
+        actor_notification = session.get(schema.Notification, actor_notification_id)
+        assert actor_notification is not None and actor_notification.actor_id is None
+        assert (
+            session.scalar(
+                select(schema.NotificationDevice).where(
+                    schema.NotificationDevice.user_id == user.id
+                )
+            )
+            is None
+        )
+        assert (
+            session.scalar(
+                select(schema.NotificationPushJob).where(
+                    schema.NotificationPushJob.recipient_id == user.id
+                )
+            )
+            is None
+        )
 
         post = session.get(schema.Post, liked_post.id)
         assert post is not None

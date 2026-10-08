@@ -34,6 +34,8 @@ from app.features.likes.infrastructure.repositories import SqlAlchemyLikeReposit
 from app.features.lost_pets.application.service import LostPetsService
 from app.features.lost_pets.infrastructure.repositories import SqlAlchemyLostPetRepository
 from app.features.moderation.application.service import ModerationService
+from app.features.notifications.application.service import NotificationService
+from app.features.notifications.infrastructure.repository import NotificationRepository
 from app.features.places.application.service import PlacesService
 from app.features.places.infrastructure.repositories import SqlAlchemyPlaceRepository
 from app.features.posts.application.service import PostsService
@@ -157,6 +159,7 @@ def get_comments_service(request: Request) -> CommentsService:
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyCommentRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,
+        notification_repository_factory=NotificationRepository,
     )
 
 
@@ -208,6 +211,7 @@ def get_lost_pets_service(request: Request) -> LostPetsService:
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyLostPetRepository,
         media_storage_service=media_storage_service,
+        notification_repository_factory=NotificationRepository,
     )
 
 
@@ -223,6 +227,11 @@ def get_adoption_posts_service(request: Request) -> AdoptionPostsService:
         repository_factory=SqlAlchemyAdoptionPostRepository,
         media_storage_service=media_storage_service,
     )
+
+
+def get_notification_service(request: Request) -> NotificationService:
+    container = get_container(request)
+    return NotificationService(container.db_session_manager, container.settings)
 
 
 def get_object_storage(request: Request) -> ObjectStorage:

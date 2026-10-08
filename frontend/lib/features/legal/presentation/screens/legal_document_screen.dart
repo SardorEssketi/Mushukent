@@ -254,7 +254,7 @@ const _privacyPolicy = _LegalDocument(
         'Email address.',
         'Password hash for password accounts.',
         'Google Sign-In email/name when Google Sign-In is used.',
-        'Registration time, last login time, preferred language, and accepted legal-document version.',
+        'Registration time, last login time, coarse last-active time, preferred language, and accepted legal-document version.',
       ],
     ),
     _LegalSection(
@@ -270,6 +270,7 @@ const _privacyPolicy = _LegalDocument(
         'Current location when used for nearby search.',
         'Observation location when attached to a post.',
         'Cat canonical location, place-search location, and lost-pet last-seen location.',
+        'A private Lost Pet alert point only when you save one; it is removed when nearby alerts are disabled.',
         "Lost-pet posts publicly show the user's profile phone number only after explicit phone-publication consent.",
       ],
     ),
@@ -277,6 +278,7 @@ const _privacyPolicy = _LegalDocument(
       heading: 'Technical and security data',
       paragraphs: [
         'Mushukistan processes API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.',
+        'Android notification device tokens are encrypted at rest; token hashes support deduplication. Delivery retries are bounded, and full tokens are not placed in normal logs or public profiles.',
       ],
     ),
     _LegalSection(
@@ -295,6 +297,8 @@ const _privacyPolicy = _LegalDocument(
         'Show nearby cats, places, and map content.',
         'Operate lost-pet contact features.',
         'Enable comments, likes, reports, moderation, and account settings.',
+        'Store comment, reply, and nearby Lost Pet inbox events and their read state; send Android pushes through Firebase Cloud Messaging when permitted and enabled.',
+        'Send one optional push-only reminder after seven full days without authenticated app activity. No background location tracking is used.',
         'Prevent abuse, rate-limit requests, secure the service, and comply with legal obligations.',
       ],
     ),
@@ -311,6 +315,7 @@ const _privacyPolicy = _LegalDocument(
         'Cloudflare R2 for uploaded media and object metadata when configured.',
         'Google when a user chooses Google Sign-In.',
         'OpenStreetMap for map tiles and map/place data.',
+        'Google Firebase Cloud Messaging for Android push delivery when configured and permitted. Web Push is not used.',
         'Email provider: not configured in the verified repository.',
         'Backup provider: not configured in the verified repository.',
       ],
@@ -327,6 +332,7 @@ const _privacyPolicy = _LegalDocument(
       paragraphs: [
         'Active account and content data is retained while the account/content remains active.',
         'Account deletion anonymizes and deactivates the account, disables login, removes authentication credentials and profile personal data, deletes likes, removes account-related blocking records, removes affected leaderboard cache entries, hides and anonymizes user-owned posts, comments, lost-pet posts, and adoption/rehoming posts, clears copied contact details, and attempts best-effort media cleanup.',
+        'Account deletion also removes Android device push tokens, notification preferences, private alert point, last-active/reminder state, and received inbox rows. Notifications received by others no longer identify the deleted actor.',
         'Some non-public or anonymized records may remain where needed for service integrity, moderation, safety, abuse prevention, or legal compliance. The verified repository does not define a guaranteed automatic deletion period for all retained records.',
         'Backups are not configured in the verified repository. If backups are enabled later, backup retention and deletion schedules must be documented before production release.',
       ],

@@ -27,6 +27,39 @@ final adoptionPostCommentsProvider = FutureProvider.autoDispose
       .listAdoptionPostComments(adoptionPostId);
 });
 
+/// Scrolls to the existing comments section when a notification opens a post.
+class CommentDeepLinkFocus extends StatefulWidget {
+  const CommentDeepLinkFocus(
+      {super.key, required this.focus, required this.child});
+
+  final bool focus;
+  final Widget child;
+
+  @override
+  State<CommentDeepLinkFocus> createState() => _CommentDeepLinkFocusState();
+}
+
+class _CommentDeepLinkFocusState extends State<CommentDeepLinkFocus> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Scrollable.ensureVisible(
+            context,
+            duration: const Duration(milliseconds: 300),
+            alignment: 0.08,
+          );
+        }
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 class PostCommentsSection extends ConsumerStatefulWidget {
   const PostCommentsSection({
     super.key,

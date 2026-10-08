@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../notifications/presentation/notification_center_screen.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/navigation/tab_actions.dart';
@@ -359,6 +360,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
           ),
         ),
         actions: [
+          if (authenticated) const NotificationBell(),
           if (!authenticated)
             TextButton(
               onPressed: () => context.push('/login'),

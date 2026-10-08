@@ -540,9 +540,16 @@ Required screens:
 - Moderator Reports List
 - Moderator Report Detail
 
+Notifications
+-------------
+- The authenticated Feed app bar contains a bell with an unread badge. The inbox lists newest first, shows unread state and time, supports load more, and has an explicit Mark all as read action.
+- Tapping a comment or reply opens its post at the existing comments section. Tapping a nearby Lost Pet opens its detail. A due follow-up push opens Feed so the existing persisted follow-up listener can present the due question. An inactivity push opens Feed, not an empty inbox. Unavailable content is handled without an external URL.
+- Notification settings provide independent Android push choices for comments, replies, follow-ups, nearby Lost Pets, and inactivity. Nearby alerts require an explicit map point; a one-time current-location button is available. Disabling nearby removes the saved point. The fixed radius is 500 m. No background location permission or tracking is used.
+- Android notification permission is requested only after explanatory context in settings. If denied or Firebase is not configured, the inbox remains functional and the setting explains why device push is unavailable. Web uses the inbox without browser push.
+
 11. Out of Scope for MVP UI
 ---------------------------
-- Push notification center
+- Web Push and iOS push
 - In-app chat/direct messages
 - Offline mode synchronization UI
 - Web layouts

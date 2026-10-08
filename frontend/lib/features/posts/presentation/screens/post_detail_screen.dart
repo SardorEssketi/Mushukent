@@ -29,9 +29,11 @@ final postDetailProvider =
 });
 
 class PostDetailScreen extends ConsumerStatefulWidget {
-  const PostDetailScreen({super.key, required this.postId});
+  const PostDetailScreen(
+      {super.key, required this.postId, this.focusComments = false});
 
   final String postId;
+  final bool focusComments;
 
   @override
   ConsumerState<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -420,8 +422,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
-                  PostCommentsSection(
-                      postId: widget.postId, padding: EdgeInsets.zero),
+                  CommentDeepLinkFocus(
+                    focus: widget.focusComments,
+                    child: PostCommentsSection(
+                        postId: widget.postId, padding: EdgeInsets.zero),
+                  ),
                 ],
               ));
         },

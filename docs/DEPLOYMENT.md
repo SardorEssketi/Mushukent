@@ -148,6 +148,14 @@ On the production VPS, before any migration or container replacement:
 4. Apply `alembic upgrade head` only when the deployed code has a newer head,
    then record the resulting revision.
 
+## Notification deployment requirements (future release)
+
+This notification code is not deployed by this implementation task. Before building Android with push, provision a Firebase project with an Android app whose package ID is `uz.mushukistan.app`. Download that app's public Firebase configuration as `frontend/android/app/google-services.json`; it is ignored by Git. Android builds without this file keep FCM disabled and still support the in-app inbox. Push-enabled builds use `--dart-define=ENABLE_ANDROID_PUSH=true` and fail if the file is missing. Do not invent values or commit generated Firebase files. Web builds do not use Firebase Messaging and keep the in-app inbox without browser push.
+
+Create a Firebase Admin service account with messaging permission. Store its JSON outside Git, readable only by the deployment account, and set `FIREBASE_CREDENTIALS_HOST_PATH` to its absolute host path. Set `FIREBASE_PROJECT_ID` and a stable 32-byte URL-safe Fernet `PUSH_TOKEN_ENCRYPTION_KEY` in the private production environment. Losing or rotating this key without a re-encryption plan makes stored device tokens unreadable. Never log or commit the service account or key. The backend and worker mount the service account read-only at `/run/secrets/firebase-admin.json` through `docker-compose.notifications.yml`.
+
+Back up the database, apply forward Alembic migration `20261007_0025`, then activate a backend/web release and the worker from the same commit/image. The worker is enabled with the `notifications` Compose profile and the notification overlay, for example `docker compose --profile notifications -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.notifications.yml up -d --build`. Verify `docker compose ... config` first, then verify backend health, worker startup, inbox API authorization, and a controlled FCM send. The worker uses existing PostgreSQL, polls every 30 seconds, claims jobs with a two-minute lease, and tries each delivery at most four times (initial, then 1, 5, and 30 minute delays). No Redis or background location service is needed. Roll back the backend and worker together; migration rollback requires separate data review because notification rows can be lost.
+
 ## Website deployment
 
 Use the existing production Compose project and Nginx/TLS setup. Preserve the

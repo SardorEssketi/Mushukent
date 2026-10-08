@@ -20,7 +20,7 @@ Account data:
 - Email address.
 - Password hash for password accounts.
 - Google Sign-In email/name when Google Sign-In is used.
-- Registration time, last login time, preferred language, and accepted legal-document version.
+- Registration time, last login time, coarse last-active time, preferred language, and accepted legal-document version.
 
 Profile data:
 - Name.
@@ -46,12 +46,14 @@ Location data:
 - Cat canonical location.
 - Place-search location.
 - Lost-pet last-seen location.
+- Private notification alert point saved only after explicit selection for nearby Lost Pet alerts.
 
 Contact data published by the user:
 - Lost-pet and adoption/rehoming posts may publicly show copied contact details only after explicit publication consent.
 
 Technical and security data:
 - API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.
+- Android push device token stored encrypted, token hash, notification preferences, inbox read state, and bounded delivery status.
 
 ## 3. Photos and media
 
@@ -71,6 +73,7 @@ Mushukistan uses data to:
 - Show nearby cats, places, and map content.
 - Operate lost-pet and adoption/rehoming contact features.
 - Enable comments, likes, reports, moderation, and account settings.
+- Deliver structured in-app notifications and permitted Android push alerts.
 - Prevent abuse, rate-limit requests, and secure the service.
 - Comply with legal obligations and enforce policies.
 
@@ -94,13 +97,20 @@ Mushukistan uses or may use these third-party services:
 - DigitalOcean for hosting and database infrastructure.
 - Cloudflare R2 for uploaded media and object metadata when configured.
 - Google when a user chooses Google Sign-In.
+- Google Firebase Cloud Messaging for Android push delivery when configured and permitted.
 - OpenStreetMap for map tiles and map/place data.
 
 Email provider: not configured in the verified repository.
 
 Backup provider: not configured in the verified repository.
 
-Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, push notifications, or AI features in the verified repository.
+Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.
+
+The notification inbox stores event type, relevant content/comment identifiers, actor and recipient references, creation time, and read time. Android push delivery stores encrypted device tokens and token hashes, preferences, bounded delivery attempts, and errors without full token values in ordinary logs. Push messages contain no phone numbers, Telegram handles, precise pet coordinates, private alert coordinates, or full comment text.
+
+Nearby Lost Pet alerts are disabled until you explicitly choose a private alert point and enable them. New active Lost Pets within a fixed 500 m radius may then produce inbox and Android push alerts. You can choose the point on a map or use your current location once when you tap the location action. Mushukistan does not collect background or continuous location for notifications. Disabling nearby alerts removes the saved point.
+
+Inactivity reminders are off by default, push-only, and sent once after seven full days without authenticated app activity. Mushukistan records a coarse last-active time on authenticated launch or resume, with database writes throttled to at most once per 15 minutes. Returning starts a new inactivity period. Separate settings control Android pushes for comments, replies, existing pet follow-ups, nearby Lost Pets, and inactivity.
 
 ## 7. Cookies and browser storage
 
@@ -116,7 +126,7 @@ Settings -> About account -> Delete account
 
 Users who cannot access the app can start account deletion from https://mushukistan.uz/delete-account. The website asks for the account email address and, if an active account exists, sends a time-limited confirmation link to that email address. The website does not reveal whether the submitted email address has an account. The account is deleted only after the confirmation link is opened and deletion is explicitly confirmed.
 
-When account deletion is confirmed, Mushukistan deactivates and anonymizes the account. Login is disabled, authentication credentials are removed, and profile personal information is removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, and last-login data.
+When account deletion is confirmed, Mushukistan deactivates and anonymizes the account. Login is disabled, authentication credentials are removed, and profile personal information is removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, last-login and last-active data, device push tokens, notification preferences, and private alert point. Inbox rows received by the deleted account are removed; its actor reference on other users' notifications becomes anonymous.
 
 Mushukistan also removes the user's likes, removes account-related blocking records, removes affected leaderboard cache entries, hides and anonymizes user-owned posts, comments, lost-pet posts, and adoption/rehoming posts, clears copied contact details from lost-pet and adoption/rehoming posts, and removes the user as creator/reporter/handler where possible.
 

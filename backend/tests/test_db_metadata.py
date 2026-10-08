@@ -10,7 +10,7 @@ from app.infrastructure.db.base import NAMING_CONVENTION, Base
 from app.infrastructure.db.models import schema
 
 
-def test_metadata_discovers_all_mvp_tables() -> None:
+def test_metadata_discovers_application_tables() -> None:
     assert set(Base.metadata.tables) == {
         "users",
         "cats",
@@ -33,6 +33,10 @@ def test_metadata_discovers_all_mvp_tables() -> None:
         "places",
         "place_category_links",
         "auth_refresh_sessions",
+        "notification_preferences",
+        "notifications",
+        "notification_devices",
+        "notification_push_jobs",
     }
     assert Base.metadata.naming_convention == NAMING_CONVENTION
 

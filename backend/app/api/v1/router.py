@@ -10,6 +10,7 @@ from app.api.v1.routes.leaderboards import router as leaderboards_router
 from app.api.v1.routes.likes import router as likes_router
 from app.api.v1.routes.lost_pets import router as lost_pets_router
 from app.api.v1.routes.moderation import router as moderation_router
+from app.api.v1.routes.notifications import router as notifications_router
 from app.api.v1.routes.places import router as places_router
 from app.api.v1.routes.posts import router as posts_router
 from app.api.v1.routes.reports import router as reports_router
@@ -29,4 +30,5 @@ api_v1_router.include_router(adoption_posts_router, tags=["adoption-posts"])
 api_v1_router.include_router(leaderboards_router, tags=["leaderboards"])
 api_v1_router.include_router(reports_router, tags=["reports"])
 api_v1_router.include_router(moderation_router, tags=["moderation"])
+api_v1_router.include_router(notifications_router, tags=["notifications"])
 api_v1_router.include_router(places_router, tags=["places"])

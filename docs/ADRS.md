@@ -233,6 +233,10 @@ authenticated app checks the API; there is no email, push, worker, or server
 timer. The app checks on entry, resume, and periodically while open. The server
 decides whether the hour has elapsed. Only the owner may answer, once.
 
+The notification feature approved on 2026-10-07 adds an optional push reminder
+for due follow-ups using these same records. The original on-demand in-app
+check and Yes/No lifecycle remain the source of truth.
+
 The existing `is_resolved` boolean remains the status source. Answering Yes
 resolves the pet, removes it from public Feed and Map queries, and retains it in
 the owner's existing profile area. Answering No leaves it active. Migration

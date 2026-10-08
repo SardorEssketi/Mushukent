@@ -10,7 +10,7 @@ Scope: Flutter Android/web app + FastAPI backend
 This document defines the canonical authentication and authorization design for MVP. It aligns with `PROJECT_BIBLE.md`, `PRD.md`, `ARCHITECTURE.md`, `DATABASE.md`, and `API.md`.
 
 MVP constraints:
-- No Redis, no RabbitMQ, no background workers.
+- Authentication needs no Redis, RabbitMQ, or background worker. Notification push delivery has a separate PostgreSQL-backed Compose worker.
 - No additional identity provider besides Google OAuth and email/password.
 - Flutter web is available for the MVP production frontend.
 

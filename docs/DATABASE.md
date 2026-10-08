@@ -6,7 +6,7 @@ This document defines the canonical database design for Mushukistan MVP. It is t
 
 MVP constraints and decisions
 ----------------------------
-- MVP only (no AI, no background workers, no Redis, no RabbitMQ).
+- MVP only (no AI, Redis, or RabbitMQ). Notification push delivery uses one lightweight Compose worker backed by PostgreSQL.
 - Single relational database: PostgreSQL with PostGIS extension (hosted on a Hetzner VPS for MVP).
 - Images live in Cloudflare R2; DB stores URLs only.
 - Use UUID primary keys (v4) for entities to avoid accidental coupling to integer IDs and to make later migrations easier.
@@ -327,7 +327,8 @@ CREATE INDEX idx_lost_pet_photos_lost_pet_id_position ON lost_pet_photos (lost_p
 -- A contact is recorded on the Contact Owner action. The first contact in a
 -- cycle creates one follow-up with due_at = contact time + 1 hour. A partial
 -- unique index on (lost_pet_id) where completed_at IS NULL prevents duplicates.
--- Follow-ups are retrieved on app checks; no background worker is required.
+-- Follow-ups remain available on app checks. The notification worker uses these
+-- existing records to send due push reminders without changing follow-up state.
 CREATE TABLE lost_pet_contact_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lost_pet_id UUID NOT NULL REFERENCES lost_pets(id) ON DELETE CASCADE,
@@ -556,7 +557,15 @@ Appendix: rationale for key choices
 - UUID primary keys: avoid leaking cardinality and make merging data across environments easier. UUIDs are slightly larger but are standard for mobile-first apps.
 - PostGIS SRID 4326: simplest and interoperable with mobile devices using lat/lon.
 - Geometry + generated lat/lon columns: some clients and simple queries benefit from direct lat/lon; we keep them generated to avoid inconsistency.
-- No Redis/Background workers for MVP: simplifies infra and speeds shipping. Some tasks (thumbnails, embeddings) need background processing — postponed per your direction.
+- Notification push uses one lightweight Compose worker and PostgreSQL delivery rows. No Redis or external queue is required.
+
+Notifications (migration `20261007_0025`)
+---------------------------------------
+- `users.last_active_at TIMESTAMPTZ NULL`: coarse authenticated launch/resume activity. `idx_users_active_last_activity` supports inactivity scans; writes are throttled to 15 minutes.
+- `notification_preferences`: one row per user, independent push booleans, opt-in nearby/inactivity booleans, private `alert_location GEOMETRY(POINT,4326)`, and `last_inactivity_cycle_at`. A check requires a point when nearby is enabled. A partial GiST index on `alert_location::geography` supports the fixed 500 m lookup.
+- `notifications`: recipient, nullable actor, structured kind/target/comment identifiers, creation/read timestamps, and unique event key. Recipient page and partial unread indexes support inbox reads. Actor deletion sets the actor reference null; recipient deletion removes inbox rows.
+- `notification_devices`: Android device token ciphertext (Fernet), SHA-256 token hash for unique lookup, owner, and last seen timestamp. Raw tokens are not exposed by the API or normal logs.
+- `notification_push_jobs`: one row per logical event and device (`UNIQUE(event_key,device_id)`), due/lease/attempt/status fields, optional inbox reference and activity-cycle snapshot. The worker claims with `FOR UPDATE SKIP LOCKED`, checks current eligibility, calls FCM outside originating transactions, and retries at 1, 5, and 30 minutes (four total attempts). Invalid tokens are removed; terminal failures remain recorded. Application-level deduplication cannot make an ambiguously acknowledged FCM request exactly once.
 
 Document history
 ----------------

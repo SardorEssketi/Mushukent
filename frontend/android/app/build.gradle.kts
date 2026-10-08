@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -5,6 +6,24 @@ plugins {
     id("org.jetbrains.kotlin.android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services") apply false
+}
+
+val pushEnabled = (project.findProperty("dart-defines") as String?)
+    ?.split(",")
+    ?.any { encoded ->
+        runCatching {
+            String(Base64.getDecoder().decode(encoded), Charsets.UTF_8) == "ENABLE_ANDROID_PUSH=true"
+        }.getOrDefault(false)
+    } == true
+val googleServicesConfig = file("google-services.json")
+if (pushEnabled) {
+    require(googleServicesConfig.isFile) {
+        "ENABLE_ANDROID_PUSH=true requires frontend/android/app/google-services.json."
+    }
+}
+if (googleServicesConfig.isFile) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 val releaseKeystoreProperties = Properties()
