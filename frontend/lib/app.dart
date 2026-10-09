@@ -11,6 +11,7 @@ import 'core/startup/startup_log.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/auth/application/auth_controller.dart';
+import 'features/notifications/application/notification_push.dart';
 
 class MushukistanApp extends ConsumerStatefulWidget {
   const MushukistanApp({super.key});
@@ -49,19 +50,22 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp> {
     final themeMode = ref.watch(appThemeModeProvider);
     final language = ref.watch(appLanguageProvider);
 
-    return MaterialApp.router(
-      title: 'Mushukistan',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: themeMode.themeMode,
-      locale: language.locale,
-      routerConfig: router,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: L10n.supportedLocales,
+    return NotificationLifecycle(
+      router: router,
+      child: MaterialApp.router(
+        title: 'Mushukistan',
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: themeMode.themeMode,
+        locale: language.locale,
+        routerConfig: router,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: L10n.supportedLocales,
+      ),
     );
   }
 }

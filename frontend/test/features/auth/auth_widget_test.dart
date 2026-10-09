@@ -18,6 +18,7 @@ import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repositor
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_sign_in_entry_button.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
+import 'package:mushukistan_frontend/features/notifications/application/notification_push.dart';
 import 'package:mushukistan_frontend/features/profile/presentation/screens/profile_screen.dart';
 
 import '../../support/fakes.dart';
@@ -240,6 +241,26 @@ void main() {
         reason: '$path must remain public',
       );
     }
+  });
+
+  testWidgets('push lifecycle remains mounted on root detail routes',
+      (tester) async {
+    final repo = FakeAuthRepository(
+      restoreResult: SessionRestoreSuccess(AuthSession.restored(
+        accessToken: 'access-a',
+        user: testUser(),
+      )),
+    );
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+
+    await _pumpApp(tester, container, useProductionRoot: true);
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationLifecycle), findsOneWidget);
+
+    container.read(appRouterProvider).go('/posts/post-1');
+    await tester.pumpAndSettle();
+    expect(find.byType(NotificationLifecycle), findsOneWidget);
   });
 
   testWidgets('invalid and unavailable session restoration leave guest UI',

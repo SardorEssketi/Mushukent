@@ -113,8 +113,10 @@ class AndroidPushService {
 }
 
 class NotificationLifecycle extends ConsumerStatefulWidget {
-  const NotificationLifecycle({super.key, required this.child});
+  const NotificationLifecycle(
+      {super.key, required this.router, required this.child});
 
+  final GoRouter router;
   final Widget child;
 
   @override
@@ -183,13 +185,13 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     if (message.data['kind'] == 'lost_pet_followup' ||
         message.data['kind'] == 'adoption_followup') {
       // The existing feed shell checks the persisted due follow-ups on entry.
-      GoRouter.of(context).go(
+      widget.router.go(
         ref.read(authControllerProvider).isAuthenticated ? '/feed' : '/login',
       );
       return;
     }
     if (message.data['kind'] == 'inactivity') {
-      GoRouter.of(context).go('/feed');
+      widget.router.go('/feed');
       return;
     }
     final kind = message.data['target_kind'];
@@ -201,7 +203,7 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
                 message.data['kind'] == 'reply')
         ? '$path?comments=1'
         : path;
-    GoRouter.of(context).go(destination ?? '/notifications');
+    widget.router.go(destination ?? '/notifications');
   }
 
   Future<void> _sync(String userId, {bool forceRegistration = false}) async {
