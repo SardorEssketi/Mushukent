@@ -158,13 +158,61 @@ Back up the database, apply forward Alembic migration `20261007_0025`, then acti
 
 ## Website deployment
 
+### Public homepage release addition
+
+Build the static homepage from reviewed source before assembling a **new**
+versioned release directory:
+
+```powershell
+python website/build.py
+python -m unittest discover -s website -p 'test_*.py' -v
+```
+
+The release must contain both complete, independently built directories:
+`frontend/build/web` mounted read-only at `/usr/share/nginx/html`, and
+`website/dist` mounted read-only at `/var/www/landing`. The root `/` and the
+localized `/ru/` and `/uz/` are exact Nginx routes; `/landing-assets/` is a
+separate static namespace. Flutter stays at its existing root route structure:
+`/feed`, `/map`, shared post/profile links, authentication, and Flutter legal
+routes continue through its fallback. `/privacy`, `/child-safety`, and
+`/delete-account` keep their existing static behavior. The new homepage does
+not change the API, media, database, Google Sign-In origin, Flutter bootstrap,
+or CanvasKit layout. The web manifest launches at `/feed`.
+
+After notification changes are complete and reviewed, integrate this branch by
+reviewing the Git diff, resolving any overlap in a new integration worktree,
+and running website tests and relevant Flutter tests. Rebuild both outputs from
+the integrated commit. Do not copy old Flutter `index.html`, `main.dart.js`, or
+CanvasKit files into the new release; keep the validated Flutter build together.
+Run Compose configuration validation and Nginx syntax validation against the
+new directory, then check an isolated preview or staging instance before the
+active release is switched.
+
+Before switching the active release, verify `/`, `/ru/`, `/uz/`, `/feed`,
+`/map`, shared `/posts/:id`, `/lost-pets/:id`, `/adoption-posts/:id`, and
+`/users/:id` links; `/login`, `/register`, and `/verify-email`; the three public
+legal/account pages; `/api/` and `/media/`; locale links, both themes, mobile
+navigation, robots and sitemap, SEO metadata, and PWA launch from the installed
+app. Test Google Sign-In with the real production OAuth configuration only in
+an authorized release window. Confirm Cloudflare respects `no-store` on
+homepage HTML and the Flutter shell and immutable caching on hashed landing
+assets. Submit the sitemap in Google Search Console only after ownership is
+verified there; record the actual result.
+
+Rollback is a release-directory switch back to the previously validated
+Flutter bundle, Nginx config, Compose files, and artifact mounts as one set.
+Do not remove the database or media volumes. No migration is needed for the
+homepage. Record the old and new release identifiers and recheck `/` and
+`/feed` after rollback.
+
 Use the existing production Compose project and Nginx/TLS setup. Preserve the
 active `.env`, named PostgreSQL/media volumes, `/etc/letsencrypt`, R2 settings,
-and domains. Copy only the reviewed release source and the single final
-`frontend/build/web` artifact into a new versioned release directory, preserve
-its `.env`, and validate the complete artifact before switching the active
-Compose project to that directory. Never rebuild or copy individual web files
-inside the directory currently bind-mounted by Nginx: doing so can expose a
+and domains. Copy only the reviewed release source, the single final
+`frontend/build/web` artifact, and the final `website/dist` artifact into a new
+versioned release directory, preserve its `.env`, and validate both artifacts
+before switching the active Compose project to that directory. Never rebuild
+or copy individual web files inside the directory currently bind-mounted by
+Nginx: doing so can expose a
 mixed shell, Dart bundle, and renderer asset set. Then run from the new release:
 
 ```bash

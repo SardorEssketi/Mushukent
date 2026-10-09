@@ -1,7 +1,8 @@
 {
     "name": "Mushukistan",
     "short_name": "Mushukistan",
-    "start_url": ".",
+    "start_url": "/feed",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
