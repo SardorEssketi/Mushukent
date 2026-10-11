@@ -426,6 +426,42 @@ void main() {
     expect(find.text('Continue browsing'), findsOneWidget);
   });
 
+  testWidgets('legacy notification settings link redirects to Settings child',
+      (tester) async {
+    final api = FakeApiClient()
+      ..setHandler(
+          'GET',
+          'notifications/preferences',
+          (_) => {
+                'push_comments': true,
+                'push_replies': true,
+                'push_followups': true,
+                'nearby_enabled': false,
+                'inactivity_enabled': false,
+                'push_available': false,
+                'alert_location': null,
+              });
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(AuthSession.restored(
+          accessToken: 'token-123',
+          user: testUser(),
+        )),
+      ),
+      apiClient: api,
+    );
+    addTearDown(container.dispose);
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+    router.go('/notifications/settings');
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path,
+        '/profile/settings/notifications');
+    expect(find.text('Notification settings'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('authenticated users are redirected away from login',
       (tester) async {
     final container = _containerWithRepo(

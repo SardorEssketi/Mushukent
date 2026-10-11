@@ -10,6 +10,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../notifications/presentation/notification_strings.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -20,6 +21,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  late final StateController<bool> _unsavedChanges;
+  late final StateController<VoidCallback?> _discardChanges;
   late AppThemeMode _pendingTheme;
   late AppLanguage _pendingLanguage;
   late bool _pendingAllowPublicActivityView;
@@ -28,13 +31,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _unsavedChanges = ref.read(settingsHasUnsavedChangesProvider.notifier);
+    _discardChanges = ref.read(settingsDiscardChangesProvider.notifier);
     _pendingTheme = ref.read(appThemeModeProvider);
     _pendingLanguage = ref.read(appLanguageProvider);
     final profile = ref.read(profileMeProvider).valueOrNull;
     _pendingAllowPublicActivityView = profile?.allowPublicActivityView ?? true;
-    ref.read(settingsHasUnsavedChangesProvider.notifier).state = false;
-    ref.read(settingsDiscardChangesProvider.notifier).state =
-        _discardPendingChanges;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _unsavedChanges.state = false;
+      _discardChanges.state = _discardPendingChanges;
+    });
   }
 
   void _discardPendingChanges() {
@@ -68,6 +75,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _openAccountSecurity() async {
     if (!await _confirmLeaving() || !mounted) return;
     context.push('/profile/settings/security');
+  }
+
+  Future<void> _openNotifications() async {
+    if (!await _confirmLeaving() || !mounted) return;
+    context.push('/profile/settings/notifications');
   }
 
   bool get _hasChanges {
@@ -136,6 +148,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final profile = ref.watch(profileMeProvider).valueOrNull;
     final strings = ref.watch(appStringsProvider);
     final securityStrings = ref.watch(accountSecurityStringsProvider);
+    final notificationStrings = ref.watch(notificationStringsProvider);
     final hasChanges = _hasChanges;
 
     if (profile != null &&
@@ -265,6 +278,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: AppSpacing.md),
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.notifications_outlined),
+                title: Text(notificationStrings.get('title')),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _isSaving ? null : _openNotifications,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.security_outlined),
                 title: Text(securityStrings.title),
                 trailing: const Icon(Icons.chevron_right),
@@ -303,8 +324,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
-    ref.read(settingsDiscardChangesProvider.notifier).state = null;
-    ref.read(settingsHasUnsavedChangesProvider.notifier).state = false;
+    _discardChanges.state = null;
+    _unsavedChanges.state = false;
     super.dispose();
   }
 }

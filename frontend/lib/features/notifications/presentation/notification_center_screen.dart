@@ -147,13 +147,6 @@ class _NotificationCenterScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(copy.get('title')),
-        actions: [
-          IconButton(
-            tooltip: copy.get('settings'),
-            onPressed: () => context.push('/notifications/settings'),
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
       ),
       body: RefreshIndicator(
         onRefresh: () => _load(reset: true),

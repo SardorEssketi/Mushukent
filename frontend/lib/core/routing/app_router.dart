@@ -289,6 +289,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                             const AccountSecurityScreen(),
                       ),
                       GoRoute(
+                        path: 'notifications',
+                        builder: (context, state) =>
+                            const NotificationSettingsScreen(),
+                      ),
+                      GoRoute(
                         path: 'about-account',
                         builder: (context, state) => const AboutAccountScreen(),
                       ),
@@ -327,7 +332,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: 'settings',
-            builder: (context, state) => const NotificationSettingsScreen(),
+            redirect: (context, state) => '/profile/settings/notifications',
           ),
         ],
       ),
