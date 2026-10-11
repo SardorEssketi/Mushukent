@@ -5,6 +5,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,6 +26,48 @@ class AndroidPushConfiguration {
   }
 
   static bool get ready => supported && enabled && Firebase.apps.isNotEmpty;
+}
+
+enum DevicePushPermission {
+  web,
+  unavailable,
+  notDetermined,
+  denied,
+  deniedPermanently,
+  allowed,
+}
+
+final devicePushAccessProvider = Provider<DevicePushAccess>((ref) {
+  return DevicePushAccess();
+});
+
+class DevicePushAccess {
+  static const _settingsChannel =
+      MethodChannel('mushukistan/notification_settings');
+
+  Future<DevicePushPermission> status() async {
+    if (!AndroidPushConfiguration.supported) return DevicePushPermission.web;
+    if (!AndroidPushConfiguration.ready) {
+      return DevicePushPermission.unavailable;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return switch (settings.authorizationStatus) {
+      AuthorizationStatus.authorized ||
+      AuthorizationStatus.provisional =>
+        DevicePushPermission.allowed,
+      AuthorizationStatus.notDetermined => DevicePushPermission.notDetermined,
+      AuthorizationStatus.deniedPermanently =>
+        DevicePushPermission.deniedPermanently,
+      AuthorizationStatus.denied => DevicePushPermission.denied,
+    };
+  }
+
+  Future<bool> requestPermission() => AndroidPushService.requestPermission();
+
+  Future<void> openSettings() async {
+    if (!AndroidPushConfiguration.supported) return;
+    await _settingsChannel.invokeMethod<void>('openNotificationSettings');
+  }
 }
 
 class AndroidPushService {

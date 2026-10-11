@@ -414,12 +414,16 @@ Bottom navigation with 5 tabs on main tab roots:
   - theme selector
   - language selector: English, Uzbek, Russian
   - privacy toggle: allow other people to view my posts and comments
+  - Notifications entry leading to grouped notification preferences
+  - Account Security entry
   - About account entry
   - Save changes button
 - Interaction:
   - theme and language changes remain pending until the user taps Save changes.
   - saving updates the app locale immediately and persists the language preference and activity privacy preference to the authenticated user's profile.
   - successful save returns the user to Profile.
+  - opening Notifications, Account Security, or About account first uses the existing discard-changes confirmation when theme, language, or privacy edits are pending.
+  - notification preferences are reached through Profile -> Settings -> Notifications. The former `/notifications/settings` link redirects to this page.
 
 5.17.2 About Account Screen
 - Purpose: show account metadata that is not part of the main profile summary.
@@ -543,9 +547,11 @@ Required screens:
 Notifications
 -------------
 - The authenticated Feed app bar contains a bell with an unread badge. The inbox lists newest first, shows unread state and time, supports load more, and has an explicit Mark all as read action.
+- The Notification Center is the inbox only; its app bar has no settings gear. Preferences belong under Profile -> Settings -> Notifications.
 - Tapping a comment or reply opens its post at the existing comments section. Tapping a nearby Lost Pet opens its detail. A due follow-up push opens Feed so the existing persisted follow-up listener can present the due question. An inactivity push opens Feed, not an empty inbox. Unavailable content is handled without an external URL.
-- Notification settings provide independent Android push choices for comments, replies, follow-ups, nearby Lost Pets, and inactivity. Nearby alerts require an explicit map point; a one-time current-location button is available. Disabling nearby removes the saved point. The fixed radius is 500 m. No background location permission or tracking is used.
-- Android notification permission is requested only after explanatory context in settings. If denied or Firebase is not configured, the inbox remains functional and the setting explains why device push is unavailable. Web uses the inbox without browser push.
+- Notification settings use a centered, bounded column with Activity, Pets, and Nearby sections. Independent push choices cover comments, replies, follow-ups, nearby Lost Pets, and inactivity. Choices can be saved even when device push permission is missing; the in-app inbox continues to work.
+- The Nearby section starts without a map when no point is saved. The user explicitly chooses a point on a compact OpenStreetMap editor or uses current location once. A saved point has a restrained preview and Change action. Nearby alerts cannot be enabled without a point. Disabling nearby removes the stored private point. Matching remains fixed at 500 m, with no background location permission or tracking.
+- Android push status appears in a compact surface. A first permission request follows an explanation after user action; a permanent denial offers the app's Android notification settings. If Firebase or server push is unavailable, the page says so without implying permission alone will fix it. Web has the in-app inbox and synced Android push preferences, without browser push or Android-only actions.
 
 11. Out of Scope for MVP UI
 ---------------------------
