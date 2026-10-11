@@ -166,6 +166,9 @@ versioned release directory:
 ```powershell
 python website/build.py
 python -m unittest discover -s website -p 'test_*.py' -v
+node website/test_interactions.js
+python website/tool/check_flutter_bundle.py frontend/build/web
+python website/tool/check_nginx_http.py --flutter frontend/build/web --website website/dist --report .data/nginx-http.json
 ```
 
 The release must contain both complete, independently built directories:
@@ -179,14 +182,21 @@ routes continue through its fallback. `/privacy`, `/child-safety`, and
 not change the API, media, database, Google Sign-In origin, Flutter bootstrap,
 or CanvasKit layout. The web manifest launches at `/feed`.
 
-After notification changes are complete and reviewed, integrate this branch by
+Integrate the homepage against the exact deployed source commit by
 reviewing the Git diff, resolving any overlap in a new integration worktree,
 and running website tests and relevant Flutter tests. Rebuild both outputs from
 the integrated commit. Do not copy old Flutter `index.html`, `main.dart.js`, or
 CanvasKit files into the new release; keep the validated Flutter build together.
 Run Compose configuration validation and Nginx syntax validation against the
 new directory, then check an isolated preview or staging instance before the
-active release is switched.
+active release is switched. Unfinished notification UI work must stay outside
+the release. A homepage-only release is safe when its base contains all deployed
+functionality; compare the deployed source archive, image revision, and relevant
+source hashes with that base. The isolated HTTP harness uses disposable Docker
+containers, random localhost ports, and a generated test certificate. It needs
+Python's `cryptography` package and the `nginx:1.27-alpine` and
+`python:3.13-slim` images. It tests the production configuration and exact built
+artifacts, including proxies, security headers, cache behavior, and deep links.
 
 Before switching the active release, verify `/`, `/ru/`, `/uz/`, `/feed`,
 `/map`, shared `/posts/:id`, `/lost-pets/:id`, `/adoption-posts/:id`, and
@@ -210,15 +220,38 @@ active `.env`, named PostgreSQL/media volumes, `/etc/letsencrypt`, R2 settings,
 and domains. Copy only the reviewed release source, the single final
 `frontend/build/web` artifact, and the final `website/dist` artifact into a new
 versioned release directory, preserve its `.env`, and validate both artifacts
-before switching the active Compose project to that directory. Never rebuild
+before switching the active Compose project to that directory. Preserve the
+active notification overlays and backend/worker image pins as well. Never rebuild
 or copy individual web files inside the directory currently bind-mounted by
 Nginx: doing so can expose a
 mixed shell, Dart bundle, and renderer asset set. Then run from the new release:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose --profile notifications -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.notifications.yml -f docker-compose.notification-release.yml config --quiet
+docker compose --profile notifications -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.notifications.yml -f docker-compose.notification-release.yml up -d --no-deps --no-build --force-recreate nginx
 ```
+
+The example includes the currently deployed notification profile, credential
+mount overlay, and private release image-pin overlay. Use the exact active
+overlay set recorded from the Nginx container's Compose labels. Do not replace
+the backend, worker, or database for this static homepage change. Save their
+container IDs before switching and assert the IDs are identical afterwards.
+Validate the staged configuration with `nginx -t` in a disposable container
+using the existing Docker network and read-only TLS/config/artifact mounts,
+without publishing ports. Keep the previous versioned release intact.
+
+Run the read-only public HTTPS gate immediately after the Nginx switch:
+
+```powershell
+python website/tool/check_production_http.py --flutter frontend/build/web --website website/dist --report .data/production-http.json
+```
+
+This compares public response hashes with the complete validated artifacts,
+checks locale redirects, cache/security headers, API health, and notification
+API authentication. It does not log in, create data, or bypass TLS validation.
+If an important check fails, switch only Nginx back from the previous directory
+with the same overlay set and the same `--no-deps --no-build` command, then
+verify the old bundle, health endpoints, and retained container IDs.
 
 After deployment, inspect container health/logs and the real HTTPS site. Check
 the registration and login screens, Google button initialization, email auth,

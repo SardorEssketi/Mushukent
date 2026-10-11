@@ -11,6 +11,8 @@ social cards with Pillow if the brand artwork changes.
 python website/build.py
 python -m unittest discover -s website -p 'test_*.py' -v
 node website/test_interactions.js  # optional interaction check; not needed to build
+python website/tool/check_flutter_bundle.py frontend/build/web
+python website/tool/check_nginx_http.py --flutter frontend/build/web --website website/dist --report .data/nginx-http.json
 python -m http.server 8765 --directory website/dist
 ```
 
@@ -32,7 +34,8 @@ Nginx mounts `website/dist` at `/var/www/landing` and serves exact homepage
 routes from it. `/landing-assets/` is the only landing asset prefix. Flutter
 stays under `/usr/share/nginx/html`, with its existing route fallback, API and
 media proxies, legal files, and CanvasKit assets. Homepage HTML is `no-store`;
-hashed assets are immutable. The production CSP is inherited unchanged by
+successful hashed assets are immutable; missing landing assets are `no-store`.
+The production CSP is inherited unchanged by
 landing responses, and there are no new external origins. The JSON-LD block is
 non-executable structured data.
 
@@ -48,3 +51,10 @@ For integrated local testing, build a Flutter web bundle in this worktree and
 use an isolated Nginx container with `infrastructure/nginx/local.conf`, mounting
 both generated outputs read-only. Use a private port and a disposable container
 name. Do not recreate the shared Compose project or mount its live release.
+
+The HTTP harness above tests the production HTTPS configuration against complete
+built artifacts on random localhost ports. It requires Docker, Python
+`cryptography`, and the Nginx/Python images listed in `docs/DEPLOYMENT.md`.
+After an authorized release, `website/tool/check_production_http.py` accepts
+the same artifact/report arguments and compares the real public HTTPS
+responses to the validated release. Neither harness uses account credentials.
