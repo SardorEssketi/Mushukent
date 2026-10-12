@@ -20,8 +20,8 @@ CONTENT = {
         "eyebrow": "A little more connected, a lot more caring · Uzbekistan",
         "hero": "A better world for cats starts with us.",
         "intro": "Discover cats around you, help lost pets find their way home, and connect with people who care.",
-        "explore": "Explore Mushukistan", "map": "Explore map", "hero_note": "A place for the cats and people around us.",
-        "about_kicker": "What is Mushukistan?", "about_title": "Every local act of care adds up.",
+        "explore": "Open Mushukistan", "map": "Explore map", "hero_note": "A place for the cats and people around us.",
+        "about_kicker": "What is Mushukistan?", "about_title": "Every act of care makes a difference.",
         "about_body": "Mushukistan brings cat observations, lost pet alerts, rehoming posts, nearby pet care places, and community conversations into one shared space. Start by exploring what is happening around you.",
         "features_kicker": "Made for real moments", "features_title": "From a sighting to a helping hand.",
         "features": [
@@ -39,9 +39,20 @@ CONTENT = {
             ("Connect", "Reach the people who can help, whether that means a lead, advice, or a new home."),
         ],
         "mission_kicker": "Our mission", "mission_title": "Care begins close to home.",
-        "mission_body": "Mushukistan makes animal welfare more visible, accessible, and community-driven in Uzbekistan. A nearby observation, a timely reply, or a shared lost pet alert can help people act together for animals in their area.",
-        "closing_kicker": "There is room for you here", "closing_title": "Come see who is waiting around the corner.",
-        "closing_body": "Explore the community, find local pet care, and take part when you are ready.", "get_started": "Get started",
+        "mission_body": "Mushukistan makes animal care more visible and accessible in Uzbekistan. An observation, a timely reply, or a shared lost pet alert helps neighbors act together.",
+        "closing_kicker": "There is room for you here", "closing_title": "Discover the world of cats around you.",
+        "closing_body": "Explore the community, find local pet care, and take part when you are ready.", "get_started": "Open app",
+        "showcase_kicker": "Inside the app", "showcase_title": "Mushukistan in action",
+        "showcase_intro": "See how Mushukistan helps you find cats, share observations, and care for animals.",
+        "showcase_label": "Application screenshots", "showcase_hint": "Swipe or use the arrow keys to explore all four screens.",
+        "showcase_note": "Real Android screens, shown in Uzbek. Personal details and one photo are concealed.",
+        "map_credit": "Map data", "osm_credit": "OpenStreetMap contributors",
+        "screens": [
+            ("map", "Map", "Find pet services around Tashkent.", "Mushukistan map with pet-service pins and clusters across Tashkent"),
+            ("feed", "Community feed", "Browse posts and observations from the community.", "Mushukistan feed with a kitten photograph and post interactions; identities concealed"),
+            ("leaderboard", "Leaderboard", "See participation across the community.", "Mushukistan leaderboard showing activity counts; names and avatars concealed"),
+            ("profile", "Your profile", "View your activity and find your account settings.", "Mushukistan profile with personal activity and account settings; personal details concealed"),
+        ],
         "footer_tag": "A community for cats and the people who care for them.", "country": "Uzbekistan", "home": "Home", "app": "Application", "privacy": "Privacy policy", "terms": "Terms of service", "safety": "Child safety standards", "deletion": "Account deletion", "contact": "Contact", "language": "Language", "visual_alt": "Original illustration of a cat in a neighborhood with map markers and a connecting path",
     },
     "ru": {
@@ -52,7 +63,7 @@ CONTENT = {
         "hero": "Лучший мир для кошек начинается с нас.",
         "intro": "Находите кошек рядом, помогайте потерявшимся питомцам вернуться домой и знакомьтесь с неравнодушными людьми.",
         "explore": "Открыть Mushukistan", "map": "Открыть карту", "hero_note": "Место для кошек и людей рядом с нами.",
-        "about_kicker": "Что такое Mushukistan?", "about_title": "Каждый добрый поступок рядом важен.",
+        "about_kicker": "Что такое Mushukistan?", "about_title": "Каждый добрый поступок имеет значение.",
         "about_body": "Mushukistan объединяет наблюдения за кошками, объявления о пропавших питомцах, поиск нового дома, полезные места рядом и общение в одном пространстве. Начните с того, что происходит вокруг вас.",
         "features_kicker": "Для реальных ситуаций", "features_title": "От встречи до помощи.",
         "features": [
@@ -70,9 +81,20 @@ CONTENT = {
             ("Общайтесь", "Свяжитесь с теми, кто может помочь советом, информацией или новым домом."),
         ],
         "mission_kicker": "Наша миссия", "mission_title": "Забота начинается рядом.",
-        "mission_body": "Mushukistan делает заботу о животных заметнее, доступнее и ближе к сообществу в Узбекистане. Наблюдение по соседству, своевременный ответ или объявление о пропаже помогают людям действовать вместе.",
-        "closing_kicker": "Здесь есть место и для вас", "closing_title": "Узнайте, кто ждёт за углом.",
-        "closing_body": "Исследуйте сообщество, находите помощь рядом и присоединяйтесь, когда будете готовы.", "get_started": "Начать",
+        "mission_body": "Mushukistan делает заботу о животных заметнее и доступнее в Узбекистане. Наблюдение, своевременный ответ или объявление о пропаже помогают людям действовать вместе.",
+        "closing_kicker": "Здесь есть место и для вас", "closing_title": "Откройте мир кошек рядом с вами.",
+        "closing_body": "Исследуйте сообщество, находите помощь рядом и присоединяйтесь, когда будете готовы.", "get_started": "Открыть приложение",
+        "showcase_kicker": "Внутри приложения", "showcase_title": "Мушукистан в действии",
+        "showcase_intro": "Посмотрите, как Mushukistan помогает находить кошек, делиться наблюдениями и заботиться о животных.",
+        "showcase_label": "Скриншоты приложения", "showcase_hint": "Листайте или используйте клавиши со стрелками, чтобы увидеть все четыре экрана.",
+        "showcase_note": "Настоящие экраны Android на узбекском языке. Личные данные и одно фото скрыты.",
+        "map_credit": "Данные карты", "osm_credit": "участники OpenStreetMap",
+        "screens": [
+            ("map", "Карта", "Находите места для заботы о питомцах в Ташкенте.", "Карта Mushukistan с отметками и группами мест для питомцев в Ташкенте"),
+            ("feed", "Лента сообщества", "Читайте публикации и наблюдения сообщества.", "Лента Mushukistan с фотографией котёнка и реакциями на пост; данные авторов скрыты"),
+            ("leaderboard", "Лидеры", "Следите за активностью участников.", "Рейтинг Mushukistan с показателями активности; имена и аватары скрыты"),
+            ("profile", "Ваш профиль", "Просматривайте свою активность и настройки аккаунта.", "Профиль Mushukistan с личной активностью и настройками; личные данные скрыты"),
+        ],
         "footer_tag": "Сообщество для кошек и людей, которым они небезразличны.", "country": "Узбекистан", "home": "Главная", "app": "Приложение", "privacy": "Политика конфиденциальности", "terms": "Условия использования", "safety": "Стандарты безопасности детей", "deletion": "Удаление аккаунта", "contact": "Связаться", "language": "Язык", "visual_alt": "Авторская иллюстрация кошки в районе с отметками на карте и соединяющим маршрутом",
     },
     "uz": {
@@ -82,8 +104,8 @@ CONTENT = {
         "eyebrow": "Ko‘proq birdamlik, ko‘proq g‘amxo‘rlik · O‘zbekiston",
         "hero": "Mushuklar uchun yaxshiroq dunyo bizdan boshlanadi.",
         "intro": "Yaqiningizdagi mushuklarni kashf eting, yo‘qolgan uy hayvonlariga uyga qaytishda yordam bering va mehribon insonlar bilan bog‘laning.",
-        "explore": "Mushukistanni kashf etish", "map": "Xaritani ochish", "hero_note": "Atrofimizdagi mushuklar va insonlar uchun joy.",
-        "about_kicker": "Mushukistan nima?", "about_title": "Yaqinimizdagi har bir ezgu ish ahamiyatli.",
+        "explore": "Mushukistanni ochish", "map": "Xaritani ochish", "hero_note": "Atrofimizdagi mushuklar va insonlar uchun joy.",
+        "about_kicker": "Mushukistan nima?", "about_title": "Har bir ezgu ishning ahamiyati bor.",
         "about_body": "Mushukistan mushuklar haqidagi kuzatuvlar, yo‘qolgan hayvonlar e’lonlari, yangi uy qidirish, yaqin atrofdagi foydali joylar va suhbatlarni bir joyga jamlaydi. Atrofingizda nimalar bo‘layotganini ko‘rishdan boshlang.",
         "features_kicker": "Haqiqiy vaziyatlar uchun", "features_title": "Uchrashuvdan yordamgacha.",
         "features": [
@@ -101,9 +123,20 @@ CONTENT = {
             ("Bog‘laning", "Maslahat, ma’lumot yoki yangi uy taklif qila oladigan insonlar bilan aloqa qiling."),
         ],
         "mission_kicker": "Maqsadimiz", "mission_title": "G‘amxo‘rlik yonimizdan boshlanadi.",
-        "mission_body": "Mushukistan O‘zbekistonda hayvonlarga g‘amxo‘rlikni ko‘rinadigan, qulay va hamjamiyatga yaqin qiladi. Qo‘shni kuzatuvi, o‘z vaqtida berilgan javob yoki yo‘qolgan hayvon e’loni odamlarning birga harakat qilishiga yordam beradi.",
-        "closing_kicker": "Siz uchun ham joy bor", "closing_title": "Yaqiningizda kim kutayotganini ko‘ring.",
-        "closing_body": "Hamjamiyatni kashf eting, yaqin atrofdagi yordamni toping va tayyor bo‘lganingizda qo‘shiling.", "get_started": "Boshlash",
+        "mission_body": "Mushukistan O‘zbekistonda hayvonlarning ehtiyojlarini ko‘rish va ularga yordam berishni osonlashtiradi. Kuzatuv, o‘z vaqtida berilgan javob yoki yo‘qolgan hayvon haqidagi e’lon odamlarni birlashtiradi.",
+        "closing_kicker": "Siz uchun ham joy bor", "closing_title": "Yaqiningizdagi mushuklar olamini kashf eting.",
+        "closing_body": "Hamjamiyatni kashf eting, yaqin atrofdagi yordamni toping va tayyor bo‘lganingizda qo‘shiling.", "get_started": "Ilovani ochish",
+        "showcase_kicker": "Ilova ichida", "showcase_title": "Mushukistan amalda",
+        "showcase_intro": "Mushuklarni topish, kuzatuvlarni ulashish va hayvonlarga yordam berish Mushukistonda qanday ishlashini ko‘ring.",
+        "showcase_label": "Ilova ekranlari", "showcase_hint": "To‘rtta ekranni ko‘rish uchun suring yoki strelka tugmalaridan foydalaning.",
+        "showcase_note": "Android ilovasining asl ekranlari o‘zbek tilida. Shaxsiy ma’lumotlar va bitta surat yashirilgan.",
+        "map_credit": "Xarita ma’lumotlari", "osm_credit": "OpenStreetMap ishtirokchilari",
+        "screens": [
+            ("map", "Xarita", "Toshkentdagi hayvonlar uchun foydali joylarni toping.", "Mushukistan xaritasida Toshkentdagi hayvonlar uchun joylar belgilari va guruhlari"),
+            ("feed", "Hamjamiyat tasmasi", "Hamjamiyat postlari va kuzatuvlarini ko‘ring.", "Mushukistan tasmasida mushukcha surati va postga munosabatlar; mualliflar yashirilgan"),
+            ("leaderboard", "Yetakchilar", "Hamjamiyatdagi ishtirok va faollikni ko‘ring.", "Mushukistan reytingida faollik ko‘rsatkichlari; ismlar va avatarlar yashirilgan"),
+            ("profile", "Profilingiz", "Faolligingizni ko‘ring va hisob sozlamalarini toping.", "Mushukistan profilida shaxsiy faollik va hisob sozlamalari; shaxsiy ma’lumotlar yashirilgan"),
+        ],
         "footer_tag": "Mushuklar va ularga befarq bo‘lmagan insonlar hamjamiyati.", "country": "O‘zbekiston", "home": "Bosh sahifa", "app": "Ilova", "privacy": "Maxfiylik siyosati", "terms": "Foydalanish shartlari", "safety": "Bolalar xavfsizligi standartlari", "deletion": "Hisobni o‘chirish", "contact": "Bog‘lanish", "language": "Til", "visual_alt": "Xarita belgilari va yo‘l bilan mahalladagi mushukning asl illyustratsiyasi",
     },
 }
@@ -120,12 +153,40 @@ def asset(name: str, content: bytes) -> str:
     return "/landing-assets/" + filename
 
 
+def screenshot_assets() -> dict:
+    source = ROOT / "src/screenshots"
+    reviewed = json.loads((source / "publication.json").read_text(encoding="utf-8"))
+    expected = {f"app-{name}-{width}.{ext}" for name in ("map", "feed", "leaderboard", "profile")
+                for width in (270, 540) for ext in ("webp", "jpg")}
+    assert set(reviewed["variants"]) == expected, "Screenshot allowlist changed; review required"
+    result = {}
+    for name in ("map", "feed", "leaderboard", "profile"):
+        result[name] = {}
+        for extension in ("webp", "jpg"):
+            result[name][extension] = {}
+            for width in (270, 540):
+                filename = f"app-{name}-{width}.{extension}"
+                data = (source / filename).read_bytes()
+                assert hashlib.sha256(data).hexdigest() == reviewed["variants"][filename]["sha256"], filename
+                result[name][extension][width] = asset(filename, data)
+    return result
+
+
 def page(lang: str, c: dict, assets: dict[str, str]) -> str:
     path = "/" if lang == "en" else f"/{lang}/"
     hreflang = "\n".join(f'<link rel="alternate" hreflang="{code}" href="{BASE}{url}">' for code, url in [("en", "/"), ("ru", "/ru/"), ("uz", "/uz/"), ("x-default", "/")])
     links = "".join(f'<a href="{url}" hreflang="{code}" lang="{code}" aria-current="{"page" if code == lang else "false"}">{label}</a>' for code, url, label in [("en", "/", "EN"), ("ru", "/ru/", "RU"), ("uz", "/uz/", "UZ")])
     features = "\n".join(f'<article class="feature"><span class="feature-number">{n}</span><div><h3>{e(title)}</h3><p>{e(body)}</p><a class="text-link" href="{url}">{e(action)} <span aria-hidden="true">↗</span></a></div></article>' for n, title, body, url, action in c["features"])
     steps = "\n".join(f'<li><span class="step-number">0{i}</span><h3>{e(title)}</h3><p>{e(body)}</p></li>' for i, (title, body) in enumerate(c["steps"], 1))
+    screens = []
+    sizes = "(max-width: 1100px) 280px, (min-width: 1400px) 280px, calc((100vw - 136px) / 4)"
+    for number, (name, title, caption, alt) in enumerate(c["screens"], 1):
+        files = assets["screens"][name]
+        webp = ", ".join(f"{files['webp'][width]} {width}w" for width in (270, 540))
+        jpeg = ", ".join(f"{files['jpg'][width]} {width}w" for width in (270, 540))
+        credit = (f'<small class="map-credit">{e(c["map_credit"])} © <a href="https://www.openstreetmap.org/copyright">{e(c["osm_credit"])}</a></small>' if name == "map" else "")
+        screens.append(f'''<li class="showcase-screen" id="screen-{name}"><figure><div class="phone-preview"><picture><source type="image/webp" srcset="{webp}" sizes="{sizes}"><img src="{files['jpg'][540]}" srcset="{jpeg}" sizes="{sizes}" width="540" height="1106" alt="{e(alt)}" loading="lazy" decoding="async"></picture></div><figcaption><span class="screen-number" aria-hidden="true">0{number}</span><h3>{e(title)}</h3><p>{e(caption)}</p>{credit}</figcaption></figure></li>''')
+    showcase = "\n".join(screens)
     structured = json.dumps([
         {"@context": "https://schema.org", "@type": "Organization", "name": "Mushukistan", "url": BASE, "logo": BASE + assets["logo"]},
         {"@context": "https://schema.org", "@type": "WebSite", "name": "Mushukistan", "url": BASE, "inLanguage": ["en", "ru", "uz"]},
@@ -155,9 +216,10 @@ def page(lang: str, c: dict, assets: dict[str, str]) -> str:
   </div><nav id="mobile-nav" class="mobile-nav container" aria-label="{e(c['navigation'])}" hidden><a href="#about">{e(c['nav'][0])}</a><a href="#features">{e(c['nav'][1])}</a><a href="#mission">{e(c['nav'][2])}</a><a href="/feed">{e(c['open'])} ↗</a><div class="mobile-languages" role="group" aria-label="{e(c['language'])}">{links}</div></nav></header>
   <main id="main"><section class="hero"><div class="container hero-grid"><div class="hero-copy"><p class="eyebrow"><span class="eyebrow-line"></span>{e(c['eyebrow'])}</p><h1>{e(c['hero'])}</h1><p class="hero-intro">{e(c['intro'])}</p><div class="hero-actions"><a class="button button-primary" href="/feed">{e(c['explore'])}<span aria-hidden="true">↗</span></a><a class="button button-quiet" href="/map">{e(c['map'])}<span aria-hidden="true">→</span></a></div><p class="hero-footnote"><span class="small-paw" aria-hidden="true">✦</span>{e(c['hero_note'])}</p></div><div class="hero-art"><img src="{assets['hero']}" width="720" height="730" alt="{e(c['visual_alt'])}" fetchpriority="high"></div></div></section>
   <section id="about" class="about section"><div class="container about-grid"><div><p class="section-kicker">{e(c['about_kicker'])}</p><h2>{e(c['about_title'])}</h2></div><div class="about-body"><p>{e(c['about_body'])}</p><div class="about-rule"><span>UZ</span><span>✦</span><span>01 / 03</span></div></div></div></section>
+  <section id="showcase" class="showcase section" aria-labelledby="showcase-title"><div class="container"><div class="showcase-heading"><div><p class="section-kicker">{e(c['showcase_kicker'])}</p><h2 id="showcase-title">{e(c['showcase_title'])}</h2></div><p class="showcase-intro">{e(c['showcase_intro'])}</p></div><p id="showcase-hint" class="showcase-hint">{e(c['showcase_hint'])}</p><ol class="showcase-gallery" tabindex="0" aria-label="{e(c['showcase_label'])}" aria-describedby="showcase-hint">{showcase}</ol><p class="showcase-note">{e(c['showcase_note'])}</p></div></section>
   <section id="features" class="features section"><div class="container"><div class="section-heading"><div><p class="section-kicker">{e(c['features_kicker'])}</p><h2>{e(c['features_title'])}</h2></div><span class="section-mark" aria-hidden="true">✳</span></div><div class="feature-grid">{features}</div></div></section>
   <section id="how" class="how section"><div class="container how-layout"><div><p class="section-kicker">{e(c['how_kicker'])}</p><h2>{e(c['how_title'])}</h2><a class="button button-outline" href="/map">{e(c['map'])}<span aria-hidden="true">↗</span></a></div><ol class="steps">{steps}</ol></div></section>
-  <section id="mission" class="mission section"><div class="container mission-panel"><div class="mission-symbol" aria-hidden="true">✳</div><div><p class="section-kicker">{e(c['mission_kicker'])}</p><h2>{e(c['mission_title'])}</h2><p>{e(c['mission_body'])}</p></div></div></section>
+  <section id="mission" class="mission section"><div class="container mission-panel"><div class="mission-symbol" aria-hidden="true"><svg viewBox="0 0 180 180" fill="none"><circle cx="90" cy="90" r="75" fill="var(--sage-soft)"/><path d="M36 103C28 62 55 35 90 35s63 27 54 68" stroke="var(--sage)" stroke-width="2" stroke-dasharray="3 7" stroke-linecap="round"/><circle cx="36" cy="106" r="8" fill="var(--sage)"/><circle cx="144" cy="106" r="8" fill="var(--sage)"/><circle cx="90" cy="35" r="6" fill="var(--accent)"/><path d="M63 126c8-5 14-18 27-18s19 13 27 18c8 7 1 17-8 16-12-3-26-3-38 0-9 1-16-9-8-16Z" fill="var(--sage)"/><ellipse cx="65" cy="91" rx="9" ry="12" transform="rotate(-24 65 91)" fill="var(--sage)"/><ellipse cx="83" cy="81" rx="8" ry="12" transform="rotate(-8 83 81)" fill="var(--sage)"/><ellipse cx="103" cy="82" rx="8" ry="12" transform="rotate(8 103 82)" fill="var(--sage)"/><ellipse cx="120" cy="94" rx="9" ry="12" transform="rotate(24 120 94)" fill="var(--sage)"/></svg></div><div><p class="section-kicker">{e(c['mission_kicker'])}</p><h2>{e(c['mission_title'])}</h2><p>{e(c['mission_body'])}</p></div></div></section>
   <section class="final-cta section"><div class="container"><p class="section-kicker">{e(c['closing_kicker'])}</p><h2>{e(c['closing_title'])}</h2><p>{e(c['closing_body'])}</p><a class="button button-primary" href="/feed">{e(c['get_started'])}<span aria-hidden="true">↗</span></a></div></section></main>
   <footer class="site-footer"><div class="container footer-top"><div><a class="brand" href="{path}"><img src="{assets['logo']}" width="40" height="40" alt=""><span>Mushukistan<span class="brand-dot">.</span></span></a><p>{e(c['footer_tag'])}</p></div><nav aria-label="{e(c['navigation'])}"><a href="{path}">{e(c['home'])}</a><a href="/feed">{e(c['app'])}</a><a href="/map">{e(c['map'])}</a><a href="/privacy">{e(c['privacy'])}</a><a href="/legal/terms">{e(c['terms'])}</a><a href="/child-safety">{e(c['safety'])}</a><a href="/delete-account">{e(c['deletion'])}</a><a href="mailto:sardor.datascience@gmail.com">{e(c['contact'])}</a></nav></div><div class="container footer-bottom"><span>© Mushukistan</span><span>{e(c['country'])} · {e(c['footer_tag'])}</span></div></footer>
 </body></html>'''
@@ -173,6 +235,7 @@ def main() -> None:
         "hero": asset("hero.svg", (ROOT / "src/hero.svg").read_bytes()),
         "social": {lang: asset(f"social-{lang}.png", (ROOT / f"src/social-{lang}.png").read_bytes()) for lang in CONTENT},
         "logo": asset("logo.png", (ROOT / "src/logo.png").read_bytes()),
+        "screens": screenshot_assets(),
     }
     for lang, content in CONTENT.items():
         target = OUT if lang == "en" else OUT / lang

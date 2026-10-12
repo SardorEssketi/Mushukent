@@ -52,6 +52,41 @@ use an isolated Nginx container with `infrastructure/nginx/local.conf`, mounting
 both generated outputs read-only. Use a private port and a disposable container
 name. Do not recreate the shared Compose project or mount its live release.
 
+## Real application showcase
+
+The four Android previews use only the reviewed derivatives under
+`src/screenshots/`. See `SCREENSHOTS.md` for the owner-confirmed photograph
+rights, crop/redaction recipe, private source handling, and exact reproduction
+command. The static build verifies their review hashes and copies an explicit
+allowlist; it does not publish the source captures or review manifest.
+WebP/JPEG sources at 270px and 540px use native image ratios, lazy loading, and
+reserved dimensions. The mobile gallery uses CSS scroll snapping and native
+keyboard/touch scrolling, with no carousel script or autoplay.
+
+The browser gate requires Chrome and the small development dependency in
+`tool/requirements-browser.txt`:
+
+```powershell
+python -m pip install -r website/tool/requirements-assets.txt -r website/tool/requirements-browser.txt
+python -m unittest discover -s website -p 'test_*.py' -v
+node website/test_interactions.js
+python website/tool/check_browser.py --report .data/browser-after/results.json
+python website/tool/check_browser.py --origin https://mushukistan.uz --capture-only --report .data/browser-before/results.json
+```
+
+The browser gate starts an isolated static preview when `--origin` is omitted.
+It checks EN/RU/UZ at desktop, tablet, and touch-sized viewports, measures hero
+CTA visibility and contrast, tests native arrow-key/touch snapping and reduced
+motion, checks image geometry and layout shifts, and saves light/dark screenshots.
+`--capture-only` records a baseline without requiring the new showcase to exist.
+Use `--chrome` if Chrome has a different local path. After deployment, run it
+against the real HTTPS origin without `--capture-only`.
+
+For this website-only refinement, preserve the complete deployed Flutter bundle
+and verify all its hashes instead of rebuilding Flutter. Mount that preserved
+directory in the HTTP gate. See the website-only procedure in
+`docs/DEPLOYMENT.md`; unrelated application services must not be replaced.
+
 The HTTP harness above tests the production HTTPS configuration against complete
 built artifacts on random localhost ports. It requires Docker, Python
 `cryptography`, and the Nginx/Python images listed in `docs/DEPLOYMENT.md`.

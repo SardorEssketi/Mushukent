@@ -89,7 +89,7 @@ class SiteBuildTest(unittest.TestCase):
                         self.assertTrue((OUT / path.removeprefix("/")).is_file(), path)
                 for a in parsed.all("a"):
                     href = a.get("href", "")
-                    self.assertTrue(href.startswith(("/", "#", "mailto:")), href)
+                    self.assertTrue(href.startswith(("/", "#", "mailto:")) or href == "https://www.openstreetmap.org/copyright", href)
                     if href.startswith("/"):
                         self.assertFalse(urlparse(href).netloc)
                 self.assertIn('href="/privacy"', document)

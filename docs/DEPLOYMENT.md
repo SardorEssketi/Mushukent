@@ -260,6 +260,40 @@ media, likes/comments where credentials permit, and browser console/network
 errors. Report uncompleted interactive OAuth or authenticated flows as
 `NOT VERIFIED`, never as working.
 
+## Website-only visual refinement
+
+When a release changes only `website/` and documentation, preserve the complete
+deployed `frontend/build/web` directory byte-for-byte. Do not rebuild Flutter or
+copy individual shells, bundles, manifests, or CanvasKit files from another
+revision. Record the active release commit and Nginx mount paths, hash every
+Flutter file, and compare those hashes with the candidate release before and
+after the Nginx switch. This is an explicit alternative to the paired rebuild
+above for a verified static website-only change.
+
+Run the static build, all website unit/interaction tests, screenshot publication
+checks, the browser gate in `website/tool/check_browser.py`, and the isolated
+production Nginx HTTP gate against the preserved Flutter bundle. The screenshot
+privacy/rights review and repeatable processing recipe live in
+`website/SCREENSHOTS.md`. Original screenshots stay in ignored local storage and
+must not enter the source archive, generated site, or production release.
+
+Assemble a new versioned release with reviewed Git source, the new complete
+`website/dist`, and the complete preserved Flutter artifact. Retain private
+environment, notification overlays/image pins, TLS, named volumes, and unrelated
+service configurations. Compare resolved Compose configurations without logging
+secrets; only Nginx artifact/config bind paths may change. Validate the staged
+Nginx config with its real read-only mounts, preserve the old release and a
+database backup as required above, then recreate **only Nginx** using the exact
+active overlay set and `--no-deps --no-build --force-recreate nginx`.
+
+Immediately run the public HTTPS artifact gate, production browser gate, API and
+media smoke tests, and service/log review. Confirm protected containers retain
+their IDs/images/start times. If an important check fails, switch Nginx back to
+the retained release and verify the original artifact hashes/routes/health. No
+migration, database restore, worker replacement, or backend deployment is needed
+for this static refinement. Keep before/after browser captures with the release
+record and mark credential-dependent or real-device scenarios NOT VERIFIED.
+
 ## Canonical production AAB build
 
 Do not clean or rebuild web output after it has passed verification. Build the
