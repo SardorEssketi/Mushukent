@@ -195,7 +195,7 @@ class _ProfileStat extends StatelessWidget {
                   '$value',
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: onTap == null ? colors.onSurface : colors.primary,
+                    color: colors.onSurface,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xs),

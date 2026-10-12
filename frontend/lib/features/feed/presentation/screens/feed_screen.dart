@@ -376,6 +376,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (!authenticated)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _GuestWelcomeCard(strings: strings),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -456,6 +463,67 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// First-impression card for signed-out visitors: states the product purpose
+/// and offers the two ways in (account or just exploring the map).
+class _GuestWelcomeCard extends StatelessWidget {
+  const _GuestWelcomeCard({required this.strings});
+
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadii.card),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.pets_rounded, color: colors.onPrimaryContainer),
+            const SizedBox(height: AppSpacing.md),
+            Semantics(
+              header: true,
+              child: Text(
+                strings.welcomeHeadline,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: colors.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              strings.welcomeBody,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                FilledButton(
+                  onPressed: () => context.push('/register'),
+                  child: Text(strings.createAccount),
+                ),
+                OutlinedButton(
+                  onPressed: () => context.go('/map'),
+                  child: Text(strings.map),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
