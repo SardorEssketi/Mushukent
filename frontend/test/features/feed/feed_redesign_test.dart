@@ -182,6 +182,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.calls.last.path, 'lost-pets');
     expect(find.text('Today'), findsNothing);
+    await tester.ensureVisible(find.text('Adoption').first);
     await tester.tap(find.text('Adoption').first);
     await tester.pumpAndSettle();
     expect(client.calls.last.path, 'adoption-posts');
@@ -316,6 +317,7 @@ void main() {
                 call.queryParameters?['cursor'] == 'lost-next')
             .length,
         1);
+    await tester.ensureVisible(find.text('Adoption').first);
     await tester.tap(find.text('Adoption').first);
     await tester.pumpAndSettle();
     expect(

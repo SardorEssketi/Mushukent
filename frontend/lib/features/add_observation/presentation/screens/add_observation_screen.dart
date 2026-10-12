@@ -141,7 +141,7 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
               if (constraints.maxWidth < AppWidths.readable - AppSpacing.xl) {
                 return Column(children: [
                   for (final card in cards) ...[
-                    card,
+                    card.asCompact(),
                     const SizedBox(height: AppSpacing.md),
                   ],
                 ]);
@@ -224,6 +224,7 @@ class _CreateActionCard extends StatelessWidget {
     required this.description,
     required this.accent,
     required this.onTap,
+    this.compact = false,
   });
 
   final IconData icon;
@@ -232,37 +233,74 @@ class _CreateActionCard extends StatelessWidget {
   final Color accent;
   final VoidCallback onTap;
 
+  /// Phones get a one-handed horizontal tile; wide layouts get a grid card.
+  final bool compact;
+
+  _CreateActionCard asCompact() => _CreateActionCard(
+        icon: icon,
+        title: title,
+        description: description,
+        accent: accent,
+        onTap: onTap,
+        compact: true,
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AppCard(
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 138),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadii.sm),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                child: Icon(icon, color: accent, size: 24),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(title,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: AppSpacing.xs),
-            Text(description,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                )),
-          ],
+    final badge = DecoratedBox(
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Icon(icon, color: accent, size: 28),
+      ),
+    );
+    final text = [
+      Text(title, style: theme.textTheme.titleMedium),
+      const SizedBox(height: AppSpacing.xs),
+      Text(
+        description,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
         ),
+      ),
+    ];
+    return Semantics(
+      button: true,
+      label: title,
+      child: AppCard(
+        onTap: onTap,
+        child: compact
+            ? Row(
+                children: [
+                  badge,
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: text,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              )
+            : ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 138),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    badge,
+                    const SizedBox(height: AppSpacing.lg),
+                    ...text,
+                  ],
+                ),
+              ),
       ),
     );
   }

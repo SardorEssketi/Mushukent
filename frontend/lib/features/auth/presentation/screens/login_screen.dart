@@ -8,6 +8,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/brand_header.dart';
 import '../../application/auth_controller.dart';
 import '../../domain/auth_models.dart';
 import '../widgets/google_sign_in_action.dart';
@@ -64,10 +65,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             padding: const EdgeInsets.all(AppSpacing.xl),
             shrinkWrap: true,
             children: [
-              Text(
-                strings.signInToMushukistan,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+              BrandHeader(title: strings.signInToMushukistan),
               const SizedBox(height: AppSpacing.xl),
               AppCard(
                 child: Column(
