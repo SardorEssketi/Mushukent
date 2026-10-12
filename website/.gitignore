@@ -1,1 +1,9 @@
 dist/
+# Private owner-provided captures; publish only reviewed derivatives.
+*-original.*
+/mushukistan-landing-screenshots.zip
+/feed.jpg
+/map.jpg
+/leaderboard.jpg
+/profile.jpg
+/screenshots-private/
