@@ -62,10 +62,21 @@ class NotificationService:
     def update_preferences(self, user_id: UUID, patch: PreferencePatch) -> PreferenceResponse:
         if patch.expected_user_id is not None and patch.expected_user_id != user_id:
             raise api_error(409, "SESSION_CHANGED", "The account changed. Please retry.")
+        # Installed clients explicitly save a private point with this exact pair
+        # after the legacy disclosure. This remains an explicit owner action,
+        # not consent inferred from OS permission. New automatic clients always
+        # carry expected_user_id and must acknowledge the new disclosure.
+        legacy_point_consent = (
+            "nearby_consent" not in patch.model_fields_set
+            and "expected_user_id" not in patch.model_fields_set
+            and patch.nearby_enabled is True
+            and patch.alert_location is not None
+        )
+        has_consent = patch.nearby_consent is True or legacy_point_consent
         with self.manager.session_scope() as session:
             repo = NotificationRepository(session)
             preference = repo.preferences(user_id)
-            if patch.nearby_enabled is True and patch.nearby_consent is not True:
+            if patch.nearby_enabled is True and not has_consent:
                 raise api_error(
                     422, "NEARBY_CONSENT_REQUIRED", "Consent to private nearby alerts is required."
                 )
@@ -74,7 +85,7 @@ class NotificationService:
                     422, "ALERT_LOCATION_REQUIRED", "An authorized location is required."
                 )
             if patch.alert_location is not None:
-                if patch.nearby_consent is not True or patch.nearby_enabled is not True:
+                if not has_consent or patch.nearby_enabled is not True:
                     raise api_error(
                         422,
                         "NEARBY_CONSENT_REQUIRED",

@@ -250,4 +250,48 @@ void main() {
     expect(location.fixes, 0);
     web.dispose();
   });
+
+  test(
+      'offline withdrawal clears when connectivity returns without a resume or GPS poll',
+      () async {
+    final retrying = NearbyAlerts(
+        api: api,
+        location: location,
+        consent: consent,
+        android: true,
+        currentUser: () => current,
+        clearRetryDelay: const Duration(milliseconds: 10));
+    api.offline = true;
+    await retrying.setConsent('owner', false);
+    api.offline = false;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(retrying.status, NearbyAlertStatus.consentRequired);
+    expect(location.fixes, 0);
+    expect(api.patches.every((p) => p['nearby_enabled'] == false), true);
+    retrying.dispose();
+  });
+
+  test('failed deletion retries stop in the background and on account switch',
+      () async {
+    final retrying = NearbyAlerts(
+        api: api,
+        location: location,
+        consent: consent,
+        android: true,
+        currentUser: () => current,
+        clearRetryDelay: const Duration(milliseconds: 10));
+    api.offline = true;
+    await retrying.setConsent('owner', false);
+    final count = api.patches.length;
+    retrying.foreground(false);
+    api.offline = false;
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(api.patches.length, count);
+    current = 'other';
+    retrying.activate('other');
+    retrying.foreground(true);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(api.patches.length, count);
+    retrying.dispose();
+  });
 }

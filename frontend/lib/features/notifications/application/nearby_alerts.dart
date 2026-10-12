@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -52,12 +54,14 @@ class NearbyAlerts extends ChangeNotifier {
       required this.location,
       required this.consent,
       required this.android,
-      required this.currentUser});
+      required this.currentUser,
+      this.clearRetryDelay = const Duration(seconds: 30)});
   final NotificationApi api;
   final LocationService location;
   final NearbyConsentStore consent;
   final bool android;
   final String? Function() currentUser;
+  final Duration clearRetryDelay;
   NearbyAlertStatus status = NearbyAlertStatus.unsupported;
   AuthorizedLocationStatus permission = AuthorizedLocationStatus.unsupported;
   String? _user;
@@ -66,17 +70,25 @@ class NearbyAlerts extends ChangeNotifier {
   bool _disposed = false;
   Future<void>? _flight;
   int? _flightGeneration;
+  Timer? _clearRetry;
+  final _pendingClear = <String>{};
 
   void activate(String? user) {
     if (_user == user) return;
     _user = user;
     _generation++;
+    _clearRetry?.cancel();
+    _clearRetry = null;
     status = NearbyAlertStatus.unsupported;
   }
 
   void foreground(bool value) {
     _foreground = value;
     if (!value) _generation++; // Discard a fix arriving after app pause.
+    if (!value) {
+      _clearRetry?.cancel();
+      _clearRetry = null;
+    }
   }
 
   bool _current(String user, int generation) =>
@@ -94,8 +106,58 @@ class NearbyAlerts extends ChangeNotifier {
 
   Future<void> _clear(String user, int generation) async {
     if (!_current(user, generation)) return;
-    await api
-        .updatePreferences({'nearby_enabled': false, 'expected_user_id': user});
+    _pendingClear.add(user);
+    try {
+      await api.updatePreferences(
+          {'nearby_enabled': false, 'expected_user_id': user});
+      _pendingClear.remove(user);
+      _clearRetry?.cancel();
+      _clearRetry = null;
+    } catch (_) {
+      _scheduleClearRetry(user, generation);
+      rethrow;
+    }
+  }
+
+  void _scheduleClearRetry(String user, int generation) {
+    if (!_current(user, generation) ||
+        !_pendingClear.contains(user) ||
+        _clearRetry != null) {
+      return;
+    }
+    _clearRetry = Timer(clearRetryDelay, () async {
+      _clearRetry = null;
+      if (!_current(user, generation)) return;
+      if (_flight != null) {
+        _scheduleClearRetry(user, generation);
+        return;
+      }
+      final operation = _retryClear(user, generation);
+      _flight = operation;
+      _flightGeneration = null; // A resume must still obtain its one fresh fix.
+      try {
+        await operation;
+      } finally {
+        if (identical(_flight, operation)) _flight = null;
+      }
+    });
+  }
+
+  Future<void> _retryClear(String user, int generation) async {
+    try {
+      // Retry deletion only. Connectivity recovery must not poll GPS.
+      await _clear(user, generation);
+      final granted = await consent.read(user);
+      if (_current(user, generation)) {
+        _status(granted != true
+            ? NearbyAlertStatus.consentRequired
+            : permission != AuthorizedLocationStatus.authorized
+                ? NearbyAlertStatus.permissionMissing
+                : NearbyAlertStatus.locationUnavailable);
+      }
+    } catch (_) {
+      // _clear schedules the next bounded-frequency foreground retry.
+    }
   }
 
   Future<void> sync(String user, {Future<bool> Function()? disclose}) async {
@@ -127,7 +189,8 @@ class NearbyAlerts extends ChangeNotifier {
       if (!_current(user, generation)) return;
       var granted = await consent.read(user);
       if (!_current(user, generation)) return;
-      if (granted != true ||
+      if (_pendingClear.contains(user) ||
+          granted != true ||
           permission != AuthorizedLocationStatus.authorized) {
         // Includes legacy manually selected points, denied/revoked permissions,
         // disabled GPS, and withdrawn consent. Retry on the next online resume.
@@ -209,6 +272,7 @@ class NearbyAlerts extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _clearRetry?.cancel();
     _generation++;
     super.dispose();
   }

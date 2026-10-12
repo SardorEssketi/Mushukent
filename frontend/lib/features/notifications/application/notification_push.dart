@@ -50,6 +50,14 @@ class DevicePushAccess {
 
   bool get available => AndroidPushConfiguration.ready;
 
+  // Android 13+ reports denied both before the first prompt and after denial.
+  // A local one-time disclosure marker prevents repeated requests.
+  static bool shouldExplainPermission(DevicePushPermission status,
+          {required bool alreadyAsked}) =>
+      !alreadyAsked &&
+      (status == DevicePushPermission.notDetermined ||
+          status == DevicePushPermission.denied);
+
   Future<DevicePushPermission> status() async {
     if (!AndroidPushConfiguration.supported) return DevicePushPermission.web;
     if (!AndroidPushConfiguration.ready) {
@@ -191,6 +199,9 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
   void initState() {
     super.initState();
     _nearby = ref.read(nearbyAlertsProvider);
+    final initialLifecycle = WidgetsBinding.instance.lifecycleState;
+    _nearby.foreground(initialLifecycle == null ||
+        initialLifecycle == AppLifecycleState.resumed);
     WidgetsBinding.instance.addObserver(this);
     unawaited(AndroidPushService.retryPendingRevocation().catchError((_) {}));
     _unreadTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -284,8 +295,9 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     }
     try {
       final access = ref.read(devicePushAccessProvider);
-      if (await access.status() == DevicePushPermission.notDetermined &&
-          !await ref.read(nearbyConsentStoreProvider).pushAsked(userId)) {
+      if (DevicePushAccess.shouldExplainPermission(await access.status(),
+          alreadyAsked:
+              await ref.read(nearbyConsentStoreProvider).pushAsked(userId))) {
         final dialogContext =
             widget.router.routerDelegate.navigatorKey.currentContext;
         if (dialogContext == null || !mounted || _activeUser != userId) return;

@@ -341,7 +341,8 @@ def test_foreground_point_requires_consent_and_withdrawal_clears_it(db_session_m
     assert service.preferences(user_id).alert_location is None
     with pytest.raises(HTTPException) as rejected:
         service.update_preferences(
-            user_id, PreferencePatch(nearby_enabled=True, alert_location=point)
+            user_id,
+            PreferencePatch(expected_user_id=user_id, nearby_enabled=True, alert_location=point),
         )
     assert rejected.value.status_code == 422
     assert service.preferences(user_id).alert_location is None
@@ -363,6 +364,29 @@ def test_foreground_point_requires_consent_and_withdrawal_clears_it(db_session_m
     )
     withdrawn = service.update_preferences(user_id, PreferencePatch(nearby_consent=False))
     assert not withdrawn.nearby_enabled and withdrawn.alert_location is None
+
+
+def test_installed_client_explicit_point_save_remains_compatible(db_session_manager):
+    with db_session_manager.session_scope() as session:
+        user = _user(session, "Installed client")
+        user_id = user.id
+    service = NotificationService(db_session_manager, Settings())
+    point = AlertPoint(latitude=41.3111, longitude=69.2797)
+    saved = service.update_preferences(
+        user_id, PreferencePatch(nearby_enabled=True, alert_location=point)
+    )
+    assert saved.nearby_enabled and saved.alert_location == point
+    # No bare enabling, point-only write, or explicit refusal bypasses consent.
+    for patch in [
+        PreferencePatch(nearby_enabled=True),
+        PreferencePatch(alert_location=point),
+        PreferencePatch(nearby_enabled=True, nearby_consent=False, alert_location=point),
+    ]:
+        with pytest.raises(HTTPException) as invalid:
+            service.update_preferences(user_id, patch)
+        assert invalid.value.status_code == 422
+    cleared = service.update_preferences(user_id, PreferencePatch(nearby_enabled=False))
+    assert not cleared.nearby_enabled and cleared.alert_location is None
 
 
 @pytest.mark.parametrize("change", ["withdraw", "move"])

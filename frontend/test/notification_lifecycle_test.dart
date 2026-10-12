@@ -20,6 +20,31 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('mushukistan/notification_settings');
 
+  test(
+      'Android 13 undetermined-as-denied is explained once; permanent denial uses settings',
+      () {
+    for (final status in [
+      DevicePushPermission.denied,
+      DevicePushPermission.notDetermined
+    ]) {
+      expect(
+          DevicePushAccess.shouldExplainPermission(status, alreadyAsked: false),
+          true);
+      expect(
+          DevicePushAccess.shouldExplainPermission(status, alreadyAsked: true),
+          false);
+    }
+    expect(
+        DevicePushAccess.shouldExplainPermission(
+            DevicePushPermission.deniedPermanently,
+            alreadyAsked: false),
+        false);
+    expect(
+        DevicePushAccess.shouldExplainPermission(DevicePushPermission.allowed,
+            alreadyAsked: false),
+        false);
+  });
+
   test('Android OS permission is readable without configured Firebase',
       () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;

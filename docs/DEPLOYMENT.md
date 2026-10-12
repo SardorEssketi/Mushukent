@@ -323,3 +323,72 @@ Record the Git commit, changed files, exact commands, production URLs, database
 backup and Alembic revisions, website/auth/smoke/runtime results, AAB path/size,
 package/version/signing/config results, and automated tests. Mark each important
 flow `VERIFIED`, `FAILED`, or `NOT VERIFIED`.
+
+
+## Automatic notification release
+
+Use an isolated integration worktree descended from the exact active web
+release, preserving homepage/showcase/loading-icon changes. The completed
+notification settings prerequisite is `1477900` (equivalent integrated patch
+`3f0838d`), followed by `2412679` and reviewed rollout fixes. Keep main and
+other worktrees intact; do not push or publish as part of a test APK release.
+
+The automatic-default rollout uses the existing `20261007_0025` schema.
+Do not run Alembic upgrades on this release. Override the backend image's
+default migration/startup command in the private release overlay with
+`["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]`.
+Backend and worker use the same immutable new image/revision; retain old
+images, environment, Firebase credential mounts, and token encryption key.
+Record Alembic current/head, preserve and validate a custom-format backup,
+validate Compose and staged Nginx, then replace backend/worker and the Web
+release together without recreating PostgreSQL or its volumes. Drain/freeze
+the old worker with no sending jobs before replacement; never run old/new
+workers simultaneously. Event/device unique keys and retry state stay intact.
+Physical FCM delivery remains best effort; an ambiguously acknowledged send
+cannot be proven exactly once by database deduplication alone.
+
+Run the focused notification/PostGIS tests, Flutter notification/location/
+consent/routing/auth tests, and focused lint/analyze. Build complete Flutter
+Web output using the canonical `-Target Web` script and production OAuth
+configuration; validate local CanvasKit, startup protection and `/feed` PWA
+launch. Build the unchanged static website and compare all hashes with the
+active homepage; perform HTTP artifact/routing checks without a browser matrix.
+
+For a signed physical-test APK, set the existing public production Google Web
+client ID in the build session and use ignored owner signing/Firebase files:
+
+```powershell
+.\frontend\tool\build_production.ps1 -Target AndroidApk -EnableAndroidPush
+```
+
+The script passes the production API, `MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID`,
+and `ENABLE_ANDROID_PUSH=true`; missing Firebase config fails the build.
+Verify the generated APK package/version/certificate, merged manifest
+notification and foreground location permissions, Firebase resources/project,
+AOT API/OAuth values, file size and SHA-256. No background location permission
+is allowed. An FCM-only Firebase project may differ from Google Sign-In's
+project: this app explicitly supplies `serverClientId`, so do not replace the
+production OAuth ID with an unrelated auto-generated Firebase Web ID.
+Google Cloud must authorize the APK's signing SHA-1 for `uz.mushukistan.app`
+in the project owning that server client; console allowlisting and actual
+device Google authentication remain manual checks where access is unavailable.
+
+Android 13+ can report denied before the first OS prompt; the app tracks its
+one-time disclosure marker and does not repeatedly prompt. Failed private-point
+deletion retries every 30 seconds only while foreground, without fetching GPS.
+Pausing, logout and account changes cancel that retry; the next authenticated
+launch/resume also retries. Existing clients' explicit save-point requests
+remain compatible, while new automatic uploads require their separate consent
+and expected-account guard.
+
+After activation check HTTPS artifacts/routes/homepage, API health, inbox,
+preferences, registration/unregistration and consent/radius behavior using
+temporary controlled accounts; delete only those accounts afterward. Do not
+send synthetic notifications to real users. Inspect worker/backend logs and
+retained database identity. Keep a complete rollback directory/config and old
+backend/worker image pins; rollback code and web as one set without restoring
+or replacing data. Normalized category values are not undone by code rollback.
+Share the new APK only after production gates pass; if the backend is rolled
+back later, stop testing that new APK until its compatible API is restored.
+The owner confirms real-device receipt, permission behavior, deep links and
+Google authentication; backend acceptance/send success is not proof of receipt.
