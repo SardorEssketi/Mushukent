@@ -22,22 +22,37 @@ class FeedCardFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surface,
-      shape: RoundedRectangleBorder(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadii.card),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7)),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: colors.shadow.withValues(alpha: 0.06),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (accent != null)
-              SizedBox(height: 3, child: ColoredBox(color: accent!)),
-            ...children,
-          ],
+      child: Material(
+        color: colors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (accent != null)
+                SizedBox(height: 4, child: ColoredBox(color: accent!)),
+              ...children,
+            ],
+          ),
         ),
       ),
     );
@@ -217,7 +232,7 @@ class _FeedMediaState extends State<FeedMedia> {
             itemCount: photos.length,
             onPageChanged: (index) => setState(() => _index = index),
             itemBuilder: (context, index) => ColoredBox(
-              color: colors.surfaceContainerLow,
+              color: colors.surfaceContainerHigh,
               child: AppRemoteImage(
                 photos[index],
                 fit: BoxFit.contain,

@@ -34,6 +34,7 @@ Map<String, Object?> _feedResponse() => {
 Future<(ProviderContainer, GoRouter)> _mount(
   WidgetTester tester, {
   String initialLocation = '/feed',
+  Size size = const Size(390, 844),
 }) async {
   final apiClient = FakeApiClient()
     ..setHandler('GET', 'feed', (_) => _feedResponse());
@@ -116,6 +117,10 @@ Future<(ProviderContainer, GoRouter)> _mount(
       ),
     ],
   );
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: MaterialApp.router(routerConfig: router),
@@ -132,6 +137,26 @@ Finder _tab(String label) => find.descendant(
     );
 
 void main() {
+  testWidgets('tablet and desktop widths use a navigation rail',
+      (tester) async {
+    await _mount(tester, initialLocation: '/map', size: const Size(768, 1024));
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(tester.widget<NavigationRail>(find.byType(NavigationRail)).extended,
+        isFalse);
+  });
+
+  testWidgets('desktop rail is extended and switches tabs', (tester) async {
+    final (_, router) = await _mount(tester,
+        initialLocation: '/map', size: const Size(1440, 900));
+    final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
+    expect(rail.extended, isTrue);
+    await tester.tap(find.descendant(
+        of: find.byType(NavigationRail), matching: find.text('Profile')));
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, '/profile');
+  });
+
   testWidgets('Profile edit then Map then Profile returns to Profile root',
       (tester) async {
     final (_, router) = await _mount(tester, initialLocation: '/profile');

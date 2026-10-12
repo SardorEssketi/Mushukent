@@ -517,9 +517,10 @@ class _FeedFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: 56,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(children: [
           _FilterTab(
             value: 'recent',
@@ -574,25 +575,39 @@ class _FilterTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final selected = selectedValue == value;
-    return InkWell(
-      onTap: () => onSelected(value),
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 64, minHeight: 48),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border(
-              bottom: BorderSide(
-            color: selected ? colors.primary : Colors.transparent,
-            width: 2,
-          )),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: selected ? colors.primary : colors.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: ExcludeSemantics(
+          child: AnimatedContainer(
+            duration: AppMotion.of(context, AppMotion.fast),
+            curve: AppMotion.curve,
+            decoration: BoxDecoration(
+              color: selected ? colors.primary : colors.surface,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+              border: Border.all(
+                color: selected ? colors.primary : colors.outlineVariant,
               ),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+              onTap: () => onSelected(value),
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: selected ? colors.onPrimary : colors.onSurface,
+                      ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

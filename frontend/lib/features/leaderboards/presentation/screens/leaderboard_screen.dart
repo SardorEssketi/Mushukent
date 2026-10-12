@@ -39,9 +39,12 @@ class LeaderboardScreen extends ConsumerWidget {
               maxWidth: AppWidths.readable,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Text(
-                  strings.leaderboard,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: Text(
+                    strings.leaderboard,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                 ),
               ),
             ),

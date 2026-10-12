@@ -94,33 +94,35 @@ class ProfileSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.lg),
-          Divider(height: 1, color: theme.colorScheme.outlineVariant),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _ProfileStat(
-                  value: observationCount,
-                  label: strings.observations,
-                  onTap: onObservationsTap,
+          const SizedBox(height: AppSpacing.xl),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _ProfileStat(
+                    value: observationCount,
+                    label: strings.observations,
+                    onTap: onObservationsTap,
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _ProfileStat(
-                  value: likesReceived,
-                  label: strings.likesReceived,
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _ProfileStat(
+                    value: likesReceived,
+                    label: strings.likesReceived,
+                  ),
                 ),
-              ),
-              Expanded(
-                child: _ProfileStat(
-                  value: commentCount,
-                  label: strings.comments,
-                  onTap: onCommentsTap,
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: _ProfileStat(
+                    value: commentCount,
+                    label: strings.comments,
+                    onTap: onCommentsTap,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -176,33 +178,39 @@ class _ProfileStat extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadii.sm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        child: Column(
-          children: [
-            Text(
-              '$value',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: onTap == null ? colors.onSurface : colors.primary,
-              ),
+    return Material(
+        color: colors.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              vertical: AppSpacing.md,
+              horizontal: AppSpacing.xs,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              label,
-              maxLines: 3,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            child: Column(
+              children: [
+                Text(
+                  '$value',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: onTap == null ? colors.onSurface : colors.primary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  label,
+                  maxLines: 3,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        ));
   }
 }
 
@@ -240,10 +248,24 @@ class ProfileActionRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
-      );
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ListTile(
+      minTileHeight: 56,
+      leading: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.primaryContainer.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+        ),
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(icon, size: 22, color: colors.onPrimaryContainer),
+        ),
+      ),
+      title: Text(title, style: Theme.of(context).textTheme.titleSmall),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: onTap,
+    );
+  }
 }
