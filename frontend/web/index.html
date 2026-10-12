@@ -59,12 +59,8 @@
       height: 54px;
       margin: 0 auto 18px;
       border-radius: 18px;
-      display: grid;
-      place-items: center;
-      background: #5b55d6;
-      color: white;
-      font-size: 28px;
-      font-weight: 800;
+      display: block;
+      object-fit: contain;
     }
 
     .startup-title {
@@ -133,7 +129,7 @@
 <body>
   <div id="flutter-startup" role="status" aria-live="polite">
     <div class="startup-card">
-      <div class="startup-mark" aria-hidden="true">M</div>
+      <img class="startup-mark" src="/icons/Icon-192.png" width="54" height="54" alt="" aria-hidden="true">
       <h1 class="startup-title">Mushukistan</h1>
       <p id="flutter-startup-status" class="startup-status">Loading Mushukistan…</p>
       <div class="startup-progress" aria-hidden="true"></div>
