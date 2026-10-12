@@ -2,6 +2,7 @@ package uz.mushukistan.app
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.app.NotificationManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -14,6 +15,12 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "mushukistan/notification_settings")
             .setMethodCallHandler { call, result ->
+                if (call.method == "notificationPermissionStatus") {
+                    val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                    val enabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.N || manager.areNotificationsEnabled()
+                    result.success(if (enabled) "allowed" else "denied")
+                    return@setMethodCallHandler
+                }
                 if (call.method != "openNotificationSettings") {
                     result.notImplemented()
                     return@setMethodCallHandler

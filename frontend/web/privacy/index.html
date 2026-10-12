@@ -138,7 +138,7 @@
   <main class="wrap">
     <article>
       <h1>Privacy Policy</h1>
-      <p class="muted">Version: 2026-08-21</p>
+      <p class="muted">Version: 2026-10-12</p>
       <p>This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.</p>
 
       <h2>Who is responsible for your data</h2>
@@ -152,7 +152,7 @@
         <li>Account data, including email address, password hash for password accounts, Google Sign-In email/name when Google Sign-In is used, registration time, last login time, coarse last-active time, preferred language, and accepted legal-document version.</li>
         <li>Profile data, including name, avatar URL, phone number, Telegram username, bio, and public activity visibility preference.</li>
         <li>User content, including cat sightings, cat photos, cat profile information, descriptions, comments, likes, reports, lost-pet posts, and adoption/rehoming posts.</li>
-        <li>Location data, including current location when used for nearby search, observation location, cat canonical location, place-search location, lost-pet last-seen location, and a private alert point only when explicitly saved for nearby Lost Pet alerts.</li>
+        <li>Location data, including current location when used for nearby search, observation location, cat canonical location, place-search location, lost-pet last-seen location, and a private last-authorized device location only after separate nearby-alert consent and Android location permission.</li>
         <li>Contact data published by the user when explicit publication consent is given for lost-pet or adoption/rehoming posts.</li>
         <li>Technical and security data used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs; plus encrypted Android push tokens, token hashes, notification preferences, inbox read state, and delivery status.</li>
       </ul>
@@ -191,8 +191,8 @@
       <p>Backup provider: not configured in the verified repository.</p>
       <p>Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features. Android push uses Firebase Cloud Messaging (Google) after notification permission is granted. Web has an in-app inbox without browser push.</p>
       <p>The notification inbox stores structured event and target identifiers, recipient/actor references, creation and read times. Android delivery stores encrypted device tokens, token hashes, preferences, and bounded retry state. Push payloads omit phone numbers, Telegram handles, exact pet and alert coordinates, and full comment text.</p>
-      <p>Nearby Lost Pet alerts require an explicitly saved private alert point and opt-in. New active Lost Pets within a fixed 500 m radius may generate inbox and Android push alerts. The point can be chosen on a map or from a one-time current-location action. No background or continuous notification location tracking is used. Disabling nearby alerts removes the point.</p>
-      <p>Inactivity reminders are off by default, push-only, and sent once after seven full days away. A coarse authenticated launch/resume timestamp is written at most every 15 minutes. Separate settings control comments, replies, existing pet follow-ups, nearby alerts, and inactivity pushes.</p>
+      <p>Nearby Lost Pet alerts use only the last authorized device location after a separate, explicit privacy disclosure and consent, plus Android location permission. The point is private, replaced on authenticated foreground launch/resume, and matched at a fixed 500 m. There is no map selection, fallback Tashkent position, background permission, continuous tracking, or location history. Consent can be withdrawn under Profile -> Settings -> Nearby alert privacy. Missing/revoked permission, disabled location services, withdrawal, and an invalid or unavailable fix clear the point and stop matching when the authenticated app next connects. Offline deletion is retried on a later active resume; a server cannot observe an offline OS permission change. One account retains one point, from the last consenting Android device; device consent is scoped to that account on that installation. Browser activity never uploads or clears an Android point.</p>
+      <p>Comments, replies, pet follow-ups, and inactivity reminders are enabled automatically, including previously disabled category choices. Inactivity is push-only, once after seven full days away. Android permission is required for push; the in-app inbox works without it.</p>
 
       <h2>Cookies and browser storage</h2>
       <p>The Android app does not use cookies.</p>

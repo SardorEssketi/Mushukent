@@ -2,24 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:mushukistan_frontend/core/location/location_service.dart';
-import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
+import 'package:mushukistan_frontend/features/notifications/application/nearby_alerts.dart';
 import 'package:mushukistan_frontend/features/notifications/application/notification_push.dart';
 import 'package:mushukistan_frontend/features/notifications/data/notification_api.dart';
 import 'package:mushukistan_frontend/features/notifications/presentation/notification_settings_screen.dart';
 
+import 'nearby_alerts_test.dart' show AuthorizedLocationFake, MemoryConsent;
 import 'support/fakes.dart';
 
 class _PushAccess extends DevicePushAccess {
-  _PushAccess(this.current);
+  _PushAccess(this.current, this.configured);
   DevicePushPermission current;
+  final bool configured;
   int openedSettings = 0;
   int requested = 0;
-
+  @override
+  bool get available => configured;
   @override
   Future<DevicePushPermission> status() async => current;
-
   @override
   Future<bool> requestPermission() async {
     requested++;
@@ -32,225 +33,116 @@ class _PushAccess extends DevicePushAccess {
   }
 }
 
-class _Location extends LocationService {
-  int requests = 0;
-
-  @override
-  Future<GeoPoint?> resolveCurrentLocation() async {
-    requests++;
-    return const GeoPoint(latitude: 41.3, longitude: 69.2);
-  }
-}
-
-Map<String, Object?> _preferences({
-  bool nearby = false,
-  Map<String, Object?>? point,
-}) =>
-    {
-      'push_comments': true,
-      'push_replies': false,
-      'push_followups': true,
-      'nearby_enabled': nearby,
-      'inactivity_enabled': false,
-      'push_available': true,
-      'alert_location': point,
-    };
-
-Future<(FakeApiClient, _PushAccess, _Location)> _mount(
+Future<(FakeApiClient, _PushAccess, AuthorizedLocationFake)> mountSettings(
   WidgetTester tester, {
-  DevicePushPermission status = DevicePushPermission.denied,
-  Map<String, Object?>? initialPreferences,
+  DevicePushPermission permission = DevicePushPermission.denied,
+  AuthorizedLocationStatus locationPermission = AuthorizedLocationStatus.denied,
+  bool configured = true,
+  bool android = true,
   bool failLoad = false,
 }) async {
   final client = FakeApiClient();
-  final preferences = initialPreferences ?? _preferences();
-  final push = _PushAccess(status);
-  final location = _Location();
   client.setHandler('GET', 'notifications/preferences', (_) {
     if (failLoad) throw StateError('offline');
-    return {...preferences};
+    return {
+      'push_comments': true,
+      'push_replies': true,
+      'push_followups': true,
+      'nearby_enabled': false,
+      'inactivity_enabled': true,
+      'push_available': configured,
+      'alert_location': null
+    };
   });
-  client.setHandler('PATCH', 'notifications/preferences', (call) {
-    final patch = call.body! as Map<String, Object?>;
-    preferences.addAll(patch);
-    if (patch['nearby_enabled'] == false) preferences['alert_location'] = null;
-    return {...preferences};
-  });
-  await tester.pumpWidget(ProviderScope(
-    overrides: [
-      notificationApiProvider.overrideWithValue(NotificationApi(client)),
-      devicePushAccessProvider.overrideWithValue(push),
-      locationServiceProvider.overrideWithValue(location),
-    ],
-    child: const MaterialApp(home: NotificationSettingsScreen()),
-  ));
+  final push = _PushAccess(permission, configured);
+  final location = AuthorizedLocationFake()..permission = locationPermission;
+  final api = NotificationApi(client);
+  final nearby = NearbyAlerts(
+      api: api,
+      location: location,
+      consent: MemoryConsent(),
+      android: android,
+      currentUser: () => 'owner');
+  await tester.pumpWidget(ProviderScope(overrides: [
+    notificationApiProvider.overrideWithValue(api),
+    devicePushAccessProvider.overrideWithValue(push),
+    locationServiceProvider.overrideWithValue(location),
+    nearbyAlertsAndroidProvider.overrideWithValue(android),
+    nearbyAlertsProvider.overrideWith((ref) => nearby),
+  ], child: const MaterialApp(home: NotificationSettingsScreen())));
   await tester.pumpAndSettle();
   return (client, push, location);
 }
 
-Future<void> _showNearby(WidgetTester tester) async {
-  await tester.scrollUntilVisible(find.text('Nearby Lost Pets'), 180,
-      scrollable: find.byType(Scrollable).first);
-  await tester.pump();
-}
-
 void main() {
-  testWidgets('permission denial does not disable server preferences',
+  testWidgets(
+      'status screen is read-only, with no category switches, map or save action',
       (tester) async {
-    final (client, _, _) = await _mount(tester);
-    expect(find.text('Notifications are off on this device'), findsOneWidget);
-    final comments = tester.widget<SwitchListTile>(
-      find.widgetWithText(SwitchListTile, 'Comments on my posts'),
-    );
-    expect(comments.value, isTrue);
-    expect(comments.onChanged, isNotNull);
-    expect(
-        tester
-            .widget<SwitchListTile>(
-              find.widgetWithText(SwitchListTile, 'Replies to my comments'),
-            )
-            .value,
-        isFalse);
-    await tester.tap(find.text('Comments on my posts'));
-    await tester.pumpAndSettle();
-    expect((client.calls.last.body as Map)['push_comments'], false);
-    expect(
-        tester
-            .widget<SwitchListTile>(
-              find.widgetWithText(SwitchListTile, 'Comments on my posts'),
-            )
-            .value,
-        isFalse);
+    final (client, push, location) = await mountSettings(tester);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.byType(FlutterMap), findsNothing);
+    expect(find.textContaining('Save'), findsNothing);
+    expect(find.text('Not allowed'), findsOneWidget);
+    expect(find.textContaining('500 m'), findsOneWidget);
+    expect(client.calls.where((call) => call.method == 'PATCH'), isEmpty);
+    expect(location.fixes, 0);
+    expect(push.requested, 0);
   });
 
-  testWidgets('permanent denial points to Android settings', (tester) async {
-    final (_, access, _) =
-        await _mount(tester, status: DevicePushPermission.deniedPermanently);
+  testWidgets(
+      'denied notification permission opens Android notification settings',
+      (tester) async {
+    final (_, push, _) = await mountSettings(tester,
+        permission: DevicePushPermission.deniedPermanently);
     await tester.tap(find.text('Open Android settings'));
     await tester.pump();
-    expect(access.openedSettings, 1);
-    expect(access.requested, 0);
+    expect(push.openedSettings, 1);
+    expect(push.requested, 0);
   });
 
-  testWidgets('unconfigured push has no misleading permission action',
+  testWidgets(
+      'location denial opens Android location settings, without a map action',
       (tester) async {
-    await _mount(tester, status: DevicePushPermission.unavailable);
-    expect(find.text('Device push is unavailable'), findsOneWidget);
-    expect(find.text('Enable notifications'), findsNothing);
+    final (_, _, location) = await mountSettings(tester);
+    await tester.ensureVisible(find.text('Open Android location permissions'));
+    await tester.tap(find.text('Open Android location permissions'));
+    await tester.pump();
+    expect(location.settings, 1);
+    expect(location.permissionRequests, 0);
+  });
+
+  testWidgets('permission and configured push delivery are separate statuses',
+      (tester) async {
+    await mountSettings(tester,
+        permission: DevicePushPermission.allowed, configured: false);
+    expect(find.text('Allowed'), findsOneWidget);
+    expect(
+        find.textContaining('Unavailable: Android permission'), findsOneWidget);
     expect(find.text('Open Android settings'), findsNothing);
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, 'Comments on my posts'),
-          )
-          .onChanged,
-      isNotNull,
-    );
   });
 
-  testWidgets('enabling a push category asks permission only after context',
+  testWidgets('configured allowed push is available', (tester) async {
+    await mountSettings(tester, permission: DevicePushPermission.allowed);
+    expect(find.text('Available on this device'), findsOneWidget);
+  });
+
+  testWidgets('web has no Android permission or location controls',
       (tester) async {
-    final (client, access, _) = await _mount(
-      tester,
-      status: DevicePushPermission.notDetermined,
-    );
-    expect(access.requested, 0);
-    await tester.tap(find.text('Replies to my comments'));
-    await tester.pumpAndSettle();
-    expect((client.calls.last.body as Map)['push_replies'], true);
-    expect(find.textContaining('Allow Android notifications'), findsOneWidget);
-    expect(access.requested, 0);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    expect(access.requested, 1);
-    expect(
-      tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, 'Replies to my comments'),
-          )
-          .value,
-      isTrue,
-    );
+    await mountSettings(tester,
+        permission: DevicePushPermission.web, android: false);
+    expect(find.text('Open Android settings'), findsNothing);
+    expect(find.text('Open Android location permissions'), findsNothing);
+    expect(find.textContaining('Notification Center works'), findsOneWidget);
   });
 
-  testWidgets(
-      'nearby needs a point; map selection saves and disabling clears it',
-      (tester) async {
-    final (client, _, _) = await _mount(tester);
-    await _showNearby(tester);
-    expect(find.byType(FlutterMap), findsNothing);
-    await tester.tap(find.text('Nearby Lost Pets'));
-    await tester.pump();
-    expect(find.byType(FlutterMap), findsOneWidget);
-    expect(client.calls.where((call) => call.method == 'PATCH'), isEmpty);
-    final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
-    map.options.onTap!(
-      const TapPosition(Offset.zero, Offset.zero),
-      const LatLng(41.3, 69.2),
-    );
-    await tester.pump();
-    await tester.ensureVisible(find.text('Save point and turn on alerts'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save point and turn on alerts'));
-    await tester.pumpAndSettle();
-    final patch = client.calls.last.body as Map;
-    expect(patch['nearby_enabled'], true);
-    expect((patch['alert_location'] as Map)['latitude'], 41.3);
-    await tester.ensureVisible(find.text('Nearby Lost Pets'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Nearby Lost Pets'));
-    await tester.pumpAndSettle();
-    expect((client.calls.last.body as Map)['nearby_enabled'], false);
-    expect(find.byType(FlutterMap), findsNothing);
-  });
-
-  testWidgets(
-      'one-time current location selects a point but does not upload it',
-      (tester) async {
-    final (client, _, location) = await _mount(tester);
-    await _showNearby(tester);
-    await tester.ensureVisible(find.text('Use my current location once'));
-    await tester.tap(find.text('Use my current location once'));
-    await tester.pumpAndSettle();
-    expect(location.requests, 1);
-    expect(find.byType(FlutterMap), findsOneWidget);
-    expect(client.calls.where((call) => call.method == 'PATCH'), isEmpty);
-  });
-
-  testWidgets('saved point has compact preview and change action',
-      (tester) async {
-    await _mount(tester,
-        initialPreferences: _preferences(
-          nearby: true,
-          point: {'latitude': 41.3, 'longitude': 69.2},
-        ));
-    await _showNearby(tester);
-    expect(tester.getSize(find.byType(FlutterMap)).height, 140);
-    await tester.ensureVisible(find.text('Change alert point'));
-    await tester.tap(find.text('Change alert point'));
-    await tester.pump();
-    expect(tester.getSize(find.byType(FlutterMap)).height, 210);
-  });
-
-  testWidgets('load failure has a retry action and compact layout is bounded',
+  testWidgets('offline screen offers retry; compact screen has no overflow',
       (tester) async {
     tester.view.physicalSize = const Size(320, 700);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await _mount(tester, failLoad: true);
+    await mountSettings(tester, failLoad: true);
     expect(find.text('Try again'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('loaded settings fit a compact screen without overflow',
-      (tester) async {
-    tester.view.physicalSize = const Size(320, 700);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await _mount(tester);
-    await _showNearby(tester);
     expect(tester.takeException(), isNull);
   });
 }

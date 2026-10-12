@@ -1,6 +1,6 @@
 # Mushukistan Privacy Policy
 
-Version: 2026-08-21
+Version: 2026-10-12
 
 This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.
 
@@ -46,7 +46,7 @@ Location data:
 - Cat canonical location.
 - Place-search location.
 - Lost-pet last-seen location.
-- Private notification alert point saved only after explicit selection for nearby Lost Pet alerts.
+- Last authorized device location stored privately only after a separate explicit nearby-alert disclosure and consent, with Android location permission; no location history is stored.
 
 Contact data published by the user:
 - Lost-pet and adoption/rehoming posts may publicly show copied contact details only after explicit publication consent.
@@ -108,9 +108,9 @@ Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting S
 
 The notification inbox stores event type, relevant content/comment identifiers, actor and recipient references, creation time, and read time. Android push delivery stores encrypted device tokens and token hashes, preferences, bounded delivery attempts, and errors without full token values in ordinary logs. Push messages contain no phone numbers, Telegram handles, precise pet coordinates, private alert coordinates, or full comment text.
 
-Nearby Lost Pet alerts are disabled until you explicitly choose a private alert point and enable them. New active Lost Pets within a fixed 500 m radius may then produce inbox and Android push alerts. You can choose the point on a map or use your current location once when you tap the location action. Mushukistan does not collect background or continuous location for notifications. Disabling nearby alerts removes the saved point.
+Nearby Lost Pet alerts use only the last authorized device location after a separate, explicit privacy disclosure and consent, plus Android location permission. The point is private, replaced on authenticated foreground launch/resume, and matched at a fixed 500 m. There is no map selection, fallback Tashkent position, background permission, continuous tracking, or location history. Consent can be withdrawn under Profile -> Settings -> Nearby alert privacy. Missing/revoked permission, disabled location services, withdrawal, and an invalid or unavailable fix clear the point and stop matching when the authenticated app next connects. Offline deletion is retried on a later active resume; a server cannot observe an offline OS permission change. One account retains one point, from the last consenting Android device; device consent is scoped to that account on that installation. Browser activity never uploads or clears an Android point.
 
-Inactivity reminders are off by default, push-only, and sent once after seven full days without authenticated app activity. Mushukistan records a coarse last-active time on authenticated launch or resume, with database writes throttled to at most once per 15 minutes. Returning starts a new inactivity period. Separate settings control Android pushes for comments, replies, existing pet follow-ups, nearby Lost Pets, and inactivity.
+Comments, replies, pet follow-ups, and inactivity reminders are enabled automatically, including previously saved disabled category choices. Inactivity reminders are push-only, once after seven full inactive days; Android push requires operating-system permission. The in-app inbox remains available when push is denied. Nearby alerts additionally require explicit privacy consent and an authorized location as described above.
 
 ## 7. Cookies and browser storage
 

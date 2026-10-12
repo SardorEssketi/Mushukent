@@ -5,13 +5,18 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from cryptography.fernet import Fernet
-from sqlalchemy import and_, delete, or_, select, update
+from geoalchemy2 import Geography
+from sqlalchemy import and_, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from structlog import get_logger
 
 from app.core.config import Settings, get_settings
 from app.features.notifications.infrastructure.fcm import FcmSender, PushResult
-from app.features.notifications.infrastructure.repository import INACTIVITY_THRESHOLD
+from app.features.notifications.infrastructure.repository import (
+    INACTIVITY_THRESHOLD,
+    NEARBY_RADIUS_METERS,
+    NotificationRepository,
+)
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 
@@ -25,7 +30,10 @@ PUSH_COPY = {
     "en": {
         "comment": ("New comment", "Someone commented on your post."),
         "reply": ("New reply", "Someone replied to your comment."),
-        "nearby_lost_pet": ("Lost pet nearby", "A lost pet was reported near your alert point."),
+        "nearby_lost_pet": (
+            "Lost pet nearby",
+            "A lost pet was reported near your last authorized location.",
+        ),
         "lost_pet_followup": ("Lost pet follow-up", "Please check your lost pet follow-up."),
         "adoption_followup": ("New home follow-up", "Please check your new home follow-up."),
         "inactivity": ("We miss you", "See what is new in Mushukistan."),
@@ -33,7 +41,10 @@ PUSH_COPY = {
     "ru": {
         "comment": ("Новый комментарий", "Кто-то прокомментировал вашу публикацию."),
         "reply": ("Новый ответ", "Кто-то ответил на ваш комментарий."),
-        "nearby_lost_pet": ("Рядом пропал питомец", "Рядом с выбранной точкой ищут питомца."),
+        "nearby_lost_pet": (
+            "Рядом пропал питомец",
+            "Рядом с вашим последним разрешённым местоположением ищут питомца.",
+        ),
         "lost_pet_followup": ("Напоминание о питомце", "Проверьте вопрос о пропавшем питомце."),
         "adoption_followup": (
             "Напоминание о новом доме",
@@ -46,7 +57,7 @@ PUSH_COPY = {
         "reply": ("Yangi javob", "Kimdir izohingizga javob berdi."),
         "nearby_lost_pet": (
             "Yaqinda jonivor yo‘qoldi",
-            "Tanlangan joy yaqinida jonivor yo‘qolgani e’lon qilindi.",
+            "Oxirgi ruxsat berilgan joylashuvingiz yaqinida jonivor yo‘qolgani e’lon qilindi.",
         ),
         "lost_pet_followup": (
             "Yo‘qolgan jonivor haqida eslatma",
@@ -73,6 +84,7 @@ class NotificationWorker:
     def enqueue_due_followups(self, now: datetime) -> int:
         count = 0
         with self.manager.session_scope() as session:
+            NotificationRepository(session).normalize_defaults()
             for followup_model, post_model, post_id_field, kind in (
                 (
                     schema.LostPetFollowUp,
@@ -135,6 +147,7 @@ class NotificationWorker:
     def enqueue_inactivity(self, now: datetime) -> int:
         count = 0
         with self.manager.session_scope() as session:
+            NotificationRepository(session).normalize_defaults()
             candidates = session.execute(
                 select(schema.User.id, schema.User.last_active_at, schema.NotificationPreference)
                 .join(
@@ -231,7 +244,7 @@ class NotificationWorker:
             or device.user_id != job.recipient_id
         ):
             return False
-        pref = session.get(schema.NotificationPreference, job.recipient_id)
+        pref = NotificationRepository(session).preferences(job.recipient_id)
         if job.kind == "inactivity":
             return bool(
                 pref
@@ -265,6 +278,18 @@ class NotificationWorker:
                 and pet.is_public
                 and not pet.deleted_at
                 and not pet.is_resolved
+                and session.scalar(
+                    select(
+                        func.ST_DWithin(
+                            cast(schema.NotificationPreference.alert_location, Geography),
+                            cast(schema.LostPet.last_seen_location, Geography),
+                            NEARBY_RADIUS_METERS,
+                        )
+                    )
+                    .select_from(schema.NotificationPreference)
+                    .join(schema.LostPet, schema.LostPet.id == job.target_id)
+                    .where(schema.NotificationPreference.user_id == job.recipient_id)
+                )
             )
         followup_model, post_model, post_id_name = (
             (schema.LostPetFollowUp, schema.LostPet, "lost_pet_id")

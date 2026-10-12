@@ -16,7 +16,7 @@ from app.features.cats.domain.models import CatStatus
 from app.features.comments.application.schemas import CommentCreate
 from app.features.comments.application.service import CommentsService
 from app.features.comments.infrastructure.repositories import SqlAlchemyCommentRepository
-from app.features.notifications.application.schemas import PreferencePatch
+from app.features.notifications.application.schemas import AlertPoint, PreferencePatch
 from app.features.notifications.application.service import NotificationService
 from app.features.notifications.application.worker import NotificationWorker
 from app.features.notifications.infrastructure.fcm import PushResult
@@ -42,6 +42,8 @@ def _auth(user: schema.User) -> AuthUser:
         "push_replies",
         "push_followups",
         "nearby_enabled",
+        "nearby_consent",
+        "expected_user_id",
         "inactivity_enabled",
         "alert_location",
     ),
@@ -281,6 +283,120 @@ class _FakeSender:
         return self.result
 
 
+def test_automatic_defaults_upgrade_legacy_and_initialize_absent_rows(db_session_manager):
+    with db_session_manager.session_scope() as session:
+        legacy, new = _user(session, "Legacy"), _user(session, "New")
+        repo = NotificationRepository(session)
+        pref = repo.preferences(legacy.id)
+        for field in ("push_comments", "push_replies", "push_followups", "inactivity_enabled"):
+            setattr(pref, field, False)
+        repo.set_alert_location(pref, 41.3111, 69.2797)
+        pref.nearby_enabled = True
+        cycle = datetime.now(UTC)
+        pref.last_inactivity_cycle_at = cycle
+        ids = legacy.id, new.id
+    with db_session_manager.session_scope() as session:
+        repo = NotificationRepository(session)
+        repo.normalize_defaults()
+        repo.normalize_defaults()  # Idempotent, no consent/location reset.
+        for user_id in ids:
+            pref = session.get(schema.NotificationPreference, user_id)
+            assert all(
+                getattr(pref, f)
+                for f in ("push_comments", "push_replies", "push_followups", "inactivity_enabled")
+            )
+        assert repo.get_alert_location(ids[0]) == (41.3111, 69.2797)
+        assert session.get(schema.NotificationPreference, ids[0]).last_inactivity_cycle_at == cycle
+        assert not session.get(schema.NotificationPreference, ids[1]).nearby_enabled
+        assert repo.get_alert_location(ids[1]) is None
+
+    service = NotificationService(db_session_manager, Settings())
+    response = service.update_preferences(
+        ids[0],
+        PreferencePatch(
+            push_comments=False, push_replies=False, push_followups=False, inactivity_enabled=False
+        ),
+    )
+    assert response.push_comments and response.push_replies and response.push_followups
+    assert response.inactivity_enabled
+
+
+def test_foreground_point_requires_consent_and_withdrawal_clears_it(db_session_manager):
+    with db_session_manager.session_scope() as session:
+        user = _user(session, "Consent")
+        user_id = user.id
+    service = NotificationService(db_session_manager, Settings())
+    point = AlertPoint(latitude=41.3111, longitude=69.2797)
+    with pytest.raises(HTTPException) as switched_account:
+        service.update_preferences(
+            user_id,
+            PreferencePatch(
+                expected_user_id=uuid4(),
+                nearby_enabled=True,
+                nearby_consent=True,
+                alert_location=point,
+            ),
+        )
+    assert switched_account.value.status_code == 409
+    assert service.preferences(user_id).alert_location is None
+    with pytest.raises(HTTPException) as rejected:
+        service.update_preferences(
+            user_id, PreferencePatch(nearby_enabled=True, alert_location=point)
+        )
+    assert rejected.value.status_code == 422
+    assert service.preferences(user_id).alert_location is None
+    response = service.update_preferences(
+        user_id, PreferencePatch(nearby_enabled=True, nearby_consent=True, alert_location=point)
+    )
+    assert response.nearby_enabled and response.alert_location == point
+    with pytest.raises(HTTPException) as missing_fix:
+        service.update_preferences(
+            user_id, PreferencePatch(nearby_enabled=True, nearby_consent=True)
+        )
+    assert missing_fix.value.status_code == 422
+    moved = AlertPoint(latitude=41.32, longitude=69.3)
+    assert (
+        service.update_preferences(
+            user_id, PreferencePatch(nearby_enabled=True, nearby_consent=True, alert_location=moved)
+        ).alert_location
+        == moved
+    )
+    withdrawn = service.update_preferences(user_id, PreferencePatch(nearby_consent=False))
+    assert not withdrawn.nearby_enabled and withdrawn.alert_location is None
+
+
+@pytest.mark.parametrize("change", ["withdraw", "move"])
+def test_queued_nearby_delivery_rechecks_latest_eligibility(db_session_manager, change):
+    key = Fernet.generate_key().decode()
+    with db_session_manager.session_scope() as session:
+        owner, recipient = _user(session, "Owner"), _user(session, "Recipient")
+        pet = schema.LostPet(
+            user_id=owner.id,
+            pet_name="Pet",
+            owner_phone_number="+998901234567",
+            last_seen_location=WKTElement("POINT(69.2797 41.3111)", srid=4326),
+        )
+        session.add(pet)
+        session.flush()
+        repo = NotificationRepository(session)
+        pref = repo.preferences(recipient.id)
+        repo.set_alert_location(pref, 41.3111, 69.2797)
+        pref.nearby_enabled = True
+        repo.upsert_device(recipient.id, "nearby-current-location-test-token", key)
+        repo.create_nearby_events(lost_pet_id=pet.id, recipient_ids=[recipient.id])
+        if change == "withdraw":
+            pref.nearby_enabled = False
+            pref.alert_location = None
+        else:
+            repo.set_alert_location(pref, 42, 70)
+    sender = _FakeSender()
+    worker = NotificationWorker(db_session_manager, Settings(PUSH_TOKEN_ENCRYPTION_KEY=key), sender)
+    assert worker.deliver(datetime.now(UTC)) == 0
+    assert sender.calls == 0
+    with db_session_manager.session_scope() as session:
+        assert session.scalar(select(schema.NotificationPushJob.status)) == "cancelled"
+
+
 def test_inactivity_once_per_period_and_activity_reset(db_session_manager) -> None:
     key = Fernet.generate_key().decode()
     now = datetime.now(UTC)
@@ -288,7 +404,8 @@ def test_inactivity_once_per_period_and_activity_reset(db_session_manager) -> No
         user = _user(session, "Inactive")
         user.last_active_at = now - timedelta(days=7, minutes=15, seconds=1)
         repo = NotificationRepository(session)
-        repo.preferences(user.id).inactivity_enabled = True
+        # The worker must upgrade an old disabled choice without an app visit.
+        repo.preferences(user.id).inactivity_enabled = False
         repo.upsert_device(user.id, "test-device-token-long-enough", key)
         user_id = user.id
 
@@ -327,6 +444,7 @@ def test_due_followup_one_job_per_device_and_completed_cycle_cancelled(db_sessio
         NotificationRepository(session).upsert_device(
             owner.id, "test-followup-token-long-enough", key
         )
+        NotificationRepository(session).preferences(owner.id).push_followups = False
         session.flush()
         followup_id = followup.id
 

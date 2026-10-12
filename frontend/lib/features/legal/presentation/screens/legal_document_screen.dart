@@ -233,7 +233,7 @@ const _termsOfService = _LegalDocument(
 
 const _privacyPolicy = _LegalDocument(
   title: 'Privacy Policy',
-  version: '2026-08-01',
+  version: '2026-10-12',
   sections: [
     _LegalSection(
       paragraphs: [
@@ -270,7 +270,7 @@ const _privacyPolicy = _LegalDocument(
         'Current location when used for nearby search.',
         'Observation location when attached to a post.',
         'Cat canonical location, place-search location, and lost-pet last-seen location.',
-        'A private Lost Pet alert point only when you save one; it is removed when nearby alerts are disabled.',
+        'Your last device location is stored privately for Lost Pet alerts within 500 m only after separate explicit privacy consent and Android location permission. It refreshes on foreground launch/resume without background tracking or location history. Withdraw consent under Profile -> Settings -> Nearby alert privacy; withdrawal or revoked permission clears the point when the authenticated app next connects.',
         "Lost-pet posts publicly show the user's profile phone number only after explicit phone-publication consent.",
       ],
     ),
@@ -298,7 +298,7 @@ const _privacyPolicy = _LegalDocument(
         'Operate lost-pet contact features.',
         'Enable comments, likes, reports, moderation, and account settings.',
         'Store comment, reply, and nearby Lost Pet inbox events and their read state; send Android pushes through Firebase Cloud Messaging when permitted and enabled.',
-        'Send one optional push-only reminder after seven full days without authenticated app activity. No background location tracking is used.',
+        'Comments, replies, pet follow-ups, and inactivity reminders are enabled automatically, including previously disabled category choices. Inactivity is push-only, once after seven full days away. Android permission is required for push; the inbox works without it.',
         'Prevent abuse, rate-limit requests, secure the service, and comply with legal obligations.',
       ],
     ),

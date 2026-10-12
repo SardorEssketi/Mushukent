@@ -19,9 +19,15 @@ import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_s
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/notifications/application/notification_push.dart';
+import 'package:mushukistan_frontend/features/notifications/application/nearby_alerts.dart';
 import 'package:mushukistan_frontend/features/profile/presentation/screens/profile_screen.dart';
 
 import '../../support/fakes.dart';
+
+class _BrowserNotificationAccess extends DevicePushAccess {
+  @override
+  Future<DevicePushPermission> status() async => DevicePushPermission.web;
+}
 
 Widget _buildApp(ProviderContainer container,
     {bool useProductionRoot = false}) {
@@ -161,6 +167,8 @@ ProviderContainer _containerWithRepo(
         googleIdentityTokens ?? FakeGoogleIdentityTokenProvider(),
       ),
       apiClientProvider.overrideWithValue(fakeApiClient),
+      nearbyAlertsAndroidProvider.overrideWithValue(false),
+      devicePushAccessProvider.overrideWithValue(_BrowserNotificationAccess()),
       authenticatedOnboardingStoreProvider.overrideWithValue(
         InMemoryAuthenticatedOnboardingStore(
           seenUserIds: {'11111111-1111-4111-8111-111111111111'},
@@ -458,7 +466,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.routeInformationProvider.value.uri.path,
         '/profile/settings/notifications');
-    expect(find.text('Notification settings'), findsOneWidget);
+    expect(find.text('Notifications'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

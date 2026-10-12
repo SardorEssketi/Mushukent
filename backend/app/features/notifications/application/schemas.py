@@ -18,6 +18,10 @@ class PreferencePatch(BaseModel):
     push_replies: bool | None = None
     push_followups: bool | None = None
     nearby_enabled: bool | None = None
+    # Explicit disclosure acknowledgement for each foreground location upload.
+    # nearby_enabled remains the persisted consent/eligibility flag.
+    nearby_consent: bool | None = None
+    expected_user_id: UUID | None = None
     inactivity_enabled: bool | None = None
     alert_location: AlertPoint | None = None
 
