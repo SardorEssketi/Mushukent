@@ -37,9 +37,18 @@ try {
         # Keep CanvasKit on the same origin. This avoids Safari/WebKit startup
         # failures when the remote gstatic CanvasKit CDN is blocked or cannot
         # complete its WebAssembly load.
-        & flutter build web --release --no-web-resources-cdn `
-            "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
-            "--dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=$normalizedGoogleClientId"
+        # Windows PowerShell can turn harmless native stderr (for example the
+        # SDK's Wasm dry-run warnings) into terminating ErrorRecords. The native
+        # exit code remains the build gate; keep validation errors terminating.
+        $nativeBuildErrorAction = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & flutter build web --release --no-web-resources-cdn `
+                "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
+                "--dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=$normalizedGoogleClientId"
+        } finally {
+            $ErrorActionPreference = $nativeBuildErrorAction
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "Flutter production web build failed with exit code $LASTEXITCODE."
         }
@@ -100,9 +109,15 @@ try {
     if ($EnableAndroidPush) {
         $pushBuildArguments = @('--dart-define=ENABLE_ANDROID_PUSH=true')
     }
-    & flutter build $androidArtifact --release `
-        "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
-        "--dart-define=MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID=$normalizedGoogleClientId" @pushBuildArguments
+    $nativeBuildErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & flutter build $androidArtifact --release `
+            "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
+            "--dart-define=MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID=$normalizedGoogleClientId" @pushBuildArguments
+    } finally {
+        $ErrorActionPreference = $nativeBuildErrorAction
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "Flutter production Android build failed with exit code $LASTEXITCODE."
     }
