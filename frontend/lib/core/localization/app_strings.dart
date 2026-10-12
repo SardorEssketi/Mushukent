@@ -3224,6 +3224,25 @@ class AppStrings {
     };
   }
 
+  String get welcomeHeadline {
+    return switch (this) {
+      _UzbekStrings() => 'O‘zbekiston bo‘ylab mushuklarga yordam beramiz',
+      _RussianStrings() => 'Помогаем кошкам и питомцам по всему Узбекистану',
+      _ => 'Helping cats and pets across Uzbekistan',
+    };
+  }
+
+  String get welcomeBody {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Xaritada mushuklarni belgilang, yo‘qolgan uy hayvonlari haqida xabar bering va ularga uy topishga yordam bering.',
+      _RussianStrings() =>
+        'Отмечайте кошек на карте, сообщайте о пропавших питомцах и помогайте им найти дом.',
+      _ =>
+        'Spot cats on the map, report lost pets, and help animals find a home, together with your community.',
+    };
+  }
+
   String get continueBrowsing {
     return switch (this) {
       _UzbekStrings() => 'Ko‘rishni davom ettirish',

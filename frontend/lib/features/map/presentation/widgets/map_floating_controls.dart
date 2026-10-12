@@ -28,7 +28,7 @@ class MapLayersControl extends StatelessWidget {
         child: Material(
           color: filtered ? colors.primaryContainer : colors.surface,
           elevation: 2,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(16),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onPressed,
