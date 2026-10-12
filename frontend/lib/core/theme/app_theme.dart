@@ -252,6 +252,8 @@ class AppTheme {
         backgroundColor: c.surface,
         indicatorColor: c.primaryContainer,
         indicatorShape: const StadiumBorder(),
+        selectedIconTheme: IconThemeData(color: c.onPrimaryContainer),
+        unselectedIconTheme: IconThemeData(color: c.onSurfaceVariant),
         selectedLabelTextStyle: text.labelMedium?.copyWith(color: c.onSurface),
         unselectedLabelTextStyle: text.labelMedium,
       ),
