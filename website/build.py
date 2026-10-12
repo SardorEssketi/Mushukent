@@ -226,8 +226,9 @@ def main() -> None:
     if OUT.exists():
         shutil.rmtree(OUT)
     (OUT / "landing-assets").mkdir(parents=True)
+    font_url = asset("manrope.ttf", (ROOT / "src/manrope.ttf").read_bytes())
     assets = {
-        "css": asset("site.css", (ROOT / "src/site.css").read_bytes()),
+        "css": asset("site.css", (ROOT / "src/site.css").read_text(encoding="utf-8").replace("__FONT__", font_url).encode("utf-8")),
         "js": asset("site.js", (ROOT / "src/site.js").read_bytes()),
         "hero": asset("hero.svg", (ROOT / "src/hero.svg").read_bytes()),
         "social": {lang: asset(f"social-{lang}.png", (ROOT / f"src/social-{lang}.png").read_bytes()) for lang in CONTENT},
