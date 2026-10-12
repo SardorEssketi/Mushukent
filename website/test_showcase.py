@@ -61,7 +61,7 @@ class ShowcaseTest(unittest.TestCase):
                 self.assertLess(document.index('id="about"'), document.index('id="showcase"'))
                 self.assertLess(document.index('id="showcase"'), document.index('id="how"'))
                 self.assertIn(content["showcase_title"], " ".join(parsed.text))
-                self.assertIn(content["showcase_note"], " ".join(parsed.text))
+                self.assertNotIn('class="showcase-note"', document)
                 images = [p for p in parsed.all("img") if "app-" in p["src"]]
                 self.assertEqual(len(images), 4)
                 self.assertEqual(len(parsed.all("picture")), 4)

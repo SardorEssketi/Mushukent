@@ -101,7 +101,7 @@ def main():
             values = evaluate(r'''(() => {
               const rgb=s=>s.match(/[\d.]+/g).slice(0,3).map(Number);
               const l=c=>c.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0);
-              return ['.hero-intro','.showcase-intro','.showcase-screen p','.showcase-note','.button-primary'].map(selector=>{
+              return ['.hero-intro','.showcase-intro','.showcase-screen p','.button-primary'].map(selector=>{
                 const node=document.querySelector(selector);let parent=node,bg;
                 while(parent){bg=getComputedStyle(parent).backgroundColor;if(bg!=='rgba(0, 0, 0, 0)'&&bg!=='transparent')break;parent=parent.parentElement;}
                 const a=l(rgb(getComputedStyle(node).color)),b=l(rgb(bg));

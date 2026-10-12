@@ -59,6 +59,7 @@ class SiteBuildTest(unittest.TestCase):
                 self.assertIn(content["hero"], " ".join(parsed.text))
                 self.assertIn(content["mission_body"], " ".join(parsed.text))
                 self.assertNotIn("flutter_bootstrap.js", document)
+                self.assertNotIn('class="about-rule"', document)
                 self.assertEqual(len(parsed.all("nav")), 3)
 
     def test_metadata_and_assets(self) -> None:
@@ -93,7 +94,7 @@ class SiteBuildTest(unittest.TestCase):
                     if href.startswith("/"):
                         self.assertFalse(urlparse(href).netloc)
                 self.assertIn('href="/privacy"', document)
-                self.assertIn('href="/child-safety"', document)
+                self.assertNotIn('href="/child-safety"', document)
                 self.assertIn('href="/delete-account"', document)
 
     def test_sitemap_robots_and_manifest(self) -> None:
