@@ -390,6 +390,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       FilledButton.icon(
                         onPressed:
@@ -405,7 +406,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                             const Icon(Icons.mode_comment_outlined, size: 18),
                         label: Text('${strings.comments} ${post.commentCount}'),
                       ),
-                      OutlinedButton.icon(
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         onPressed: () => context.push(
                           Uri(
                             path: '/report',
