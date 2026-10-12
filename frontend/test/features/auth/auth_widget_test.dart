@@ -402,7 +402,7 @@ void main() {
     expect(container.read(authControllerProvider).isAuthenticated, isTrue);
     expect(router.routeInformationProvider.value.uri.path, '/feed');
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -492,7 +492,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -512,7 +512,7 @@ void main() {
     container.read(appRouterProvider).go('/moderation/reports');
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(AppBar, 'Profile'), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsOneWidget);
   });
 
   testWidgets('moderators can open moderation routes', (tester) async {
@@ -546,7 +546,7 @@ void main() {
     await _pumpApp(tester, container);
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(find.text('Join Mushukistan'), findsNothing);
@@ -555,7 +555,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -589,7 +589,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(find.text('Join Mushukistan'), findsNothing);
@@ -609,7 +609,7 @@ void main() {
     expect(
         container.read(authControllerProvider).phase, AuthPhase.authenticated);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(find.text('Join Mushukistan'), findsNothing);
@@ -650,7 +650,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -828,7 +828,7 @@ void main() {
         expect(repo.lastGoogleIdToken, 'google-id-token');
         expect(repo.registerCalls, 0);
         expect(
-          find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+          find.byType(FeedScreen),
           findsOneWidget,
         );
         expect(
@@ -883,7 +883,7 @@ void main() {
               .path,
           '/feed');
       expect(
-        find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+        find.byType(FeedScreen),
         findsOneWidget,
       );
     });
@@ -957,7 +957,7 @@ void main() {
     expect(repo.lastGoogleIdToken, 'google-id-token');
     expect(find.byType(Checkbox), findsNothing);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -1090,7 +1090,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(repo.logoutCalled, isTrue);

@@ -29,7 +29,6 @@ class ProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(strings.profile),
         actions: [
           if (MediaQuery.sizeOf(context).width < AppWidths.compact)
             IconButton(

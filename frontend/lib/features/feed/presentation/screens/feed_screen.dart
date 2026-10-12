@@ -350,15 +350,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        titleSpacing: 0,
-        title: AppContentWidth(
-          maxWidth: AppWidths.readable,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Align(
-                alignment: Alignment.centerLeft, child: Text(strings.feed)),
-          ),
-        ),
         actions: [
           if (authenticated) const NotificationBell(),
           if (!authenticated)
