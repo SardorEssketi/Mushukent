@@ -264,6 +264,23 @@ def test_notifier_posts_html_message_to_bot_api() -> None:
     assert seen["json"]["parse_mode"] == "HTML"
 
 
+def test_bot_token_is_not_written_to_logs_by_httpx(caplog) -> None:
+    """httpx logs request URLs at INFO and the token is part of the URL."""
+    import logging
+
+    from app.core.logging import configure_logging
+
+    configure_logging()
+    notifier = TelegramFeedbackNotifier(
+        bot_token="SECRET-TOKEN",
+        chat_id="42",
+        client=_client(lambda r: httpx.Response(200, json={"ok": True})),
+    )
+    with caplog.at_level(logging.INFO):
+        assert notifier.notify(make_notification()) is True
+    assert "SECRET-TOKEN" not in caplog.text
+
+
 def test_notifier_is_disabled_without_credentials() -> None:
     calls: list[int] = []
     notifier = TelegramFeedbackNotifier(
