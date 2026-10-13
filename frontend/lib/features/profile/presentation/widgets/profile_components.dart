@@ -51,6 +51,7 @@ class ProfileSummaryCard extends StatelessWidget {
 
     return AppCard(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(

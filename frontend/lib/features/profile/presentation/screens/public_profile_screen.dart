@@ -180,7 +180,12 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               recentHeading,
-              Expanded(child: recentContent),
+              // Only the scrolling list fills the height; the empty and private
+              // states keep their natural size instead of stretching.
+              if (!activityAvailable || result.posts.items.isEmpty)
+                recentContent
+              else
+                Expanded(child: recentContent),
             ],
           );
           return AppContentWidth(
