@@ -1102,3 +1102,36 @@ class NotificationPushJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ),
         Index("idx_notification_push_jobs_recipient", "recipient_id"),
     )
+
+
+class Feedback(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    """Product feedback from a signed-in user.
+
+    The author link is nullable (SET NULL) so feedback survives account
+    deletion. Category is text plus a CHECK so a new category needs no enum
+    migration.
+    """
+
+    __tablename__ = "feedback"
+
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    category: Mapped[str] = mapped_column(Text, nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    platform: Mapped[str | None] = mapped_column(Text, nullable=True)
+    app_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('bug', 'suggestion', 'other')",
+            name="feedback_category_valid",
+        ),
+        CheckConstraint(
+            "char_length(message) BETWEEN 10 AND 2000",
+            name="feedback_message_length",
+        ),
+        Index("idx_feedback_user_created", "user_id", "created_at"),
+    )

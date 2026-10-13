@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         alias="RESEND_FROM_EMAIL",
     )
 
+    telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
+    telegram_feedback_chat_id: str = Field(default="", alias="TELEGRAM_FEEDBACK_CHAT_ID")
+    feedback_rate_limit_per_hour: int = Field(default=3, alias="FEEDBACK_RATE_LIMIT_PER_HOUR")
+
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
     rate_limit_auth_per_minute: int = Field(default=10, alias="RATE_LIMIT_AUTH_PER_MINUTE")
     rate_limit_anon_per_minute: int = Field(default=30, alias="RATE_LIMIT_ANON_PER_MINUTE")
