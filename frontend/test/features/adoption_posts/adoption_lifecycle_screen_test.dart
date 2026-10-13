@@ -98,7 +98,9 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Mark as rehomed'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Mark as rehomed'));
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, 'Mark as rehomed')));
     await tester.pumpAndSettle();
     expect(resolved, isTrue);
     expect(container.read(resolvedAdoptionIdsProvider), contains('adoption-1'));
@@ -141,8 +143,9 @@ void main() {
           home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Edit rehoming post'), 250,
-        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Edit rehoming post'), findsNothing);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     expect(find.text('Edit rehoming post'), findsOneWidget);
     expect(find.text('Delete rehoming post'), findsOneWidget);
     expect(find.text('Contact Owner'), findsNothing);
@@ -162,8 +165,11 @@ void main() {
           home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
     ));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     expect(find.text('Edit rehoming post'), findsNothing);
     expect(find.text('Delete rehoming post'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
   });
 
   testWidgets('delete requires confirmation', (tester) async {
@@ -179,8 +185,8 @@ void main() {
           home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Delete rehoming post'), 250,
-        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Delete rehoming post'));
     await tester.pumpAndSettle();
     expect(find.text('This rehoming post will be removed.'), findsOneWidget);
@@ -218,8 +224,8 @@ void main() {
     ));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Delete rehoming post'), 250,
-        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Delete rehoming post'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));

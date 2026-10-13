@@ -41,7 +41,14 @@ Future<(FakeApiClient, GoRouter)> _mount(
   String? name,
   bool located = false,
   bool moderator = false,
+  String? viewerId,
+  ThemeData? theme,
+  Size size = const Size(390, 844),
 }) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   final client = FakeApiClient();
   client.setHandler('GET', 'posts/post-1',
       (_) => _post(kind: kind, name: name, located: located));
@@ -52,7 +59,7 @@ Future<(FakeApiClient, GoRouter)> _mount(
   client.setHandler('DELETE', 'posts/post-1', (_) => null);
   client.setHandler('DELETE', 'moderation/posts/post-1', (_) => null);
   final user = MushukistanUser(
-    id: moderator ? 'moderator-1' : _owner.id,
+    id: moderator ? 'moderator-1' : (viewerId ?? _owner.id),
     registeredAt: _owner.registeredAt,
     isModerator: moderator,
   );
@@ -91,12 +98,17 @@ Future<(FakeApiClient, GoRouter)> _mount(
           .overrideWithValue(FakeGoogleIdentityTokenProvider()),
       currentUserProvider.overrideWith((ref) => user),
     ],
-    child: MaterialApp.router(routerConfig: router),
+    child: MaterialApp.router(routerConfig: router, theme: theme),
   ));
   await tester.pumpAndSettle();
   router.push('/posts/post-1');
   await tester.pumpAndSettle();
   return (client, router);
+}
+
+Future<void> _openMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Post actions'));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -107,41 +119,78 @@ void main() {
     expect(find.text('Unnamed cat'), findsNothing);
     expect(find.text('View on map'), findsNothing);
     expect(find.text('Likes'), findsNothing);
-    await tester.scrollUntilVisible(find.text('Comments 2'), 200,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('Comments 2'), findsOneWidget);
-    expect(find.text('Edit post'), findsOneWidget);
+    // One compact engagement row; no always-visible management buttons.
+    expect(find.byTooltip('Like'), findsOneWidget);
+    expect(find.byTooltip('Comments'), findsOneWidget);
+    expect(find.text('Edit post'), findsNothing);
+    expect(find.text('Delete post'), findsNothing);
+    expect(find.text('Amina'), findsOneWidget);
   });
 
-  testWidgets('help post shows badge, help section and location action',
+  testWidgets('help post shows badge, callout and location action',
       (tester) async {
-    final (client, _) = await _mount(tester,
-        kind: 'needs_help', located: true, moderator: true);
+    await _mount(tester, kind: 'needs_help', located: true, moderator: true);
     expect(find.text('Cat needs help'), findsWidgets);
     expect(find.text('What help is needed'), findsOneWidget);
     expect(find.text('Injured paw'), findsOneWidget);
     expect(find.text('View on map'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Post history'), 200,
-        scrollable: find.byType(Scrollable).first);
+    await _openMenu(tester);
     expect(find.text('Post history'), findsOneWidget);
     expect(find.text('Remove as moderator'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Like 3'), 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.text('Like 3'));
+    expect(find.text('Edit post'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
+  });
+
+  testWidgets('like toggles through the existing endpoint', (tester) async {
+    final (client, _) = await _mount(tester, viewerId: 'viewer-1');
+    expect(find.text('3'), findsOneWidget);
+    await tester.tap(find.byTooltip('Like'));
     await tester.pumpAndSettle();
     expect(
         client.calls.where((call) =>
             call.method == 'POST' && call.path == 'posts/post-1/likes'),
         hasLength(1));
+    expect(find.text('4'), findsOneWidget);
+    expect(find.byTooltip('Unlike'), findsOneWidget);
   });
 
-  testWidgets('owner deletion still calls the existing post endpoint',
+  testWidgets('comments shortcut scrolls to the discussion', (tester) async {
+    await _mount(tester, size: const Size(390, 600));
+    await tester.tap(find.byTooltip('Comments'));
+    await tester.pumpAndSettle();
+    expect(find.text('No comments yet.'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('No comments yet.')).dy, lessThan(600));
+  });
+
+  testWidgets('owner menu offers edit and delete, never report',
+      (tester) async {
+    await _mount(tester);
+    await _openMenu(tester);
+    expect(find.text('Edit post'), findsOneWidget);
+    expect(find.text('Delete post'), findsOneWidget);
+    expect(find.text('Post history'), findsNothing);
+    expect(find.text('Report'), findsNothing);
+    await tester.tap(find.text('Edit post'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit destination'), findsOneWidget);
+  });
+
+  testWidgets('another user can only report', (tester) async {
+    await _mount(tester, viewerId: 'viewer-1');
+    await _openMenu(tester);
+    expect(find.text('Report'), findsOneWidget);
+    expect(find.text('Edit post'), findsNothing);
+    expect(find.text('Delete post'), findsNothing);
+    expect(find.text('Remove as moderator'), findsNothing);
+  });
+
+  testWidgets('owner deletion confirms and calls the existing post endpoint',
       (tester) async {
     final (client, _) = await _mount(tester);
-    await tester.scrollUntilVisible(find.text('Delete post'), 200,
-        scrollable: find.byType(Scrollable).first);
+    await _openMenu(tester);
     await tester.tap(find.text('Delete post'));
     await tester.pumpAndSettle();
+    expect(client.calls.where((call) => call.method == 'DELETE'), isEmpty);
     expect(find.text('Delete'), findsOneWidget);
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
@@ -154,8 +203,7 @@ void main() {
 
   testWidgets('moderator removal uses the moderation endpoint', (tester) async {
     final (client, _) = await _mount(tester, moderator: true);
-    await tester.scrollUntilVisible(find.text('Remove as moderator'), 200,
-        scrollable: find.byType(Scrollable).first);
+    await _openMenu(tester);
     await tester.tap(find.text('Remove as moderator'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));
@@ -169,10 +217,28 @@ void main() {
   testWidgets('located post opens the Map from its location row',
       (tester) async {
     await _mount(tester, located: true);
-    await tester.drag(find.byType(ListView).first, const Offset(0, -350));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('View on map'));
     await tester.pumpAndSettle();
     expect(find.text('Map destination'), findsOneWidget);
+  });
+
+  testWidgets('layout adapts without overflow across sizes and themes',
+      (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1;
+    for (final size in const [
+      Size(1440, 900),
+      Size(800, 1000),
+      Size(360, 640),
+    ]) {
+      await _mount(tester,
+          size: size,
+          kind: 'needs_help',
+          located: true,
+          theme: size.width == 360 ? ThemeData.dark() : ThemeData.light());
+      expect(tester.takeException(), isNull, reason: '$size');
+      expect(find.text('Injured paw'), findsOneWidget);
+    }
   });
 }

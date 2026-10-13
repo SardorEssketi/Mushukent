@@ -477,13 +477,6 @@ class _CommentsContentState extends State<_CommentsContent> {
                   widget.strings.comments,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const Spacer(),
-                Text(
-                  '${visibleComments.length}',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -571,11 +564,16 @@ class _CommentsContentState extends State<_CommentsContent> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ],
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             if (visibleComments.isEmpty)
-              AppStatePanel(
-                icon: Icons.chat_bubble_outline,
-                title: widget.strings.noCommentsYet,
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  widget.strings.noCommentsYet,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
               )
             else
               ...roots.map(
@@ -621,7 +619,10 @@ class _CommentsContentState extends State<_CommentsContent> {
           ),
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: CircularProgressIndicator()),
+      ),
       error: (error, stackTrace) => AppStatePanel(
         icon: Icons.error_outline,
         title: widget.strings.comments,
