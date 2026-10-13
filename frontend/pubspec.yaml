@@ -53,6 +53,10 @@ flutter:
   uses-material-design: true
   assets:
     - assets/app_icon.png
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope.ttf
 
 flutter_launcher_icons:
   android: true

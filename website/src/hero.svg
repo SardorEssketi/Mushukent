@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 730" role="img" aria-labelledby="title">
+<title id="title">A cat in a warm neighborhood with community map markers</title>
+<defs>
+  <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#f8e3cc"/><stop offset="1" stop-color="#f2cfb2"/></linearGradient>
+  <linearGradient id="wall" x2="0" y2="1"><stop stop-color="#f4e9d8"/><stop offset="1" stop-color="#dfcfb9"/></linearGradient>
+  <clipPath id="arch"><path d="M80 45h560a34 34 0 0 1 34 34v515c0 47-38 85-85 85H131c-47 0-85-38-85-85V79a34 34 0 0 1 34-34Z"/></clipPath>
+  <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".55" numOctaves="2" seed="8" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".08"/></feComponentTransfer></filter>
+</defs>
+<path fill="#e3e9d8" d="M80 45h560a34 34 0 0 1 34 34v515c0 47-38 85-85 85H131c-47 0-85-38-85-85V79a34 34 0 0 1 34-34Z"/>
+<g clip-path="url(#arch)">
+  <path fill="url(#sky)" d="M46 45h628v500H46z"/>
+  <circle cx="538" cy="162" r="74" fill="#fff3d4" opacity=".88"/>
+  <path d="M46 305 156 275l95 19 90-53 124 47 99-32 110 24v259H46Z" fill="#dcc2a8" opacity=".72"/>
+  <path d="M46 341c83-34 175-26 245 12 91-36 173-16 253 5 50-14 93-12 130 0v162H46Z" fill="#adbca5"/>
+  <path d="M58 377c143 29 268-44 380-12 76 22 152 5 236-12v194H46Z" fill="#89a18b"/>
+  <path d="M53 480c161-41 294-11 431 26 78 21 133-4 190-24v202H46Z" fill="#728e78"/>
+  <path d="M46 557c129-25 255-7 354 42 92-20 184-21 274 2v78H46Z" fill="#577963"/>
+  <path d="M-10 705c153-90 266-145 424-127 126 14 197 42 304 39v127H-10Z" fill="#e7d0b4"/>
+  <path d="M85 704c130-81 202-114 301-118 141-8 204 53 316 42" fill="none" stroke="#f6e9d6" stroke-width="10" stroke-linecap="round" stroke-dasharray="28 25"/>
+  <g fill="url(#wall)">
+    <path d="M78 228h111v184H78zM92 205h84l28 23H68z"/>
+    <path d="M210 266h91v135h-91zM198 266l55-43 59 43z"/>
+    <path d="M504 256h112v155H504zM493 256l67-44 67 44z"/>
+    <path d="M620 301h62v151h-62z"/>
+  </g>
+  <g fill="#876e5c"><path d="M97 252h22v35H97zm37 0h22v35h-22zm-37 54h22v35H97zm37 0h22v35h-22zm91-22h18v31h-18zm35 0h18v31h-18zm-35 48h18v31h-18zm35 0h18v31h-18zm264-52h22v35h-22zm39 0h22v35h-22zm-39 50h22v35h-22zm39 0h22v35h-22z"/></g>
+  <g fill="#f7e8d1"><path d="M84 355h53v60H84zm192 8h30v54h-30zm263-4h49v58h-49z"/></g>
+  <g fill="#4b6958"><path d="M38 379c0-34 17-50 29-50s28 16 28 50-17 36-28 36-29-7-29-36Zm594 34c0-47 22-67 39-67s36 20 36 67-22 46-36 46-39-11-39-46Z"/></g>
+  <g fill="none" stroke="#426b59" stroke-width="5" stroke-linecap="round"><path d="M67 399v61m603-24v63"/></g>
+  <!-- Original cat illustration; no user images or invented app screenshot. -->
+  <path d="M270 552c-41-57-44-114-13-137 23-17 46 2 48 23 3 29-18 39-32 23" fill="none" stroke="#9c614b" stroke-width="29" stroke-linecap="round"/>
+  <path d="M279 516c-12-65 15-117 70-127 66-13 112 24 126 82 16 65-10 116-63 132-63 18-117-11-133-87Z" fill="#c87b5c"/>
+  <path d="M312 421 319 343l54 45 45-8 49-54 8 103c24 27 27 57 4 83-29 32-124 42-161-1-27-31-29-61-6-90Z" fill="#d28b68"/>
+  <path d="M322 370 356 397l-40 13zm137-20-37 46 42 11z" fill="#e8ae92"/>
+  <path d="M326 471c12 7 26 8 38 4m65-4c12 6 27 4 39-2" fill="none" stroke="#4a4037" stroke-width="6" stroke-linecap="round"/>
+  <path d="M379 489c12-8 22-8 34 0l-17 13z" fill="#7a4b43"/>
+  <path d="M396 502v9m0 0c-9 10-19 12-26 6m26-6c9 10 19 12 26 6" fill="none" stroke="#7a4b43" stroke-width="4" stroke-linecap="round"/>
+  <path d="M365 500c-33-6-53-3-75 7m75 3c-32 2-52 11-66 22m130-32c30-8 52-6 76 4m-76 6c30 1 51 11 67 22" fill="none" stroke="#f6e2cc" stroke-width="3" stroke-linecap="round"/>
+  <path d="M326 583c-9-34-4-64 17-73m83 72c13-36 14-62-5-74" fill="none" stroke="#ad674f" stroke-width="13" stroke-linecap="round"/>
+  <path d="M260 604c62 4 130 9 195-3" fill="none" stroke="#354d41" stroke-width="8" stroke-linecap="round" opacity=".35"/>
+  <g transform="translate(145 439)"><path d="M0-28c19 0 31 13 31 29 0 22-31 48-31 48S-31 23-31 1c0-16 12-29 31-29Z" fill="#c95f45"/><circle r="12" fill="#fff8f0"/></g>
+  <g transform="translate(566 457) scale(.8)"><path d="M0-28c19 0 31 13 31 29 0 22-31 48-31 48S-31 23-31 1c0-16 12-29 31-29Z" fill="#fffaf0"/><circle r="12" fill="#6f8f72"/></g>
+  <g fill="#fff9e9" opacity=".75"><circle cx="120" cy="120" r="3"/><circle cx="166" cy="145" r="2"/><circle cx="572" cy="100" r="3"/></g>
+  <path fill="#fff" filter="url(#grain)" d="M46 45h628v634H46z"/>
+</g>
+<path d="M80 45h560a34 34 0 0 1 34 34v515c0 47-38 85-85 85H131c-47 0-85-38-85-85V79a34 34 0 0 1 34-34Z" fill="none" stroke="#e4d7c6" stroke-width="2"/>
+</svg>

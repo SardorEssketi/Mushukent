@@ -21,6 +21,9 @@ ACTIVITY_WRITE_INTERVAL = timedelta(minutes=15)
 # A throttled activity write can lag the real event by up to 15 minutes.
 # Grace ensures the reminder is never earlier than seven full inactive days.
 INACTIVITY_THRESHOLD = timedelta(days=7) + ACTIVITY_WRITE_INTERVAL
+AUTOMATIC_DEFAULTS = dict(
+    push_comments=True, push_replies=True, push_followups=True, inactivity_enabled=True
+)
 
 
 class NotificationRepository:
@@ -30,10 +33,42 @@ class NotificationRepository:
     def preferences(self, user_id: UUID) -> schema.NotificationPreference:
         self.session.execute(
             insert(schema.NotificationPreference)
-            .values(user_id=user_id)
+            .values(user_id=user_id, **AUTOMATIC_DEFAULTS)
             .on_conflict_do_nothing(index_elements=["user_id"])
         )
-        return self.session.get(schema.NotificationPreference, user_id)
+        preference = self.session.get(schema.NotificationPreference, user_id)
+        for field, value in AUTOMATIC_DEFAULTS.items():
+            setattr(preference, field, value)
+        return preference
+
+    def normalize_defaults(self) -> None:
+        """Upgrade legacy category choices, including users who have not reopened the app.
+
+        Nearby consent and the private point are deliberately untouched. Explicit
+        insert values also override the historical database's inactivity default.
+        """
+        self.session.execute(
+            insert(schema.NotificationPreference)
+            .from_select(
+                ["user_id", *AUTOMATIC_DEFAULTS],
+                select(schema.User.id, *[True for _ in AUTOMATIC_DEFAULTS]).where(
+                    schema.User.is_active.is_(True)
+                ),
+            )
+            .on_conflict_do_nothing(index_elements=["user_id"])
+        )
+        self.session.execute(
+            update(schema.NotificationPreference)
+            .where(
+                or_(
+                    *[
+                        getattr(schema.NotificationPreference, field).is_(False)
+                        for field in AUTOMATIC_DEFAULTS
+                    ]
+                )
+            )
+            .values(**AUTOMATIC_DEFAULTS)
+        )
 
     def create_event(
         self,

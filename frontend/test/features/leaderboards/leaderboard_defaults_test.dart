@@ -50,6 +50,17 @@ void main() {
     expect(find.text('Profile user-4'), findsOneWidget);
   });
 
+  testWidgets('title is a trophy banner and fits a narrow phone', (
+    tester,
+  ) async {
+    await _setWidth(tester, 320);
+    await _pumpLeaderboard(tester, entries: _entries);
+
+    expect(find.text('Leaderboard'), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_events_rounded), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('popular shows likes without posts', (tester) async {
     await _setWidth(tester, 1000);
     await _pumpLeaderboard(

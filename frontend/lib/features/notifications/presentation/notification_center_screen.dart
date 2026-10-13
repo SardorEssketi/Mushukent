@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/network/mushukistan_api.dart';
+import '../../../core/widgets/app_surface.dart';
 import '../data/notification_api.dart';
 import 'notification_strings.dart';
 
@@ -178,14 +179,18 @@ class _NotificationCenterScreenState
                   '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.createdAt.toLocal()))}',
                 ),
                 trailing: entry.readAt == null
-                    ? const Icon(Icons.circle, size: 9)
+                    ? Icon(Icons.circle,
+                        size: 10, color: Theme.of(context).colorScheme.primary)
                     : null,
                 onTap: () => _open(entry),
               ),
             if (_loaded && _items.isEmpty)
               Padding(
-                padding: const EdgeInsets.all(32),
-                child: Center(child: Text(copy.get('empty'))),
+                padding: const EdgeInsets.only(top: 48),
+                child: AppStatePanel(
+                  icon: Icons.notifications_none_rounded,
+                  title: copy.get('empty'),
+                ),
               ),
             if (_error)
               Center(

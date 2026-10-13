@@ -11,6 +11,8 @@ import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../notifications/presentation/notification_strings.dart';
+import '../../../notifications/presentation/nearby_alert_privacy.dart';
+import '../../../notifications/application/nearby_alerts.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -283,6 +285,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _isSaving ? null : _openNotifications,
               ),
+              if (ref.watch(nearbyAlertsAndroidProvider))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: Text(notificationStrings.get('location_privacy')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _isSaving
+                      ? null
+                      : () async {
+                          if (!await _confirmLeaving() || !mounted) return;
+                          if (context.mounted) {
+                            await manageNearbyPrivacy(context, ref);
+                          }
+                        },
+                ),
               const SizedBox(height: AppSpacing.md),
               ListTile(
                 contentPadding: EdgeInsets.zero,
