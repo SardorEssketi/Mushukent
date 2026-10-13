@@ -665,6 +665,27 @@ class MushukistanApi {
     return _client.delete('users/me');
   }
 
+  /// Sends product feedback. [category] is `bug`, `suggestion` or `other`;
+  /// [platform] is `web` or `android`.
+  Future<void> submitFeedback({
+    required String category,
+    required String message,
+    String? platform,
+    String? appVersion,
+  }) {
+    return _client.postJson<Object?>(
+      'feedback',
+      body: <String, Object?>{
+        'category': category,
+        'message': message,
+        if (platform != null) 'platform': platform,
+        if (appVersion != null && appVersion.isNotEmpty)
+          'app_version': appVersion,
+      },
+      decoder: (_) => null,
+    );
+  }
+
   Future<void> blockUser(String userId) {
     return _client.postJson<Object?>(
       'users/$userId/block',

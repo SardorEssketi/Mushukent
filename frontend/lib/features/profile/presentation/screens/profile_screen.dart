@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/navigation/settings_changes_guard.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/localization/feedback_strings.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -26,6 +27,7 @@ class ProfileScreen extends ConsumerWidget {
     final profileAsync = ref.watch(profileMeProvider);
     final currentUser = ref.watch(currentUserProvider);
     final strings = ref.watch(appStringsProvider);
+    final feedbackStrings = ref.watch(feedbackStringsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -134,6 +136,13 @@ class ProfileScreen extends ConsumerWidget {
                     icon: Icons.settings_outlined,
                     title: strings.settings,
                     onTap: () => context.push('/profile/settings'),
+                  ),
+                  const Divider(height: 1),
+                  ProfileActionRow(
+                    icon: Icons.rate_review_outlined,
+                    title: feedbackStrings.entryTitle,
+                    badge: feedbackStrings.beta,
+                    onTap: () => context.push('/profile/feedback'),
                   ),
                 ]),
               ),

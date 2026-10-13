@@ -1008,6 +1008,25 @@ Feature: Leaderboards
    - deterministic tie-breaking: the selected metric descending, then user ID ascending
 - Pydantic: LeaderboardResponse
 
+Feature: Feedback
+-----------------
+1) POST /api/v1/feedback
+- Purpose: a signed-in user sends product feedback to the developer
+- Auth: Bearer (active account)
+- Request model: FeedbackCreate
+  Example:
+  {
+    "category":"bug",
+    "message":"The map freezes when switching between tabs.",
+    "platform":"android",
+    "app_version":"0.1.0+8"
+  }
+- Validation: category in bug|suggestion|other; message 10-2000 characters after trimming; platform optional, web|android; app_version optional, up to 32 characters; unknown fields are rejected
+- Response: FeedbackResponse (201) containing only id, category, created_at
+- Errors: 401, 403 (disabled account), 422 (validation), 429 `FEEDBACK_RATE_LIMITED` with a Retry-After header (more than FEEDBACK_RATE_LIMIT_PER_HOUR submissions, default 3, in a rolling hour per user)
+- Notification: after the row is committed, a best-effort Telegram message is sent to the developer in a background task. A missing or failing Telegram configuration never affects the response or the stored feedback.
+- There are no read, list, update or delete endpoints; feedback is read directly from the database and in Telegram.
+
 Feature: Moderation
 -------------------
 1) POST /api/v1/reports

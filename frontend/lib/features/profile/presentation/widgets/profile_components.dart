@@ -241,11 +241,15 @@ class ProfileActionRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
+    this.badge,
   });
 
   final IconData icon;
   final String title;
   final VoidCallback onTap;
+
+  /// Optional short label (for example "Beta") shown before the chevron.
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +268,34 @@ class ProfileActionRow extends StatelessWidget {
         ),
       ),
       title: Text(title, style: Theme.of(context).textTheme.titleSmall),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: badge == null
+          ? const Icon(Icons.chevron_right_rounded)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colors.secondaryContainer,
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: AppSpacing.xxs,
+                    ),
+                    child: Text(
+                      badge!,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.onSecondaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
       onTap: onTap,
     );
   }

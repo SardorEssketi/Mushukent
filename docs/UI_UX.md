@@ -357,7 +357,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - shared profile summary surface with large avatar, display name, short bio, and secondary owner-only email, phone, and Telegram details.
   - compact stats: posts, likes received, comments. Posts and Comments open their existing activity screens.
   - Your activity section: My lost pets and My rehoming posts.
-  - Resources and account section: adoption guidance and Settings.
+  - Resources and account section: adoption guidance, Settings, and Feedback (Beta badge; see 5.17.3).
   - moderator-only Moderation reports section.
   - app bar: Donate to author (icon only on compact screens), Edit Profile, and Logout in the overflow menu.
   - donation dialog identifies Sardor Muxtorov as the recipient and shows the existing support card number as selectable text with a copy action.
@@ -441,6 +441,19 @@ Bottom navigation with 5 tabs on main tab roots:
   - confirming deletion deactivates the account through the backend and signs the user out.
 - Navigation:
   - Profile -> Settings -> About account.
+
+5.17.3 Feedback Screen (Beta)
+- Purpose: let a signed-in user send a bug report, feature suggestion, or other feedback to the developer.
+- Entry: Profile -> Resources and account -> Feedback (localized: Обратная связь / Feedback / Fikr-mulohaza) with a small Beta badge, directly below Settings. It exists only on the user's own Profile, never on public profiles. Route: `/profile/feedback`.
+- Layout (one column, bounded by AppWidths.readable):
+  - heading "Help improve Mushukistan" and a short friendly description.
+  - category choice as three icon chips: Bug report, Feature suggestion, Other feedback. A category is required; there is no preselected default so reports are not mislabeled.
+  - multiline message field, 10-2,000 characters (trimmed), with a character counter and inline validation.
+  - Send feedback button; while sending it shows a spinner, is disabled, and the form is read-only, so repeat taps cannot duplicate a submission.
+- Success: the form is replaced by a calm confirmation ("Thank you! Your feedback helps us improve Mushukistan.") with a Back to Profile action.
+- Errors (inline banner above the button; the draft is always kept so the user can retry): network failure, expired session (the user is asked to sign in again), rate limit (3 per hour per user), and a generic fallback.
+- Leaving with unsent text asks for confirmation using the shared unsaved-changes dialog; an empty form closes silently.
+- Platform (`web` or `android`) and the optional build-time `MUSHUKISTAN_APP_VERSION` define are attached to the submission. No device identifiers or other data are collected.
 
 5.18 Report Content Screen
 - Purpose: submit moderation report.

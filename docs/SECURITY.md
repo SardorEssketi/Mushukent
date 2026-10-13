@@ -107,6 +107,7 @@ Notes:
 - Google OAuth client configuration
 - Cloudflare R2 access key and secret key
 - Resend API key for transactional email delivery
+- Telegram bot token and feedback chat id (feedback notifications; optional)
 
 7.2 Rules
 - Secrets must come from environment variables.

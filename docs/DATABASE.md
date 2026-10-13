@@ -235,6 +235,20 @@ CREATE TABLE reports (
 CREATE INDEX idx_reports_status ON reports (status);
 CREATE INDEX idx_reports_target ON reports (target_type, target_id);
 
+-- Product feedback (developer inbox; write-only from the API)
+CREATE TABLE feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    category TEXT NOT NULL CHECK (category IN ('bug','suggestion','other')),
+    message TEXT NOT NULL CHECK (char_length(message) BETWEEN 10 AND 2000),
+    platform TEXT NULL, -- 'web' | 'android' as reported by the client
+    app_version TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Serves the per-user hourly submission cap
+CREATE INDEX idx_feedback_user_created ON feedback (user_id, created_at);
+-- Added by Alembic revision 20261013_0026. Category is text + CHECK so new categories need no enum migration.
+
 -- Leaderboard cache (optional, used to store precomputed leaderboard snapshots)
 CREATE TYPE leaderboard_type AS ENUM ('most_active','most_popular','top_helpers');
 

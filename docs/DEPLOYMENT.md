@@ -392,3 +392,31 @@ Share the new APK only after production gates pass; if the backend is rolled
 back later, stop testing that new APK until its compatible API is restored.
 The owner confirms real-device receipt, permission behavior, deep links and
 Google authentication; backend acceptance/send success is not proof of receipt.
+
+## Feedback and Telegram notifications
+
+Users send feedback from Profile -> Feedback (`POST /api/v1/feedback`, see
+`docs/API.md`). Each stored submission triggers a best-effort Telegram message to
+the developer. Configure it in the backend `.env` (never commit real values):
+
+| Variable | Purpose |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
+| `TELEGRAM_FEEDBACK_CHAT_ID` | Destination chat id (message the bot once, then read `getUpdates`) |
+| `FEEDBACK_RATE_LIMIT_PER_HOUR` | Per-user cap, default `3` |
+
+If either Telegram value is empty, feedback is still stored and the notification
+is skipped. Telegram failures are logged (exception type and status only, never
+the token) and never affect the user's submission. Deploying requires the normal
+`alembic upgrade head` for revision `20261013_0026`.
+
+Test locally without real credentials:
+
+1. Start the local stack (`docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`)
+   and open the app, sign in, and use Profile -> Feedback.
+2. Check storage: `docker exec mushukistan-db psql -U <db user> -d <db name> -c "select category, left(message, 40), platform, created_at from feedback order by created_at desc limit 5"`.
+3. Run backend tests: `pytest tests/test_feedback.py` (HTTP, validation, rate limit,
+   Telegram formatting/failure tests use mocks; the repository test needs
+   `RUN_DB_INTEGRATION_TESTS=1` and `TEST_DATABASE_URL`).
+4. For a real Telegram check, set the two variables to a personal test bot and chat.
+
