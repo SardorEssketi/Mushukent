@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 
 import '../../../../core/localization/app_strings.dart';
@@ -9,14 +11,18 @@ import '../../../feed/presentation/widgets/feed_card_parts.dart';
 /// Shared building blocks for the Post, Lost Pet and Rehoming detail screens.
 ///
 /// Every publication reads the same way: media, author, title and text,
-/// facts/contacts, engagement, then discussion. Type-specific content is
+/// facts and contacts, engagement, then discussion. Type-specific content is
 /// composed by each screen from these parts.
 
 /// Viewport width at which media moves beside the content.
 const double kPublicationSplitWidth = 960;
 
-/// Lays the page out as one bounded column on phones and tablets, and as
-/// media beside content + discussion on desktop.
+/// Below this width media runs edge to edge.
+const double kPublicationBleedWidth = 560;
+
+/// Phone: full-bleed media, then content, then discussion. Tablet: the same,
+/// in a bounded column. Desktop: media beside the summary, with the
+/// discussion in a readable column underneath.
 class PublicationDetailLayout extends StatelessWidget {
   const PublicationDetailLayout({
     super.key,
@@ -35,49 +41,77 @@ class PublicationDetailLayout extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final split = width >= kPublicationSplitWidth;
-    final commentsBlock = KeyedSubtree(
-      key: commentsKey,
-      child: comments,
-    );
+    final bleed = width < kPublicationBleedWidth;
+    final commentsBlock = KeyedSubtree(key: commentsKey, child: comments);
     final detailColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ...details,
-        const SizedBox(height: AppSpacing.xl),
-        commentsBlock,
-      ],
+      children: details,
     );
 
+    if (split) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.md,
+          AppSpacing.xl,
+          AppSpacing.huge,
+        ),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppWidths.wide),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 6, child: gallery),
+                    const SizedBox(width: AppSpacing.xxl),
+                    Expanded(flex: 5, child: detailColumn),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.xxl),
+                Center(
+                  child: ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(maxWidth: AppWidths.readable),
+                    child: commentsBlock,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final gutter = width < AppWidths.compact ? AppSpacing.lg : AppSpacing.xl;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        width < AppWidths.compact ? AppSpacing.md : AppSpacing.lg,
-        AppSpacing.sm,
-        width < AppWidths.compact ? AppSpacing.md : AppSpacing.lg,
-        AppSpacing.xxl,
-      ),
       child: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: split ? AppWidths.wide : AppWidths.readable,
+          constraints: const BoxConstraints(maxWidth: AppWidths.readable),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: bleed
+                    ? EdgeInsets.zero
+                    : EdgeInsets.fromLTRB(gutter, AppSpacing.sm, gutter, 0),
+                child: gallery,
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(gutter, AppSpacing.lg, gutter, 0),
+                child: detailColumn,
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                    gutter, AppSpacing.xl, gutter, AppSpacing.huge),
+                child: commentsBlock,
+              ),
+            ],
           ),
-          child: split
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 11, child: gallery),
-                    const SizedBox(width: AppSpacing.xl),
-                    Expanded(flex: 10, child: detailColumn),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    gallery,
-                    const SizedBox(height: AppSpacing.lg),
-                    detailColumn,
-                  ],
-                ),
         ),
       ),
     );
@@ -86,7 +120,8 @@ class PublicationDetailLayout extends StatelessWidget {
 
 /// Swipeable media with a counter, dots and (on wide screens) arrows.
 ///
-/// Photos are contained in a neutral frame so nothing important is cropped.
+/// The photo is contained so nothing important is cropped; a blurred copy of
+/// it fills the frame so there are no empty bars.
 class PublicationGallery extends StatefulWidget {
   const PublicationGallery({super.key, required this.photoUrls});
 
@@ -118,67 +153,91 @@ class _PublicationGalleryState extends State<PublicationGallery> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final size = MediaQuery.sizeOf(context);
     final count = widget.photoUrls.length;
-    final wide = MediaQuery.sizeOf(context).width >= AppBreakpoints.medium;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadii.card),
-      child: AspectRatio(
-        aspectRatio: wide ? 4 / 3 : 1.15,
-        child: ColoredBox(
-          color: colors.surfaceContainerHighest,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              PageView.builder(
-                controller: _controller,
-                itemCount: count,
-                onPageChanged: (value) => setState(() => _index = value),
-                itemBuilder: (context, index) => AppRemoteImage(
-                  widget.photoUrls[index],
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Center(
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      size: 48,
-                      color: colors.onSurfaceVariant,
+    final split = size.width >= kPublicationSplitWidth;
+    final bleed = size.width < kPublicationBleedWidth;
+    final aspect = split || bleed ? 1.0 : 4 / 3;
+    final backdrop = widget.photoUrls.isEmpty
+        ? null
+        : widget.photoUrls[_index.clamp(0, count - 1)];
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: size.height * 0.62),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(bleed ? 0 : AppRadii.card),
+        child: AspectRatio(
+          aspectRatio: aspect,
+          child: ColoredBox(
+            color: colors.surfaceContainerHighest,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (backdrop != null) ...[
+                  ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: 28,
+                      sigmaY: 28,
+                      tileMode: TileMode.clamp,
+                    ),
+                    child: AppRemoteImage(
+                      backdrop,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                  ),
+                  ColoredBox(color: Colors.black.withValues(alpha: 0.22)),
+                ],
+                PageView.builder(
+                  controller: _controller,
+                  itemCount: count,
+                  onPageChanged: (value) => setState(() => _index = value),
+                  itemBuilder: (context, index) => AppRemoteImage(
+                    widget.photoUrls[index],
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 48,
+                        color: colors.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              if (count > 1) ...[
-                Positioned(
-                  top: AppSpacing.md,
-                  right: AppSpacing.md,
-                  child: _GalleryCounter(current: _index + 1, total: count),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: AppSpacing.md,
-                  child: _GalleryDots(count: count, activeIndex: _index),
-                ),
-                if (wide) ...[
+                if (count > 1) ...[
                   Positioned(
-                    left: AppSpacing.sm,
-                    top: 0,
-                    bottom: 0,
-                    child: _GalleryArrow(
-                      icon: Icons.chevron_left,
-                      onPressed: _index == 0 ? null : () => _move(-1),
-                    ),
+                    top: AppSpacing.md,
+                    right: AppSpacing.md,
+                    child: _GalleryCounter(current: _index + 1, total: count),
                   ),
                   Positioned(
-                    right: AppSpacing.sm,
-                    top: 0,
-                    bottom: 0,
-                    child: _GalleryArrow(
-                      icon: Icons.chevron_right,
-                      onPressed: _index == count - 1 ? null : () => _move(1),
-                    ),
+                    left: 0,
+                    right: 0,
+                    bottom: AppSpacing.md,
+                    child: _GalleryDots(count: count, activeIndex: _index),
                   ),
+                  if (size.width >= AppBreakpoints.medium) ...[
+                    Positioned(
+                      left: AppSpacing.sm,
+                      top: 0,
+                      bottom: 0,
+                      child: _GalleryArrow(
+                        icon: Icons.chevron_left,
+                        onPressed: _index == 0 ? null : () => _move(-1),
+                      ),
+                    ),
+                    Positioned(
+                      right: AppSpacing.sm,
+                      top: 0,
+                      bottom: 0,
+                      child: _GalleryArrow(
+                        icon: Icons.chevron_right,
+                        onPressed: _index == count - 1 ? null : () => _move(1),
+                      ),
+                    ),
+                  ],
                 ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -420,92 +479,63 @@ class PublicationCallout extends StatelessWidget {
   }
 }
 
-/// One quiet container for facts and contacts. Rows are separated by hairlines
-/// instead of stacking separate cards.
-class PublicationInfoGroup extends StatelessWidget {
-  const PublicationInfoGroup({super.key, required this.rows});
-
-  final List<PublicationInfoRow> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0)
-              Divider(height: 1, indent: 52, color: colors.outlineVariant),
-            rows[i],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class PublicationInfoRow extends StatelessWidget {
-  const PublicationInfoRow({
+/// A small tappable pill for a single fact, such as the location.
+class PublicationChip extends StatelessWidget {
+  const PublicationChip({
     super.key,
     required this.icon,
-    required this.title,
-    required this.subtitle,
+    required this.label,
     required this.onTap,
     this.color,
   });
 
   final IconData icon;
-  final String title;
-  final String subtitle;
+  final String label;
   final VoidCallback onTap;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 56),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: color ?? colors.primary),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    final tint = color ?? theme.colorScheme.primary;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Center(
+            widthFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadii.pill),
+                border: Border.all(color: tint.withValues(alpha: 0.28)),
+              ),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: colors.onSurfaceVariant),
+                    Icon(icon, size: 18, color: tint),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: tint,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: colors.onSurfaceVariant),
-            ],
+            ),
           ),
         ),
       ),
@@ -513,8 +543,71 @@ class PublicationInfoRow extends StatelessWidget {
   }
 }
 
-/// Compact engagement row: an optional like toggle and a comments shortcut.
-/// Both targets share size, icon and type scale.
+/// The page's primary call to action (contact the owner). The value, such as
+/// a phone number, is shown under the label so people see what they will call.
+class PublicationContactButton extends StatelessWidget {
+  const PublicationContactButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onPressed,
+    this.primary = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final VoidCallback onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final child = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 22),
+        const SizedBox(width: AppSpacing.md),
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    final style = ButtonStyle(
+      minimumSize: const WidgetStatePropertyAll(Size.fromHeight(60)),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.control),
+        ),
+      ),
+    );
+    return primary
+        ? FilledButton(onPressed: onPressed, style: style, child: child)
+        : OutlinedButton(onPressed: onPressed, style: style, child: child);
+  }
+}
+
+/// Flat engagement strip between two hairlines: an optional like toggle and a
+/// comments shortcut. Both targets share size, icon and type scale.
 class PublicationEngagementBar extends StatelessWidget {
   const PublicationEngagementBar({
     super.key,
@@ -538,26 +631,32 @@ class PublicationEngagementBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Row(
-      children: [
-        if (likeCount != null) ...[
-          _EngagementButton(
-            icon: liked ? Icons.favorite : Icons.favorite_border,
-            count: likeCount!,
-            label: liked ? strings.unlike : strings.like,
-            color: liked ? colors.error : null,
-            selected: liked,
-            onPressed: onLike,
-          ),
-          const SizedBox(width: AppSpacing.sm),
-        ],
-        _EngagementButton(
-          icon: Icons.mode_comment_outlined,
-          count: commentCount,
-          label: strings.comments,
-          onPressed: onComments,
+    final line =
+        BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7));
+    return DecoratedBox(
+      decoration: BoxDecoration(border: Border(top: line, bottom: line)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Row(
+          children: [
+            if (likeCount != null)
+              _EngagementButton(
+                icon: liked ? Icons.favorite : Icons.favorite_border,
+                count: likeCount!,
+                label: liked ? strings.unlike : strings.like,
+                color: liked ? colors.error : null,
+                selected: liked,
+                onPressed: onLike,
+              ),
+            _EngagementButton(
+              icon: Icons.mode_comment_outlined,
+              count: commentCount,
+              label: strings.comments,
+              onPressed: onComments,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -591,33 +690,27 @@ class _EngagementButton extends StatelessWidget {
         selected: selected,
         label: '$label, $count',
         excludeSemantics: true,
-        child: Material(
-          color: selected
-              ? tint.withValues(alpha: 0.12)
-              : colors.surfaceContainerHigh.withValues(alpha: 0.6),
+        child: InkWell(
+          onTap: onPressed,
           borderRadius: BorderRadius.circular(AppRadii.pill),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onPressed,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 48, minWidth: 64),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon, size: 22, color: tint),
-                    const SizedBox(width: 8),
-                    Text(
-                      '$count',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: selected ? tint : colors.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 72),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 24, color: tint),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$count',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: selected ? tint : colors.onSurface,
+                      fontWeight: FontWeight.w700,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

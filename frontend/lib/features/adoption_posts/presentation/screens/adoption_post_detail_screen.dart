@@ -293,23 +293,6 @@ class _AdoptionPostDetailScreenState
               post.author?.id != null &&
               post.author?.id != viewerId;
           final authorId = post.author?.id;
-          final rows = [
-            if (canContact)
-              PublicationInfoRow(
-                icon: Icons.phone_outlined,
-                title: strings.contactOwner,
-                subtitle: post.ownerPhoneNumber!,
-                onTap: () => _contactOwner(context, strings, post),
-              ),
-            if (canContact && post.ownerTelegramUsername != null)
-              PublicationInfoRow(
-                icon: Icons.alternate_email,
-                title: 'Telegram',
-                subtitle: '@${post.ownerTelegramUsername}',
-                onTap: () =>
-                    _contactOwner(context, strings, post, telegram: true),
-              ),
-          ];
           return PublicationDetailLayout(
             commentsKey: _commentsKey,
             gallery: PublicationGallery(photoUrls: post.photoUrls),
@@ -359,9 +342,25 @@ class _AdoptionPostDetailScreenState
                       ?.copyWith(height: 1.45),
                 ),
               ],
-              if (rows.isNotEmpty) ...[
+              if (canContact) ...[
                 const SizedBox(height: AppSpacing.lg),
-                PublicationInfoGroup(rows: rows),
+                PublicationContactButton(
+                  icon: Icons.phone_outlined,
+                  label: strings.contactOwner,
+                  value: post.ownerPhoneNumber!,
+                  onPressed: () => _contactOwner(context, strings, post),
+                ),
+                if (post.ownerTelegramUsername != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  PublicationContactButton(
+                    primary: false,
+                    icon: Icons.alternate_email,
+                    label: 'Telegram',
+                    value: '@${post.ownerTelegramUsername}',
+                    onPressed: () =>
+                        _contactOwner(context, strings, post, telegram: true),
+                  ),
+                ],
               ],
               if (isOwner) ...[
                 const SizedBox(height: AppSpacing.md),

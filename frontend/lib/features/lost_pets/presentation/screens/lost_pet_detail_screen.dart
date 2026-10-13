@@ -309,34 +309,6 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
               lostPet.author?.id != viewerId;
           final authorId = lostPet.author?.id;
           final colors = Theme.of(context).colorScheme;
-          final rows = [
-            if (!lostPet.isResolved && lostPet.lastSeenLocation != null)
-              PublicationInfoRow(
-                icon: Icons.location_on_outlined,
-                title: strings.lastSeen,
-                subtitle: strings.viewOnMap,
-                onTap: () => _openMap(context, lostPet),
-              ),
-            if (canContact)
-              PublicationInfoRow(
-                icon: Icons.phone_outlined,
-                title: strings.contactOwner,
-                subtitle: lostPet.ownerPhoneNumber!,
-                onTap: () => _contactOwner(context, strings, lostPet),
-              ),
-            if (canContact && lostPet.ownerTelegramUsername != null)
-              PublicationInfoRow(
-                icon: Icons.alternate_email,
-                title: 'Telegram',
-                subtitle: '@${lostPet.ownerTelegramUsername}',
-                onTap: () => _contactOwner(
-                  context,
-                  strings,
-                  lostPet,
-                  telegram: true,
-                ),
-              ),
-          ];
           return PublicationDetailLayout(
             commentsKey: _commentsKey,
             gallery: PublicationGallery(photoUrls: lostPet.photoUrls),
@@ -386,9 +358,37 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                       ?.copyWith(height: 1.45),
                 ),
               ],
-              if (rows.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.lg),
-                PublicationInfoGroup(rows: rows),
+              if (!lostPet.isResolved && lostPet.lastSeenLocation != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                PublicationChip(
+                  icon: Icons.location_on_outlined,
+                  label: strings.lastSeen,
+                  onTap: () => _openMap(context, lostPet),
+                ),
+              ],
+              if (canContact) ...[
+                const SizedBox(height: AppSpacing.md),
+                PublicationContactButton(
+                  icon: Icons.phone_outlined,
+                  label: strings.contactOwner,
+                  value: lostPet.ownerPhoneNumber!,
+                  onPressed: () => _contactOwner(context, strings, lostPet),
+                ),
+                if (lostPet.ownerTelegramUsername != null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  PublicationContactButton(
+                    primary: false,
+                    icon: Icons.alternate_email,
+                    label: 'Telegram',
+                    value: '@${lostPet.ownerTelegramUsername}',
+                    onPressed: () => _contactOwner(
+                      context,
+                      strings,
+                      lostPet,
+                      telegram: true,
+                    ),
+                  ),
+                ],
               ],
               if (isOwner) ...[
                 const SizedBox(height: AppSpacing.md),

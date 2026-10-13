@@ -244,11 +244,11 @@ void main() {
 
     tester.view.physicalSize = const Size(800, 900);
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(PublicationGallery)).width, 760);
+    expect(tester.getSize(find.byType(PublicationGallery)).width, 712);
 
     tester.view.physicalSize = const Size(390, 844);
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(PublicationGallery)).width, 366);
+    expect(tester.getSize(find.byType(PublicationGallery)).width, 390);
     expect(tester.takeException(), isNull);
   });
 

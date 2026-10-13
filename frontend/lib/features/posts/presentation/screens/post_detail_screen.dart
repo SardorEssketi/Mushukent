@@ -360,20 +360,17 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                   ),
               ],
               if (location != null) ...[
-                const SizedBox(height: AppSpacing.md),
-                PublicationInfoGroup(rows: [
-                  PublicationInfoRow(
-                    icon: Icons.location_on_outlined,
-                    color: needsHelp ? colors.tertiary : colors.primary,
-                    title: strings.location,
-                    subtitle: strings.viewOnMap,
-                    onTap: () => context.go(
-                      '/map?lat=${location.latitude}&lon=${location.longitude}',
-                    ),
+                const SizedBox(height: AppSpacing.sm),
+                PublicationChip(
+                  icon: Icons.location_on_outlined,
+                  color: needsHelp ? colors.tertiary : colors.primary,
+                  label: strings.viewOnMap,
+                  onTap: () => context.go(
+                    '/map?lat=${location.latitude}&lon=${location.longitude}',
                   ),
-                ]),
+                ),
               ],
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
               PublicationEngagementBar(
                 strings: strings,
                 liked: isLiked,

@@ -724,41 +724,60 @@ class _CommentThread extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final indentation = ((depth * 16).clamp(0, 96)).toDouble();
-    return Padding(
-      padding: EdgeInsets.only(left: indentation, bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _CommentBubble(
-            comment: node.comment,
+    final colors = Theme.of(context).colorScheme;
+    final nested = depth < 3;
+    final replies = node.children
+        .map(
+          (child) => _CommentThread(
+            node: child,
+            depth: depth + 1,
             strings: strings,
             currentUserId: currentUserId,
             isModerator: isModerator,
-            canEdit: canEdit(node.comment),
-            canDelete: canDelete(node.comment),
-            busy: isBusy(node.comment),
-            onEdit: () => onEdit(node.comment),
-            onDelete: () => onDelete(node.comment),
-            onReply: () => onReply(node.comment),
+            canEdit: canEdit,
+            canDelete: canDelete,
+            isBusy: isBusy,
+            onEdit: onEdit,
+            onDelete: onDelete,
+            onReply: onReply,
           ),
-          ...node.children.map(
-            (child) => _CommentThread(
-              node: child,
-              depth: depth + 1,
-              strings: strings,
-              currentUserId: currentUserId,
-              isModerator: isModerator,
-              canEdit: canEdit,
-              canDelete: canDelete,
-              isBusy: isBusy,
-              onEdit: onEdit,
-              onDelete: onDelete,
-              onReply: onReply,
+        )
+        .toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _CommentBubble(
+          comment: node.comment,
+          strings: strings,
+          currentUserId: currentUserId,
+          isModerator: isModerator,
+          canEdit: canEdit(node.comment),
+          canDelete: canDelete(node.comment),
+          busy: isBusy(node.comment),
+          onEdit: () => onEdit(node.comment),
+          onDelete: () => onDelete(node.comment),
+          onReply: () => onReply(node.comment),
+        ),
+        if (replies.isNotEmpty)
+          Container(
+            margin: EdgeInsets.only(left: nested ? 17 : 0),
+            padding: EdgeInsets.only(left: nested ? 14 : 0),
+            decoration: nested
+                ? BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: colors.outlineVariant,
+                        width: 2,
+                      ),
+                    ),
+                  )
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: replies,
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -794,13 +813,9 @@ class _CommentBubble extends StatelessWidget {
     final userId = comment.user?.id;
     final userName = comment.user?.name ?? strings.anonymous;
     final avatarUrl = comment.user?.avatarUrl;
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 12, 8, 8),
+    final isOwn = comment.user?.id != null && comment.user?.id == currentUserId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -854,53 +869,54 @@ class _CommentBubble extends StatelessWidget {
                   ),
                 ),
               ),
-              if (canEdit || canDelete)
-                PopupMenuButton<String>(
-                  enabled: !busy,
-                  tooltip: strings.editComment,
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit();
-                    if (value == 'delete') onDelete();
-                  },
-                  itemBuilder: (context) => [
-                    if (canEdit)
-                      PopupMenuItem<String>(
-                        value: 'edit',
-                        child: Text(strings.editComment),
+              PopupMenuButton<String>(
+                enabled: !busy,
+                tooltip: strings.postActions,
+                onSelected: (value) {
+                  if (value == 'edit') onEdit();
+                  if (value == 'delete') onDelete();
+                  if (value == 'report') {
+                    context.push(
+                      Uri(
+                        path: '/report',
+                        queryParameters: {
+                          'type': 'comment',
+                          'id': comment.id,
+                          'label': comment.content,
+                        },
+                      ).toString(),
+                    );
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (canEdit)
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Text(strings.editComment),
+                    ),
+                  if (!isOwn)
+                    PopupMenuItem<String>(
+                      value: 'report',
+                      child: Text(strings.report),
+                    ),
+                  if (canDelete)
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Text(
+                        isModerator && !isOwn
+                            ? strings.deleteCommentAsModerator
+                            : strings.deleteComment,
                       ),
-                    if (canDelete)
-                      PopupMenuItem<String>(
-                        value: 'delete',
-                        child: Text(
-                          isModerator && comment.user?.id != currentUserId
-                              ? strings.deleteCommentAsModerator
-                              : strings.deleteComment,
-                        ),
-                      ),
-                  ],
-                  icon: busy
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.more_vert, size: 20),
-                )
-              else
-                const SizedBox(width: 48),
-              IconButton(
-                tooltip: strings.report,
-                onPressed: () => context.push(
-                  Uri(
-                    path: '/report',
-                    queryParameters: {
-                      'type': 'comment',
-                      'id': comment.id,
-                      'label': comment.content,
-                    },
-                  ).toString(),
-                ),
-                icon: const Icon(Icons.flag_outlined, size: 20),
+                    ),
+                ],
+                icon: busy
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(Icons.more_vert,
+                        size: 20, color: colors.onSurfaceVariant),
               ),
             ],
           ),
