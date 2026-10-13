@@ -115,6 +115,7 @@ async def _parse_update_request(
     response_model_exclude_none=True,
 )
 async def create_lost_pet(
+    request: Request,
     last_seen_location: str = Form(...),
     pet_name: str = Form(...),
     additional_info: str | None = Form(default=None),
@@ -130,14 +131,19 @@ async def create_lost_pet(
         owner_phone_publication_consent,
     )
     photo_payloads = await read_image_uploads(photos, purpose="lost_pet_create")
-    return ApiSuccess(
-        data=await run_upload_processing(
-            lost_pets_service.create_lost_pet,
-            current_user,
-            payload,
-            photos=photo_payloads,
-        )
+    created_report = await run_upload_processing(
+        lost_pets_service.create_lost_pet,
+        current_user,
+        payload,
+        photos=photo_payloads,
     )
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture(
+            "lost_pet_report_created",
+            properties={"photo_count": len(photo_payloads)},
+        )
+    return ApiSuccess(data=created_report)
 
 
 @router.get(
@@ -213,21 +219,30 @@ def answer_follow_up(
 
 @router.post("/{lost_pet_id}/contact", status_code=status.HTTP_204_NO_CONTENT)
 def contact_owner(
+    request: Request,
     lost_pet_id: UUID,
     current_user: AuthUser = Depends(get_current_active_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> None:
     lost_pets_service.contact_owner(lost_pet_id, current_user)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("lost_pet_owner_contacted")
 
 
 @router.patch("/{lost_pet_id}/resolution", response_model=ApiSuccess[LostPetResponse])
 def set_resolution(
+    request: Request,
     lost_pet_id: UUID,
     payload: LostPetResolutionRequest,
     current_user: AuthUser = Depends(get_current_active_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[LostPetResponse]:
-    return ApiSuccess(data=lost_pets_service.set_resolution(lost_pet_id, current_user, payload))
+    resolved_report = lost_pets_service.set_resolution(lost_pet_id, current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("lost_pet_report_resolved")
+    return ApiSuccess(data=resolved_report)
 
 
 @router.patch(

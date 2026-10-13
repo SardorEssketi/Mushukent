@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.core.dependencies import (
     get_comments_service,
@@ -27,12 +27,17 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 def create_comment(
+    request: Request,
     post_id: UUID,
     payload: CommentCreate,
     current_user: AuthUser = Depends(get_current_active_user),
     comments_service: CommentsService = Depends(get_comments_service),
 ) -> ApiSuccess[CommentResponse]:
-    return ApiSuccess(data=comments_service.create_comment(post_id, current_user, payload))
+    comment = comments_service.create_comment(post_id, current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("comment_created", properties={"comment_target": "post"})
+    return ApiSuccess(data=comment)
 
 
 @router.post(
@@ -41,14 +46,17 @@ def create_comment(
     status_code=status.HTTP_201_CREATED,
 )
 def create_lost_pet_comment(
+    request: Request,
     lost_pet_id: UUID,
     payload: CommentCreate,
     current_user: AuthUser = Depends(get_current_active_user),
     comments_service: CommentsService = Depends(get_comments_service),
 ) -> ApiSuccess[CommentResponse]:
-    return ApiSuccess(
-        data=comments_service.create_lost_pet_comment(lost_pet_id, current_user, payload)
-    )
+    comment = comments_service.create_lost_pet_comment(lost_pet_id, current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("comment_created", properties={"comment_target": "lost_pet"})
+    return ApiSuccess(data=comment)
 
 
 @router.post(
@@ -57,18 +65,21 @@ def create_lost_pet_comment(
     status_code=status.HTTP_201_CREATED,
 )
 def create_adoption_post_comment(
+    request: Request,
     adoption_post_id: UUID,
     payload: CommentCreate,
     current_user: AuthUser = Depends(get_current_active_user),
     comments_service: CommentsService = Depends(get_comments_service),
 ) -> ApiSuccess[CommentResponse]:
-    return ApiSuccess(
-        data=comments_service.create_adoption_post_comment(
-            adoption_post_id,
-            current_user,
-            payload,
-        )
+    comment = comments_service.create_adoption_post_comment(
+        adoption_post_id,
+        current_user,
+        payload,
     )
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("comment_created", properties={"comment_target": "adoption_post"})
+    return ApiSuccess(data=comment)
 
 
 @router.get(

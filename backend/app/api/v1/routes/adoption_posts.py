@@ -53,6 +53,7 @@ def _parse_create_payload(
     response_model_exclude_none=True,
 )
 async def create_adoption_post(
+    request: Request,
     pet_name: str = Form(...),
     additional_info: str | None = Form(default=None),
     photos: list[UploadFile] = File(...),
@@ -64,14 +65,19 @@ async def create_adoption_post(
         additional_info,
     )
     photo_payloads = await read_image_uploads(photos, purpose="adoption_create")
-    return ApiSuccess(
-        data=await run_upload_processing(
-            adoption_posts_service.create_adoption_post,
-            current_user,
-            payload,
-            photos=photo_payloads,
-        )
+    created_post = await run_upload_processing(
+        adoption_posts_service.create_adoption_post,
+        current_user,
+        payload,
+        photos=photo_payloads,
     )
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture(
+            "adoption_post_created",
+            properties={"photo_count": len(photo_payloads)},
+        )
+    return ApiSuccess(data=created_post)
 
 
 @router.get(
@@ -126,23 +132,30 @@ def answer_follow_up(
 
 @router.post("/{adoption_post_id}/contact", status_code=status.HTTP_204_NO_CONTENT)
 def contact_owner(
+    request: Request,
     adoption_post_id: UUID,
     current_user: AuthUser = Depends(get_current_active_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> None:
     adoption_posts_service.contact_owner(adoption_post_id, current_user)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("adoption_owner_contacted")
 
 
 @router.patch("/{adoption_post_id}/resolution", response_model=ApiSuccess[AdoptionPostResponse])
 def set_resolution(
+    request: Request,
     adoption_post_id: UUID,
     payload: AdoptionResolutionRequest,
     current_user: AuthUser = Depends(get_current_active_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> ApiSuccess[AdoptionPostResponse]:
-    return ApiSuccess(
-        data=adoption_posts_service.set_resolution(adoption_post_id, current_user, payload)
-    )
+    resolved_post = adoption_posts_service.set_resolution(adoption_post_id, current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("adoption_post_resolved")
+    return ApiSuccess(data=resolved_post)
 
 
 @router.patch(

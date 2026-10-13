@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.core.dependencies import get_current_active_user, get_reports_service
 from app.features.auth.application.schemas import ApiSuccess
@@ -16,8 +16,13 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 def create_report(
+    request: Request,
     payload: ReportCreate,
     current_user: AuthUser = Depends(get_current_active_user),
     reports_service: ReportsService = Depends(get_reports_service),
 ) -> ApiSuccess[ReportResponse]:
-    return ApiSuccess(data=reports_service.create_report(current_user, payload))
+    report = reports_service.create_report(current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("report_submitted")
+    return ApiSuccess(data=report)

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 
 from app.api.v1.uploads import read_image_upload, run_upload_processing
 from app.core.dependencies import (
@@ -56,11 +56,16 @@ def read_me(
     response_model_exclude_none=True,
 )
 def update_me(
+    request: Request,
     payload: UserUpdate,
     current_user: AuthUser = Depends(get_current_active_user),
     users_service: UsersService = Depends(get_users_service),
 ) -> ApiSuccess[UserProfile]:
-    return ApiSuccess(data=users_service.update_me(current_user, payload))
+    updated_user = users_service.update_me(current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("profile_updated")
+    return ApiSuccess(data=updated_user)
 
 
 @router.delete(

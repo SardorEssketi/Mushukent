@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
     enable_api_docs: bool = Field(default=False, alias="ENABLE_API_DOCS")
 
+    posthog_project_token: str = Field(default="", alias="POSTHOG_PROJECT_TOKEN")
+    posthog_host: str = Field(default="", alias="POSTHOG_HOST")
+
     api_prefix: str = Field(default="/api/v1", alias="API_PREFIX")
     cors_allowed_origins: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")
 
