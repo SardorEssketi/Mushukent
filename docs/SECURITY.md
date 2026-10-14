@@ -85,6 +85,13 @@ Notes:
 Deployment requirements for the settings above:
 - Security-critical settings fail closed: `APP_ENV` defaults to `production` and must be one of `development`, `test`, `staging`, `production` (anything else stops startup). Production-like environments additionally require `APP_DEBUG=false`, `RATE_LIMIT_ENABLED=true`, a symmetric `JWT_ALGORITHM` (HS256/384/512) and the secrets listed below. Every process that loads settings (API, notification worker, `alembic upgrade head`, scripts) needs `APP_ENV` set explicitly, or a complete production environment. The backend must only be reachable through nginx: client addresses for rate limiting come from the `X-Forwarded-For` entry nginx appends, and `TRUSTED_PROXY_CIDRS` must cover the nginx container. If a CDN or load balancer is ever placed in front of nginx, configure nginx `real_ip` for it first, otherwise every client appears as the CDN address.
 
+Analytics (PostHog)
+-------------------
+- Optional. With `POSTHOG_PROJECT_TOKEN` and `POSTHOG_HOST` both set the API sends events and logs to PostHog; otherwise (missing or partial configuration) analytics are disabled and a warning naming the missing setting is logged. The API and the test suite start either way.
+- Startup or runtime PostHog failures (bad configuration, library errors, an unreachable host) never fail a request: every call goes through `app/core/analytics.py`, which logs the error type (never values) at most once a minute and drops the event. Application exceptions are not caught by this layer.
+- `POSTHOG_REQUIRED=true` is the deliberate fail-fast switch: startup stops if PostHog is not configured or cannot be initialised. It is off by default, including in production, so an analytics problem cannot take the product down; enable it if missing analytics must block a release.
+- Shutdown is bounded (log flush at most 3 s) and releases the client, its exit hook and the log exporter, so restarts and repeated test runs do not accumulate them.
+
 6. File Upload Security
 -----------------------
 6.1 Allowed Types
