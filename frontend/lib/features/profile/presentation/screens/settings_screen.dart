@@ -74,6 +74,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     context.push('/profile/settings/about-account');
   }
 
+  Future<void> _openBlockedUsers() async {
+    if (!await _confirmLeaving() || !mounted) return;
+    context.push('/profile/settings/blocked-users');
+  }
+
   Future<void> _openAccountSecurity() async {
     if (!await _confirmLeaving() || !mounted) return;
     context.push('/profile/settings/security');
@@ -300,6 +305,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           }
                         },
                 ),
+              const SizedBox(height: AppSpacing.md),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.block_outlined),
+                title: Text(strings.blockedUsers),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _isSaving ? null : _openBlockedUsers,
+              ),
               const SizedBox(height: AppSpacing.md),
               ListTile(
                 contentPadding: EdgeInsets.zero,

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
+import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
@@ -22,6 +23,7 @@ void main() {
     int postCount = 1,
     bool privatePostsResponse = false,
     String? avatarUrl,
+    bool blockedByViewer = false,
   }) async {
     final client = FakeApiClient();
     client.setHandler(
@@ -37,6 +39,7 @@ void main() {
               'total_likes_received': 45,
               'comment_count': 17,
               'allow_public_activity_view': publicActivity,
+              'is_blocked_by_viewer': blockedByViewer,
               'email': 'private@example.com',
               'phone_number': '+998901234567',
               'telegram_username': 'private_handle',
@@ -76,6 +79,7 @@ void main() {
       };
     });
     client.setHandler('POST', 'users/other/block', (_) => null);
+    client.setHandler('DELETE', 'users/other/block', (_) => null);
     final container = ProviderContainer(overrides: [
       apiClientProvider.overrideWithValue(client),
       authRepositoryProvider.overrideWithValue(FakeAuthRepository(
@@ -236,14 +240,15 @@ void main() {
         isEmpty);
   });
 
-  testWidgets('report and block stay in overflow; block is disabled after use',
+  testWidgets('block turns into unblock after use and refreshes dependent data',
       (tester) async {
-    final (client, _, _) = await mount(
+    final (client, container, _) = await mount(
       tester,
       publicActivity: true,
       authenticated: true,
       withPost: false,
     );
+    final revisionBefore = container.read(postMutationRevisionProvider);
     await tester.tap(find.byTooltip('Profile actions'));
     await tester.pumpAndSettle();
     expect(find.text('Report'), findsOneWidget);
@@ -255,18 +260,77 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.calls.where((call) => call.path == 'users/other/block'),
         hasLength(1));
+    // Feed, map, post and activity providers watch this revision; the bump reloads them.
+    expect(container.read(postMutationRevisionProvider),
+        greaterThan(revisionBefore));
 
     await tester.tap(find.byTooltip('Profile actions'));
     await tester.pumpAndSettle();
-    final blockItem = tester
-        .widgetList<PopupMenuItem>(
-          find.byWidgetPredicate((widget) => widget is PopupMenuItem),
-        )
-        .last;
-    expect(blockItem.enabled, isFalse);
+    expect(find.text('Block user'), findsNothing);
+    expect(find.text('Unblock'), findsOneWidget);
     await tester.tap(find.text('Report'));
     await tester.pumpAndSettle();
     expect(find.text('Report route'), findsOneWidget);
+  });
+
+  testWidgets('a profile the server reports as blocked offers Unblock',
+      (tester) async {
+    final (client, container, _) = await mount(
+      tester,
+      publicActivity: true,
+      authenticated: true,
+      withPost: false,
+      blockedByViewer: true,
+    );
+    await tester.tap(find.byTooltip('Profile actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Block user'), findsNothing);
+    final revisionBefore = container.read(postMutationRevisionProvider);
+    await tester.tap(find.text('Unblock'));
+    await tester.pumpAndSettle();
+    expect(client.calls.where((call) => call.method == 'DELETE'), hasLength(1));
+    expect(
+        client.calls.where((call) =>
+            call.path == 'users/other/block' && call.method == 'POST'),
+        isEmpty);
+    expect(container.read(postMutationRevisionProvider),
+        greaterThan(revisionBefore));
+    expect(find.text('User unblocked.'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.tap(find.byTooltip('Profile actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Block user'), findsOneWidget);
+  });
+
+  testWidgets('a failed block keeps the menu usable and explains the failure',
+      (tester) async {
+    final (client, _, _) = await mount(
+      tester,
+      publicActivity: true,
+      authenticated: true,
+      withPost: false,
+    );
+    client.setHandler('POST', 'users/other/block', (_) {
+      throw const MushukistanApiException(
+        kind: ApiFailureKind.server,
+        code: 'INTERNAL',
+        message: 'boom',
+        statusCode: 500,
+      );
+    });
+    await tester.tap(find.byTooltip('Profile actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block user'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Block', skipOffstage: false));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not update the block. Please try again.'),
+        findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.tap(find.byTooltip('Profile actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Block user'), findsOneWidget);
   });
 
   testWidgets('missing and broken avatars show initials', (tester) async {

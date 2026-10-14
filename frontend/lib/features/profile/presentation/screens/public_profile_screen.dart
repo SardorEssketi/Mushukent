@@ -10,6 +10,7 @@ import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
+import '../../application/blocking.dart';
 import '../widgets/profile_components.dart';
 
 class PublicProfileBundle {
@@ -69,13 +70,14 @@ class PublicProfileScreen extends ConsumerStatefulWidget {
 
 class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
   bool _isBlocking = false;
-  bool _blocked = false;
+  bool? _blockedOverride;
 
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(publicProfileProvider(widget.userId));
     final strings = ref.watch(appStringsProvider);
     final profile = profileAsync.valueOrNull?.profile;
+    final blocked = _blockedOverride ?? profile?.isBlockedByViewer ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -95,7 +97,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                     },
                   ).toString());
                 } else {
-                  _blockProfile(profile.id, strings);
+                  _toggleBlock(profile.id, blocked, strings);
                 }
               },
               itemBuilder: (context) => [
@@ -105,9 +107,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                 ),
                 PopupMenuItem(
                   value: _PublicProfileAction.block,
-                  enabled: !_isBlocking && !_blocked,
+                  enabled: !_isBlocking,
                   child:
-                      Text(_blocked ? strings.userBlocked : strings.blockUser),
+                      Text(blocked ? strings.unblockUser : strings.blockUser),
                 ),
               ],
             ),
@@ -251,27 +253,43 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     );
   }
 
-  Future<void> _blockProfile(String profileId, AppStrings strings) async {
-    if (_isBlocking || _blocked) return;
+  Future<void> _toggleBlock(
+    String profileId,
+    bool currentlyBlocked,
+    AppStrings strings,
+  ) async {
+    if (_isBlocking) return;
     if (!ref.read(authControllerProvider).isAuthenticated) {
       requestAuthentication(context);
       return;
     }
-    final confirmed = await _confirmBlock(context, strings);
-    if (!confirmed || !mounted || _isBlocking || _blocked) return;
+    if (!currentlyBlocked) {
+      final confirmed = await _confirmBlock(context, strings);
+      if (!confirmed || !mounted || _isBlocking) return;
+    }
     setState(() => _isBlocking = true);
     try {
-      await ref.read(mushukistanApiProvider).blockUser(profileId);
-      if (mounted) {
-        setState(() => _blocked = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.userBlocked)),
-        );
+      final api = ref.read(mushukistanApiProvider);
+      if (currentlyBlocked) {
+        await api.unblockUser(profileId);
+      } else {
+        await api.blockUser(profileId);
       }
+      if (!mounted) return;
+      setState(() => _blockedOverride = !currentlyBlocked);
+      // Everything loaded under the old relationship is stale now.
+      refreshAfterBlockChange(ref);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            currentlyBlocked ? strings.userUnblocked : strings.userBlocked,
+          ),
+        ),
+      );
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotLoadSection)),
+          SnackBar(content: Text(strings.couldNotUpdateBlock)),
         );
       }
     } finally {

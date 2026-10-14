@@ -2089,11 +2089,52 @@ class AppStrings {
   String get blockUserMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Foydalanuvchi haqoratli yoki xavfli boʻlsa, shundan foydalaning. Blokdan chiqarish interfeysi qoʻshilguncha supportdan yordam soʻrashingiz mumkin.',
+        'Siz bu foydalanuvchining eʼlonlari va izohlarini koʻrmaysiz, u ham sizniki bilan muloqot qila olmaydi va sizga bildirishnoma yubora olmaydi. Blokdan chiqarish: Sozlamalar > Bloklangan foydalanuvchilar.',
       _RussianStrings() =>
-        'Используйте это, если пользователь ведет себя оскорбительно или небезопасно. Пока интерфейс разблокировки не добавлен, можно попросить support разблокировать пользователя.',
+        'Вы не будете видеть публикации и комментарии этого пользователя, а он не сможет взаимодействовать с вашим контентом и отправлять вам уведомления. Разблокировать можно в Настройки > Заблокированные пользователи.',
       _ =>
-        'Use this when a user is abusive or unsafe. You can ask support to unblock them until the unblock UI is added.',
+        'You will no longer see this user\'s posts or comments, and they cannot interact with your content or send you notifications. You can unblock them in Settings > Blocked users.',
+    };
+  }
+
+  String get unblockUser {
+    return switch (this) {
+      _UzbekStrings() => 'Blokdan chiqarish',
+      _RussianStrings() => 'Разблокировать',
+      _ => 'Unblock',
+    };
+  }
+
+  String get userUnblocked {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchi blokdan chiqarildi.',
+      _RussianStrings() => 'Пользователь разблокирован.',
+      _ => 'User unblocked.',
+    };
+  }
+
+  String get blockedUsers {
+    return switch (this) {
+      _UzbekStrings() => 'Bloklangan foydalanuvchilar',
+      _RussianStrings() => 'Заблокированные пользователи',
+      _ => 'Blocked users',
+    };
+  }
+
+  String get blockedUsersEmpty {
+    return switch (this) {
+      _UzbekStrings() => 'Siz hech kimni bloklamagansiz.',
+      _RussianStrings() => 'Вы никого не блокировали.',
+      _ => 'You have not blocked anyone.',
+    };
+  }
+
+  String get couldNotUpdateBlock {
+    return switch (this) {
+      _UzbekStrings() => 'Blokni oʻzgartirib boʻlmadi. Qayta urinib koʻring.',
+      _RussianStrings() =>
+        'Не удалось изменить блокировку. Попробуйте ещё раз.',
+      _ => 'Could not update the block. Please try again.',
     };
   }
 

@@ -51,7 +51,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CatSummary>>(
       'cats',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'filter': filter,
         if (lat != null) 'lat': lat,
@@ -262,7 +261,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'lost-pets',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         if (lat != null) 'lat': lat,
         if (lon != null) 'lon': lon,
@@ -285,7 +283,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<LostPetMapData>>(
       'lost-pets/map',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'bbox': bbox,
         'limit': limit,
@@ -303,7 +300,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'adoption-posts',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         if (cursor != null) 'cursor': cursor,
@@ -388,7 +384,6 @@ class MushukistanApi {
   Future<UserPublicData> getPublicProfile(String userId) {
     return _client.get<UserPublicData>(
       'users/$userId',
-      authenticated: false,
       decoder: (json) => UserPublicData.fromJson(json),
     );
   }
@@ -416,7 +411,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CommentData>>(
       'posts/$postId/comments',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,
@@ -486,7 +480,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CommentData>>(
       'lost-pets/$lostPetId/comments',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,
@@ -522,7 +515,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CommentData>>(
       'adoption-posts/$adoptionPostId/comments',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,
@@ -696,6 +688,17 @@ class MushukistanApi {
 
   Future<void> unblockUser(String userId) {
     return _client.delete('users/$userId/block');
+  }
+
+  Future<List<BlockedUserData>> listBlockedUsers() {
+    return _client.get<List<BlockedUserData>>(
+      'users/me/blocks',
+      decoder: (json) {
+        final items = _readMap(json)['items'];
+        if (items is! List) return const <BlockedUserData>[];
+        return items.map(BlockedUserData.fromJson).toList(growable: false);
+      },
+    );
   }
 
   Future<UserProfileData> updateAvatar({
@@ -1621,6 +1624,7 @@ class UserPublicData {
     required this.totalLikesReceived,
     required this.commentCount,
     required this.allowPublicActivityView,
+    this.isBlockedByViewer = false,
     this.name,
     this.avatarUrl,
     this.bio,
@@ -1636,6 +1640,9 @@ class UserPublicData {
   final int commentCount;
   final bool allowPublicActivityView;
 
+  /// True when the signed-in viewer has blocked this user.
+  final bool isBlockedByViewer;
+
   factory UserPublicData.fromJson(Object? json) {
     final map = _readMap(json);
     return UserPublicData(
@@ -1649,6 +1656,31 @@ class UserPublicData {
       commentCount: _readInt(map['comment_count']),
       allowPublicActivityView:
           _readBoolOrNull(map['allow_public_activity_view']) ?? true,
+      isBlockedByViewer: _readBoolOrNull(map['is_blocked_by_viewer']) ?? false,
+    );
+  }
+}
+
+class BlockedUserData {
+  const BlockedUserData({
+    required this.id,
+    required this.blockedAt,
+    this.name,
+    this.avatarUrl,
+  });
+
+  final String id;
+  final String? name;
+  final String? avatarUrl;
+  final DateTime blockedAt;
+
+  factory BlockedUserData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return BlockedUserData(
+      id: _readString(map['id']),
+      name: _readStringOrNull(map['name']),
+      avatarUrl: _readStringOrNull(map['avatar_url']),
+      blockedAt: _readDateTime(map['blocked_at']),
     );
   }
 }

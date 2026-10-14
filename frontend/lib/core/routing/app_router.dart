@@ -38,6 +38,7 @@ import '../../features/profile/presentation/screens/about_account_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/public_profile_screen.dart';
 import '../../features/profile/presentation/screens/feedback_screen.dart';
+import '../../features/profile/presentation/screens/blocked_users_screen.dart';
 import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/account_security_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
@@ -297,6 +298,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                         path: 'notifications',
                         builder: (context, state) =>
                             const NotificationSettingsScreen(),
+                      ),
+                      GoRoute(
+                        path: 'blocked-users',
+                        builder: (context, state) => const BlockedUsersScreen(),
                       ),
                       GoRoute(
                         path: 'about-account',
