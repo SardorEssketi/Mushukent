@@ -356,6 +356,8 @@ Feature: Users
 - Auth: Bearer required
 - Response: 204 No Content
 
+Owner contact details (lost-pet and adoption posts): owner_phone_number and owner_telegram_username are returned only by the detail endpoints and only to signed-in viewers; list, feed, map, mine and anonymous responses omit them and carry contact_available (boolean) instead. See docs/CONTACT_PRIVACY.md.
+
 8b) GET /api/v1/users/me/blocks
 - Purpose: List users the current user has blocked, newest first.
 - Auth: Bearer required
@@ -436,7 +438,7 @@ Feature: Cats
 3) PATCH /api/v1/cats/{cat_id}
 - Purpose: Update cat metadata
 - Auth: Bearer required
-- Authorization: moderators can change status and merged_into; normal users can suggest (for MVP allow users to update non-sensitive fields but require moderation for merges)
+- Authorization: only the creator of the cat record or a moderator may update it (others get 403); status and merged_into are moderator-only. cover_photo_url must point at platform media storage (422 otherwise). See docs/CAT_EDITING.md.
 - Request model: CatUpdate
   Example:
   {"name":"New Name","status":"healthy","cover_photo_url":"..."}
