@@ -345,15 +345,23 @@ Feature: Users
 - Rate limit: auth-style anonymous rate limit.
 
 7) POST /api/v1/users/{user_id}/block
-- Purpose: Block another active user.
+- Purpose: Block another active user. Idempotent: repeating the call returns 204 again.
 - Auth: Bearer required
 - Response: 204 No Content
 - Errors: 401 UNAUTHORIZED, 404 USER_NOT_FOUND, 422 VALIDATION_ERROR when blocking yourself
+- Effect: the two users stop seeing and interacting with each other's content; see docs/BLOCKING.md.
 
 8) DELETE /api/v1/users/{user_id}/block
-- Purpose: Remove a block created by the current user.
+- Purpose: Remove a block created by the current user. Idempotent; never removes a block created by the other user.
 - Auth: Bearer required
 - Response: 204 No Content
+
+8b) GET /api/v1/users/me/blocks
+- Purpose: List users the current user has blocked, newest first.
+- Auth: Bearer required
+- Response: { items: [{ id, name, avatar_url, blocked_at }], limit }
+- Notes: GET /api/v1/users/{user_id} also returns is_blocked_by_viewer (false for anonymous viewers).
+- Blocking semantics for feed, comments, likes, contact and notifications are defined in docs/BLOCKING.md.
 
 Feature: Cats
 -------------

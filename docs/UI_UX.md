@@ -378,11 +378,11 @@ Bottom navigation with 5 tabs on main tab roots:
   - same identity and stats surface as the self profile, with name, avatar, short public bio, posts, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
   - Recent posts shows up to four current Feed post cards and a See all action to the existing posts screen; comments open from the stat.
   - on wide screens, the summary stays fixed in the left column while the recent-post list scrolls within the available viewport height; compact screens use one vertical page scroll.
-  - Report and Block appear in the app bar overflow menu. A successful block disables the Block action for that screen session.
+  - Report and Block appear in the app bar overflow menu. The menu offers Block or Unblock depending on whether the viewer has blocked the user; both confirm with a snackbar. Blocked accounts are listed under Settings > Blocked users with an Unblock action.
   - one column on phones; on wide screens, identity/stats and recent posts sit side by side within AppWidths.wide.
 - Interactions:
   - open posts and comments from stats when public activity is enabled; tap a post card for its existing detail route.
-  - Report opens the existing report route. Block retains its sign-in requirement and confirmation.
+  - Report opens the existing report route. Block retains its sign-in requirement and confirmation; Unblock needs no confirmation.
 - Privacy:
   - when public activity is disabled, the profile remains visible, the activity stats do not navigate, and a calm private-activity state replaces the preview. No preview request is sent when privacy is already known.
   - a privacy response during a preview request also suppresses previews and navigation.
