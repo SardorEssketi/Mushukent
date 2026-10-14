@@ -34,6 +34,22 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp>
         }
       }),
     );
+    unawaited(
+      loadSavedLanguage().then((saved) {
+        // A language chosen by the signed-in account (applied below) wins over the stored one.
+        if (saved != null &&
+            mounted &&
+            ref.read(authControllerProvider).user == null) {
+          ref.read(appLanguageProvider.notifier).state = saved;
+        }
+      }),
+    );
+    ref.listenManual<AppLanguage>(
+      appLanguageProvider,
+      (previous, next) {
+        if (previous != next) unawaited(saveLanguage(next));
+      },
+    );
     ref.listenManual<String?>(
       authControllerProvider.select((state) => state.user?.preferredLanguage),
       (previous, next) {

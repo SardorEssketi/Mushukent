@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/localization/language_controller.dart';
 import 'package:mushukistan_frontend/core/location/location_service.dart';
@@ -1431,6 +1432,49 @@ void main() {
         await tester.pumpWidget(const SizedBox.shrink());
       });
     }
+
+    testWidgets(
+        'saved language is used on a cold start during an outage and follows later changes',
+        (tester) async {
+      FlutterSecureStorage.setMockInitialValues(
+          {'mushukistan_app_language': 'ru'});
+      addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+
+      expect(container.read(appLanguageProvider), AppLanguage.russian);
+      expect(find.text('Не удаётся связаться с сервером'), findsWidgets);
+      expect(find.text('Can’t reach the server'), findsNothing);
+
+      // A language change is persisted for the next cold start.
+      container.read(appLanguageProvider.notifier).state = AppLanguage.uzbek;
+      await tester.pumpAndSettle();
+      expect(
+        await const FlutterSecureStorage()
+            .read(key: 'mushukistan_app_language'),
+        'uz',
+      );
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('without a saved language the app starts in English',
+        (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(find.text('Can’t reach the server'), findsWidgets);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
 
     testWidgets('a signed-in user mid-session is not affected by later outages',
         (tester) async {
