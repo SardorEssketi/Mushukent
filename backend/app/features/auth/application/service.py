@@ -618,7 +618,7 @@ class AuthService(AuthenticationService):
 
     @property
     def _is_dev_verification_flow(self) -> bool:
-        return self.settings.app_env.casefold() == "development"
+        return self.settings.allows_dev_diagnostics
 
     def _emit_verification_link(self, email: str, token: str) -> None:
         self.email_verification_sender.send_verification_email(email=email, token=token)

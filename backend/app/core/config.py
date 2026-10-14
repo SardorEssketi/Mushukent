@@ -4,15 +4,22 @@ from pathlib import Path
 from typing import Self
 
 from cryptography.fernet import Fernet
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEVELOPMENT_ENVIRONMENTS = frozenset({"development", "test"})
+PRODUCTION_ENVIRONMENTS = frozenset({"production", "staging"})
+KNOWN_ENVIRONMENTS = DEVELOPMENT_ENVIRONMENTS | PRODUCTION_ENVIRONMENTS
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = Field(default="Mushukistan API", alias="APP_NAME")
-    app_env: str = Field(default="development", alias="APP_ENV")
+    # Fail closed: an unset APP_ENV means production. Development-only behaviour (returning
+    # verification tokens in API responses, skipping email delivery, weak secrets, open docs)
+    # must be requested explicitly with APP_ENV=development or APP_ENV=test.
+    app_env: str = Field(default="production", alias="APP_ENV")
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
     enable_api_docs: bool = Field(default=False, alias="ENABLE_API_DOCS")
 
@@ -106,9 +113,24 @@ class Settings(BaseSettings):
     r2_public_base_url: str = Field(default="", alias="R2_PUBLIC_BASE_URL")
     media_storage_root: str = Field(default=".data/media", alias="MEDIA_STORAGE_ROOT")
 
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def normalize_app_env(cls, value: object) -> str:
+        normalized = str(value).strip().casefold()
+        if normalized not in KNOWN_ENVIRONMENTS:
+            raise ValueError(
+                "APP_ENV must be one of: " + ", ".join(sorted(KNOWN_ENVIRONMENTS)) + "."
+            )
+        return normalized
+
     @property
     def is_production_like(self) -> bool:
-        return self.app_env.casefold() in {"production", "staging"}
+        return self.app_env in PRODUCTION_ENVIRONMENTS
+
+    @property
+    def allows_dev_diagnostics(self) -> bool:
+        """True only for explicit development/test runs (tokens in responses, no email)."""
+        return self.app_env in DEVELOPMENT_ENVIRONMENTS
 
     @property
     def allowed_cors_origins(self) -> list[str]:
@@ -125,6 +147,12 @@ class Settings(BaseSettings):
 
         insecure_values = {"", "change_me", "change-me", "mushukistan"}
         errors: list[str] = []
+        if self.app_debug:
+            errors.append("APP_DEBUG must be false in production.")
+        if not self.rate_limit_enabled:
+            errors.append("RATE_LIMIT_ENABLED must be true in production.")
+        if self.jwt_algorithm not in {"HS256", "HS384", "HS512"}:
+            errors.append("JWT_ALGORITHM must be one of HS256, HS384 or HS512.")
         if self.jwt_secret_key in insecure_values or len(self.jwt_secret_key) < 32:
             errors.append("JWT_SECRET_KEY must be set to a strong production secret.")
         if self.postgres_password in insecure_values:

@@ -17,7 +17,7 @@ class EmailVerificationSender:
         self.settings = settings
 
     def send_verification_email(self, *, email: str, token: str) -> None:
-        if self.settings.app_env.casefold() == "development":
+        if self.settings.allows_dev_diagnostics:
             return
         if (
             not self.settings.resend_api_key
@@ -183,7 +183,7 @@ class AccountDeletionConfirmationSender:
         self.settings = settings
 
     def send_confirmation_email(self, *, email: str, token: str) -> None:
-        if self.settings.app_env.casefold() == "development":
+        if self.settings.allows_dev_diagnostics:
             return
         if (
             not self.settings.resend_api_key
