@@ -1,29 +1,20 @@
-import atexit
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from posthog import Posthog, identify_context, new_context
+from posthog import identify_context, new_context
+from structlog import get_logger
 
 from app.api.v1.router import api_v1_router
+from app.core.analytics import Analytics
 from app.core.container import build_container
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
-from app.core.posthog_logging import (
-    configure_posthog_log_export,
-    shutdown_posthog_log_export,
-)
 from app.core.rate_limit import add_rate_limit_middleware
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
-
-def _missing_posthog_setting_error(setting_name: str) -> RuntimeError:
-    return RuntimeError(
-        f"{setting_name} variable required by PostHog is missing or un-configured, "
-        f"this causes events to be silently missed. This error stops appearing once "
-        f"{setting_name} is configured"
-    )
+logger = get_logger(__name__)
 
 
 class PostHogContextMiddleware:
@@ -55,10 +46,24 @@ class PostHogContextMiddleware:
             # Route dependencies retain responsibility for rejecting invalid credentials.
             principal = None
 
-        with new_context():
+        # Binding the user to the analytics context is best effort; only analytics errors are
+        # swallowed here, never errors raised by the application itself.
+        context = None
+        try:
+            context = new_context()
+            context.__enter__()
             if principal is not None:
                 identify_context(str(principal.user_id))
+        except Exception as exc:
+            logger.warning("analytics_context_failed", error_type=type(exc).__name__)
+        try:
             await self.app(scope, receive, send)
+        finally:
+            if context is not None:
+                try:
+                    context.__exit__(None, None, None)
+                except Exception as exc:
+                    logger.warning("analytics_context_failed", error_type=type(exc).__name__)
 
 
 def create_app() -> FastAPI:
@@ -68,36 +73,12 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        posthog_client: Posthog | None = None
-        posthog_logger = None
-        if settings.posthog_project_token and settings.posthog_host:
-            posthog_client = Posthog(
-                project_api_key=settings.posthog_project_token,
-                host=settings.posthog_host,
-                enable_exception_autocapture=True,
-            )
-            atexit.register(posthog_client.shutdown)
-            posthog_logger = configure_posthog_log_export(
-                settings.posthog_project_token,
-                settings.posthog_host,
-            )
-            posthog_logger.info("posthog_log_export_started", extra={"component": "api"})
-        elif settings.app_debug or not settings.is_production_like:
-            missing_setting = (
-                "POSTHOG_PROJECT_TOKEN"
-                if not settings.posthog_project_token
-                else "POSTHOG_HOST"
-            )
-            raise _missing_posthog_setting_error(missing_setting)
-
-        app.state.posthog_client = posthog_client
-        yield
-
-        if posthog_logger is not None:
-            posthog_logger.info("posthog_log_export_stopping", extra={"component": "api"})
-            shutdown_posthog_log_export()
-        if posthog_client is not None:
-            posthog_client.flush()
+        analytics = Analytics()
+        app.state.posthog_client = analytics.start(settings)
+        try:
+            yield
+        finally:
+            analytics.stop()
 
     app = FastAPI(
         title=settings.app_name,

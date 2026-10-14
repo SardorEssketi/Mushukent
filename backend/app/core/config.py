@@ -25,6 +25,9 @@ class Settings(BaseSettings):
 
     posthog_project_token: str = Field(default="", alias="POSTHOG_PROJECT_TOKEN")
     posthog_host: str = Field(default="", alias="POSTHOG_HOST")
+    # Analytics are optional by default. Set POSTHOG_REQUIRED=true to fail startup instead when
+    # PostHog is not configured or cannot be initialised.
+    posthog_required: bool = Field(default=False, alias="POSTHOG_REQUIRED")
 
     api_prefix: str = Field(default="/api/v1", alias="API_PREFIX")
     cors_allowed_origins: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")

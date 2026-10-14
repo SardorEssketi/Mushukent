@@ -29,6 +29,7 @@ def configure_posthog_log_export(project_token: str, host: str) -> logging.Logge
             OTLPLogExporter(
                 endpoint=f"{host.rstrip('/')}/i/v1/logs",
                 headers={"Authorization": f"Bearer {project_token}"},
+                timeout=5,
             )
         )
     )
@@ -49,7 +50,21 @@ def get_posthog_logger() -> logging.Logger | None:
 
 
 def shutdown_posthog_log_export() -> None:
-    """Flush and stop only the provider created for the dedicated PostHog logger."""
-    if _logger_provider is not None:
-        _logger_provider.force_flush()
-        _logger_provider.shutdown()
+    """Flush and stop only the provider created for the dedicated PostHog logger.
+
+    The flush is bounded so an unreachable PostHog host cannot hold up application shutdown, and
+    the module state is reset so a later start (tests, reloads) configures a fresh exporter.
+    """
+    global _logger, _logger_provider
+
+    provider, logger = _logger_provider, _logger
+    _logger = None
+    _logger_provider = None
+    if logger is not None:
+        for handler in list(logger.handlers):
+            logger.removeHandler(handler)
+    if provider is not None:
+        try:
+            provider.force_flush(timeout_millis=3000)
+        finally:
+            provider.shutdown()
