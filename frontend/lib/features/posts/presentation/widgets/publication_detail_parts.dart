@@ -550,14 +550,16 @@ class PublicationContactButton extends StatelessWidget {
     super.key,
     required this.icon,
     required this.label,
-    required this.value,
+    this.value,
     required this.onPressed,
     this.primary = true,
   });
 
   final IconData icon;
   final String label;
-  final String value;
+
+  /// Shown under the label (the phone number or handle); null when the viewer may not see it yet.
+  final String? value;
   final VoidCallback onPressed;
   final bool primary;
 
@@ -581,12 +583,13 @@ class PublicationContactButton extends StatelessWidget {
                 style: theme.textTheme.labelLarge
                     ?.copyWith(fontWeight: FontWeight.w800),
               ),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
+              if (value != null)
+                Text(
+                  value!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
             ],
           ),
         ),

@@ -18,6 +18,8 @@ import '../../../posts/presentation/widgets/publication_detail_parts.dart';
 
 final adoptionPostDetailProvider = FutureProvider.autoDispose
     .family<AdoptionPostData, String>((ref, adoptionPostId) async {
+  // Contact details are only sent to signed-in viewers: reload when the session changes.
+  ref.watch(authControllerProvider.select((state) => state.isAuthenticated));
   try {
     return await ref
         .watch(mushukistanApiProvider)
@@ -127,10 +129,13 @@ class _AdoptionPostDetailScreenState
       await ref.read(mushukistanApiProvider).contactAdoptionOwner(post.id);
       if (!context.mounted) return;
       if (telegram) {
-        await _openTelegram(post.ownerTelegramUsername!);
+        final handle = post.ownerTelegramUsername;
+        if (handle != null) await _openTelegram(handle);
       } else {
-        await launchPublicPhone(context,
-            phone: post.ownerPhoneNumber!, strings: strings);
+        final phone = post.ownerPhoneNumber;
+        if (phone != null) {
+          await launchPublicPhone(context, phone: phone, strings: strings);
+        }
       }
     } on MushukistanApiException catch (error) {
       if (error.code == 'ADOPTION_POST_NOT_ACTIVE') {
@@ -289,7 +294,7 @@ class _AdoptionPostDetailScreenState
           final info = post.additionalInfo?.trim();
           final isOwner = viewerId != null && post.author?.id == viewerId;
           final canContact = !post.isResolved &&
-              post.ownerPhoneNumber != null &&
+              post.contactAvailable &&
               post.author?.id != null &&
               post.author?.id != viewerId;
           final authorId = post.author?.id;
@@ -347,7 +352,7 @@ class _AdoptionPostDetailScreenState
                 PublicationContactButton(
                   icon: Icons.phone_outlined,
                   label: strings.contactOwner,
-                  value: post.ownerPhoneNumber!,
+                  value: post.ownerPhoneNumber,
                   onPressed: () => _contactOwner(context, strings, post),
                 ),
                 if (post.ownerTelegramUsername != null) ...[

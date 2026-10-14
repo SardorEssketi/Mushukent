@@ -19,6 +19,8 @@ import '../../../profile/presentation/screens/profile_screen.dart';
 
 final lostPetDetailProvider = FutureProvider.autoDispose
     .family<LostPetData, String>((ref, lostPetId) async {
+  // Contact details are only sent to signed-in viewers: reload when the session changes.
+  ref.watch(authControllerProvider.select((state) => state.isAuthenticated));
   try {
     return await ref.watch(mushukistanApiProvider).getLostPet(lostPetId);
   } on MushukistanApiException catch (error) {
@@ -187,13 +189,15 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
       await ref.read(mushukistanApiProvider).contactLostPetOwner(lostPet.id);
       if (!context.mounted) return;
       if (telegram) {
-        await _openTelegram(lostPet.ownerTelegramUsername!);
+        final handle = lostPet.ownerTelegramUsername;
+        if (handle != null) await _openTelegram(handle);
       } else {
-        await launchPublicPhone(
-          context,
-          phone: lostPet.ownerPhoneNumber!,
-          strings: strings,
-        );
+        // Signed in but the details have not arrived yet (session still loading): the contact
+        // event is recorded, and the next tap uses the reloaded number.
+        final phone = lostPet.ownerPhoneNumber;
+        if (phone != null) {
+          await launchPublicPhone(context, phone: phone, strings: strings);
+        }
       }
     } on MushukistanApiException catch (error) {
       if (error.code == 'LOST_PET_NOT_ACTIVE') {
@@ -304,7 +308,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
           final info = lostPet.additionalInfo?.trim();
           final isOwner = viewerId != null && lostPet.author?.id == viewerId;
           final canContact = !lostPet.isResolved &&
-              lostPet.ownerPhoneNumber != null &&
+              lostPet.contactAvailable &&
               lostPet.author?.id != null &&
               lostPet.author?.id != viewerId;
           final authorId = lostPet.author?.id;
@@ -371,7 +375,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                 PublicationContactButton(
                   icon: Icons.phone_outlined,
                   label: strings.contactOwner,
-                  value: lostPet.ownerPhoneNumber!,
+                  value: lostPet.ownerPhoneNumber,
                   onPressed: () => _contactOwner(context, strings, lostPet),
                 ),
                 if (lostPet.ownerTelegramUsername != null) ...[

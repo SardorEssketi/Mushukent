@@ -1391,6 +1391,7 @@ class LostPetData extends FeedItem {
     required this.petName,
     required this.ownerPhoneNumber,
     this.ownerTelegramUsername,
+    this.contactAvailable = false,
     required this.photoUrl,
     required this.photoUrls,
     required this.lastSeenLocation,
@@ -1410,6 +1411,10 @@ class LostPetData extends FeedItem {
   final String petName;
   final String? ownerPhoneNumber;
   final String? ownerTelegramUsername;
+
+  /// The owner can be contacted. Phone and Telegram are only sent to signed-in viewers on the
+  /// detail endpoint, so guests rely on this flag to see the "Contact owner" action.
+  final bool contactAvailable;
   final String photoUrl;
   final String? thumbUrl;
   final List<String> photoUrls;
@@ -1434,6 +1439,8 @@ class LostPetData extends FeedItem {
           map['author'] == null ? null : PostAuthorData.fromJson(map['author']),
       ownerPhoneNumber: _readStringOrNull(map['owner_phone_number']),
       ownerTelegramUsername: _readStringOrNull(map['owner_telegram_username']),
+      contactAvailable: _readBoolOrNull(map['contact_available']) ??
+          _readStringOrNull(map['owner_phone_number']) != null,
       photoUrl: photoUrl,
       thumbUrl: _readStringOrNull(map['thumb_url']),
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
@@ -1509,6 +1516,7 @@ class AdoptionPostData extends FeedItem {
     required this.petName,
     required this.ownerPhoneNumber,
     this.ownerTelegramUsername,
+    this.contactAvailable = false,
     required this.photoUrl,
     required this.photoUrls,
     required this.createdAt,
@@ -1527,6 +1535,9 @@ class AdoptionPostData extends FeedItem {
   final String petName;
   final String? ownerPhoneNumber;
   final String? ownerTelegramUsername;
+
+  /// See [LostPetData.contactAvailable].
+  final bool contactAvailable;
   final String photoUrl;
   final String? thumbUrl;
   final List<String> photoUrls;
@@ -1550,6 +1561,8 @@ class AdoptionPostData extends FeedItem {
           map['author'] == null ? null : PostAuthorData.fromJson(map['author']),
       ownerPhoneNumber: _readStringOrNull(map['owner_phone_number']),
       ownerTelegramUsername: _readStringOrNull(map['owner_telegram_username']),
+      contactAvailable: _readBoolOrNull(map['contact_available']) ??
+          _readStringOrNull(map['owner_phone_number']) != null,
       photoUrl: photoUrl,
       thumbUrl: _readStringOrNull(map['thumb_url']),
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
