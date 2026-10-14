@@ -75,9 +75,15 @@ Behavior:
 Notes:
 - Implementation can use in-process limiter for MVP.
 - External distributed limiter (Redis) is out of MVP scope.
-- Current MVP implementation uses an in-process fixed-window limiter. This is sufficient for a single backend process and should be replaced with a shared Redis-backed limiter before horizontal scaling.
+- Current MVP implementation uses an in-process sliding-window limiter. It is exact for a single backend process (the deployed configuration: one uvicorn process, no `--workers`) and should be replaced with a shared Redis-backed limiter before running several workers or replicas, because each process keeps its own counters.
+- Identity of a caller: a Bearer token only counts as a user when its signature, expiry, issuer, audience and type verify (bucket `user:<id>`, shared by all of that user's tokens). Anything else (missing, malformed, forged, expired, oversized) is rate-limited as an anonymous client by address. An invalid token can never create its own bucket.
+- Address identity: the rightmost `X-Forwarded-For` entry that is not itself a trusted proxy, only when the immediate peer is trusted; otherwise the peer address. IPv6 callers are keyed by their /64; IPv4-mapped IPv6 by the IPv4 address. Callers behind one NAT share one anonymous bucket by design; signed-in users keep their own bucket.
+- Memory: idle keys are swept every 30 s and the store is capped at 50,000 live keys (least recently active evicted first), so memory is bounded by traffic in the last window, not by the number of distinct identities seen.
 - The limiter is split into rate-limit policy and storage. `RATE_LIMIT_BACKEND=memory` is active now; `RATE_LIMIT_BACKEND=redis` and `RATE_LIMIT_REDIS_URL` are reserved for a future Redis-backed store so route behavior and response envelopes do not need to change.
 - Forwarded client IPs are used only when the immediate peer is in `TRUSTED_PROXY_CIDRS`; the proxy chain is walked from the trusted edge toward the first untrusted address. Direct clients cannot choose their rate-limit identity with `X-Forwarded-For`.
+
+Deployment requirements for the settings above:
+- Security-critical settings fail closed: `APP_ENV` defaults to `production` and must be one of `development`, `test`, `staging`, `production` (anything else stops startup). Production-like environments additionally require `APP_DEBUG=false`, `RATE_LIMIT_ENABLED=true`, a symmetric `JWT_ALGORITHM` (HS256/384/512) and the secrets listed below. Every process that loads settings (API, notification worker, `alembic upgrade head`, scripts) needs `APP_ENV` set explicitly, or a complete production environment. The backend must only be reachable through nginx: client addresses for rate limiting come from the `X-Forwarded-For` entry nginx appends, and `TRUSTED_PROXY_CIDRS` must cover the nginx container. If a CDN or load balancer is ever placed in front of nginx, configure nginx `real_ip` for it first, otherwise every client appears as the CDN address.
 
 6. File Upload Security
 -----------------------

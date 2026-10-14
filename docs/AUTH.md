@@ -20,7 +20,7 @@ MVP constraints:
 - Client submits name, email, password, and required Terms/Privacy acceptance.
 - Backend validates payload and password policy.
 - Backend creates user record with hashed password.
-- Backend returns a verification-required response containing the email address and, in development only, a verification token for local testing.
+- Backend returns a verification-required response containing the email address and, only when `APP_ENV` is explicitly `development` or `test`, a verification token for local testing. `APP_ENV` defaults to `production` and unknown values stop startup, so a missing or mistyped value can never return tokens.
 - A normalized-email duplicate returns the same public response shape and creates no second user; clients must not reveal whether an arbitrary address already has an account.
 - Account remains inactive for password login until email verification is completed.
 
