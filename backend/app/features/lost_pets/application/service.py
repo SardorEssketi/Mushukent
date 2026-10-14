@@ -169,7 +169,9 @@ class LostPetsService:
             )
             if item is None:
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
-            response = to_lost_pet_response(item)
+            # Contact details are for signed-in viewers only; guests get `contact_available` and
+            # are asked to sign in before contacting the owner.
+            response = to_lost_pet_response(item, include_contact=user is not None)
             if item.is_resolved and (user is None or user.id != item.user_id):
                 return response.model_copy(
                     update={

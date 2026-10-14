@@ -149,7 +149,8 @@ class AdoptionPostsService:
             )
             if item is None:
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
-            response = to_adoption_post_response(item)
+            # Contact details are for signed-in viewers only (see docs/CONTACT_PRIVACY.md).
+            response = to_adoption_post_response(item, include_contact=user is not None)
             if item.is_resolved and (user is None or user.id != item.user_id):
                 return response.model_copy(
                     update={"owner_phone_number": None, "owner_telegram_username": None}

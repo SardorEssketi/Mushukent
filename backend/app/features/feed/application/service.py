@@ -7,7 +7,9 @@ from typing import Protocol
 from uuid import UUID
 
 from app.core.security import api_error
-from app.features.adoption_posts.application.schemas import AdoptionPostListItem
+from app.features.adoption_posts.application.schemas import (
+    to_adoption_post_list_item,
+)
 from app.features.adoption_posts.domain.repositories import AdoptionPostRepository
 from app.features.auth.domain.models import AuthUser
 from app.features.feed.application.schemas import FeedListItem, FeedQuery
@@ -18,7 +20,7 @@ from app.features.feed.domain.models import (
     FeedItemType,
 )
 from app.features.feed.domain.repositories import FeedRepository
-from app.features.lost_pets.application.schemas import LostPetListItem
+from app.features.lost_pets.application.schemas import to_lost_pet_list_item
 from app.features.lost_pets.domain.repositories import LostPetRepository
 from app.features.posts.application.schemas import (
     GenericListResponse,
@@ -76,10 +78,7 @@ class FeedService:
                         details={"cursor": ["invalid"]},
                     ) from exc
                 return GenericListResponse[FeedListItem](
-                    items=[
-                        AdoptionPostListItem.model_validate(item, from_attributes=True)
-                        for item in adoption_page.items
-                    ],
+                    items=[to_adoption_post_list_item(item) for item in adoption_page.items],
                     next_cursor=adoption_page.next_cursor,
                     limit=adoption_page.limit,
                 )
@@ -144,17 +143,11 @@ class FeedService:
                         for item in posts
                     },
                     **{
-                        (FeedItemType.LOST_PET, item.id): LostPetListItem.model_validate(
-                            item,
-                            from_attributes=True,
-                        )
+                        (FeedItemType.LOST_PET, item.id): to_lost_pet_list_item(item)
                         for item in lost_pets
                     },
                     **{
-                        (FeedItemType.ADOPTION, item.id): AdoptionPostListItem.model_validate(
-                            item,
-                            from_attributes=True,
-                        )
+                        (FeedItemType.ADOPTION, item.id): to_adoption_post_list_item(item)
                         for item in adoption_posts
                     },
                 }

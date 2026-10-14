@@ -1951,7 +1951,13 @@ def test_owner_can_resolve_without_contact_reopen_and_close_pending_cycle(
     resolution_path = f"{path}/resolution"
     with feed_runtime.db_session_manager.session_scope() as session:
         session.get(post_model, post_id).owner_telegram_username = "mushuk_test"
-    active_public = client.get(path).json()["data"]
+    # Contact details are for signed-in viewers only (docs/CONTACT_PRIVACY.md); guests only learn
+    # that contact is possible.
+    guest_view = client.get(path).json()["data"]
+    assert guest_view.get("owner_phone_number") is None
+    assert guest_view.get("owner_telegram_username") is None
+    assert guest_view["contact_available"] is True
+    active_public = client.get(path, headers=contact_headers).json()["data"]
     assert active_public["owner_phone_number"] == "+998 90 123 45 67"
     assert active_public["owner_telegram_username"] == "mushuk_test"
     if kind == "lost":
@@ -2003,7 +2009,8 @@ def test_owner_can_resolve_without_contact_reopen_and_close_pending_cycle(
         for item in client.get(mine_path, headers=owner_headers).json()["data"]["items"]
         if item["id"] == str(post_id)
     )
-    assert mine_item["owner_phone_number"] == active_public["owner_phone_number"]
+    assert mine_item.get("owner_phone_number") is None  # list items never carry contact details
+    assert mine_item["contact_available"] is False  # resolved at this point
     assert client.post(f"{path}/contact", headers=contact_headers).status_code == 404
     assert (
         client.patch(
@@ -2023,7 +2030,7 @@ def test_owner_can_resolve_without_contact_reopen_and_close_pending_cycle(
         ).status_code
         == 200
     )
-    reopened_public = client.get(path).json()["data"]
+    reopened_public = client.get(path, headers=contact_headers).json()["data"]
     assert reopened_public["owner_phone_number"] == active_public["owner_phone_number"]
     if kind == "lost":
         assert reopened_public["last_seen_location"] == active_public["last_seen_location"]
