@@ -23,6 +23,8 @@ class LostPetRepository(Protocol):
         *,
         for_update: bool = False,
         include_deleted: bool = False,
+        viewer_user_id: UUID | None = None,
+        respect_blocks: bool = False,
     ) -> LostPetRecord | None: ...
 
     def update(self, lost_pet_id: UUID, draft: LostPetUpdateDraft) -> LostPetRecord: ...
@@ -34,7 +36,11 @@ class LostPetRepository(Protocol):
     ) -> LostPetRecord: ...
 
     def get_by_ids(
-        self, lost_pet_ids: list[UUID], *, active_only: bool = False
+        self,
+        lost_pet_ids: list[UUID],
+        *,
+        active_only: bool = False,
+        viewer_user_id: UUID | None = None,
     ) -> list[LostPetRecord]: ...
 
     def record_contact(self, lost_pet_id: UUID, contacting_user_id: UUID) -> bool: ...
@@ -59,6 +65,7 @@ class LostPetRepository(Protocol):
         radius_meters: int | None = None,
         valid_for_map: bool = False,
         bbox: tuple[float, float, float, float] | None = None,
+        viewer_user_id: UUID | None = None,
     ) -> LostPetPage: ...
 
     def list_map_markers(
@@ -66,4 +73,5 @@ class LostPetRepository(Protocol):
         *,
         limit: int,
         bbox: tuple[float, float, float, float],
+        viewer_user_id: UUID | None = None,
     ) -> LostPetMapPage: ...

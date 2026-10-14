@@ -192,9 +192,14 @@ def read_cat(
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
     sort: ObservationSortOrder = Query(default=ObservationSortOrder.LATEST),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     cats_service: CatsService = Depends(get_cats_service),
 ) -> ApiSuccess[CatDetailResponse]:
-    return ApiSuccess(data=cats_service.get_cat(cat_id, limit=limit, cursor=cursor, order=sort))
+    return ApiSuccess(
+        data=cats_service.get_cat(
+            cat_id, limit=limit, cursor=cursor, order=sort, viewer=current_user
+        )
+    )
 
 
 @router.get(
@@ -211,6 +216,7 @@ def list_cats(
     kind: PostKind | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     cats_service: CatsService = Depends(get_cats_service),
 ) -> ApiSuccess[GenericListResponse[CatListItem]]:
     try:
@@ -233,7 +239,7 @@ def list_cats(
             "Validation failed.",
             details=_validation_details(exc.errors()),
         ) from exc
-    return ApiSuccess(data=cats_service.list_cats(query))
+    return ApiSuccess(data=cats_service.list_cats(query, viewer=current_user))
 
 
 @router.get(

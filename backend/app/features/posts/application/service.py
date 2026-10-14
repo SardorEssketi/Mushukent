@@ -226,6 +226,7 @@ class PostsService:
                 post_id,
                 include_deleted=False,
                 viewer_user_id=current_user.id if current_user is not None else None,
+                respect_blocks=True,
             )
             if detail is None or not self._can_view_post(detail, current_user):
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")

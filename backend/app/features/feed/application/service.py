@@ -66,6 +66,7 @@ class FeedService:
                     adoption_page = adoption_repository.list_public(
                         limit=query.limit,
                         cursor=query.cursor,
+                        viewer_user_id=current_user.id if current_user is not None else None,
                     )
                 except ValueError as exc:
                     raise api_error(
@@ -129,10 +130,10 @@ class FeedService:
                     viewer_is_moderator=viewer_is_moderator,
                 )
                 lost_pets = self.lost_pet_repository_factory(session).get_by_ids(
-                    lost_pet_ids, active_only=True
+                    lost_pet_ids, active_only=True, viewer_user_id=viewer_user_id
                 )
                 adoption_posts = self.adoption_post_repository_factory(session).get_by_ids(
-                    adoption_ids, active_only=True
+                    adoption_ids, active_only=True, viewer_user_id=viewer_user_id
                 )
                 item_by_key: dict[tuple[FeedItemType, UUID], FeedListItem] = {
                     **{

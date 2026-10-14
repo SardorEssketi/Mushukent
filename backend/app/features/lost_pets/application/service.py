@@ -162,7 +162,11 @@ class LostPetsService:
     def get_lost_pet(self, lost_pet_id: UUID, user: AuthUser | None = None) -> LostPetResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            item = repository.get_by_id(lost_pet_id)
+            item = repository.get_by_id(
+                lost_pet_id,
+                viewer_user_id=user.id if user is not None else None,
+                respect_blocks=True,
+            )
             if item is None:
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
             response = to_lost_pet_response(item)
@@ -377,6 +381,7 @@ class LostPetsService:
         radius_meters: int | None = None,
         valid_for_map: bool = False,
         bbox: str | None = None,
+        viewer: AuthUser | None = None,
     ) -> GenericListResponse[LostPetListItem]:
         parsed_bbox = self._parse_bbox(bbox)
         with self.db_session_manager.session_scope() as session:
@@ -390,6 +395,7 @@ class LostPetsService:
                     radius_meters=radius_meters,
                     valid_for_map=valid_for_map,
                     bbox=parsed_bbox,
+                    viewer_user_id=viewer.id if viewer is not None else None,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -405,6 +411,7 @@ class LostPetsService:
         *,
         limit: int,
         bbox: str,
+        viewer: AuthUser | None = None,
     ) -> GenericListResponse[LostPetMapListItem]:
         parsed_bbox = self._parse_bbox(bbox)
         if parsed_bbox is None:
@@ -413,6 +420,7 @@ class LostPetsService:
             page = self.repository_factory(session).list_map_markers(
                 limit=limit,
                 bbox=parsed_bbox,
+                viewer_user_id=viewer.id if viewer is not None else None,
             )
             return to_lost_pet_map_page_response(page)
 

@@ -29,6 +29,7 @@ from app.features.users.application.schemas import (
     AccountDeletionRequest,
     AccountDeletionRequestResponse,
     AccountDeletionRequestStatus,
+    BlockedUser,
     UserProfile,
     UserPublic,
     UserUpdate,
@@ -104,6 +105,18 @@ def confirm_account_deletion(
     return ApiSuccess(data=AccountDeletionConfirmStatus())
 
 
+@router.get(
+    "/me/blocks",
+    response_model=ApiSuccess[GenericListResponse[BlockedUser]],
+)
+def list_blocked_users(
+    current_user: AuthUser = Depends(get_current_active_user),
+    users_service: UsersService = Depends(get_users_service),
+) -> ApiSuccess[GenericListResponse[BlockedUser]]:
+    items = users_service.list_blocked_users(current_user)
+    return ApiSuccess(data=GenericListResponse[BlockedUser](items=items, limit=200))
+
+
 @router.post(
     "/{user_id}/block",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -162,9 +175,10 @@ async def update_my_avatar(
 )
 def read_public_profile(
     user_id: UUID,
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     users_service: UsersService = Depends(get_users_service),
 ) -> ApiSuccess[UserPublic]:
-    return ApiSuccess(data=users_service.get_public_profile(user_id))
+    return ApiSuccess(data=users_service.get_public_profile(user_id, current_user))
 
 
 @router.get(

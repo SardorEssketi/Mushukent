@@ -25,6 +25,7 @@ from app.features.cats.domain.models import (
 from app.features.cats.domain.repositories import CatListPage, CatRepository, PostListPage
 from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import exclude_blocked
 
 
 def _point_to_wkt(point: GeoPoint | None) -> WKTElement | None:
@@ -64,6 +65,7 @@ class SqlAlchemyCatRepository(CatRepository):
     @staticmethod
     def _latest_public_post_lateral(
         created_after: datetime | None = None,
+        viewer_user_id: UUID | None = None,
     ):
         statement = select(
             schema.Post.id.label("id"),
@@ -75,6 +77,7 @@ class SqlAlchemyCatRepository(CatRepository):
         )
         if created_after is not None:
             statement = statement.where(schema.Post.created_at >= created_after)
+        statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
         return (
             statement.order_by(schema.Post.created_at.desc(), schema.Post.id.desc())
             .limit(1)
@@ -128,12 +131,14 @@ class SqlAlchemyCatRepository(CatRepository):
         row = self.session.execute(statement).one_or_none()
         return self._to_record_row(row) if row is not None else None
 
-    def get_detail(self, cat_id: UUID) -> CatDetailRecord | None:
+    def get_detail(
+        self, cat_id: UUID, *, viewer_user_id: UUID | None = None
+    ) -> CatDetailRecord | None:
         cat = self.get_by_id(cat_id)
         if cat is None:
             return None
 
-        history = self.list_history(cat_id=cat_id, limit=20).items
+        history = self.list_history(cat_id=cat_id, limit=20, viewer_user_id=viewer_user_id).items
         (
             first_seen_at,
             last_seen_at,
@@ -173,10 +178,12 @@ class SqlAlchemyCatRepository(CatRepository):
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
         kind: PostKind | None = None,
+        viewer_user_id: UUID | None = None,
     ) -> CatListPage:
         map_recent_cutoff = datetime.now(UTC) - timedelta(days=10)
         latest_public_post = self._latest_public_post_lateral(
             map_recent_cutoff if bbox is not None or filter_by == CatListFilter.NEARBY else None,
+            viewer_user_id,
         )
         statement = (
             select(
@@ -273,6 +280,9 @@ class SqlAlchemyCatRepository(CatRepository):
                     schema.Post.is_public.is_(True),
                     schema.Post.kind == schema.PostKind.NEEDS_HELP,
                 )
+                needs_help_post_exists = exclude_blocked(
+                    needs_help_post_exists, viewer_user_id, schema.Post.user_id
+                )
                 statement = statement.where(needs_help_post_exists.exists())
                 sort_key_expr = func.coalesce(schema.Cat.last_seen_at, schema.Cat.created_at)
                 statement = statement.order_by(sort_key_expr.desc(), schema.Cat.id.asc())
@@ -305,6 +315,7 @@ class SqlAlchemyCatRepository(CatRepository):
         limit: int,
         cursor: str | None = None,
         order: ObservationSortOrder = ObservationSortOrder.LATEST,
+        viewer_user_id: UUID | None = None,
     ) -> PostListPage:
         cursor_payload = _decode_cursor(cursor)
         sort_key = schema.Post.created_at
@@ -344,6 +355,7 @@ class SqlAlchemyCatRepository(CatRepository):
                 schema.Post.is_public.is_(True),
             )
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
 
         if order == ObservationSortOrder.LATEST:
             statement = statement.order_by(sort_key.desc(), schema.Post.id.desc())

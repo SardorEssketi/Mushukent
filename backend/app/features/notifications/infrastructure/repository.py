@@ -12,9 +12,14 @@ from geoalchemy2 import Geography
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import and_, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import (
+    blocked_between,
+    exclude_blocked,
+    users_are_blocked,
+)
 
 NEARBY_RADIUS_METERS = 500
 ACTIVITY_WRITE_INTERVAL = timedelta(minutes=15)
@@ -85,6 +90,9 @@ class NotificationRepository:
         user = self.session.get(schema.User, recipient_id)
         if user is None or not user.is_active or recipient_id == actor_id:
             return None
+        # A block in either direction suppresses the notification and its push jobs.
+        if users_are_blocked(self.session, actor_id, recipient_id):
+            return None
         notification_id = self.session.execute(
             insert(schema.Notification)
             .values(
@@ -151,6 +159,7 @@ class NotificationRepository:
                     schema.NotificationPreference.alert_location.is_not(None),
                     schema.User.is_active.is_(True),
                     schema.User.id != owner_id,
+                    ~blocked_between(owner_id, schema.User.id),
                     func.ST_DWithin(
                         cast(schema.NotificationPreference.alert_location, Geography),
                         cast(point, Geography),
@@ -215,15 +224,34 @@ class NotificationRepository:
             )
         return len(rows)
 
+    @staticmethod
+    def _visible(statement, user_id: UUID):
+        """Recipient's notifications minus anything caused by or about a blocked user.
+
+        Comment/reply notifications carry the actor; nearby lost-pet alerts have no actor, so
+        the lost pet's owner is checked instead. Filtering in SQL keeps pagination and the
+        unread count consistent, and unblocking makes the notifications visible again.
+        """
+        owner = aliased(schema.LostPet)
+        statement = statement.outerjoin(
+            owner,
+            and_(
+                schema.Notification.kind == "nearby_lost_pet",
+                owner.id == schema.Notification.target_id,
+            ),
+        ).where(schema.Notification.recipient_id == user_id)
+        statement = exclude_blocked(statement, user_id, schema.Notification.actor_id)
+        return exclude_blocked(statement, user_id, owner.user_id)
+
     def list_page(
         self, user_id: UUID, limit: int, cursor: str | None
     ) -> tuple[list[tuple], str | None]:
-        statement = (
-            select(schema.Notification, schema.User.name)
-            .outerjoin(schema.User, schema.User.id == schema.Notification.actor_id)
-            .where(schema.Notification.recipient_id == user_id)
-            .order_by(schema.Notification.created_at.desc(), schema.Notification.id.desc())
-        )
+        statement = self._visible(
+            select(schema.Notification, schema.User.name).outerjoin(
+                schema.User, schema.User.id == schema.Notification.actor_id
+            ),
+            user_id,
+        ).order_by(schema.Notification.created_at.desc(), schema.Notification.id.desc())
         if cursor:
             try:
                 data = json.loads(
@@ -261,8 +289,7 @@ class NotificationRepository:
     def unread_count(self, user_id: UUID) -> int:
         return int(
             self.session.scalar(
-                select(func.count(schema.Notification.id)).where(
-                    schema.Notification.recipient_id == user_id,
+                self._visible(select(func.count(schema.Notification.id)), user_id).where(
                     schema.Notification.read_at.is_(None),
                 )
             )

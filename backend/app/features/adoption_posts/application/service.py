@@ -142,7 +142,11 @@ class AdoptionPostsService:
     ) -> AdoptionPostResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            item = repository.get_by_id(adoption_post_id)
+            item = repository.get_by_id(
+                adoption_post_id,
+                viewer_user_id=user.id if user is not None else None,
+                respect_blocks=True,
+            )
             if item is None:
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
             response = to_adoption_post_response(item)
@@ -344,11 +348,16 @@ class AdoptionPostsService:
         *,
         limit: int = 20,
         cursor: str | None = None,
+        viewer: AuthUser | None = None,
     ) -> GenericListResponse[AdoptionPostListItem]:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             try:
-                page = repository.list_public(limit=limit, cursor=cursor)
+                page = repository.list_public(
+                    limit=limit,
+                    cursor=cursor,
+                    viewer_user_id=viewer.id if viewer is not None else None,
+                )
             except ValueError as exc:
                 raise api_error(
                     422,

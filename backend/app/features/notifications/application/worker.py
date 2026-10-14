@@ -19,6 +19,7 @@ from app.features.notifications.infrastructure.repository import (
 )
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
+from app.infrastructure.repositories.blocking import users_are_blocked
 
 logger = get_logger(__name__)
 MAX_ATTEMPTS = 4
@@ -257,10 +258,15 @@ class NotificationWorker:
                 pref, f"push_{'comments' if job.kind == 'comment' else 'replies'}"
             ):
                 return False
-            if (
-                job.notification_id is None
-                or session.get(schema.Notification, job.notification_id) is None
-            ):
+            notification = (
+                session.get(schema.Notification, job.notification_id)
+                if job.notification_id is not None
+                else None
+            )
+            if notification is None:
+                return False
+            # Re-check at delivery time: a block created after the event was queued cancels it.
+            if users_are_blocked(session, notification.actor_id, job.recipient_id):
                 return False
             target_model = {
                 "post": schema.Post,
@@ -275,6 +281,7 @@ class NotificationWorker:
                 pref
                 and pref.nearby_enabled
                 and pet
+                and not users_are_blocked(session, pet.user_id, job.recipient_id)
                 and pet.is_public
                 and not pet.deleted_at
                 and not pet.is_resolved

@@ -12,6 +12,7 @@ class LikeRepository(Protocol):
         post_id: UUID,
         *,
         viewer_user_id: UUID | None,
+        respect_blocks: bool = False,
     ) -> PostDetailRecord | None: ...
 
     def create_like(self, post_id: UUID, user_id: UUID) -> bool: ...

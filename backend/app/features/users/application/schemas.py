@@ -52,6 +52,18 @@ class UserPublic(BaseModel):
     total_likes_received: int = 0
     comment_count: int = 0
     allow_public_activity_view: bool = True
+    # True when the authenticated viewer has blocked this user; always False for anonymous
+    # viewers. Lets the client offer "Unblock" instead of "Block".
+    is_blocked_by_viewer: bool = False
+
+
+class BlockedUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str | None = None
+    avatar_url: str | None = None
+    blocked_at: datetime
 
 
 class UserUpdate(BaseModel):

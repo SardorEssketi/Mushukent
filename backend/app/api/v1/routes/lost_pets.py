@@ -159,6 +159,7 @@ def list_lost_pets(
     radius_meters: int | None = Query(default=None, ge=1, le=5000),
     bbox: str | None = Query(default=None),
     valid_for_map: bool = Query(default=False),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[GenericListResponse[LostPetListItem]]:
     return ApiSuccess(
@@ -170,6 +171,7 @@ def list_lost_pets(
             radius_meters=radius_meters,
             bbox=bbox,
             valid_for_map=valid_for_map,
+            viewer=current_user,
         )
     )
 
@@ -182,9 +184,12 @@ def list_lost_pets(
 def list_lost_pet_map_markers(
     bbox: str = Query(...),
     limit: int = Query(default=100, ge=1, le=100),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[GenericListResponse[LostPetMapListItem]]:
-    return ApiSuccess(data=lost_pets_service.list_map_markers(limit=limit, bbox=bbox))
+    return ApiSuccess(
+        data=lost_pets_service.list_map_markers(limit=limit, bbox=bbox, viewer=current_user)
+    )
 
 
 @router.get("/mine", response_model=ApiSuccess[GenericListResponse[LostPetListItem]])

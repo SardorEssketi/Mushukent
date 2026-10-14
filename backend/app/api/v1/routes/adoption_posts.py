@@ -88,12 +88,14 @@ async def create_adoption_post(
 def list_adoption_posts(
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> ApiSuccess[GenericListResponse[AdoptionPostListItem]]:
     return ApiSuccess(
         data=adoption_posts_service.list_adoption_posts(
             limit=limit,
             cursor=cursor,
+            viewer=current_user,
         )
     )
 

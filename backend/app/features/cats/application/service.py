@@ -194,10 +194,12 @@ class CatsService:
         limit: int = 20,
         cursor: str | None = None,
         order: ObservationSortOrder = ObservationSortOrder.LATEST,
+        viewer: AuthUser | None = None,
     ) -> CatDetailResponse:
+        viewer_user_id = viewer.id if viewer is not None else None
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            detail = repository.get_detail(cat_id)
+            detail = repository.get_detail(cat_id, viewer_user_id=viewer_user_id)
             if (
                 detail is None
                 or detail.deleted_at is not None
@@ -212,6 +214,7 @@ class CatsService:
                     limit=limit,
                     cursor=cursor,
                     order=order,
+                    viewer_user_id=viewer_user_id,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -227,7 +230,9 @@ class CatsService:
                 limit=history_page.limit,
             )
 
-    def list_cats(self, query: CatListQuery) -> GenericListResponse[CatListItem]:
+    def list_cats(
+        self, query: CatListQuery, viewer: AuthUser | None = None
+    ) -> GenericListResponse[CatListItem]:
         bbox = self._parse_bbox(query.bbox)
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
@@ -241,6 +246,7 @@ class CatsService:
                     radius_meters=query.radius_meters,
                     bbox=bbox,
                     kind=query.kind,
+                    viewer_user_id=viewer.id if viewer is not None else None,
                 )
             except ValueError as exc:
                 raise api_error(

@@ -19,6 +19,7 @@ from app.features.adoption_posts.domain.models import (
 )
 from app.features.posts.domain.models import PostAuthorSummary
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import exclude_blocked, users_are_blocked
 
 
 class SqlAlchemyAdoptionPostRepository:
@@ -54,7 +55,13 @@ class SqlAlchemyAdoptionPostRepository:
         return created
 
     def get_by_id(
-        self, adoption_post_id: UUID, *, for_update: bool = False, include_deleted: bool = False
+        self,
+        adoption_post_id: UUID,
+        *,
+        for_update: bool = False,
+        include_deleted: bool = False,
+        viewer_user_id: UUID | None = None,
+        respect_blocks: bool = False,
     ) -> AdoptionPostRecord | None:
         statement = (
             select(schema.AdoptionPost)
@@ -69,6 +76,8 @@ class SqlAlchemyAdoptionPostRepository:
         )
         if not include_deleted:
             statement = statement.where(schema.AdoptionPost.deleted_at.is_(None))
+        if respect_blocks:
+            statement = exclude_blocked(statement, viewer_user_id, schema.AdoptionPost.user_id)
         statement = statement.execution_options(populate_existing=True)
         if for_update:
             statement = statement.with_for_update()
@@ -76,7 +85,11 @@ class SqlAlchemyAdoptionPostRepository:
         return self._model_to_record(item) if item is not None else None
 
     def get_by_ids(
-        self, adoption_post_ids: list[UUID], *, active_only: bool = False
+        self,
+        adoption_post_ids: list[UUID],
+        *,
+        active_only: bool = False,
+        viewer_user_id: UUID | None = None,
     ) -> list[AdoptionPostRecord]:
         if not adoption_post_ids:
             return []
@@ -94,6 +107,7 @@ class SqlAlchemyAdoptionPostRepository:
         )
         if active_only:
             statement = statement.where(schema.AdoptionPost.is_resolved.is_(False))
+        statement = exclude_blocked(statement, viewer_user_id, schema.AdoptionPost.user_id)
         items = self.session.scalars(statement).all()
         return [self._model_to_record(item) for item in items]
 
@@ -179,6 +193,8 @@ class SqlAlchemyAdoptionPostRepository:
             return False
         if post.user_id == contacting_user_id:
             raise PermissionError("Owners cannot contact themselves through this flow.")
+        if users_are_blocked(self.session, post.user_id, contacting_user_id):
+            return False
         now = datetime.now(UTC)
         self.session.add(
             schema.AdoptionContactEvent(
@@ -274,6 +290,7 @@ class SqlAlchemyAdoptionPostRepository:
         *,
         limit: int,
         cursor: str | None = None,
+        viewer_user_id: UUID | None = None,
     ) -> AdoptionPostPage:
         statement = (
             select(schema.AdoptionPost)
@@ -287,6 +304,7 @@ class SqlAlchemyAdoptionPostRepository:
                 schema.AdoptionPost.is_resolved.is_(False),
             )
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.AdoptionPost.user_id)
 
         if cursor is not None:
             cursor_created_at, cursor_id = self._decode_cursor(cursor)

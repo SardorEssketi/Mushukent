@@ -24,6 +24,7 @@ from app.features.lost_pets.domain.models import (
 )
 from app.features.posts.domain.models import PostAuthorSummary
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import exclude_blocked, users_are_blocked
 
 
 class SqlAlchemyLostPetRepository:
@@ -68,6 +69,8 @@ class SqlAlchemyLostPetRepository:
         *,
         for_update: bool = False,
         include_deleted: bool = False,
+        viewer_user_id: UUID | None = None,
+        respect_blocks: bool = False,
     ) -> LostPetRecord | None:
         statement = (
             select(schema.LostPet)
@@ -79,6 +82,8 @@ class SqlAlchemyLostPetRepository:
         )
         if not include_deleted:
             statement = statement.where(schema.LostPet.deleted_at.is_(None))
+        if respect_blocks:
+            statement = exclude_blocked(statement, viewer_user_id, schema.LostPet.user_id)
         statement = statement.execution_options(populate_existing=True)
         if for_update:
             statement = statement.with_for_update()
@@ -155,7 +160,11 @@ class SqlAlchemyLostPetRepository:
         return result
 
     def get_by_ids(
-        self, lost_pet_ids: list[UUID], *, active_only: bool = False
+        self,
+        lost_pet_ids: list[UUID],
+        *,
+        active_only: bool = False,
+        viewer_user_id: UUID | None = None,
     ) -> list[LostPetRecord]:
         if not lost_pet_ids:
             return []
@@ -170,6 +179,7 @@ class SqlAlchemyLostPetRepository:
         )
         if active_only:
             statement = statement.where(schema.LostPet.is_resolved.is_(False))
+        statement = exclude_blocked(statement, viewer_user_id, schema.LostPet.user_id)
         items = self.session.scalars(statement).all()
         return [self._model_to_record(item) for item in items]
 
@@ -187,6 +197,8 @@ class SqlAlchemyLostPetRepository:
             return False
         if pet.user_id == contacting_user_id:
             raise PermissionError("Owners cannot contact themselves through this flow.")
+        if users_are_blocked(self.session, pet.user_id, contacting_user_id):
+            return False
         now = datetime.now(UTC)
         self.session.add(
             schema.LostPetContactEvent(
@@ -316,6 +328,7 @@ class SqlAlchemyLostPetRepository:
         radius_meters: int | None = None,
         valid_for_map: bool = False,
         bbox: tuple[float, float, float, float] | None = None,
+        viewer_user_id: UUID | None = None,
     ) -> LostPetPage:
         statement = (
             select(schema.LostPet)
@@ -326,6 +339,7 @@ class SqlAlchemyLostPetRepository:
                 schema.LostPet.is_resolved.is_(False),
             )
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.LostPet.user_id)
         if valid_for_map:
             statement = statement.where(
                 schema.LostPet.is_resolved.is_(False),
@@ -387,6 +401,7 @@ class SqlAlchemyLostPetRepository:
         *,
         limit: int,
         bbox: tuple[float, float, float, float],
+        viewer_user_id: UUID | None = None,
     ) -> LostPetMapPage:
         min_lon, min_lat, max_lon, max_lat = bbox
         envelope = func.ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
@@ -409,6 +424,7 @@ class SqlAlchemyLostPetRepository:
             .order_by(schema.LostPet.created_at.desc(), schema.LostPet.id.desc())
             .limit(limit)
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.LostPet.user_id)
         rows = self.session.execute(statement).mappings().all()
         return LostPetMapPage(
             items=[

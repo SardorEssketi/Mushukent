@@ -12,6 +12,7 @@ from app.features.likes.domain.repositories import LikeRepository
 from app.features.posts.domain.models import PostAuthorSummary, PostCatSummary, PostDetailRecord
 from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import exclude_blocked
 
 
 class SqlAlchemyLikeRepository(LikeRepository):
@@ -23,11 +24,14 @@ class SqlAlchemyLikeRepository(LikeRepository):
         post_id: UUID,
         *,
         viewer_user_id: UUID | None,
+        respect_blocks: bool = False,
     ) -> PostDetailRecord | None:
         statement = self._post_statement(
             viewer_user_id=viewer_user_id,
             include_deleted=False,
         ).where(schema.Post.id == post_id)
+        if respect_blocks:
+            statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
         row = self.session.execute(statement.with_for_update(of=schema.Post)).mappings().first()
         if row is None:
             return None
