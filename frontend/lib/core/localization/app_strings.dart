@@ -2113,6 +2113,33 @@ class AppStrings {
     };
   }
 
+  String get sessionUnavailableTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Serverga ulanib bo‘lmadi',
+      _RussianStrings() => 'Не удаётся связаться с сервером',
+      _ => 'Can’t reach the server',
+    };
+  }
+
+  String get sessionUnavailableMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Siz hisobingizdan chiqmadingiz. Aloqa tiklanishi bilan avtomatik qayta urinamiz.',
+      _RussianStrings() =>
+        'Вы по-прежнему вошли в аккаунт. Как только связь восстановится, мы проверим сессию автоматически.',
+      _ =>
+        'You are still signed in. We will check again automatically when the connection is back.',
+    };
+  }
+
+  String get sessionReconnecting {
+    return switch (this) {
+      _UzbekStrings() => 'Ulanmoqda...',
+      _RussianStrings() => 'Подключаемся...',
+      _ => 'Reconnecting...',
+    };
+  }
+
   String get blockedUsers {
     return switch (this) {
       _UzbekStrings() => 'Bloklangan foydalanuvchilar',

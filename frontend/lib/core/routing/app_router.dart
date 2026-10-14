@@ -13,6 +13,7 @@ import '../../features/add_observation/presentation/screens/add_observation_scre
 import '../../features/add_observation/application/add_observation_controller.dart';
 import '../../features/auth/presentation/screens/auth_gate_screen.dart';
 import '../../features/auth/presentation/screens/auth_required_screen.dart';
+import '../../features/auth/presentation/screens/session_unavailable_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/verify_email_screen.dart';
@@ -58,6 +59,17 @@ final _profileNavigatorKey = GlobalKey<NavigatorState>();
 bool _isAuthenticationEntryRoute(String path) =>
     path == '/login' || path == '/register' || path == '/auth-required';
 
+/// Where protected routes go while a stored session could not be confirmed (server unreachable).
+/// Deliberately not the sign-in flow: the user is still signed in as far as we know.
+String sessionUnavailableLocation(Uri intendedLocation) {
+  final redirect =
+      validatedPostAuthRedirect(intendedLocation.toString()) ?? '/feed';
+  return Uri(
+    path: '/session-unavailable',
+    queryParameters: {'redirect': redirect},
+  ).toString();
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -80,6 +92,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   location.startsWith('/adoption-posts/')) &&
               location.endsWith('/edit'));
 
+      if (location == '/auth-required' &&
+          authState.phase == AuthPhase.sessionUnavailable) {
+        // A cold load of a protected URL parks on /auth-required while the session is being
+        // checked; once the check ends as "server unreachable" this is not a sign-in problem.
+        return sessionUnavailableLocation(
+          Uri.parse(
+            validatedPostAuthRedirect(state.uri.queryParameters['redirect']) ??
+                '/feed',
+          ),
+        );
+      }
+
+      if (location == '/session-unavailable' &&
+          authState.phase != AuthPhase.sessionUnavailable) {
+        // Recovered (or the session was confirmed gone): continue to where the user was going.
+        return validatedPostAuthRedirect(
+                state.uri.queryParameters['redirect']) ??
+            '/feed';
+      }
+
+      if ((isModeratorRoute || isProtectedRoute) &&
+          authState.phase == AuthPhase.sessionUnavailable) {
+        return sessionUnavailableLocation(state.uri);
+      }
+
       if (isModeratorRoute) {
         if (!authState.isAuthenticated) {
           return authenticationRequiredLocation(state.uri);
@@ -100,6 +137,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       switch (authState.phase) {
         case AuthPhase.initial:
         case AuthPhase.restoring:
+        case AuthPhase.sessionUnavailable:
         case AuthPhase.failure:
         case AuthPhase.unauthenticated:
         case AuthPhase.authenticating:
@@ -129,6 +167,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth-gate',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AuthGateScreen(),
+      ),
+      GoRoute(
+        path: '/session-unavailable',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SessionUnavailableScreen(),
       ),
       GoRoute(
         path: '/auth-required',

@@ -20,10 +20,12 @@ class MushukistanApp extends ConsumerStatefulWidget {
   ConsumerState<MushukistanApp> createState() => _MushukistanAppState();
 }
 
-class _MushukistanAppState extends ConsumerState<MushukistanApp> {
+class _MushukistanAppState extends ConsumerState<MushukistanApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     logStartupStage('Flutter application mounted');
     unawaited(
       loadSavedThemeMode().then((mode) {
@@ -42,6 +44,21 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp> {
             AppLanguage.fromCode(next);
       },
     );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back in the foreground (tab visible again, app resumed): the network may be back, so
+    // re-check a stored session that could not be confirmed. No-op in every other state.
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ref.read(authControllerProvider.notifier).retrySession());
+    }
   }
 
   @override

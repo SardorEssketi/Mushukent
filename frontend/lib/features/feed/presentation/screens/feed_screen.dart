@@ -11,6 +11,7 @@ import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../auth/presentation/screens/session_unavailable_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../widgets/feed_card_parts.dart';
@@ -324,6 +325,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final period = ref.watch(feedPopularPeriodProvider);
     final userId = ref.watch(currentUserProvider)?.id;
     final authenticated = userId != null;
+    // A stored session the server could not confirm is not a signed-out guest.
+    final sessionUnconfirmed = ref.watch(
+      authControllerProvider.select((state) => state.hasUnconfirmedSession),
+    );
     final key = _feedKey(mode, period, userId);
     final pageAsync = ref.watch(feedPostsProvider);
     final strings = ref.watch(appStringsProvider);
@@ -352,7 +357,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       appBar: AppBar(
         actions: [
           if (authenticated) const NotificationBell(),
-          if (!authenticated)
+          if (!authenticated && !sessionUnconfirmed)
             TextButton(
               onPressed: () => context.push('/login'),
               child: Text(strings.login),
@@ -367,7 +372,14 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              if (!authenticated)
+              if (sessionUnconfirmed)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: SessionUnavailableBanner(),
+                  ),
+                )
+              else if (!authenticated)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),

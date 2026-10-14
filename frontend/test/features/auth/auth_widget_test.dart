@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mushukistan_frontend/core/localization/language_controller.dart';
 import 'package:mushukistan_frontend/core/location/location_service.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/routing/app_router.dart';
@@ -15,6 +16,7 @@ import 'package:mushukistan_frontend/features/auth/application/auth_controller.d
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/screens/session_unavailable_screen.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_sign_in_entry_button.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
@@ -271,31 +273,50 @@ void main() {
     expect(find.byType(NotificationLifecycle), findsOneWidget);
   });
 
-  testWidgets('invalid and unavailable session restoration leave guest UI',
-      (tester) async {
-    for (final result in <SessionRestoreResult>[
-      const SessionRestoreInvalid(message: 'Session expired.'),
-      const SessionRestoreFailure(message: 'Backend unavailable.'),
-    ]) {
-      final container = _containerWithRepo(
-        FakeAuthRepository(restoreResult: result),
-      );
-      await _pumpApp(tester, container);
-      await tester.pumpAndSettle();
+  testWidgets('invalid session restoration leaves guest UI', (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: const SessionRestoreInvalid(message: 'Session expired.'),
+      ),
+    );
+    addTearDown(container.dispose);
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
 
-      expect(
-        container
-            .read(appRouterProvider)
-            .routeInformationProvider
-            .value
-            .uri
-            .path,
-        '/feed',
-      );
-      expect(find.textContaining('Mushu'), findsWidgets);
-      container.dispose();
-      await tester.pumpWidget(const SizedBox.shrink());
-    }
+    expect(
+      container.read(appRouterProvider).routeInformationProvider.value.uri.path,
+      '/feed',
+    );
+    expect(find.textContaining('Mushu'), findsWidgets);
+    expect(find.text('Login'), findsWidgets);
+    expect(find.text('Create account'), findsWidgets);
+  });
+
+  testWidgets('unavailable backend keeps the session and shows no guest UI',
+      (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: const SessionRestoreFailure(
+          message: 'Backend unavailable.',
+        ),
+      ),
+    );
+    await _pumpApp(tester, container);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final state = container.read(authControllerProvider);
+    expect(state.phase, AuthPhase.sessionUnavailable);
+    expect(
+      container.read(appRouterProvider).routeInformationProvider.value.uri.path,
+      '/feed',
+    );
+    // The signed-out welcome card and Login button would wrongly suggest a logout.
+    expect(find.text('Login'), findsNothing);
+    expect(find.text('Create account'), findsNothing);
+    expect(find.text('Can’t reach the server'), findsOneWidget);
+    expect(find.text('Retry'), findsWidgets);
+    container.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('guest like action requests authentication', (tester) async {
@@ -1154,5 +1175,281 @@ void main() {
     expect(container.read(authControllerProvider).user, isNull);
     repo.logoutCompleter!.complete();
     await logout;
+  });
+
+  group('session outage routing', () {
+    SessionRestoreResult confirmed() => SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'access-a', user: testUser()),
+        );
+    const outage = SessionRestoreFailure(message: 'Backend unavailable.');
+
+    final retryOnScreen = find.descendant(
+      of: find.byType(SessionUnavailableScreen),
+      matching: find.text('Retry'),
+    );
+
+    String path(ProviderContainer container) => container
+        .read(appRouterProvider)
+        .routeInformationProvider
+        .value
+        .uri
+        .path;
+
+    testWidgets(
+        'direct navigation to /profile during an outage shows retry UI, not sign-in',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/session-unavailable');
+      expect(find.text('Can’t reach the server'), findsWidgets);
+      expect(retryOnScreen, findsOneWidget);
+      expect(find.text('Login'), findsNothing);
+      expect(find.text('Create account'), findsNothing);
+      expect(find.byType(ProfileScreen), findsNothing);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'cold load of a protected URL parked on sign-in while checking ends on the retry screen',
+        (tester) async {
+      // The browser reload case found in the real-browser run: the URL is requested while the
+      // session check is still running, then the check ends as "server unreachable".
+      final repo = FakeAuthRepository()
+        ..restoreCompleter = Completer<SessionRestoreResult>();
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pump(const Duration(milliseconds: 50));
+      container.read(appRouterProvider).go('/profile');
+      // The progress spinner animates forever, so settle by a fixed interval instead.
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(path(container), startsWith('/auth-required'));
+
+      repo.restoreCompleter!.complete(outage);
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/session-unavailable');
+      expect(find.text('Login'), findsNothing);
+
+      // Recovery returns to the page that was requested originally.
+      repo.restoreCompleter = null;
+      repo.restoreResult = confirmed();
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+      expect(path(container), '/profile');
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('Retry restores the session and returns to the requested page',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(path(container), '/session-unavailable');
+
+      // Still down: pressing Retry keeps the user on the same screen, signed in.
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+      expect(path(container), '/session-unavailable');
+      expect(container.read(authControllerProvider).phase,
+          AuthPhase.sessionUnavailable);
+
+      // Backend returns.
+      repo.restoreResult = confirmed();
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(path(container), '/profile');
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('automatic re-check recovers without user action',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/notifications');
+      await tester.pumpAndSettle();
+      expect(path(container), '/session-unavailable');
+
+      repo.restoreResult = confirmed();
+      await tester
+          .pump(const Duration(seconds: 4)); // first automatic attempt (3 s)
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(path(container), '/notifications');
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'cold start during an outage: feed stays public without signed-out UI and recovers',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/feed');
+      expect(find.text('Login'), findsNothing);
+      expect(find.text('Create account'), findsNothing);
+      expect(find.text('Can’t reach the server'), findsOneWidget);
+
+      repo.restoreResult = confirmed();
+      await tester.tap(find.text('Retry').first);
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(find.text('Can’t reach the server'), findsNothing);
+      expect(find.text('Login'), findsNothing);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'a confirmed-invalid answer while waiting ends in the sign-in flow',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+
+      repo.restoreResult =
+          const SessionRestoreInvalid(message: 'Session expired.');
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).phase,
+          AuthPhase.unauthenticated);
+      expect(path(container), '/auth-required');
+      expect(find.text('Login'), findsWidgets);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'actions that need a session do not offer sign-in during an outage',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).push('/auth-required?redirect=%2Ffeed');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Can’t reach the server'), findsWidgets);
+      expect(find.text('Login'), findsNothing);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('moderator routes are held back by the outage, not by sign-in',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).go('/moderation/reports');
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/session-unavailable');
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('after explicit logout protected pages require sign-in again',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: confirmed());
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      await container.read(authControllerProvider.notifier).logout();
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(path(container), '/auth-required');
+      expect(find.text('Can’t reach the server'), findsNothing);
+    });
+
+    for (final (language, title, message, retry) in [
+      (
+        AppLanguage.russian,
+        'Не удаётся связаться с сервером',
+        'Вы по-прежнему вошли в аккаунт.',
+        'Повторить',
+      ),
+      (
+        AppLanguage.uzbek,
+        'Serverga ulanib bo‘lmadi',
+        'Siz hisobingizdan chiqmadingiz.',
+        'Qayta urinish',
+      ),
+    ]) {
+      testWidgets('outage screen is localized: ${language.code}',
+          (tester) async {
+        final repo = FakeAuthRepository(restoreResult: outage);
+        final container = _containerWithRepo(repo);
+        container.read(appLanguageProvider.notifier).state = language;
+        await _pumpApp(tester, container);
+        await tester.pumpAndSettle();
+        container.read(appRouterProvider).go('/profile');
+        await tester.pumpAndSettle();
+
+        expect(find.text(title), findsWidgets);
+        expect(find.textContaining(message), findsWidgets);
+        expect(
+          find.descendant(
+            of: find.byType(SessionUnavailableScreen),
+            matching: find.text(retry),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Can’t reach the server'), findsNothing);
+        container.dispose();
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+
+    testWidgets('a signed-in user mid-session is not affected by later outages',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: confirmed());
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfileScreen), findsOneWidget);
+
+      // The API now fails every call; auth state and route must not change by themselves.
+      repo.restoreResult = outage;
+      await tester.pump(const Duration(seconds: 30));
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(path(container), '/profile');
+      expect(repo.restoreCalls, 1,
+          reason: 'no background polling while signed in');
+    });
   });
 }

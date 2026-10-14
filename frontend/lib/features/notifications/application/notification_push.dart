@@ -250,8 +250,11 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     if (message.data['kind'] == 'lost_pet_followup' ||
         message.data['kind'] == 'adoption_followup') {
       // The existing feed shell checks the persisted due follow-ups on entry.
+      final auth = ref.read(authControllerProvider);
+      // An unconfirmed (server unreachable) session is still a signed-in user: never send
+      // them to the sign-in page.
       widget.router.go(
-        ref.read(authControllerProvider).isAuthenticated ? '/feed' : '/login',
+        auth.isAuthenticated || auth.hasUnconfirmedSession ? '/feed' : '/login',
       );
       return;
     }

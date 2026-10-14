@@ -13,13 +13,27 @@ import '../domain/auth_repository.dart';
 import '../infrastructure/auth_repository_impl.dart';
 import '../infrastructure/google_sign_in_service.dart';
 
+/// Where the session stands. Only [unauthenticated] means "signed out"; it is entered by an
+/// explicit logout, a confirmed invalid/revoked credential, or when no credentials exist.
 enum AuthPhase {
+  /// Not determined yet.
   initial,
+
+  /// Checking stored credentials with the server.
   restoring,
+
+  /// No usable session: never signed in, explicit logout, or credentials confirmed invalid.
   unauthenticated,
   verificationRequired,
   authenticating,
   authenticated,
+
+  /// Credentials are stored and have **not** been rejected, but the server could not be reached
+  /// (offline, timeout, 5xx). The session is neither valid nor lost: it is preserved and
+  /// re-checked automatically and on demand. Never treated as a logout.
+  sessionUnavailable,
+
+  /// Unexpected local failure while reading credentials; retry is offered.
   failure,
 }
 
@@ -33,6 +47,7 @@ class AuthState {
     this.messageIsError = false,
     this.pendingVerificationEmail,
     this.devVerificationToken,
+    this.reconnecting = false,
   });
 
   final AuthPhase phase;
@@ -44,7 +59,13 @@ class AuthState {
   final String? pendingVerificationEmail;
   final String? devVerificationToken;
 
+  /// Only for [AuthPhase.sessionUnavailable]: a re-check is in flight right now.
+  final bool reconnecting;
+
   bool get isAuthenticated => phase == AuthPhase.authenticated;
+
+  /// True while a stored session exists but the server could not confirm it.
+  bool get hasUnconfirmedSession => phase == AuthPhase.sessionUnavailable;
   bool get isBusy =>
       phase == AuthPhase.restoring || phase == AuthPhase.authenticating;
   bool get hasError =>
@@ -89,6 +110,19 @@ class AuthState {
     return AuthState._(phase: AuthPhase.authenticated, user: user);
   }
 
+  factory AuthState.sessionUnavailable({
+    required String message,
+    bool retryable = true,
+    bool reconnecting = false,
+  }) {
+    return AuthState._(
+      phase: AuthPhase.sessionUnavailable,
+      message: message,
+      retryable: retryable,
+      reconnecting: reconnecting,
+    );
+  }
+
   factory AuthState.failure({
     required String message,
     bool retryable = true,
@@ -127,18 +161,32 @@ final currentUserProvider = Provider<MushukistanUser?>((ref) {
   return ref.watch(authControllerProvider.select((state) => state.user));
 });
 
+/// Delays before the automatic re-checks of an unconfirmed session. The list is the whole budget:
+/// after the last attempt nothing runs in the background any more; the user (Retry button) or an
+/// app resume starts a new round. This keeps an outage from turning into endless polling.
+const List<Duration> defaultReconnectBackoff = <Duration>[
+  Duration(seconds: 3),
+  Duration(seconds: 6),
+  Duration(seconds: 12),
+  Duration(seconds: 24),
+  Duration(seconds: 48),
+];
+
 class AuthController extends StateNotifier<AuthState> {
   AuthController(
     this._repository,
     this._googleIdentityTokens, {
     Duration restoreTimeout = const Duration(seconds: 20),
     AuthTokenStore? tokenStore,
+    List<Duration> reconnectBackoff = defaultReconnectBackoff,
   })  : _restoreTimeout = restoreTimeout,
+        _reconnectBackoff = reconnectBackoff,
         super(AuthState.restoring()) {
     if (tokenStore is GuardedAuthTokenStore) {
       _credentialInvalidations = tokenStore.invalidations.listen((_) {
         if (!mounted) return;
         _authEpoch++;
+        _cancelReconnect();
         state = AuthState.unauthenticated();
       });
     }
@@ -149,6 +197,9 @@ class AuthController extends StateNotifier<AuthState> {
   final GoogleIdentityTokenProvider _googleIdentityTokens;
   final Duration _restoreTimeout;
   final Set<Timer> _restoreTimeoutTimers = <Timer>{};
+  final List<Duration> _reconnectBackoff;
+  Timer? _reconnectTimer;
+  int _reconnectAttempts = 0;
   Future<void>? _restoreInFlight;
   Future<void>? _logoutInFlight;
   StreamSubscription<void>? _credentialInvalidations;
@@ -170,24 +221,65 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  /// User-initiated (Retry button) or lifecycle-initiated (app resumed) re-check of a stored
+  /// session that could not be confirmed. Starts a fresh automatic-retry round. No-op in every
+  /// other phase, so it is safe to call from a lifecycle observer.
+  Future<void> retrySession() async {
+    if (state.phase != AuthPhase.sessionUnavailable) return;
+    _reconnectAttempts = 0;
+    _reconnectTimer?.cancel();
+    await restoreSession();
+  }
+
+  void _cancelReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _reconnectAttempts = 0;
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    if (_reconnectAttempts >= _reconnectBackoff.length) return;
+    final delay = _reconnectBackoff[_reconnectAttempts++];
+    _reconnectTimer = Timer(delay, () {
+      _reconnectTimer = null;
+      if (!mounted || state.phase != AuthPhase.sessionUnavailable) return;
+      unawaited(restoreSession());
+    });
+  }
+
+  void _enterSessionUnavailable(String message, bool retryable) {
+    state =
+        AuthState.sessionUnavailable(message: message, retryable: retryable);
+    if (retryable) _scheduleReconnect();
+  }
+
   Future<void> _performRestoreSession() async {
     final epoch = _authEpoch;
     logStartupStage('Authentication restore started');
-    state = AuthState.restoring();
+    final wasUnavailable = state.phase == AuthPhase.sessionUnavailable;
+    // A re-check of an unconfirmed session keeps the "reconnecting" screen instead of
+    // flashing the startup spinner, and never drops back to guest UI in between.
+    state = wasUnavailable
+        ? AuthState.sessionUnavailable(
+            message: state.message ?? 'Session check failed.',
+            retryable: state.retryable,
+            reconnecting: true,
+          )
+        : AuthState.restoring();
     late final SessionRestoreResult result;
     try {
       result = await _withRestoreTimeout(_repository.restoreSession());
     } on TimeoutException {
       if (epoch != _authEpoch) return;
-      logStartupStage('Authentication restore timed out; continuing as guest');
-      state = AuthState.failure(
-        message: 'Session check timed out. Please try again.',
-        retryable: true,
-      );
+      logStartupStage('Authentication restore timed out; session kept');
+      _enterSessionUnavailable(
+          'Session check timed out. Please try again.', true);
       return;
     } catch (_) {
       if (epoch != _authEpoch) return;
-      logStartupStage('Authentication restore failed; continuing as guest');
+      logStartupStage('Authentication restore failed; retry offered');
+      _cancelReconnect();
       state = AuthState.failure(
         message: 'Session check failed.',
         retryable: true,
@@ -198,19 +290,21 @@ class AuthController extends StateNotifier<AuthState> {
     switch (result) {
       case SessionRestoreMissing():
         logStartupStage('Authentication restore completed: guest');
+        _cancelReconnect();
         state = AuthState.unauthenticated();
         break;
       case SessionRestoreInvalid(:final message):
         logStartupStage('Authentication restore cleared invalid session');
+        _cancelReconnect();
         state = AuthState.unauthenticated(message: message);
         break;
       case SessionRestoreFailure(:final message, :final retryable):
-        logStartupStage(
-            'Authentication restore unavailable; guest UI remains available');
-        state = AuthState.failure(message: message, retryable: retryable);
+        logStartupStage('Authentication restore unavailable; session kept');
+        _enterSessionUnavailable(message, retryable);
         break;
       case SessionRestoreSuccess(:final session):
         logStartupStage('Authentication restore completed: authenticated');
+        _cancelReconnect();
         state = AuthState.authenticated(session.user);
         break;
     }
@@ -250,6 +344,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> login(AuthCredentials credentials) async {
     if (_logoutInFlight != null) return;
     _authEpoch++;
+    _cancelReconnect();
     final epoch = _authEpoch;
     state = AuthState.authenticating();
     try {
@@ -321,6 +416,7 @@ class AuthController extends StateNotifier<AuthState> {
       {String? password}) async {
     if (_logoutInFlight != null) return;
     _authEpoch++;
+    _cancelReconnect();
     final epoch = _authEpoch;
     state = AuthState.authenticating();
     try {
@@ -382,6 +478,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() {
     if (_logoutInFlight case final inFlight?) return inFlight;
     _authEpoch++;
+    _cancelReconnect();
     state = AuthState.unauthenticated();
     final future = _repository.logout();
     _logoutInFlight = future;
@@ -419,6 +516,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
     unawaited(_credentialInvalidations?.cancel());
     for (final timer in _restoreTimeoutTimers) {
       timer.cancel();
