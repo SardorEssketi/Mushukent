@@ -71,6 +71,17 @@ String sessionUnavailableLocation(Uri intendedLocation) {
   ).toString();
 }
 
+/// The route the user is looking at. The router's own URI only knows the declarative location; a
+/// screen opened with `context.push` (the Feed's Login button) is the last match of the delegate's
+/// configuration instead.
+Uri _visibleUri(GoRouter router) {
+  final configuration = router.routerDelegate.currentConfiguration;
+  final declared = router.routeInformationProvider.value.uri;
+  if (configuration.isEmpty) return declared;
+  final visiblePath = configuration.last.matchedLocation;
+  return visiblePath == declared.path ? declared : Uri(path: visiblePath);
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -541,7 +552,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       router.go('/feed');
       return;
     }
-    final currentUri = router.routeInformationProvider.value.uri;
+    // The router's URI only knows the declarative location. A screen opened with `context.push`
+    // (the Feed's Login button) is not part of it, so the visible route is the last match of the
+    // delegate's configuration, which includes pushed pages.
+    final currentUri = _visibleUri(router);
     final isAuthEntryRoute = _isAuthenticationEntryRoute(currentUri.path) ||
         currentUri.path == '/verify-email';
 
