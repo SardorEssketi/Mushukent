@@ -14,6 +14,7 @@ from app.features.auth.application.schemas import (
     AuthRegisterResponse,
     ChangePasswordRequest,
     GoogleLoginRequest,
+    LegalAcceptRequest,
     LogoutRequest,
     RefreshTokenRequest,
     ResendVerificationRequest,
@@ -43,13 +44,12 @@ def _identify_authenticated_user(
     if posthog_client is None:
         return
 
+    # Data minimisation (docs/SECURITY.md, "Analytics"): the person is the pseudonymous account id
+    # plus two non-sensitive attributes. Never add email, name, phone, Telegram or free text here.
     person_properties: dict[str, object] = {
-        "email": user.email,
         "preferred_language": user.preferred_language,
         "is_moderator": user.is_moderator,
     }
-    if user.name is not None:
-        person_properties["name"] = user.name
 
     with new_context():
         identify_context(str(user.id))
@@ -64,6 +64,22 @@ def sign_in_methods(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> ApiSuccess[SignInMethods]:
     return ApiSuccess(data=SignInMethods(**auth_service.get_sign_in_methods(user.id)))
+
+
+@router.post("/legal/accept", response_model=ApiSuccess[UserPublic])
+def accept_legal(
+    payload: LegalAcceptRequest,
+    user=Depends(get_current_active_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> ApiSuccess[UserPublic]:
+    updated = auth_service.accept_legal(
+        user.id,
+        accept_terms=payload.accept_terms,
+        accept_privacy=payload.accept_privacy,
+        terms_version=payload.terms_version,
+        privacy_version=payload.privacy_version,
+    )
+    return ApiSuccess(data=UserPublic.from_auth_user(updated))
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

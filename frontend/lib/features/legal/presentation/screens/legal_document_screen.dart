@@ -278,7 +278,7 @@ const _privacyPolicy = _LegalDocument(
       heading: 'Technical and security data',
       paragraphs: [
         'Mushukistan processes API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.',
-        "The Mushukistan apps do not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features, and Firebase Analytics collection is disabled in the Android app. Separately, the Mushukistan server can optionally send usage data to PostHog (server-side analytics) when the operator configures it; if it is not configured, nothing is sent. When enabled, it receives event names such as post created, comment created, post liked, report submitted, profile updated, password changed and owner contacted, simple counts such as the number of photos, the ID of the signed-in account so that events can be linked to an account, automatic reports of server errors with technical details, and health-check log lines. Event data does not include phone numbers, Telegram handles, email addresses, passwords, post text or photos. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.",
+        "The Mushukistan apps do not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features, and Firebase Analytics collection is disabled in the Android app. Separately, the Mushukistan server can optionally send usage data to PostHog (server-side analytics) when the operator configures it; if it is not configured, nothing is sent. When enabled, it receives event names such as post created, comment created, post liked, report submitted, profile updated, password changed and owner contacted, simple counts such as the number of photos, a pseudonymous account ID (a random identifier, not your email or name) together with your interface language and whether the account is a moderator, so that events can be linked to an account, and health-check log lines. Email addresses, names, phone numbers, Telegram handles, passwords, post text and photos are not sent, automatic error reports are turned off, and PostHog is told not to derive a location. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.",
         'Android notification device tokens are encrypted at rest; token hashes support deduplication. Delivery retries are bounded, and full tokens are not placed in normal logs or public profiles.',
       ],
     ),
@@ -317,7 +317,7 @@ const _privacyPolicy = _LegalDocument(
         'Google when a user chooses Google Sign-In.',
         'OpenStreetMap for map tiles and map/place data.',
         'Google Firebase Cloud Messaging for Android push delivery when configured and permitted. Web Push is not used.',
-        'PostHog for server-side product analytics and error reports, only when configured by the operator.',
+        'PostHog for server-side product usage analytics, only when configured by the operator.',
         'Email provider: not configured in the verified repository.',
         'Backup provider: not configured in the verified repository.',
       ],

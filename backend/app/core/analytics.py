@@ -84,7 +84,11 @@ class Analytics:
             self._raw_client = Posthog(
                 project_api_key=token,
                 host=host,
-                enable_exception_autocapture=True,
+                # Automatic exception reports carry stack traces and error messages that can
+                # contain personal data. They stay off until sanitisation is demonstrated.
+                enable_exception_autocapture=False,
+                # Do not let PostHog derive a location from the server's requests.
+                disable_geoip=True,
             )
             atexit.register(self._raw_client.shutdown)
             self.client = SafeAnalyticsClient(self._raw_client)
