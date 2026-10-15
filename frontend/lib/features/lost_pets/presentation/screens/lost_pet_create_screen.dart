@@ -121,7 +121,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
     }
     if (!_phonePublicationConsent) {
       setState(() {
-        _error = strings.confirmPhonePublic;
+        _error = strings.confirmContactConsent;
       });
       return;
     }
@@ -293,8 +293,8 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                           _error = null;
                         });
                       },
-                title: Text(strings.phonePublicConsent),
-                subtitle: Text(strings.phonePublicConsentSubtitle),
+                title: Text(strings.contactConsentTitle),
+                subtitle: Text(strings.contactConsentSubtitle),
                 controlAffinity: ListTileControlAffinity.leading,
               ),
               if (_error != null) ...[

@@ -28,6 +28,7 @@ class _AdoptionPostCreateScreenState
   final _formKey = GlobalKey<FormState>();
   final List<LostPetPhotoUpload> _photos = [];
   bool _isSubmitting = false;
+  bool _contactConsent = false;
   bool _isPickingPhotos = false;
   String? _error;
 
@@ -101,6 +102,12 @@ class _AdoptionPostCreateScreenState
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
+    if (!_contactConsent) {
+      setState(() {
+        _error = strings.confirmContactConsent;
+      });
+      return;
+    }
     setState(() {
       _isSubmitting = true;
       _error = null;
@@ -111,6 +118,7 @@ class _AdoptionPostCreateScreenState
             photos: _photos,
             petName: _petNameController.text,
             additionalInfo: _infoController.text,
+            ownerContactConsent: _contactConsent,
           );
       ref.invalidate(feedPostsProvider);
       if (mounted) {
@@ -241,7 +249,21 @@ class _AdoptionPostCreateScreenState
                   alignLabelWithHint: true,
                 ),
               ),
-              Text(strings.adoptionPhoneHelp),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _contactConsent,
+                onChanged: _isSubmitting
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _contactConsent = value ?? false;
+                          _error = null;
+                        });
+                      },
+                title: Text(strings.contactConsentTitle),
+                subtitle: Text(strings.contactConsentSubtitle),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(

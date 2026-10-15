@@ -47,6 +47,7 @@ class AdoptionPostDetailScreen extends ConsumerStatefulWidget {
 class _AdoptionPostDetailScreenState
     extends ConsumerState<AdoptionPostDetailScreen> {
   bool _contactInFlight = false;
+  ContactRevealData? _revealed;
   bool _statusInFlight = false;
   final GlobalKey _commentsKey = GlobalKey();
 
@@ -126,16 +127,27 @@ class _AdoptionPostDetailScreenState
     }
     _contactInFlight = true;
     try {
-      await ref.read(mushukistanApiProvider).contactAdoptionOwner(post.id);
+      final api = ref.read(mushukistanApiProvider);
+      // The server no longer sends contact details with the post: ask for them explicitly.
+      // The owner's own details and older servers still arrive with the post.
+      var contact = _revealed;
+      final inline = post.ownerPhoneNumber;
+      if (contact == null && inline != null) {
+        contact = ContactRevealData(
+          phoneNumber: inline,
+          telegramUsername: post.ownerTelegramUsername,
+        );
+      }
+      contact ??= await api.revealAdoptionContact(post.id);
+      if (mounted) setState(() => _revealed = contact);
+      await api.contactAdoptionOwner(post.id);
       if (!context.mounted) return;
       if (telegram) {
-        final handle = post.ownerTelegramUsername;
+        final handle = contact.telegramUsername;
         if (handle != null) await _openTelegram(handle);
       } else {
-        final phone = post.ownerPhoneNumber;
-        if (phone != null) {
-          await launchPublicPhone(context, phone: phone, strings: strings);
-        }
+        await launchPublicPhone(context,
+            phone: contact.phoneNumber, strings: strings);
       }
     } on MushukistanApiException catch (error) {
       if (error.code == 'ADOPTION_POST_NOT_ACTIVE') {
@@ -144,7 +156,11 @@ class _AdoptionPostDetailScreenState
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotSaveChanges)),
+          SnackBar(
+            content: Text(error.code == 'CONTACT_REVEAL_LIMIT'
+                ? strings.contactRevealLimit
+                : strings.couldNotSaveChanges),
+          ),
         );
       }
     } catch (_) {
@@ -352,16 +368,19 @@ class _AdoptionPostDetailScreenState
                 PublicationContactButton(
                   icon: Icons.phone_outlined,
                   label: strings.contactOwner,
-                  value: post.ownerPhoneNumber,
+                  value: _revealed?.phoneNumber ?? post.ownerPhoneNumber,
                   onPressed: () => _contactOwner(context, strings, post),
                 ),
-                if (post.ownerTelegramUsername != null) ...[
+                if ((_revealed?.telegramUsername ??
+                        post.ownerTelegramUsername) !=
+                    null) ...[
                   const SizedBox(height: AppSpacing.sm),
                   PublicationContactButton(
                     primary: false,
                     icon: Icons.alternate_email,
                     label: 'Telegram',
-                    value: '@${post.ownerTelegramUsername}',
+                    value:
+                        '@${_revealed?.telegramUsername ?? post.ownerTelegramUsername}',
                     onPressed: () =>
                         _contactOwner(context, strings, post, telegram: true),
                   ),

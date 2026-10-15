@@ -46,6 +46,7 @@ class LostPetDetailScreen extends ConsumerStatefulWidget {
 
 class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
   bool _contactInFlight = false;
+  ContactRevealData? _revealed;
   bool _statusInFlight = false;
   final GlobalKey _commentsKey = GlobalKey();
 
@@ -186,18 +187,27 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
     }
     _contactInFlight = true;
     try {
-      await ref.read(mushukistanApiProvider).contactLostPetOwner(lostPet.id);
+      final api = ref.read(mushukistanApiProvider);
+      // The server no longer sends contact details with the post: ask for them explicitly.
+      // The owner's own details and older servers still arrive with the post.
+      var contact = _revealed;
+      final inline = lostPet.ownerPhoneNumber;
+      if (contact == null && inline != null) {
+        contact = ContactRevealData(
+          phoneNumber: inline,
+          telegramUsername: lostPet.ownerTelegramUsername,
+        );
+      }
+      contact ??= await api.revealLostPetContact(lostPet.id);
+      if (mounted) setState(() => _revealed = contact);
+      await api.contactLostPetOwner(lostPet.id);
       if (!context.mounted) return;
       if (telegram) {
-        final handle = lostPet.ownerTelegramUsername;
+        final handle = contact.telegramUsername;
         if (handle != null) await _openTelegram(handle);
       } else {
-        // Signed in but the details have not arrived yet (session still loading): the contact
-        // event is recorded, and the next tap uses the reloaded number.
-        final phone = lostPet.ownerPhoneNumber;
-        if (phone != null) {
-          await launchPublicPhone(context, phone: phone, strings: strings);
-        }
+        await launchPublicPhone(context,
+            phone: contact.phoneNumber, strings: strings);
       }
     } on MushukistanApiException catch (error) {
       if (error.code == 'LOST_PET_NOT_ACTIVE') {
@@ -206,7 +216,11 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotSaveChanges)),
+          SnackBar(
+            content: Text(error.code == 'CONTACT_REVEAL_LIMIT'
+                ? strings.contactRevealLimit
+                : strings.couldNotSaveChanges),
+          ),
         );
       }
     } catch (_) {
@@ -375,16 +389,19 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                 PublicationContactButton(
                   icon: Icons.phone_outlined,
                   label: strings.contactOwner,
-                  value: lostPet.ownerPhoneNumber,
+                  value: _revealed?.phoneNumber ?? lostPet.ownerPhoneNumber,
                   onPressed: () => _contactOwner(context, strings, lostPet),
                 ),
-                if (lostPet.ownerTelegramUsername != null) ...[
+                if ((_revealed?.telegramUsername ??
+                        lostPet.ownerTelegramUsername) !=
+                    null) ...[
                   const SizedBox(height: AppSpacing.sm),
                   PublicationContactButton(
                     primary: false,
                     icon: Icons.alternate_email,
                     label: 'Telegram',
-                    value: '@${lostPet.ownerTelegramUsername}',
+                    value:
+                        '@${_revealed?.telegramUsername ?? lostPet.ownerTelegramUsername}',
                     onPressed: () => _contactOwner(
                       context,
                       strings,

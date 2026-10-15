@@ -113,7 +113,7 @@ void main() {
         isNot(contains('adoption-1')));
   });
 
-  testWidgets('creation explains contact without a mandatory checkbox',
+  testWidgets('creation asks for explicit consent about who sees the contact',
       (tester) async {
     final container = _container(FakeApiClient());
     addTearDown(container.dispose);
@@ -122,10 +122,15 @@ void main() {
       child: const MaterialApp(home: AdoptionPostCreateScreen()),
     ));
     await tester.pumpAndSettle();
-    expect(find.byType(CheckboxListTile), findsNothing);
-    await tester.scrollUntilVisible(find.textContaining('Contact Owner'), 250,
+    final consent = find.textContaining('signed-in Mushukistan users');
+    await tester.scrollUntilVisible(consent, 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.textContaining('Contact Owner'), findsOneWidget);
+    expect(consent, findsOneWidget);
+    expect(find.textContaining('never shown to visitors who are not signed in'),
+        findsOneWidget);
+    final checkbox = tester.widget<CheckboxListTile>(
+        find.ancestor(of: consent, matching: find.byType(CheckboxListTile)));
+    expect(checkbox.value, isFalse, reason: 'consent is never pre-checked');
   });
 
   testWidgets('only owner sees edit and delete on a rehomed post',

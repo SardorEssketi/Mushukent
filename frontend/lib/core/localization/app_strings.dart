@@ -1781,25 +1781,6 @@ class AppStrings {
     };
   }
 
-  String get showPhonePublicly {
-    return switch (this) {
-      _UzbekStrings() => 'Telefon raqamim ochiq koʻrsatilsin',
-      _RussianStrings() => 'Показывать мой номер телефона публично',
-      _ => 'Show my phone number publicly',
-    };
-  }
-
-  String get adoptionPhoneHelp {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Profilingizdagi telefon raqami bu postda ochiq ko‘rsatiladi. Kirgan foydalanuvchilar «Egasi bilan bogʻlanish» orqali qo‘ng‘iroq qilishi mumkin.',
-      _RussianStrings() =>
-        'Номер телефона из профиля будет виден всем в этом объявлении. Вошедшие пользователи смогут позвонить через «Связаться с владельцем».',
-      _ =>
-        'Your profile phone number is public on this post. Signed-in users can use Contact Owner to call you.',
-    };
-  }
-
   String get addAtLeastOnePhoto {
     return switch (this) {
       _UzbekStrings() => 'Kamida bitta rasm qoʻshing.',
@@ -1808,12 +1789,24 @@ class AppStrings {
     };
   }
 
-  String get confirmPhonePublic {
+  String get confirmContactConsent {
     return switch (this) {
-      _UzbekStrings() => 'Telefon raqamingiz ochiq koʻrsatilishini tasdiqlang.',
+      _UzbekStrings() =>
+        'Kontakt ma’lumotlaringizni kim ko‘rishi mumkinligini tasdiqlang.',
       _RussianStrings() =>
-        'Подтвердите, что ваш номер телефона можно показать публично.',
-      _ => 'Confirm that your phone number may be shown publicly.',
+        'Подтвердите, кто может видеть ваши контактные данные.',
+      _ => 'Confirm who may see your contact details.',
+    };
+  }
+
+  String get contactRevealLimit {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Siz hozircha ruxsat etilgan maksimal miqdordagi kontaktni ko‘rdingiz. Keyinroq urinib ko‘ring.',
+      _RussianStrings() =>
+        'Вы открыли максимально допустимое число контактов. Попробуйте позже.',
+      _ =>
+        'You have viewed the maximum number of owner contacts for now. Try again later.',
     };
   }
 
@@ -2792,23 +2785,25 @@ class AppStrings {
     };
   }
 
-  String get phonePublicConsent {
+  String get contactConsentTitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Profilimdagi telefon raqamini bu yo‘qolgan jonivor postida ochiq ko‘rsatish.',
+        'Telefon raqamimni (va qo‘shsam, Telegramni) ushbu e’londa «Egasi bilan bog‘lanish» tugmasini bosgan, tizimga kirgan Mushukistan foydalanuvchilariga ko‘rsatish.',
       _RussianStrings() =>
-        'Публично показать номер телефона из моего профиля в этом посте о потерянном питомце.',
-      _ => 'Show my profile phone number publicly on this lost-pet post.',
+        'Показывать мой номер телефона (и Telegram, если я его добавлю) вошедшим в аккаунт пользователям Mushukistan, которые нажмут «Связаться с владельцем» в этом объявлении.',
+      _ =>
+        'Show my phone number (and Telegram, if I add it) to signed-in Mushukistan users who tap Contact Owner on this post.',
     };
   }
 
-  String get phonePublicConsentSubtitle {
+  String get contactConsentSubtitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Lenta yoki yo‘qolgan jonivor sahifasini ko‘rgan odamlar shu raqamga qo‘ng‘iroq qilishi mumkin.',
+        'Har bir foydalanuvchi kuniga cheklangan miqdordagi kontaktni ko‘ra oladi. Tizimga kirmagan tashrifchilarga, ro‘yxatlarda va xaritada ko‘rsatilmaydi.',
       _RussianStrings() =>
-        'Люди, которые увидят ленту или страницу потерянного питомца, смогут позвонить на этот номер.',
-      _ => 'People who view the feed or lost-pet page can call this number.',
+        'Каждый пользователь может открыть ограниченное число контактов в день. Посетителям без входа, в списках и на карте контакт не показывается.',
+      _ =>
+        'Each user can view only a limited number of contacts per day. It is never shown to visitors who are not signed in, or in lists or on the map.',
     };
   }
 

@@ -158,6 +158,21 @@ class MushukistanApi {
     );
   }
 
+  /// Explicit, quota-limited reveal of the owner's contact (see docs/CONTACT_PRIVACY.md).
+  Future<ContactRevealData> revealLostPetContact(String lostPetId) {
+    return _client.postJson<ContactRevealData>(
+      'lost-pets/$lostPetId/contact-reveal',
+      decoder: (json) => ContactRevealData.fromJson(json),
+    );
+  }
+
+  Future<ContactRevealData> revealAdoptionContact(String adoptionPostId) {
+    return _client.postJson<ContactRevealData>(
+      'adoption-posts/$adoptionPostId/contact-reveal',
+      decoder: (json) => ContactRevealData.fromJson(json),
+    );
+  }
+
   Future<List<LostPetFollowUpData>> listDueLostPetFollowUps() {
     return _client.get<List<LostPetFollowUpData>>(
       'lost-pets/follow-ups/due',
@@ -905,12 +920,14 @@ class MushukistanApi {
     required List<LostPetPhotoUpload> photos,
     required String petName,
     String? additionalInfo,
+    bool ownerContactConsent = false,
   }) {
     final formData = FormData.fromMap(
       <String, dynamic>{
         'pet_name': petName.trim(),
         if (additionalInfo != null && additionalInfo.trim().isNotEmpty)
           'additional_info': additionalInfo.trim(),
+        'owner_contact_consent': ownerContactConsent,
         'photos': photos
             .map(
               (photo) => MultipartFile.fromBytes(
@@ -1381,6 +1398,21 @@ class LostPetFollowUpData {
       lostPetId: _readString(map['lost_pet_id']),
       petName: _readString(map['pet_name']),
       dueAt: _readDateTime(map['due_at']),
+    );
+  }
+}
+
+class ContactRevealData {
+  const ContactRevealData({required this.phoneNumber, this.telegramUsername});
+
+  final String phoneNumber;
+  final String? telegramUsername;
+
+  factory ContactRevealData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return ContactRevealData(
+      phoneNumber: _readString(map['phone_number']),
+      telegramUsername: _readStringOrNull(map['telegram_username']),
     );
   }
 }
