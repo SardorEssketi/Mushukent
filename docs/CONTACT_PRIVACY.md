@@ -1,45 +1,50 @@
 # Owner contact privacy (lost-pet and adoption posts)
 
-Status: implemented on branch `fix/release-readiness` (audit finding F-13). Items marked **Decision needed** are product choices for the owner of the project.
+Status: implemented on branch `fix/release-readiness`. Policy values were approved by the project owner on 2026-10-15 (legacy-compatibility mode, 15 reveals per day and 40 per week, explicit consent for both post kinds, proposed wording). Wording in Russian and Uzbek still needs a native-speaker review. Legal texts (`legal_document_screen.dart`) still say the lost-pet phone is "public" and need a legal review.
 
-## What was exposed
+## Rules
+1. **Anonymous users, lists, feeds, maps, search, notifications and the owner's `mine` lists never contain `owner_phone_number` or `owner_telegram_username`.** They carry `contact_available` (boolean).
+2. A signed-in user who is not the owner gets the contact only by calling `POST /lost-pets/{id}/contact-reveal` or `POST /adoption-posts/{id}/contact-reveal`.
+3. Each user may reveal a limited number of **unique** posts in a rolling window. Revealing a post again is free. Over the limit: `429 CONTACT_REVEAL_LIMIT` with `Retry-After`.
+4. The owner always sees their own contact on the detail response (needed by the edit form).
+5. Blocked users, resolved or deleted posts, and posts without a usable phone cannot be revealed (404); owners cannot reveal their own post (403).
+6. Reveals are recorded in `contact_reveals` (user, post kind and id, owner, mode, time). **No contact value is stored in that table or written to logs.**
+7. Responses that can contain contact details are sent with `Cache-Control: private, no-store` and `Vary: Authorization`. nginx does not cache `/api` (`infrastructure/nginx/default.conf` has no `proxy_cache`).
 
-Before this change every lost-pet and adoption endpoint returned `owner_phone_number` and `owner_telegram_username` to anyone, signed in or not:
-
-- `GET /lost-pets`, `GET /adoption-posts`, `GET /feed` (list items),
-- `GET /lost-pets/{id}`, `GET /adoption-posts/{id}`,
-- `GET /lost-pets/mine`, `GET /adoption-posts/mine` (owner's own lists).
-
-Lists are paginated up to 100 items and the old rate limiter could be bypassed with random Bearer tokens (fixed in `fix/security-hardening`), so harvesting every phone number needed only a few anonymous requests.
-
-## What the product requires (docs/PRD.md, docs/UI_UX.md)
-
-- Contact Owner is a **sign-in-gated action**: "Guests are asked to sign in before the contact event is recorded or the phone action proceeds" (UI_UX.md). The contact event is recorded server-side before the phone/Telegram action.
-- Lost pets require explicit consent to show the profile phone number publicly. Adoption posts have no consent checkbox; a usable profile phone is required (PRD.md).
-- Phone numbers are not shown on public profiles (UI_UX.md).
-
-So the number only needs to be reachable by someone who is about to contact the owner, who must already be signed in.
-
-## Policy implemented
-
-| Viewer / endpoint | Phone and Telegram | `contact_available` |
+## Configuration
+| Variable | Default | Meaning |
 |---|---|---|
-| Anonymous, any endpoint | never | yes |
-| Signed in, list / feed / map / `mine` | never | yes |
-| Signed in, detail endpoint | yes (unless the post is resolved, as before) | yes |
-| Owner, detail endpoint (needed by the edit form) | yes | yes |
+| `CONTACT_REVEAL_MAX_PER_DAY` | 15 | unique posts per user in a rolling 24 hours |
+| `CONTACT_REVEAL_MAX_PER_WEEK` | 40 | unique posts per user in a rolling 7 days |
+| `CONTACT_REVEAL_MIN_ACCOUNT_AGE_HOURS` | 0 | accounts younger than this cannot reveal (0 = off) |
+| `CONTACT_LEGACY_DETAIL_ENABLED` | true | compatibility mode for old app versions (below) |
 
-`contact_available` is true when the post is not resolved and the owner has a usable phone number. The Flutter client shows the **Contact Owner** action when it is true; guests who tap it are sent to sign in (existing behaviour), after which the detail reloads and the number appears on the button. No essential functionality was removed.
+Concurrent requests from one user are serialised with a per-user transaction lock, so parallel requests cannot exceed the quota (covered by a test).
 
-Residual risk: any verified, signed-in account can still read the numbers one post at a time. That is bounded by the per-user rate limit (60 requests/minute) and email-verified registration, but it is not eliminated.
+## Compatibility with old app versions
+Old clients send no `X-Contact-Mode` header and read the number from the detail response. For them, while `CONTACT_LEGACY_DETAIL_ENABLED=true`:
+- a signed-in **non-owner** opening a detail page receives the contact **only if the same quota allows it**; that read is recorded as a reveal with `mode=legacy_detail`;
+- over the quota the old client shows the post without the contact (no crash);
+- anonymous users never receive it. No private number is exposed just for compatibility.
 
-## Decisions needed
+The new web/Android client sends `X-Contact-Mode: reveal` on every request, so detail responses never carry contacts for it, and it calls the reveal endpoint when the user taps Contact Owner. Guests are asked to sign in first (as before).
 
-1. **Is a signed-in-only number acceptable for lost pets** whose owners consented to *public* visibility? The consent text promises public display; this policy is stricter than that promise. Recommended: yes (nothing breaks, privacy improves), and update the consent wording to "shown to signed-in users".
-2. **Adoption posts have no consent step.** Add the same explicit consent as lost pets? (Not implemented: changes the create form and API contract.)
-3. **Stronger anti-harvesting** (per-user daily cap on distinct contact reveals, or reveal only through the recorded `POST .../contact` call so every reveal is an event). Not implemented because it changes the contact flow; the contact event is already recorded, so it is a small follow-up.
-4. **Existing cached clients**: older app versions keep working (the fields are optional on the client) but guests on them lose the Contact Owner button because it used to depend on the number being present. Releasing the updated client with the server change avoids this.
+Cost of legacy mode: merely opening a detail page in an old app uses quota. Sunset: when the share of old versions is small, set `CONTACT_LEGACY_DETAIL_ENABLED=false` (old apps then lose Contact Owner, a deliberate end of support), optionally after showing a minimum-version prompt.
+
+## Consent
+Both create forms have an unchecked checkbox. Wording (English; Russian and Uzbek in `app_strings.dart`):
+> Show my phone number (and Telegram, if I add it) to signed-in Mushukistan users who tap Contact Owner on this post.
+> Each user can view only a limited number of contacts per day. It is never shown to visitors who are not signed in, or in lists or on the map.
+
+- New clients (reveal mode) must send consent: lost pets via the existing `owner_phone_publication_consent` (required), adoption via the new `owner_contact_consent`. A missing or false value is rejected (`CONTACT_CONSENT_REQUIRED` for adoption).
+- The server stores `contact_consent_version = 1` and `contact_consent_at` for posts created with the new wording; `NULL` means the original wording.
+- Older clients that send no adoption consent keep working (as before, implicitly); an explicit `false` is always refused.
+- Existing posts are not re-consented: the new policy is narrower than the "public" wording they accepted.
 
 ## Tests
+`backend/tests/test_contact_privacy.py`, `test_contact_reveal.py` (reveal, idempotence, daily and weekly windows, parallel requests, account age, blocked/owner/resolved, legacy mode and its switch, leak scan over every parameterless GET route, no contact in logs or rows) and `test_contact_consent.py`; Flutter `contact_privacy_test.dart` and `adoption_lifecycle_screen_test.dart`.
 
-`backend/tests/test_contact_privacy.py` (anonymous and signed-in views of every endpoint, scraping simulation, owner edit flow, contact workflow, resolved posts) and `frontend/test/features/lost_pets/contact_privacy_test.dart`.
+## Still open
+- Native-speaker review of Russian/Uzbek consent text; legal review of the privacy policy and terms wording.
+- Tuning of the limits after real usage data.
+- A per-account alert for repeated limit hits (log events `contact_reveal_limit_reached` exist).
