@@ -16,13 +16,19 @@ val pushEnabled = (project.findProperty("dart-defines") as String?)
             String(Base64.getDecoder().decode(encoded), Charsets.UTF_8) == "ENABLE_ANDROID_PUSH=true"
         }.getOrDefault(false)
     } == true
+// Opt-in, for testing a debug build next to an installed release build of the app:
+//   flutter build apk --debug --android-project-arg=-Ptest-application-id-suffix=.rdtest
+// The debug build then installs under a different package id and never touches the release
+// app or its data. The production Firebase config does not match that id, so push is unavailable.
+val testApplicationIdSuffix = (project.findProperty("test-application-id-suffix") as String?)
+    ?.takeIf { it.startsWith(".") && it.length > 1 }
 val googleServicesConfig = file("google-services.json")
 if (pushEnabled) {
     require(googleServicesConfig.isFile) {
         "ENABLE_ANDROID_PUSH=true requires frontend/android/app/google-services.json."
     }
 }
-if (googleServicesConfig.isFile) {
+if (googleServicesConfig.isFile && testApplicationIdSuffix == null) {
     apply(plugin = "com.google.gms.google-services")
 }
 
@@ -89,6 +95,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (testApplicationIdSuffix != null) {
+                applicationIdSuffix = testApplicationIdSuffix
+            }
+        }
         release {
             if (releaseKeystorePropertiesFile.isFile) {
                 signingConfig = signingConfigs.getByName("release")

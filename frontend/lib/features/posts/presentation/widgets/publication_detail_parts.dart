@@ -566,6 +566,10 @@ class PublicationContactButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Explicit text styles override the button's foreground, so the label and the number must
+    // take the foreground colour themselves; otherwise dark text sits on the primary fill.
+    final foreground =
+        primary ? theme.colorScheme.onPrimary : theme.colorScheme.primary;
     final child = Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -580,15 +584,17 @@ class PublicationContactButton extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelLarge
-                    ?.copyWith(fontWeight: FontWeight.w800),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: foreground,
+                ),
               ),
               if (value != null)
                 Text(
                   value!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall?.copyWith(color: foreground),
                 ),
             ],
           ),
