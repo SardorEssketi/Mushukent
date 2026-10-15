@@ -399,6 +399,7 @@ MushukistanUser testUser({
   int commentCount = 17,
   bool allowPublicActivityView = true,
   bool isModerator = false,
+  String preferredLanguage = 'en',
 }) {
   return MushukistanUser(
     id: id,
@@ -412,5 +413,6 @@ MushukistanUser testUser({
     commentCount: commentCount,
     allowPublicActivityView: allowPublicActivityView,
     isModerator: isModerator,
+    preferredLanguage: preferredLanguage,
   );
 }

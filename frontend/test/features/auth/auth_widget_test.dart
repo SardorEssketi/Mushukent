@@ -1118,6 +1118,41 @@ void main() {
     expect(repo.logoutCalled, isTrue);
   });
 
+  testWidgets('switching accounts without a restart switches the UI language',
+      (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    final userA = testUser(preferredLanguage: 'en');
+    final userB = testUser(
+      id: '22222222-2222-4222-8222-222222222222',
+      email: 'b@example.com',
+      name: 'User B',
+      preferredLanguage: 'ru',
+    );
+    final repo = FakeAuthRepository(
+      restoreResult: SessionRestoreSuccess(
+        AuthSession.restored(accessToken: 'access-a', user: userA),
+      ),
+      loginResult: AuthSession.restored(accessToken: 'access-b', user: userB),
+    );
+    final container = _containerWithRepo(repo);
+    await _pumpApp(tester, container, useProductionRoot: true);
+    await tester.pumpAndSettle();
+    final controller = container.read(authControllerProvider.notifier);
+    await controller.restoreSession();
+    await tester.pumpAndSettle();
+    expect(container.read(appLanguageProvider), AppLanguage.english);
+
+    await controller.logout();
+    await tester.pumpAndSettle();
+    await controller.login(
+        const AuthCredentials(email: 'b@example.com', password: 'Password123'));
+    await tester.pumpAndSettle();
+    expect(container.read(appLanguageProvider), AppLanguage.russian);
+
+    container.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('account switch clears cached profile and viewer overrides', () async {
     final userA = testUser();
     final userB = testUser(
