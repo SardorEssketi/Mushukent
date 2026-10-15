@@ -140,7 +140,7 @@ class _LegalSection {
 
 const _termsOfService = _LegalDocument(
   title: 'Terms of Service',
-  version: '2026-08-01',
+  version: '2026-10-15',
   sections: [
     _LegalSection(
       paragraphs: [
@@ -179,8 +179,8 @@ const _termsOfService = _LegalDocument(
       heading: 'Location and public information',
       paragraphs: [
         'Mushukistan uses location information for map, nearby cats, cat sightings, places, and lost-pet features.',
-        'Some information you submit may be public, including cat photos, cat sighting descriptions, cat locations, comments, public profile summaries, lost-pet photos, lost-pet last-seen locations, and lost-pet phone numbers.',
-        'Lost-pet posts may publish your profile phone number only after you explicitly confirm that it may be displayed publicly.',
+        'Some information you submit may be public, including cat photos, cat sighting descriptions, cat locations, comments, public profile summaries, lost-pet photos, and lost-pet last-seen locations. Contact details you approve are not public: they are shown only to signed-in users, as described in the contact section.',
+        "Lost-pet and adoption posts share copied contact details only after you explicitly tick the contact consent box. They are shown only after you tick the contact consent box on the post, and only to signed-in Mushukistan users. Visitors who are not signed in never see them, and they are not shown in lists, feeds, maps or notifications. In the current app a signed-in user sees them after tapping Contact Owner; older app versions may show them as soon as the post is opened. Each user can view only a limited number of owners' contacts per day and per week (currently 15 and 40; the operator may change these limits). Mushukistan records which signed-in user viewed which post's contact and when, without storing the contact itself in that record.",
       ],
     ),
     _LegalSection(
@@ -211,7 +211,7 @@ const _termsOfService = _LegalDocument(
     _LegalSection(
       heading: 'Third-party services',
       paragraphs: [
-        'Mushukistan may rely on third-party services for infrastructure, media storage, authentication, maps, and place data. These include DigitalOcean, Cloudflare R2 when configured, Google Sign-In when chosen by the user, and OpenStreetMap map/place data.',
+        'Mushukistan may rely on third-party services for infrastructure, media storage, authentication, maps, and place data. These include DigitalOcean, Cloudflare R2 when configured, Google Sign-In when chosen by the user, OpenStreetMap map/place data, and PostHog analytics when configured by the operator.',
       ],
     ),
     _LegalSection(
@@ -233,7 +233,7 @@ const _termsOfService = _LegalDocument(
 
 const _privacyPolicy = _LegalDocument(
   title: 'Privacy Policy',
-  version: '2026-10-12',
+  version: '2026-10-15',
   sections: [
     _LegalSection(
       paragraphs: [
@@ -271,13 +271,14 @@ const _privacyPolicy = _LegalDocument(
         'Observation location when attached to a post.',
         'Cat canonical location, place-search location, and lost-pet last-seen location.',
         'Your last device location is stored privately for Lost Pet alerts within 500 m only after separate explicit privacy consent and Android location permission. It refreshes on foreground launch/resume without background tracking or location history. Withdraw consent under Profile -> Settings -> Nearby alert privacy; withdrawal or revoked permission clears the point when the authenticated app next connects.',
-        "Lost-pet posts publicly show the user's profile phone number only after explicit phone-publication consent.",
+        "Lost-pet and adoption/rehoming posts copy your profile phone number (and Telegram username, if you added one). They are shown only after you tick the contact consent box on the post, and only to signed-in Mushukistan users. Visitors who are not signed in never see them, and they are not shown in lists, feeds, maps or notifications. In the current app a signed-in user sees them after tapping Contact Owner; older app versions may show them as soon as the post is opened. Each user can view only a limited number of owners' contacts per day and per week (currently 15 and 40; the operator may change these limits). Mushukistan records which signed-in user viewed which post's contact and when, without storing the contact itself in that record.",
       ],
     ),
     _LegalSection(
       heading: 'Technical and security data',
       paragraphs: [
         'Mushukistan processes API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.',
+        "The Mushukistan apps do not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features, and Firebase Analytics collection is disabled in the Android app. Separately, the Mushukistan server can optionally send usage data to PostHog (server-side analytics) when the operator configures it; if it is not configured, nothing is sent. When enabled, it receives event names such as post created, comment created, post liked, report submitted, profile updated, password changed and owner contacted, simple counts such as the number of photos, the ID of the signed-in account so that events can be linked to an account, automatic reports of server errors with technical details, and health-check log lines. Event data does not include phone numbers, Telegram handles, email addresses, passwords, post text or photos. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.",
         'Android notification device tokens are encrypted at rest; token hashes support deduplication. Delivery retries are bounded, and full tokens are not placed in normal logs or public profiles.',
       ],
     ),
@@ -305,7 +306,7 @@ const _privacyPolicy = _LegalDocument(
     _LegalSection(
       heading: 'Public information',
       paragraphs: [
-        'Some information may be visible to other users or visitors, depending on the feature and account settings. Public information may include cat sightings, photos, descriptions, cat locations, comments, public profile summaries, lost-pet photos, lost-pet last-seen locations, and lost-pet phone numbers.',
+        'Some information may be visible to other users or visitors, depending on the feature and account settings. Public information may include cat sightings, photos, descriptions, cat locations, comments, public profile summaries, lost-pet photos, and lost-pet last-seen locations. Contact details are not public; they are shown only to signed-in users, as described in Location and contact data.',
       ],
     ),
     _LegalSection(
@@ -316,6 +317,7 @@ const _privacyPolicy = _LegalDocument(
         'Google when a user chooses Google Sign-In.',
         'OpenStreetMap for map tiles and map/place data.',
         'Google Firebase Cloud Messaging for Android push delivery when configured and permitted. Web Push is not used.',
+        'PostHog for server-side product analytics and error reports, only when configured by the operator.',
         'Email provider: not configured in the verified repository.',
         'Backup provider: not configured in the verified repository.',
       ],

@@ -811,11 +811,11 @@ class AppStrings {
   String get privacyPolicySummary {
     return switch (this) {
       _UzbekStrings() =>
-        'Mushukistan xarita va lenta uchun hisob, profil, ochiq postlar, rasmlar, izohlar, shikoyatlar va joylashuv ma’lumotlarini saqlaydi. Tekshirilgan MVP’da analitika, reklama, push, crash SDK yoki AI funksiyasi yo‘q.',
+        'Mushukistan xarita va lenta uchun hisob, profil, ochiq postlar, rasmlar, izohlar, shikoyatlar va joylashuv ma’lumotlarini saqlaydi. Ilovada analitika SDK, reklama, crash SDK yoki AI funksiyasi yo‘q. Operator sozlasa, server PostHog’ga foydalanish hodisalari va xatolik hisobotlarini yuborishi mumkin. Android push xabarlari Firebase Cloud Messaging orqali, bildirishnoma ruxsati berilgandan keyin yuboriladi. Kontakt ma’lumotlari faqat tizimga kirgan foydalanuvchilarga, cheklov bilan ko‘rsatiladi.',
       _RussianStrings() =>
-        'Mushukistan хранит данные аккаунта, профиля, публичные посты, фото, комментарии, жалобы и местоположения для карты и ленты. В проверенном MVP нет аналитики, рекламы, push-уведомлений, crash SDK или AI-функций.',
+        'Mushukistan хранит данные аккаунта, профиля, публичные посты, фото, комментарии, жалобы и местоположения для карты и ленты. В приложении нет аналитических SDK, рекламы, crash SDK и AI-функций. Если оператор включит PostHog, сервер может отправлять туда события использования и отчёты об ошибках. Android push-уведомления идут через Firebase Cloud Messaging после вашего разрешения. Контакты показываются только вошедшим пользователям и с ограничением.',
       _ =>
-        'Mushukistan stores account data, profile data, public posts, photos, comments, reports, and locations needed for map and feed features. No analytics, ads, push, crash SDK, or AI feature is included in the verified MVP.',
+        'Mushukistan stores account data, profile data, public posts, photos, comments, reports, and locations needed for map and feed features. The apps include no analytics SDK, ads, crash SDK, or AI feature. If the operator enables PostHog, the server may send it usage events and error reports. Android push uses Firebase Cloud Messaging after you allow notifications. Contact details are shown only to signed-in users, within limits.',
     };
   }
 
@@ -1792,10 +1792,10 @@ class AppStrings {
   String get confirmContactConsent {
     return switch (this) {
       _UzbekStrings() =>
-        'Kontakt ma’lumotlaringizni kim ko‘rishi mumkinligini tasdiqlang.',
+        'Kontakt ma’lumotlaringizni tizimga kirgan foydalanuvchilar ko‘rishiga rozilik bering.',
       _RussianStrings() =>
-        'Подтвердите, кто может видеть ваши контактные данные.',
-      _ => 'Confirm who may see your contact details.',
+        'Подтвердите согласие на показ ваших контактов вошедшим пользователям.',
+      _ => 'Confirm that signed-in users may see your contact details.',
     };
   }
 
@@ -2769,11 +2769,11 @@ class AppStrings {
 
   String get createLostPetAlertHelp => switch (this) {
         _UzbekStrings() =>
-          'Odamlar siz bilan tez bog‘lanishi uchun aniq suratlar, oxirgi ko‘rilgan joy va telefon raqamini ochiq ko‘rsatishga rozilik kiriting.',
+          'Odamlar siz bilan tez bog‘lanishi uchun aniq suratlar, oxirgi ko‘rilgan joyni va kontaktlaringizni ko‘rsatishga rozilikni qo‘shing.',
         _RussianStrings() =>
-          'Добавьте чёткие фото, место последнего обнаружения и согласие на публикацию номера телефона, чтобы с вами могли быстро связаться.',
+          'Добавьте чёткие фото, место, где питомца видели в последний раз, и согласие на показ ваших контактов, чтобы с вами могли быстро связаться.',
         _ =>
-          'Use clear photos, a last-seen point, and public contact consent so people can reach you quickly.',
+          'Use clear photos, a last-seen point, and contact consent so signed-in users can reach you quickly.',
       };
 
   String get pointLastSeenLocation {
@@ -2788,22 +2788,22 @@ class AppStrings {
   String get contactConsentTitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Telefon raqamimni (va qo‘shsam, Telegramni) ushbu e’londa «Egasi bilan bog‘lanish» tugmasini bosgan, tizimga kirgan Mushukistan foydalanuvchilariga ko‘rsatish.',
+        'Tizimga kirgan Mushukistan foydalanuvchilariga ushbu e’londa telefon raqamimni (va qo‘shsam, Telegramni) ko‘rishga ruxsat berish.',
       _RussianStrings() =>
-        'Показывать мой номер телефона (и Telegram, если я его добавлю) вошедшим в аккаунт пользователям Mushukistan, которые нажмут «Связаться с владельцем» в этом объявлении.',
+        'Разрешить вошедшим в аккаунт пользователям Mushukistan видеть мой номер телефона (и Telegram, если я его добавлю) в этом объявлении.',
       _ =>
-        'Show my phone number (and Telegram, if I add it) to signed-in Mushukistan users who tap Contact Owner on this post.',
+        'Allow signed-in Mushukistan users to see my phone number (and Telegram, if I add it) on this post.',
     };
   }
 
   String get contactConsentSubtitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Har bir foydalanuvchi kuniga cheklangan miqdordagi kontaktni ko‘ra oladi. Tizimga kirmagan tashrifchilarga, ro‘yxatlarda va xaritada ko‘rsatilmaydi.',
+        'Kontaktni faqat tizimga kirgan foydalanuvchilar ko‘ra oladi. Ilovaning joriy versiyasida u «Egasi bilan bog‘lanish» tugmasi bosilgandan keyin ko‘rinadi; eski versiyalarda e’lon ochilishi bilan darhol ko‘rinishi mumkin. Har bir foydalanuvchi kuniga va haftasiga cheklangan miqdordagi kontaktni ko‘ra oladi. Tizimga kirmagan tashrifchilarga, ro‘yxatlarda, lentada va xaritada kontakt ko‘rsatilmaydi.',
       _RussianStrings() =>
-        'Каждый пользователь может открыть ограниченное число контактов в день. Посетителям без входа, в списках и на карте контакт не показывается.',
+        'Контакты видны только вошедшим в аккаунт пользователям. В текущей версии приложения они появляются после нажатия «Связаться с владельцем»; в старых версиях приложения контакт может отображаться сразу при открытии объявления. Каждый пользователь может открыть лишь ограниченное число контактов в день и в неделю. Посетителям без входа, в списках, ленте и на карте контакты не показываются.',
       _ =>
-        'Each user can view only a limited number of contacts per day. It is never shown to visitors who are not signed in, or in lists or on the map.',
+        'Only signed-in users can see it. In the current app it appears after they tap Contact Owner; older app versions may show it as soon as the post is opened. Each user can view only a limited number of contacts per day and per week. It is never shown to visitors who are not signed in, or in lists, feeds or on the map.',
     };
   }
 

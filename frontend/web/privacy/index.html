@@ -138,7 +138,7 @@
   <main class="wrap">
     <article>
       <h1>Privacy Policy</h1>
-      <p class="muted">Version: 2026-10-12</p>
+      <p class="muted">Version: 2026-10-15</p>
       <p>This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.</p>
 
       <h2>Who is responsible for your data</h2>
@@ -153,7 +153,7 @@
         <li>Profile data, including name, avatar URL, phone number, Telegram username, bio, and public activity visibility preference.</li>
         <li>User content, including cat sightings, cat photos, cat profile information, descriptions, comments, likes, reports, lost-pet posts, and adoption/rehoming posts.</li>
         <li>Location data, including current location when used for nearby search, observation location, cat canonical location, place-search location, lost-pet last-seen location, and a private last-authorized device location only after separate nearby-alert consent and Android location permission.</li>
-        <li>Contact data published by the user when explicit publication consent is given for lost-pet or adoption/rehoming posts.</li>
+        <li>Contact data shared by the user: Lost-pet and adoption/rehoming posts copy your profile phone number (and Telegram username, if you added one). They are shown only after you tick the contact consent box on the post, and only to signed-in Mushukistan users. Visitors who are not signed in never see them, and they are not shown in lists, feeds, maps or notifications. In the current app a signed-in user sees them after tapping Contact Owner; older app versions may show them as soon as the post is opened. Each user can view only a limited number of owners' contacts per day and per week (currently 15 and 40; the operator may change these limits). Mushukistan records which signed-in user viewed which post's contact and when, without storing the contact itself in that record.</li>
         <li>Technical and security data used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs; plus encrypted Android push tokens, token hashes, notification preferences, inbox read state, and delivery status.</li>
       </ul>
 
@@ -176,7 +176,7 @@
       </ul>
 
       <h2>Public information</h2>
-      <p>Some information may be visible to other users or visitors, depending on the feature and account settings. Public information may include cat sightings, photos, descriptions, locations, cat profile information, comments, public profile summaries, lost-pet photos, lost-pet last-seen locations, and contact details when the user explicitly consented to publish them.</p>
+      <p>Some information may be visible to other users or visitors, depending on the feature and account settings. Public information may include cat sightings, photos, descriptions, locations, cat profile information, comments, public profile summaries, lost-pet photos, and lost-pet last-seen locations. Contact details are not public; see the contact data section for who can see them.</p>
       <p>Do not publish another person's private information, photo, phone number, address, or location unless you have permission.</p>
 
       <h2>Third-party services</h2>
@@ -186,10 +186,11 @@
         <li>Google when a user chooses Google Sign-In.</li>
         <li>Google Firebase Cloud Messaging for Android push delivery when configured and permitted.</li>
         <li>OpenStreetMap for map tiles and map/place data.</li>
+        <li>PostHog for server-side product analytics and error reports, only when configured by the operator.</li>
       </ul>
       <p>Email provider: not configured in the verified repository.</p>
       <p>Backup provider: not configured in the verified repository.</p>
-      <p>Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features. Android push uses Firebase Cloud Messaging (Google) after notification permission is granted. Web has an in-app inbox without browser push.</p>
+      <p>The Mushukistan apps do not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features, and Firebase Analytics collection is disabled in the Android app. Separately, the Mushukistan server can optionally send usage data to PostHog (server-side analytics) when the operator configures it; if it is not configured, nothing is sent. When enabled, it receives event names such as post created, comment created, post liked, report submitted, profile updated, password changed and owner contacted, simple counts such as the number of photos, the ID of the signed-in account so that events can be linked to an account, automatic reports of server errors with technical details, and health-check log lines. Event data does not include phone numbers, Telegram handles, email addresses, passwords, post text or photos. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.</p>
       <p>The notification inbox stores structured event and target identifiers, recipient/actor references, creation and read times. Android delivery stores encrypted device tokens, token hashes, preferences, and bounded retry state. Push payloads omit phone numbers, Telegram handles, exact pet and alert coordinates, and full comment text.</p>
       <p>Nearby Lost Pet alerts use only the last authorized device location after a separate, explicit privacy disclosure and consent, plus Android location permission. The point is private, replaced on authenticated foreground launch/resume, and matched at a fixed 500 m. There is no map selection, fallback Tashkent position, background permission, continuous tracking, or location history. Consent can be withdrawn under Profile -> Settings -> Nearby alert privacy. Missing/revoked permission, disabled location services, withdrawal, and an invalid or unavailable fix clear the point and stop matching when the authenticated app next connects. Offline deletion is retried on a later active resume; a server cannot observe an offline OS permission change. One account retains one point, from the last consenting Android device; device consent is scoped to that account on that installation. Browser activity never uploads or clears an Android point.</p>
       <p>Comments, replies, pet follow-ups, and inactivity reminders are enabled automatically, including previously disabled category choices. Inactivity is push-only, once after seven full days away. Android permission is required for push; the in-app inbox works without it.</p>

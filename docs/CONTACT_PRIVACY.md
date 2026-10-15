@@ -1,6 +1,6 @@
 # Owner contact privacy (lost-pet and adoption posts)
 
-Status: implemented on branch `fix/release-readiness`. Policy values were approved by the project owner on 2026-10-15 (legacy-compatibility mode, 15 reveals per day and 40 per week, explicit consent for both post kinds, proposed wording). Wording in Russian and Uzbek still needs a native-speaker review. Legal texts (`legal_document_screen.dart`) still say the lost-pet phone is "public" and need a legal review.
+Status: implemented on branch `fix/release-readiness`. Policy values were approved by the project owner on 2026-10-15 (legacy-compatibility mode, 15 reveals per day and 40 per week, explicit consent for both post kinds, proposed wording). The consent text and the legal documents (privacy policy, terms, in-app legal screen, web privacy page) were aligned with this behaviour on 2026-10-15. Russian and Uzbek wording still needs a native-speaker review and the legal text a legal review.
 
 ## Rules
 1. **Anonymous users, lists, feeds, maps, search, notifications and the owner's `mine` lists never contain `owner_phone_number` or `owner_telegram_username`.** They carry `contact_available` (boolean).
@@ -22,24 +22,32 @@ Status: implemented on branch `fix/release-readiness`. Policy values were approv
 Concurrent requests from one user are serialised with a per-user transaction lock, so parallel requests cannot exceed the quota (covered by a test).
 
 ## Compatibility with old app versions
-Old clients send no `X-Contact-Mode` header and read the number from the detail response. For them, while `CONTACT_LEGACY_DETAIL_ENABLED=true`:
-- a signed-in **non-owner** opening a detail page receives the contact **only if the same quota allows it**; that read is recorded as a reveal with `mode=legacy_detail`;
-- over the quota the old client shows the post without the contact (no crash);
-- anonymous users never receive it. No private number is exposed just for compatibility.
+Old clients send no `X-Contact-Mode` header and read the number from the detail response, so **an old app may show the contact as soon as a post is opened**. While `CONTACT_LEGACY_DETAIL_ENABLED=true` (default):
+- a signed-in **non-owner** who opens a detail page receives the contact **only if the same quota allows it**; that read is recorded as a reveal with `mode=legacy_detail` and counts as one unique post;
+- over the quota the old client shows the post without the contact (no crash, no Contact Owner button for that post);
+- anonymous users never receive it, and neither do lists, feeds, maps or notifications. No private number is exposed just for compatibility.
 
-The new web/Android client sends `X-Contact-Mode: reveal` on every request, so detail responses never carry contacts for it, and it calls the reveal endpoint when the user taps Contact Owner. Guests are asked to sign in first (as before).
+The new web/Android client sends `X-Contact-Mode: reveal` on every request, so detail responses never carry contacts for it, and it calls the reveal endpoint **after the user taps Contact Owner**. Guests are asked to sign in first.
 
-Cost of legacy mode: merely opening a detail page in an old app uses quota. Sunset: when the share of old versions is small, set `CONTACT_LEGACY_DETAIL_ENABLED=false` (old apps then lose Contact Owner, a deliberate end of support), optionally after showing a minimum-version prompt.
+Consequences of legacy mode: opening a detail page in an old app uses quota even if the user never calls; users therefore reach the daily limit sooner on old versions. Sunset: when the share of old versions is small, set `CONTACT_LEGACY_DETAIL_ENABLED=false` (old apps then lose Contact Owner, a deliberate end of support), optionally after showing a minimum-version prompt.
 
 ## Consent
-Both create forms have an unchecked checkbox. Wording (English; Russian and Uzbek in `app_strings.dart`):
-> Show my phone number (and Telegram, if I add it) to signed-in Mushukistan users who tap Contact Owner on this post.
-> Each user can view only a limited number of contacts per day. It is never shown to visitors who are not signed in, or in lists or on the map.
+Both create forms have an unchecked checkbox. Wording (English; Russian and Uzbek in `app_strings.dart`, `contactConsentTitle` and `contactConsentSubtitle`):
+> Allow signed-in Mushukistan users to see my phone number (and Telegram, if I add it) on this post.
+> Only signed-in users can see it. In the current app it appears after they tap Contact Owner; older app versions may show it as soon as the post is opened. Each user can view only a limited number of contacts per day and per week. It is never shown to visitors who are not signed in, or in lists, feeds or on the map.
 
 - New clients (reveal mode) must send consent: lost pets via the existing `owner_phone_publication_consent` (required), adoption via the new `owner_contact_consent`. A missing or false value is rejected (`CONTACT_CONSENT_REQUIRED` for adoption).
 - The server stores `contact_consent_version = 1` and `contact_consent_at` for posts created with the new wording; `NULL` means the original wording.
 - Older clients that send no adoption consent keep working (as before, implicitly); an explicit `false` is always refused.
 - Existing posts are not re-consented: the new policy is narrower than the "public" wording they accepted.
+
+## Legal documents and acceptance versions
+The texts were changed to describe this behaviour (contact visible to signed-in users only, quotas, the optional PostHog server-side analytics and Firebase Android push). The *displayed* versions of the Privacy Policy and the Terms (documents, in-app screen and `/privacy` page) were set to `2026-10-15`.
+
+The *accepted* versions the backend compares (`CURRENT_TERMS_VERSION`, `CURRENT_PRIVACY_VERSION` in `backend/app/features/auth/application/schemas.py`) were **not** changed and remain `2026-08-01`; they already differed from the displayed privacy version (`2026-10-12`) before this change. Implications of the choice:
+- Not bumping: nobody is forced to re-accept; new sign-ups keep recording `2026-08-01`, so the stored acceptance does not prove which wording a user saw.
+- Bumping (a deliberate follow-up): returning Google sign-in users would have to accept again (`LEGAL_ACCEPTANCE_REQUIRED`), and registrations would record the new version. Password logins do not check the version today.
+**Decision required:** whether this change (the contact policy is narrower than the previous "public" wording, and analytics/push are now disclosed) warrants re-acceptance.
 
 ## Tests
 `backend/tests/test_contact_privacy.py`, `test_contact_reveal.py` (reveal, idempotence, daily and weekly windows, parallel requests, account age, blocked/owner/resolved, legacy mode and its switch, leak scan over every parameterless GET route, no contact in logs or rows) and `test_contact_consent.py`; Flutter `contact_privacy_test.dart` and `adoption_lifecycle_screen_test.dart`.

@@ -1,6 +1,6 @@
 # Mushukistan Privacy Policy
 
-Version: 2026-10-12
+Version: 2026-10-15
 
 This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.
 
@@ -49,7 +49,7 @@ Location data:
 - Last authorized device location stored privately only after a separate explicit nearby-alert disclosure and consent, with Android location permission; no location history is stored.
 
 Contact data published by the user:
-- Lost-pet and adoption/rehoming posts may publicly show copied contact details only after explicit publication consent.
+- Lost-pet and adoption/rehoming posts copy your profile phone number (and Telegram username, if you added one). They are shown only after you tick the contact consent box on the post, and only to signed-in Mushukistan users. Visitors who are not signed in never see them, and they are not shown in lists, feeds, maps or notifications. In the current app a signed-in user sees them after tapping Contact Owner; older app versions may show them as soon as the post is opened. Each user can view only a limited number of owners' contacts per day and per week (currently 15 and 40; the operator may change these limits). Mushukistan records which signed-in user viewed which post's contact and when, without storing the contact itself in that record.
 
 Technical and security data:
 - API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.
@@ -86,7 +86,8 @@ Some information may be visible to other users or visitors, depending on the fea
 - Comments.
 - Public profile summaries.
 - Lost-pet photos and last-seen locations.
-- Lost-pet and adoption/rehoming contact details when the user explicitly consented to publish them.
+
+Contact details are not public information: section 2 explains who can see them.
 
 Do not publish another person's private information, photo, phone number, address, or location unless you have permission.
 
@@ -99,12 +100,13 @@ Mushukistan uses or may use these third-party services:
 - Google when a user chooses Google Sign-In.
 - Google Firebase Cloud Messaging for Android push delivery when configured and permitted.
 - OpenStreetMap for map tiles and map/place data.
+- PostHog for server-side product analytics and error reports, only when configured by the operator.
 
 Email provider: not configured in the verified repository.
 
 Backup provider: not configured in the verified repository.
 
-Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.
+The Mushukistan apps do not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features, and Firebase Analytics collection is disabled in the Android app. Separately, the Mushukistan server can optionally send usage data to PostHog (server-side analytics) when the operator configures it; if it is not configured, nothing is sent. When enabled, it receives event names such as post created, comment created, post liked, report submitted, profile updated, password changed and owner contacted, simple counts such as the number of photos, the ID of the signed-in account so that events can be linked to an account, automatic reports of server errors with technical details, and health-check log lines. Event data does not include phone numbers, Telegram handles, email addresses, passwords, post text or photos. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.
 
 The notification inbox stores event type, relevant content/comment identifiers, actor and recipient references, creation time, and read time. Android push delivery stores encrypted device tokens and token hashes, preferences, bounded delivery attempts, and errors without full token values in ordinary logs. Push messages contain no phone numbers, Telegram handles, precise pet coordinates, private alert coordinates, or full comment text.
 

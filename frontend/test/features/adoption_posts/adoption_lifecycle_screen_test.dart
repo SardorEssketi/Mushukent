@@ -126,6 +126,11 @@ void main() {
     await tester.scrollUntilVisible(consent, 250,
         scrollable: find.byType(Scrollable).first);
     expect(consent, findsOneWidget);
+    expect(
+        find.textContaining('older app versions may show it'), findsOneWidget);
+    expect(
+        find.textContaining('limited number of contacts per day and per week'),
+        findsOneWidget);
     expect(find.textContaining('never shown to visitors who are not signed in'),
         findsOneWidget);
     final checkbox = tester.widget<CheckboxListTile>(
