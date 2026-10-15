@@ -232,8 +232,12 @@ class AppTheme {
         indicatorColor: c.primaryContainer,
         indicatorShape: const StadiumBorder(),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        // The default label padding made "Leaderboard" wrap on 360 dp wide phones.
+        labelPadding: EdgeInsets.zero,
         labelTextStyle: WidgetStateProperty.resolveWith(
           (states) => text.labelMedium?.copyWith(
+            fontSize: 11,
+            letterSpacing: 0,
             color: states.contains(WidgetState.selected)
                 ? c.onSurface
                 : c.onSurfaceVariant,

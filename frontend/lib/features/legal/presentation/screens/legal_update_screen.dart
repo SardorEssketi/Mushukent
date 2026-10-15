@@ -53,59 +53,59 @@ class _LegalUpdateScreenState extends ConsumerState<LegalUpdateScreen> {
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
     final theme = Theme.of(context);
+    // No app bar: the page heading below already carries the title, and in an app bar it was
+    // truncated ("We updated our Terms and Priva...") on narrow phones.
     return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(strings.legalUpdateTitle),
-      ),
-      body: Center(
-        child: AppContentWidth(
-          maxWidth: 520,
-          child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            children: [
-              Text(strings.legalUpdateTitle,
-                  style: theme.textTheme.headlineSmall),
-              const SizedBox(height: AppSpacing.md),
-              Text(strings.legalUpdateBody,
-                  style: theme.textTheme.bodyLarge?.copyWith(height: 1.45)),
-              const SizedBox(height: AppSpacing.lg),
-              OutlinedButton(
-                onPressed: () => context.push('/legal/terms'),
-                child: Text(strings.termsOfService),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              OutlinedButton(
-                onPressed: () => context.push('/legal/privacy'),
-                child: Text(strings.privacyPolicy),
-              ),
-              if (_error != null) ...[
+      body: SafeArea(
+        child: Center(
+          child: AppContentWidth(
+            maxWidth: 520,
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              children: [
+                Text(strings.legalUpdateTitle,
+                    style: theme.textTheme.headlineSmall),
                 const SizedBox(height: AppSpacing.md),
-                Text(
-                  _error!,
-                  style: TextStyle(color: theme.colorScheme.error),
+                Text(strings.legalUpdateBody,
+                    style: theme.textTheme.bodyLarge?.copyWith(height: 1.45)),
+                const SizedBox(height: AppSpacing.lg),
+                OutlinedButton(
+                  onPressed: () => context.push('/legal/terms'),
+                  child: Text(strings.termsOfService),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                OutlinedButton(
+                  onPressed: () => context.push('/legal/privacy'),
+                  child: Text(strings.privacyPolicy),
+                ),
+                if (_error != null) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: theme.colorScheme.error),
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.lg),
+                FilledButton(
+                  onPressed: _busy ? null : () => unawaited(_accept(strings)),
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(strings.legalUpdateAccept),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => unawaited(
+                          ref.read(authControllerProvider.notifier).logout()),
+                  child: Text(strings.logout),
                 ),
               ],
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                onPressed: _busy ? null : () => unawaited(_accept(strings)),
-                child: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(strings.legalUpdateAccept),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextButton(
-                onPressed: _busy
-                    ? null
-                    : () => unawaited(
-                        ref.read(authControllerProvider.notifier).logout()),
-                child: Text(strings.logout),
-              ),
-            ],
+            ),
           ),
         ),
       ),
