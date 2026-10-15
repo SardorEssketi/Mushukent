@@ -17,6 +17,7 @@ import 'package:mushukistan_frontend/features/auth/application/auth_controller.d
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/screens/login_screen.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/screens/session_unavailable_screen.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_sign_in_entry_button.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
@@ -1121,6 +1122,7 @@ void main() {
   testWidgets('switching accounts without a restart switches the UI language',
       (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
     final userA = testUser(preferredLanguage: 'en');
     final userB = testUser(
       id: '22222222-2222-4222-8222-222222222222',
@@ -1213,6 +1215,72 @@ void main() {
     await logout;
   });
 
+  group('login opened from the feed Login button', () {
+    setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
+    // Found on a real Android device: the feed opens Login with `context.push`, and after a
+    // successful sign-in the app stayed on the Login screen until it was restarted.
+    testWidgets(
+        'a successful login from the pushed Login screen reaches the feed',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: const SessionRestoreMissing(),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-123',
+          user: testUser(),
+        ),
+      );
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Login'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+
+      await tester.enterText(
+          find.byType(TextFormField).first, 'user@example.com');
+      await tester.enterText(find.byType(TextFormField).last, 'password1');
+      await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(find.byType(LoginScreen), findsNothing,
+          reason: 'the Login screen must not stay on top after signing in');
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('the same holds after logging out and in again',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-2',
+          user: testUser(),
+        ),
+      );
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      await container.read(authControllerProvider.notifier).logout();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Login'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextFormField).first, 'user@example.com');
+      await tester.enterText(find.byType(TextFormField).last, 'password1');
+      await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+  });
+
   group('versioned legal acceptance', () {
     const pendingId = '11111111-1111-4111-8111-111111111111';
 
@@ -1253,6 +1321,24 @@ void main() {
       expect(find.text('Accept and continue'), findsOneWidget);
       // Opening the app is never acceptance.
       expect(repo.acceptLegalCalls, 0);
+    });
+
+    testWidgets('the update title appears once, in every language, untruncated',
+        (tester) async {
+      final repo = pendingRepo();
+      final container = await start(tester, repo);
+      for (final entry in {
+        AppLanguage.english: 'We updated our Terms and Privacy Policy',
+        AppLanguage.russian:
+            'Мы обновили Условия и Политику конфиденциальности',
+        AppLanguage.uzbek:
+            'Foydalanish shartlari va Maxfiylik siyosatini yangiladik',
+      }.entries) {
+        container.read(appLanguageProvider.notifier).state = entry.key;
+        await tester.pumpAndSettle();
+        expect(find.text(entry.value), findsOneWidget, reason: '${entry.key}');
+        expect(find.byType(AppBar), findsNothing);
+      }
     });
 
     testWidgets('accepting records the named versions and continues',
