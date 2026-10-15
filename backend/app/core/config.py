@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     )
     rate_limit_user_per_minute: int = Field(default=60, alias="RATE_LIMIT_USER_PER_MINUTE")
     rate_limit_upload_per_minute: int = Field(default=10, alias="RATE_LIMIT_UPLOAD_PER_MINUTE")
+    # Contact reveal: unique posts whose owner contact a user may view per rolling window.
+    contact_reveal_max_per_day: int = Field(default=15, ge=1, alias="CONTACT_REVEAL_MAX_PER_DAY")
+    contact_reveal_max_per_week: int = Field(default=40, ge=1, alias="CONTACT_REVEAL_MAX_PER_WEEK")
+    contact_reveal_min_account_age_hours: int = Field(
+        default=0, ge=0, alias="CONTACT_REVEAL_MIN_ACCOUNT_AGE_HOURS"
+    )
+    # Old app versions read contact details from the detail response. While this is true they still
+    # get them (signed in, non-owner, within the same reveal quota). Turn off after they are gone.
+    contact_legacy_detail_enabled: bool = Field(default=True, alias="CONTACT_LEGACY_DETAIL_ENABLED")
     rate_limit_backend: str = Field(default="memory", alias="RATE_LIMIT_BACKEND")
     rate_limit_redis_url: str = Field(default="", alias="RATE_LIMIT_REDIS_URL")
     trusted_proxy_cidrs_value: str = Field(

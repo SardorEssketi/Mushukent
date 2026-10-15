@@ -702,6 +702,11 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         default=False,
         server_default=text("false"),
     )
+    # Which contact-visibility wording the owner agreed to (null = the original "public" wording).
+    contact_consent_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    contact_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     last_seen_location: Mapped[object] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False),
         nullable=False,
@@ -775,6 +780,29 @@ class LostPetContactEvent(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __table_args__ = (Index("idx_lost_pet_contacts_lost_pet_id", "lost_pet_id"),)
 
 
+class ContactReveal(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    """One user viewed one post's owner contact. Never stores the contact itself."""
+
+    __tablename__ = "contact_reveals"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    post_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    post_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    owner_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    mode: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_kind", "post_id", name="uq_contact_reveals_user_post"),
+        CheckConstraint("post_kind IN ('lost_pet', 'adoption')", name="ck_contact_reveals_kind"),
+        CheckConstraint("mode IN ('explicit', 'legacy_detail')", name="ck_contact_reveals_mode"),
+        Index("idx_contact_reveals_user_created", "user_id", "created_at"),
+    )
+
+
 class LostPetFollowUp(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "lost_pet_follow_ups"
 
@@ -845,6 +873,11 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         nullable=False,
         default=False,
         server_default=text("false"),
+    )
+    # Which contact-visibility wording the owner agreed to (null = the original "public" wording).
+    contact_consent_version: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    contact_consent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     additional_info: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_resolved: Mapped[bool] = mapped_column(
