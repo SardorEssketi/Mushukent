@@ -34,6 +34,10 @@ class SqlAlchemyAdoptionPostRepository:
             owner_phone_number=draft.owner_phone_number,
             owner_telegram_username=draft.owner_telegram_username,
             owner_phone_publication_consent=draft.owner_phone_publication_consent,
+            contact_consent_version=draft.contact_consent_version,
+            contact_consent_at=(
+                datetime.now(UTC) if draft.contact_consent_version is not None else None
+            ),
             additional_info=draft.additional_info,
             is_resolved=False,
             is_public=True,

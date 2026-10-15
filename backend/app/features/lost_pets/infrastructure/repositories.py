@@ -39,6 +39,10 @@ class SqlAlchemyLostPetRepository:
             owner_phone_number=draft.owner_phone_number,
             owner_telegram_username=draft.owner_telegram_username,
             owner_phone_publication_consent=draft.owner_phone_publication_consent,
+            contact_consent_version=draft.contact_consent_version,
+            contact_consent_at=(
+                datetime.now(UTC) if draft.contact_consent_version is not None else None
+            ),
             last_seen_location=WKTElement(
                 f"POINT({draft.last_seen_longitude} {draft.last_seen_latitude})",
                 srid=4326,

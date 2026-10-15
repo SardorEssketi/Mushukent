@@ -4,7 +4,7 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
 
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
@@ -16,6 +16,8 @@ from app.core.dependencies import (
 from app.core.security import api_error
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
+from app.features.contact_reveal.schemas import ContactRevealResponse
+from app.features.contact_reveal.service import is_reveal_mode, mark_private
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
     LostPetFollowUpAnswer,
@@ -136,6 +138,7 @@ async def create_lost_pet(
         current_user,
         payload,
         photos=photo_payloads,
+        contact_consent_version=1 if is_reveal_mode(request) else None,
     )
     posthog_client = getattr(request.app.state, "posthog_client", None)
     if posthog_client is not None:
@@ -222,6 +225,20 @@ def answer_follow_up(
     return ApiSuccess(data=lost_pets_service.answer_follow_up(follow_up_id, current_user, payload))
 
 
+@router.post(
+    "/{lost_pet_id}/contact-reveal",
+    response_model=ApiSuccess[ContactRevealResponse],
+)
+def reveal_contact(
+    response: Response,
+    lost_pet_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[ContactRevealResponse]:
+    mark_private(response, authenticated=True)
+    return ApiSuccess(data=lost_pets_service.reveal_contact(lost_pet_id, current_user))
+
+
 @router.post("/{lost_pet_id}/contact", status_code=status.HTTP_204_NO_CONTENT)
 def contact_owner(
     request: Request,
@@ -289,8 +306,15 @@ def delete_lost_pet(
     response_model_exclude_none=True,
 )
 def get_lost_pet(
+    request: Request,
+    response: Response,
     lost_pet_id: UUID,
     current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[LostPetResponse]:
-    return ApiSuccess(data=lost_pets_service.get_lost_pet(lost_pet_id, current_user))
+    mark_private(response, authenticated=current_user is not None)
+    return ApiSuccess(
+        data=lost_pets_service.get_lost_pet(
+            lost_pet_id, current_user, reveal_mode=is_reveal_mode(request)
+        )
+    )

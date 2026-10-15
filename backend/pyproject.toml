@@ -61,6 +61,8 @@ ignore = ["B008", "UP037", "UP046"]
 # then "redefine" the imported names, which is intended.
 "tests/test_cat_editing_policy.py" = ["F811"]
 "tests/test_contact_privacy.py" = ["F811"]
+"tests/test_contact_reveal.py" = ["F811"]
+"tests/test_contact_consent.py" = ["F811"]
 
 [tool.mypy]
 python_version = "3.13"

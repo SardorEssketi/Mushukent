@@ -62,6 +62,7 @@ class AdoptionPostCreateDraft:
     owner_phone_publication_consent: bool
     additional_info: str | None
     photos: list[AdoptionPostPhotoDraft]
+    contact_consent_version: int | None = None
 
 
 @dataclass(slots=True)
