@@ -17,7 +17,8 @@ val pushEnabled = (project.findProperty("dart-defines") as String?)
         }.getOrDefault(false)
     } == true
 // Opt-in, for testing a debug build next to an installed release build of the app:
-//   flutter build apk --debug --android-project-arg=-Ptest-application-id-suffix=.rdtest
+//   flutter build apk --debug --android-project-arg=test-application-id-suffix=.rdtest
+// (Flutter adds the -P itself; passing -P here silently keeps the release package id.)
 // The debug build then installs under a different package id and never touches the release
 // app or its data. The production Firebase config does not match that id, so push is unavailable.
 val testApplicationIdSuffix = (project.findProperty("test-application-id-suffix") as String?)
