@@ -327,11 +327,32 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<MushukistanUser> fetchCurrentUser() async {
-    final user = currentUser ?? loginResult?.user;
+    final user = _acceptedUser ?? currentUser ?? loginResult?.user;
     if (user == null) {
       throw StateError('No fake current user configured.');
     }
     return user;
+  }
+
+  MushukistanUser? _acceptedUser;
+  int acceptLegalCalls = 0;
+  Object? acceptLegalError;
+  MushukistanUser? acceptLegalResult;
+  String? lastAcceptedTermsVersion;
+  String? lastAcceptedPrivacyVersion;
+
+  @override
+  Future<MushukistanUser> acceptLegal({
+    required String termsVersion,
+    required String privacyVersion,
+  }) async {
+    acceptLegalCalls += 1;
+    lastAcceptedTermsVersion = termsVersion;
+    lastAcceptedPrivacyVersion = privacyVersion;
+    if (acceptLegalError != null) throw acceptLegalError!;
+    final result = acceptLegalResult ?? testUser();
+    _acceptedUser = result;
+    return result;
   }
 
   @override
@@ -400,6 +421,7 @@ MushukistanUser testUser({
   bool allowPublicActivityView = true,
   bool isModerator = false,
   String preferredLanguage = 'en',
+  bool legalAcceptanceRequired = false,
 }) {
   return MushukistanUser(
     id: id,
@@ -414,5 +436,8 @@ MushukistanUser testUser({
     allowPublicActivityView: allowPublicActivityView,
     isModerator: isModerator,
     preferredLanguage: preferredLanguage,
+    legalAcceptanceRequired: legalAcceptanceRequired,
+    currentTermsVersion: '2026-10-15',
+    currentPrivacyVersion: '2026-10-15',
   );
 }

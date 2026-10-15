@@ -89,6 +89,23 @@ class MushukistanAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<MushukistanUser> acceptLegal({
+    required String termsVersion,
+    required String privacyVersion,
+  }) {
+    return _apiClient.postJson<MushukistanUser>(
+      'auth/legal/accept',
+      body: <String, Object?>{
+        'accept_terms': true,
+        'accept_privacy': true,
+        'terms_version': termsVersion,
+        'privacy_version': privacyVersion,
+      },
+      decoder: MushukistanUser.fromJson,
+    );
+  }
+
+  @override
   Future<AuthSession> refreshSession() async {
     final revision = _sessionRevision;
     final refreshToken = await _tokenStore.readRefreshToken();

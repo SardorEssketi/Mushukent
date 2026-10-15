@@ -1213,6 +1213,168 @@ void main() {
     await logout;
   });
 
+  group('versioned legal acceptance', () {
+    const pendingId = '11111111-1111-4111-8111-111111111111';
+
+    FakeAuthRepository pendingRepo({
+      Object? acceptError,
+      MushukistanUser? accepted,
+    }) {
+      return FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(
+            accessToken: 'token',
+            user: testUser(id: pendingId, legalAcceptanceRequired: true),
+          ),
+        ),
+      )
+        ..acceptLegalError = acceptError
+        ..acceptLegalResult = accepted ?? testUser(id: pendingId);
+    }
+
+    Future<ProviderContainer> start(
+      WidgetTester tester,
+      FakeAuthRepository repo,
+    ) async {
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    testWidgets('a user with outdated acceptance sees the update screen first',
+        (tester) async {
+      final repo = pendingRepo();
+      await start(tester, repo);
+
+      expect(
+          find.text('We updated our Terms and Privacy Policy'), findsWidgets);
+      expect(find.text('Accept and continue'), findsOneWidget);
+      // Opening the app is never acceptance.
+      expect(repo.acceptLegalCalls, 0);
+    });
+
+    testWidgets('accepting records the named versions and continues',
+        (tester) async {
+      final repo = pendingRepo();
+      await start(tester, repo);
+
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+
+      expect(repo.acceptLegalCalls, 1);
+      expect(repo.lastAcceptedTermsVersion, '2026-10-15');
+      expect(repo.lastAcceptedPrivacyVersion, '2026-10-15');
+      expect(find.text('Accept and continue'), findsNothing);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('a failed acceptance keeps the screen, explains and can retry',
+        (tester) async {
+      final repo = pendingRepo(
+        acceptError: const MushukistanApiException(
+          kind: ApiFailureKind.network,
+          code: 'NETWORK_ERROR',
+          message: 'offline',
+        ),
+      );
+      await start(tester, repo);
+
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not save your acceptance'),
+          findsOneWidget);
+      expect(find.text('Accept and continue'), findsOneWidget);
+
+      repo.acceptLegalError = null;
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+      expect(repo.acceptLegalCalls, 2);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('changed documents are explained, not silently accepted',
+        (tester) async {
+      final repo = pendingRepo(
+        acceptError: const MushukistanApiException(
+          kind: ApiFailureKind.conflict,
+          code: 'LEGAL_VERSION_MISMATCH',
+          message: 'changed',
+        ),
+      );
+      await start(tester, repo);
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('documents changed again'), findsOneWidget);
+      expect(find.text('Accept and continue'), findsOneWidget);
+    });
+
+    testWidgets('both documents can be read and logout stays available',
+        (tester) async {
+      final repo = pendingRepo();
+      await start(tester, repo);
+
+      await tester.tap(find.text('Terms of Service'));
+      await tester.pumpAndSettle();
+      expect(find.text('Effective date: 2026-10-15'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Privacy Policy'));
+      await tester.pumpAndSettle();
+      expect(find.text('Effective date: 2026-10-15'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Logout'));
+      await tester.pumpAndSettle();
+      expect(repo.logoutCalled, isTrue);
+      expect(find.text('Accept and continue'), findsNothing);
+      expect(repo.acceptLegalCalls, 0, reason: 'logging out is not acceptance');
+    });
+
+    testWidgets('a user with current acceptance is not interrupted',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+      );
+      await start(tester, repo);
+      expect(find.text('Accept and continue'), findsNothing);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('account switching evaluates each account on its own',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-b',
+          user: testUser(
+            id: '22222222-2222-4222-8222-222222222222',
+            email: 'b@example.com',
+            legalAcceptanceRequired: true,
+          ),
+        ),
+      );
+      final container = await start(tester, repo);
+      expect(find.text('Accept and continue'), findsNothing);
+
+      final controller = container.read(authControllerProvider.notifier);
+      await controller.logout();
+      await tester.pumpAndSettle();
+      await controller.login(const AuthCredentials(
+          email: 'b@example.com', password: 'Password123'));
+      await tester.pumpAndSettle();
+      expect(find.text('Accept and continue'), findsOneWidget);
+      expect(repo.acceptLegalCalls, 0);
+    });
+  });
+
   group('session outage routing', () {
     SessionRestoreResult confirmed() => SessionRestoreSuccess(
           AuthSession.restored(accessToken: 'access-a', user: testUser()),

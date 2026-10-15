@@ -487,6 +487,45 @@ class AuthController extends StateNotifier<AuthState> {
     });
   }
 
+  /// Explicit acceptance of the documents named by the current user. Nothing is recorded unless
+  /// this is called from a user action; the session itself is never touched.
+  Future<void> acceptLegal() async {
+    final user = state.user;
+    final terms = user?.currentTermsVersion;
+    final privacy = user?.currentPrivacyVersion;
+    if (!state.isAuthenticated ||
+        user == null ||
+        terms == null ||
+        privacy == null) {
+      return;
+    }
+    final epoch = _authEpoch;
+    try {
+      await _repository.acceptLegal(
+          termsVersion: terms, privacyVersion: privacy);
+    } on MushukistanApiException catch (error) {
+      if (error.code == 'LEGAL_VERSION_MISMATCH') {
+        // The documents changed since this screen loaded: pick up the new versions.
+        try {
+          await _refreshCurrentUser(user.id, epoch);
+        } catch (_) {
+          // The original error is what the caller needs to see.
+        }
+      }
+      rethrow;
+    }
+    await _refreshCurrentUser(user.id, epoch);
+  }
+
+  Future<void> _refreshCurrentUser(String userId, int epoch) async {
+    final fresh = await _repository.fetchCurrentUser();
+    // Ignore the result if the user logged out or switched accounts meanwhile.
+    if (epoch != _authEpoch || state.user?.id != userId || fresh.id != userId) {
+      return;
+    }
+    state = AuthState.authenticated(fresh);
+  }
+
   void returnToLogin() {
     state = AuthState.unauthenticated();
   }

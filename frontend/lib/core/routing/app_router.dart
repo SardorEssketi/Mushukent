@@ -20,6 +20,7 @@ import '../../features/auth/presentation/screens/verify_email_screen.dart';
 import '../../features/feed/presentation/screens/feed_screen.dart';
 import '../../features/leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../features/legal/presentation/screens/legal_document_screen.dart';
+import '../../features/legal/presentation/screens/legal_update_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_create_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_detail_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_edit_screen.dart';
@@ -79,6 +80,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (location == '/' || location == '/auth-gate') {
         return '/feed';
+      }
+
+      // Outdated legal acceptance: documents, the acceptance screen and logout stay reachable;
+      // everything else waits for an explicit acceptance. Evaluated per signed-in account.
+      final legalPending = authState.isAuthenticated &&
+          authState.user?.legalAcceptanceRequired == true;
+      if (legalPending) {
+        if (location == '/legal-update' || location.startsWith('/legal/')) {
+          return null;
+        }
+        return Uri(
+          path: '/legal-update',
+          queryParameters: {
+            'redirect':
+                validatedPostAuthRedirect(state.uri.toString()) ?? '/feed',
+          },
+        ).toString();
+      }
+      if (location == '/legal-update') {
+        return validatedPostAuthRedirect(
+                state.uri.queryParameters['redirect']) ??
+            '/feed';
       }
 
       final isAuthEntryRoute = _isAuthenticationEntryRoute(location);
@@ -167,6 +190,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth-gate',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AuthGateScreen(),
+      ),
+      GoRoute(
+        path: '/legal-update',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LegalUpdateScreen(),
       ),
       GoRoute(
         path: '/session-unavailable',

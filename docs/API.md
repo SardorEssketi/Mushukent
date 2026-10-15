@@ -358,6 +358,8 @@ Feature: Users
 
 Owner contact details (lost-pet and adoption posts): owner_phone_number and owner_telegram_username are never returned to anonymous users or in list, feed, map and mine responses (they carry contact_available). Signed-in users obtain them with POST /api/v1/lost-pets/{id}/contact-reveal or POST /api/v1/adoption-posts/{id}/contact-reveal (200 {phone_number, telegram_username}; 401, 403 owner, 404 not active/blocked, 429 CONTACT_REVEAL_LIMIT with Retry-After; limits CONTACT_REVEAL_MAX_PER_DAY/WEEK). Clients send X-Contact-Mode: reveal; legacy clients without the header still receive contacts on detail responses within the same quota while CONTACT_LEGACY_DETAIL_ENABLED=true. Adoption create accepts owner_contact_consent (boolean; required true when X-Contact-Mode: reveal). See docs/CONTACT_PRIVACY.md.
 
+8a) POST /api/v1/auth/legal/accept (auth required): body {accept_terms, accept_privacy, terms_version, privacy_version}. Both flags must be true and the versions must equal the current ones (422 LEGAL_ACCEPTANCE_REQUIRED, 409 LEGAL_VERSION_MISMATCH with current_terms_version/current_privacy_version in details). Records the accepted versions and time and returns the user. User objects returned by login, google, refresh and users/me include legal_acceptance_required, current_terms_version and current_privacy_version; sign-in never fails because acceptance is outdated. See docs/CONTACT_PRIVACY.md.
+
 8b) GET /api/v1/users/me/blocks
 - Purpose: List users the current user has blocked, newest first.
 - Auth: Bearer required

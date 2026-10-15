@@ -40,6 +40,12 @@ abstract interface class AuthRepository {
   Future<VerificationRequirement> resendVerification(String email);
   Future<void> verifyEmail(String token);
   Future<MushukistanUser> fetchCurrentUser();
+
+  /// Records the user's explicit acceptance of the named (current) document versions.
+  Future<MushukistanUser> acceptLegal({
+    required String termsVersion,
+    required String privacyVersion,
+  });
   Future<AuthSession> refreshSession();
   Future<SessionRestoreResult> restoreSession();
   Future<void> logout();

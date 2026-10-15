@@ -811,11 +811,11 @@ class AppStrings {
   String get privacyPolicySummary {
     return switch (this) {
       _UzbekStrings() =>
-        'Mushukistan xarita va lenta uchun hisob, profil, ochiq postlar, rasmlar, izohlar, shikoyatlar va joylashuv ma’lumotlarini saqlaydi. Ilovada analitika SDK, reklama, crash SDK yoki AI funksiyasi yo‘q. Operator sozlasa, server PostHog’ga foydalanish hodisalari va xatolik hisobotlarini yuborishi mumkin. Android push xabarlari Firebase Cloud Messaging orqali, bildirishnoma ruxsati berilgandan keyin yuboriladi. Kontakt ma’lumotlari faqat tizimga kirgan foydalanuvchilarga, cheklov bilan ko‘rsatiladi.',
+        'Mushukistan xarita va lenta uchun hisob, profil, ochiq postlar, rasmlar, izohlar, shikoyatlar va joylashuv ma’lumotlarini saqlaydi. Ilovada analitika SDK, reklama, crash SDK yoki AI funksiyasi yo‘q. Operator sozlasa, server PostHog’ga foydalanish hodisalarini (email va ismsiz, taxalluslangan hisob identifikatori bilan) yuborishi mumkin. Android push xabarlari Firebase Cloud Messaging orqali, bildirishnoma ruxsati berilgandan keyin yuboriladi. Kontakt ma’lumotlari faqat tizimga kirgan foydalanuvchilarga, cheklov bilan ko‘rsatiladi.',
       _RussianStrings() =>
-        'Mushukistan хранит данные аккаунта, профиля, публичные посты, фото, комментарии, жалобы и местоположения для карты и ленты. В приложении нет аналитических SDK, рекламы, crash SDK и AI-функций. Если оператор включит PostHog, сервер может отправлять туда события использования и отчёты об ошибках. Android push-уведомления идут через Firebase Cloud Messaging после вашего разрешения. Контакты показываются только вошедшим пользователям и с ограничением.',
+        'Mushukistan хранит данные аккаунта, профиля, публичные посты, фото, комментарии, жалобы и местоположения для карты и ленты. В приложении нет аналитических SDK, рекламы, crash SDK и AI-функций. Если оператор включит PostHog, сервер может отправлять туда события использования, привязанные к псевдонимному идентификатору аккаунта (без email и имени). Android push-уведомления идут через Firebase Cloud Messaging после вашего разрешения. Контакты показываются только вошедшим пользователям и с ограничением.',
       _ =>
-        'Mushukistan stores account data, profile data, public posts, photos, comments, reports, and locations needed for map and feed features. The apps include no analytics SDK, ads, crash SDK, or AI feature. If the operator enables PostHog, the server may send it usage events and error reports. Android push uses Firebase Cloud Messaging after you allow notifications. Contact details are shown only to signed-in users, within limits.',
+        'Mushukistan stores account data, profile data, public posts, photos, comments, reports, and locations needed for map and feed features. The apps include no analytics SDK, ads, crash SDK, or AI feature. If the operator enables PostHog, the server may send it usage events linked to a pseudonymous account ID (no email or name). Android push uses Firebase Cloud Messaging after you allow notifications. Contact details are shown only to signed-in users, within limits.',
     };
   }
 
@@ -1796,6 +1796,56 @@ class AppStrings {
       _RussianStrings() =>
         'Подтвердите согласие на показ ваших контактов вошедшим пользователям.',
       _ => 'Confirm that signed-in users may see your contact details.',
+    };
+  }
+
+  String get legalUpdateTitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Foydalanish shartlari va Maxfiylik siyosatini yangiladik',
+      _RussianStrings() => 'Мы обновили Условия и Политику конфиденциальности',
+      _ => 'We updated our Terms and Privacy Policy',
+    };
+  }
+
+  String get legalUpdateBody {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushukistan’dan foydalanishni davom ettirish uchun yangilangan Foydalanish shartlari va Maxfiylik siyosati bilan tanishing. O‘zgarishlar, jumladan, egalarining kontaktlari ko‘rsatilishiga (faqat tizimga kirgan foydalanuvchilarga va cheklov bilan) hamda ixtiyoriy analitika va bildirishnomalar ishlashiga tegishli. «Qabul qilish va davom etish» tugmasini bosish orqali ikkala hujjatni o‘qiganingizni va qabul qilishingizni tasdiqlaysiz.',
+      _RussianStrings() =>
+        'Чтобы продолжить пользоваться Mushukistan, ознакомьтесь с обновлёнными Условиями использования и Политикой конфиденциальности. Изменения касаются в том числе показа контактов владельцев (только вошедшим пользователям и с ограничениями) и работы необязательной аналитики и уведомлений. Нажимая «Принять и продолжить», вы подтверждаете, что прочитали оба документа и принимаете их.',
+      _ =>
+        'To keep using Mushukistan, please review the updated Terms of Service and Privacy Policy. Changes include how owner contact details are shared (only with signed-in users, within limits) and how optional analytics and notifications work. Tapping Accept and continue confirms that you have read and accept both documents.',
+    };
+  }
+
+  String get legalUpdateAccept {
+    return switch (this) {
+      _UzbekStrings() => 'Qabul qilish va davom etish',
+      _RussianStrings() => 'Принять и продолжить',
+      _ => 'Accept and continue',
+    };
+  }
+
+  String get legalUpdateFailed {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Roziligingizni saqlab bo‘lmadi. Ulanishni tekshirib, qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Не удалось сохранить согласие. Проверьте соединение и попробуйте ещё раз.',
+      _ =>
+        'Could not save your acceptance. Check your connection and try again.',
+    };
+  }
+
+  String get legalUpdateChanged {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Hujjatlar yana o‘zgardi. Joriy versiyalarni ko‘rib chiqing va qaytadan qabul qiling.',
+      _RussianStrings() =>
+        'Документы снова изменились. Ознакомьтесь с актуальными версиями и примите их ещё раз.',
+      _ =>
+        'The documents changed again. Review the current versions and accept again.',
     };
   }
 

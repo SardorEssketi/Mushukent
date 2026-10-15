@@ -74,6 +74,9 @@ class MushukistanUser {
     this.totalLikesReceived = 0,
     this.commentCount = 0,
     this.isModerator = false,
+    this.legalAcceptanceRequired = false,
+    this.currentTermsVersion,
+    this.currentPrivacyVersion,
   });
 
   final String id;
@@ -88,6 +91,11 @@ class MushukistanUser {
   final int totalLikesReceived;
   final int commentCount;
   final bool isModerator;
+
+  /// The user has not yet explicitly accepted the current Terms and Privacy Policy.
+  final bool legalAcceptanceRequired;
+  final String? currentTermsVersion;
+  final String? currentPrivacyVersion;
 
   bool get hasAvatar => avatarUrl != null && avatarUrl!.isNotEmpty;
 
@@ -107,6 +115,11 @@ class MushukistanUser {
       totalLikesReceived: _readInt(map['total_likes_received']),
       commentCount: _readInt(map['comment_count']),
       isModerator: _readOptionalBool(map['is_moderator']) ?? false,
+      legalAcceptanceRequired:
+          _readOptionalBool(map['legal_acceptance_required']) ?? false,
+      currentTermsVersion: _readOptionalString(map['current_terms_version']),
+      currentPrivacyVersion:
+          _readOptionalString(map['current_privacy_version']),
     );
   }
 
@@ -123,6 +136,11 @@ class MushukistanUser {
         'total_likes_received': totalLikesReceived,
         'comment_count': commentCount,
         'is_moderator': isModerator,
+        'legal_acceptance_required': legalAcceptanceRequired,
+        if (currentTermsVersion != null)
+          'current_terms_version': currentTermsVersion,
+        if (currentPrivacyVersion != null)
+          'current_privacy_version': currentPrivacyVersion,
       };
 }
 

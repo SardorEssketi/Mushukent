@@ -42,12 +42,18 @@ Both create forms have an unchecked checkbox. Wording (English; Russian and Uzbe
 - Existing posts are not re-consented: the new policy is narrower than the "public" wording they accepted.
 
 ## Legal documents and acceptance versions
-The texts were changed to describe this behaviour (contact visible to signed-in users only, quotas, the optional PostHog server-side analytics and Firebase Android push). The *displayed* versions of the Privacy Policy and the Terms (documents, in-app screen and `/privacy` page) were set to `2026-10-15`.
+The Privacy Policy and Terms are version `2026-10-15` (documents, in-app screen, `/privacy` page) and the backend constants `CURRENT_TERMS_VERSION` / `CURRENT_PRIVACY_VERSION` (`backend/app/features/auth/application/schemas.py`) now equal them; `tests/test_legal_consistency.py` fails if they drift.
 
-The *accepted* versions the backend compares (`CURRENT_TERMS_VERSION`, `CURRENT_PRIVACY_VERSION` in `backend/app/features/auth/application/schemas.py`) were **not** changed and remain `2026-08-01`; they already differed from the displayed privacy version (`2026-10-12`) before this change. Implications of the choice:
-- Not bumping: nobody is forced to re-accept; new sign-ups keep recording `2026-08-01`, so the stored acceptance does not prove which wording a user saw.
-- Bumping (a deliberate follow-up): returning Google sign-in users would have to accept again (`LEGAL_ACCEPTANCE_REQUIRED`), and registrations would record the new version. Password logins do not check the version today.
-**Decision required:** whether this change (the contact policy is narrower than the previous "public" wording, and analytics/push are now disclosed) warrants re-acceptance.
+Behaviour (decided on 2026-10-15 because the contact policy, analytics and push disclosures changed):
+- **Registration and Google account creation** record the current versions and time, as before, only with explicit consent.
+- **Password and Google sign-in never fail because acceptance is outdated.** The user object (`login`, `google`, `refresh`, `users/me`) carries `legal_acceptance_required`, `current_terms_version`, `current_privacy_version`. Sign-in itself is not acceptance and records nothing. A Google sign-in that carries both consent flags records them.
+- **New clients** route a signed-in user with `legal_acceptance_required` to `/legal-update`: an explanation, links to both documents, an **Accept and continue** button and **Logout**. Only the button calls `POST /auth/legal/accept` with `accept_terms`, `accept_privacy` and the two versions the client was told. The documents, the screen and logout stay reachable; everything else waits. The state is derived from the signed-in account, so switching accounts re-evaluates it.
+- **The server** refuses acceptance unless both flags are true (422 `LEGAL_ACCEPTANCE_REQUIRED`) and the versions are the current ones (409 `LEGAL_VERSION_MISMATCH` with the current versions, so a stale screen cannot record text the user did not see). Repeating it keeps the original time. Sessions and refresh tokens are not touched.
+- **Existing sessions** keep working; the flag appears on the next `users/me` or sign-in, which is when the app restores a session.
+- **Old app versions** know nothing of the flag and are not interrupted; the server does not block write endpoints for unaccepted users because that would lock out every installed old app. Server-side enforcement on write endpoints is a possible later step once old versions are gone (**decision**).
+- Accounts that were created before acceptance was recorded (null versions) are asked as well.
+
+Implication: after this deploy, every existing user with a new app will see the acceptance screen once.
 
 ## Tests
 `backend/tests/test_contact_privacy.py`, `test_contact_reveal.py` (reveal, idempotence, daily and weekly windows, parallel requests, account age, blocked/owner/resolved, legacy mode and its switch, leak scan over every parameterless GET route, no contact in logs or rows) and `test_contact_consent.py`; Flutter `contact_privacy_test.dart` and `adoption_lifecycle_screen_test.dart`.

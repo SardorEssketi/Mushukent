@@ -76,3 +76,9 @@ def test_displayed_versions_match_across_documents() -> None:
     assert f"title: 'Privacy Policy',\n  version: '{privacy}'" in SCREEN.replace("\r\n", "\n")
     assert f"title: 'Terms of Service',\n  version: '{terms}'" in SCREEN.replace("\r\n", "\n")
     assert f"Version: {privacy}" in WEB_PRIVACY
+    # The backend compares accepted versions with these constants.
+    schemas = (ROOT / "backend/app/features/auth/application/schemas.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'CURRENT_TERMS_VERSION = "{terms}"' in schemas
+    assert f'CURRENT_PRIVACY_VERSION = "{privacy}"' in schemas

@@ -15,6 +15,11 @@ from app.core.storage import (
     StorageOperationError,
     StorageValidationError,
 )
+from app.features.auth.application.schemas import (
+    CURRENT_PRIVACY_VERSION,
+    CURRENT_TERMS_VERSION,
+    legal_acceptance_required,
+)
 from app.features.auth.domain.models import AuthUser
 from app.features.auth.infrastructure.email import AccountDeletionConfirmationSender
 from app.features.auth.infrastructure.tokens import JoseAccountDeletionTokenService
@@ -561,4 +566,7 @@ class UsersService:
             total_likes_received=repository.count_likes_received(user.id),
             comment_count=repository.count_comments(user.id),
             is_moderator=user.is_moderator,
+            legal_acceptance_required=legal_acceptance_required(user),
+            current_terms_version=CURRENT_TERMS_VERSION,
+            current_privacy_version=CURRENT_PRIVACY_VERSION,
         )

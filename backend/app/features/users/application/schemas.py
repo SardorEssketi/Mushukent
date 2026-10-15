@@ -38,6 +38,9 @@ class UserProfile(BaseModel):
     total_likes_received: int = 0
     comment_count: int = 0
     is_moderator: bool = False
+    legal_acceptance_required: bool = False
+    current_terms_version: str | None = None
+    current_privacy_version: str | None = None
 
 
 class UserPublic(BaseModel):
