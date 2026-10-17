@@ -1,0 +1,102 @@
+{
+  "recipe_version": 1,
+  "crop": [
+    0,
+    104,
+    1080,
+    2316
+  ],
+  "source_size": [
+    1080,
+    2436
+  ],
+  "publication_review": "Owner confirmed first feed photo rights on 2026-10-12. Second photo and all account identities concealed. City-level public service map only.",
+  "source_sha256": {
+    "map": "586438c8470269f1b4e397b5bd868b6f1047a6955c6cca3b99d864eb7934e3df",
+    "feed": "5c9b8e7463aead80596e4cb6ade8ccd05c17788526051f3e09900384da5c59e9",
+    "leaderboard": "b94d93fabfe4f5fb74e0b0fb81aef167d710c4b9e1faa6c5fabdf3e6f82f2906",
+    "profile": "b903d1950a698dff001c8dd82965e4eb61ee039b15e397908d1567f5740ede57"
+  },
+  "variants": {
+    "app-map-270.webp": {
+      "width": 270,
+      "height": 553,
+      "sha256": "e48d9bfb8a2846a1d2cbcca660b6d260dd02e70abb70f7de8412063810a718ac"
+    },
+    "app-map-270.jpg": {
+      "width": 270,
+      "height": 553,
+      "sha256": "cb6a5c81cc8d38a0615797987e3970d77f18ab4773229ba03692b874d4903d91"
+    },
+    "app-map-540.webp": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "23cadf5e07e76e5ad3346331a7af2273bf107e4e82729240ca2e38813898a53d"
+    },
+    "app-map-540.jpg": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "1d967ac9897b2bb8adbd36e16af9a4fb5a821b8cb371d429e90223bf9b0bf22c"
+    },
+    "app-feed-270.webp": {
+      "width": 270,
+      "height": 553,
+      "sha256": "df97dfbb8d4b94645b67acc8a48765010d84589237677e005090ee68fbd7341f"
+    },
+    "app-feed-270.jpg": {
+      "width": 270,
+      "height": 553,
+      "sha256": "3eb187a7f4c82fa8ae94d549c02375d731d41ce85154b25f3c119c46c4e5b450"
+    },
+    "app-feed-540.webp": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "40b3de478377cee38138c3d87f33b58a83eba7901f9fc316745c15efa69fd3a8"
+    },
+    "app-feed-540.jpg": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "51248f8677b7752ac92ea1cddb64f8fc7aae05242ccb3bb6fa0621b4ec5d5370"
+    },
+    "app-leaderboard-270.webp": {
+      "width": 270,
+      "height": 553,
+      "sha256": "b20c0c9bef95e33a8bf3a384dd78bd0fc4485d733ebfafdeabab6e622497e9aa"
+    },
+    "app-leaderboard-270.jpg": {
+      "width": 270,
+      "height": 553,
+      "sha256": "aabf077074f253411abab653ef0508cff8c026c0293f98bfd8d33da78197f883"
+    },
+    "app-leaderboard-540.webp": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "23480df2e14999bbfb2bbf893d362afdc821453595cc507a68119534e82724c7"
+    },
+    "app-leaderboard-540.jpg": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "9df1585d8a4cec6ccac68d3f73c01eb45a395edf189767482ae90f68171e9664"
+    },
+    "app-profile-270.webp": {
+      "width": 270,
+      "height": 553,
+      "sha256": "4d69dbaa172c3a53aaaf108163290728b4cca37e28a99542e141125340cc3546"
+    },
+    "app-profile-270.jpg": {
+      "width": 270,
+      "height": 553,
+      "sha256": "0f8c2f35dae41dbedf6716ade995b8f9f1f8262b9effecf9ca29c1c1ea76dbc0"
+    },
+    "app-profile-540.webp": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "f5904ce6ef5338e8deb1d0486553b230e5fa62b11de495d23913c66d8c19d772"
+    },
+    "app-profile-540.jpg": {
+      "width": 540,
+      "height": 1106,
+      "sha256": "8ea400794c93dc15a692fa72fc0ce0fd37003a788a81fb220365ad82aa03c0d4"
+    }
+  }
+}

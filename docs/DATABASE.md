@@ -235,6 +235,20 @@ CREATE TABLE reports (
 CREATE INDEX idx_reports_status ON reports (status);
 CREATE INDEX idx_reports_target ON reports (target_type, target_id);
 
+-- Product feedback (developer inbox; write-only from the API)
+CREATE TABLE feedback (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    category TEXT NOT NULL CHECK (category IN ('bug','suggestion','other')),
+    message TEXT NOT NULL CHECK (char_length(message) BETWEEN 10 AND 2000),
+    platform TEXT NULL, -- 'web' | 'android' as reported by the client
+    app_version TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Serves the per-user hourly submission cap
+CREATE INDEX idx_feedback_user_created ON feedback (user_id, created_at);
+-- Added by Alembic revision 20261013_0026. Category is text + CHECK so new categories need no enum migration.
+
 -- Leaderboard cache (optional, used to store precomputed leaderboard snapshots)
 CREATE TYPE leaderboard_type AS ENUM ('most_active','most_popular','top_helpers');
 
@@ -562,7 +576,7 @@ Appendix: rationale for key choices
 Notifications (migration `20261007_0025`)
 ---------------------------------------
 - `users.last_active_at TIMESTAMPTZ NULL`: coarse authenticated launch/resume activity. `idx_users_active_last_activity` supports inactivity scans; writes are throttled to 15 minutes.
-- `notification_preferences`: one row per user, independent push booleans, opt-in nearby/inactivity booleans, private `alert_location GEOMETRY(POINT,4326)`, and `last_inactivity_cycle_at`. A check requires a point when nearby is enabled. A partial GiST index on `alert_location::geography` supports the fixed 500 m lookup.
+- `notification_preferences`: one row per user. Application writes and the worker idempotently normalize comments, replies, follow-ups, and inactivity to true, including legacy disabled rows and absent rows; historical migration defaults remain unchanged. `nearby_enabled` is the existing consent/eligibility flag, never normalized to true without consent and an authorized fix. The private `alert_location GEOMETRY(POINT,4326)` stores only the latest fix; withdrawal or unavailable permission/location clears it. `last_inactivity_cycle_at` is preserved. The existing point constraint and 500 m GiST lookup remain. No schema migration is required.
 - `notifications`: recipient, nullable actor, structured kind/target/comment identifiers, creation/read timestamps, and unique event key. Recipient page and partial unread indexes support inbox reads. Actor deletion sets the actor reference null; recipient deletion removes inbox rows.
 - `notification_devices`: Android device token ciphertext (Fernet), SHA-256 token hash for unique lookup, owner, and last seen timestamp. Raw tokens are not exposed by the API or normal logs.
 - `notification_push_jobs`: one row per logical event and device (`UNIQUE(event_key,device_id)`), due/lease/attempt/status fields, optional inbox reference and activity-cycle snapshot. The worker claims with `FOR UPDATE SKIP LOCKED`, checks current eligibility, calls FCM outside originating transactions, and retries at 1, 5, and 30 minutes (four total attempts). Invalid tokens are removed; terminal failures remain recorded. Application-level deduplication cannot make an ambiguously acknowledged FCM request exactly once.

@@ -9,8 +9,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.features.auth.domain.models import AuthUser
 
 T = TypeVar("T")
-CURRENT_TERMS_VERSION = "2026-08-01"
-CURRENT_PRIVACY_VERSION = "2026-08-01"
+# Must equal the "Version:" of docs/legal/TERMS_OF_SERVICE.md and PRIVACY_POLICY.md (guarded by
+# tests/test_legal_consistency.py). Changing them asks returning users to accept again.
+CURRENT_TERMS_VERSION = "2026-10-15"
+CURRENT_PRIVACY_VERSION = "2026-10-15"
 
 
 class ApiSuccess(BaseModel, Generic[T]):
@@ -47,6 +49,25 @@ class GoogleLoginRequest(BaseModel):
     accept_privacy: bool = Field(default=False)
 
 
+class LegalAcceptRequest(BaseModel):
+    """Explicit acceptance of the documents the user was shown (identified by version)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    accept_terms: bool
+    accept_privacy: bool
+    terms_version: str = Field(min_length=1, max_length=32)
+    privacy_version: str = Field(min_length=1, max_length=32)
+
+
+def legal_acceptance_required(user: AuthUser) -> bool:
+    return not (
+        user.accepted_terms_version == CURRENT_TERMS_VERSION
+        and user.accepted_privacy_version == CURRENT_PRIVACY_VERSION
+        and user.accepted_legal_at is not None
+    )
+
+
 class SignInMethods(BaseModel):
     has_password: bool
     google_connected: bool
@@ -80,6 +101,10 @@ class UserPublic(BaseModel):
     total_likes_received: int | None = None
     comment_count: int | None = None
     is_moderator: bool = False
+    # True until the user has explicitly accepted the current Terms and Privacy Policy.
+    legal_acceptance_required: bool = False
+    current_terms_version: str = CURRENT_TERMS_VERSION
+    current_privacy_version: str = CURRENT_PRIVACY_VERSION
 
     @classmethod
     def from_auth_user(cls, user: AuthUser) -> "UserPublic":
@@ -94,6 +119,7 @@ class UserPublic(BaseModel):
             bio=user.bio,
             registered_at=user.registered_at,
             is_moderator=user.is_moderator,
+            legal_acceptance_required=legal_acceptance_required(user),
         )
 
 

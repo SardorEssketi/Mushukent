@@ -81,6 +81,7 @@ class LostPetCreateDraft:
     last_seen_longitude: float
     additional_info: str | None
     photos: list[LostPetPhotoDraft]
+    contact_consent_version: int | None = None
 
 
 @dataclass(slots=True)

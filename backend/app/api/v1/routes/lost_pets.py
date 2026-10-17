@@ -4,7 +4,7 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
 
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
@@ -16,6 +16,8 @@ from app.core.dependencies import (
 from app.core.security import api_error
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
+from app.features.contact_reveal.schemas import ContactRevealResponse
+from app.features.contact_reveal.service import is_reveal_mode, mark_private
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
     LostPetFollowUpAnswer,
@@ -115,6 +117,7 @@ async def _parse_update_request(
     response_model_exclude_none=True,
 )
 async def create_lost_pet(
+    request: Request,
     last_seen_location: str = Form(...),
     pet_name: str = Form(...),
     additional_info: str | None = Form(default=None),
@@ -130,14 +133,20 @@ async def create_lost_pet(
         owner_phone_publication_consent,
     )
     photo_payloads = await read_image_uploads(photos, purpose="lost_pet_create")
-    return ApiSuccess(
-        data=await run_upload_processing(
-            lost_pets_service.create_lost_pet,
-            current_user,
-            payload,
-            photos=photo_payloads,
-        )
+    created_report = await run_upload_processing(
+        lost_pets_service.create_lost_pet,
+        current_user,
+        payload,
+        photos=photo_payloads,
+        contact_consent_version=1 if is_reveal_mode(request) else None,
     )
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture(
+            "lost_pet_report_created",
+            properties={"photo_count": len(photo_payloads)},
+        )
+    return ApiSuccess(data=created_report)
 
 
 @router.get(
@@ -153,6 +162,7 @@ def list_lost_pets(
     radius_meters: int | None = Query(default=None, ge=1, le=5000),
     bbox: str | None = Query(default=None),
     valid_for_map: bool = Query(default=False),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[GenericListResponse[LostPetListItem]]:
     return ApiSuccess(
@@ -164,6 +174,7 @@ def list_lost_pets(
             radius_meters=radius_meters,
             bbox=bbox,
             valid_for_map=valid_for_map,
+            viewer=current_user,
         )
     )
 
@@ -176,9 +187,12 @@ def list_lost_pets(
 def list_lost_pet_map_markers(
     bbox: str = Query(...),
     limit: int = Query(default=100, ge=1, le=100),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[GenericListResponse[LostPetMapListItem]]:
-    return ApiSuccess(data=lost_pets_service.list_map_markers(limit=limit, bbox=bbox))
+    return ApiSuccess(
+        data=lost_pets_service.list_map_markers(limit=limit, bbox=bbox, viewer=current_user)
+    )
 
 
 @router.get("/mine", response_model=ApiSuccess[GenericListResponse[LostPetListItem]])
@@ -211,23 +225,46 @@ def answer_follow_up(
     return ApiSuccess(data=lost_pets_service.answer_follow_up(follow_up_id, current_user, payload))
 
 
+@router.post(
+    "/{lost_pet_id}/contact-reveal",
+    response_model=ApiSuccess[ContactRevealResponse],
+)
+def reveal_contact(
+    response: Response,
+    lost_pet_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
+) -> ApiSuccess[ContactRevealResponse]:
+    mark_private(response, authenticated=True)
+    return ApiSuccess(data=lost_pets_service.reveal_contact(lost_pet_id, current_user))
+
+
 @router.post("/{lost_pet_id}/contact", status_code=status.HTTP_204_NO_CONTENT)
 def contact_owner(
+    request: Request,
     lost_pet_id: UUID,
     current_user: AuthUser = Depends(get_current_active_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> None:
     lost_pets_service.contact_owner(lost_pet_id, current_user)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("lost_pet_owner_contacted")
 
 
 @router.patch("/{lost_pet_id}/resolution", response_model=ApiSuccess[LostPetResponse])
 def set_resolution(
+    request: Request,
     lost_pet_id: UUID,
     payload: LostPetResolutionRequest,
     current_user: AuthUser = Depends(get_current_active_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[LostPetResponse]:
-    return ApiSuccess(data=lost_pets_service.set_resolution(lost_pet_id, current_user, payload))
+    resolved_report = lost_pets_service.set_resolution(lost_pet_id, current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("lost_pet_report_resolved")
+    return ApiSuccess(data=resolved_report)
 
 
 @router.patch(
@@ -269,8 +306,15 @@ def delete_lost_pet(
     response_model_exclude_none=True,
 )
 def get_lost_pet(
+    request: Request,
+    response: Response,
     lost_pet_id: UUID,
     current_user: AuthUser | None = Depends(get_optional_current_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
 ) -> ApiSuccess[LostPetResponse]:
-    return ApiSuccess(data=lost_pets_service.get_lost_pet(lost_pet_id, current_user))
+    mark_private(response, authenticated=current_user is not None)
+    return ApiSuccess(
+        data=lost_pets_service.get_lost_pet(
+            lost_pet_id, current_user, reveal_mode=is_reveal_mode(request)
+        )
+    )

@@ -57,6 +57,7 @@ class CatsService:
         cover_photo_filename: str | None = None,
     ) -> CatResponse:
         self._validate_cover_photo_inputs(payload.cover_photo_url, cover_photo_content)
+        self._require_platform_media_url(payload.cover_photo_url)
 
         cat_id = uuid4()
         uploaded_key: str | None = None
@@ -107,6 +108,7 @@ class CatsService:
         cover_photo_filename: str | None = None,
     ) -> CatResponse:
         self._validate_cover_photo_inputs(payload.cover_photo_url, cover_photo_content)
+        self._require_platform_media_url(payload.cover_photo_url)
 
         uploaded_key: str | None = None
         with self.db_session_manager.session_scope() as session:
@@ -116,6 +118,12 @@ class CatsService:
                 raise api_error(404, "CAT_NOT_FOUND", "Cat not found.")
             if current.merged_into is not None and not user.is_moderator:
                 raise api_error(404, "CAT_NOT_FOUND", "Cat not found.")
+            # Cat records are internal grouping entities (docs/PRD.md); only the user who created
+            # the record, or a moderator, may change it. See docs/CAT_EDITING.md.
+            if not user.is_moderator and current.created_by != user.id:
+                raise api_error(
+                    403, "FORBIDDEN", "You do not have permission to perform this action."
+                )
 
             if payload.merged_into is not None and not user.is_moderator:
                 raise api_error(
@@ -194,10 +202,12 @@ class CatsService:
         limit: int = 20,
         cursor: str | None = None,
         order: ObservationSortOrder = ObservationSortOrder.LATEST,
+        viewer: AuthUser | None = None,
     ) -> CatDetailResponse:
+        viewer_user_id = viewer.id if viewer is not None else None
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            detail = repository.get_detail(cat_id)
+            detail = repository.get_detail(cat_id, viewer_user_id=viewer_user_id)
             if (
                 detail is None
                 or detail.deleted_at is not None
@@ -212,6 +222,7 @@ class CatsService:
                     limit=limit,
                     cursor=cursor,
                     order=order,
+                    viewer_user_id=viewer_user_id,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -227,7 +238,9 @@ class CatsService:
                 limit=history_page.limit,
             )
 
-    def list_cats(self, query: CatListQuery) -> GenericListResponse[CatListItem]:
+    def list_cats(
+        self, query: CatListQuery, viewer: AuthUser | None = None
+    ) -> GenericListResponse[CatListItem]:
         bbox = self._parse_bbox(query.bbox)
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
@@ -241,6 +254,7 @@ class CatsService:
                     radius_meters=query.radius_meters,
                     bbox=bbox,
                     kind=query.kind,
+                    viewer_user_id=viewer.id if viewer is not None else None,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -261,6 +275,24 @@ class CatsService:
                 400,
                 "INVALID_PAYLOAD",
                 "Provide either cover_photo_url or cover_photo, not both.",
+            )
+
+    def _require_platform_media_url(self, cover_photo_url: object | None) -> None:
+        """Cover photos must be images uploaded to this platform, not arbitrary external URLs.
+
+        Arbitrary URLs would let any user make every viewer's client fetch a third-party address
+        (tracking pixels, off-platform or inappropriate content). Clients that want a cover photo
+        upload the file instead.
+        """
+        if cover_photo_url is None:
+            return
+        service = self.media_storage_service
+        if service is None or not service.owns_url(str(cover_photo_url)):
+            raise api_error(
+                422,
+                "VALIDATION_ERROR",
+                "Validation failed.",
+                details={"cover_photo_url": ["must_be_platform_media_url"]},
             )
 
     def _upload_cover_photo(

@@ -71,9 +71,12 @@ class LostPetListItem(BaseModel):
     id: UUID
     author: PostAuthor | None = None
     pet_name: str
-    owner_phone_number: str
+    # Contact details are only included on the detail endpoint for signed-in viewers (see
+    # docs/CONTACT_PRIVACY.md); list, feed and anonymous responses carry `contact_available`.
+    owner_phone_number: str | None = None
     owner_telegram_username: str | None = None
     owner_phone_publication_consent: bool
+    contact_available: bool = False
     photo_url: str
     thumb_url: str | None = None
     photo_urls: list[str]
@@ -119,13 +122,37 @@ class LostPetResolutionRequest(BaseModel):
     is_resolved: bool
 
 
-def to_lost_pet_response(item: LostPetRecord) -> LostPetResponse:
-    return LostPetResponse.model_validate(item, from_attributes=True)
+def contact_is_available(item: LostPetRecord) -> bool:
+    return (
+        not item.is_resolved
+        and item.user_id is not None
+        and bool(item.owner_phone_number)
+        and item.owner_phone_number != "[deleted]"
+    )
+
+
+def to_lost_pet_response(item: LostPetRecord, *, include_contact: bool = True) -> LostPetResponse:
+    response = LostPetResponse.model_validate(item, from_attributes=True)
+    update: dict[str, object] = {"contact_available": contact_is_available(item)}
+    if not include_contact:
+        update.update(owner_phone_number=None, owner_telegram_username=None)
+    return response.model_copy(update=update)
+
+
+def to_lost_pet_list_item(item: LostPetRecord) -> LostPetListItem:
+    """List/feed representation: never carries phone or Telegram, only `contact_available`."""
+    return LostPetListItem.model_validate(item, from_attributes=True).model_copy(
+        update={
+            "owner_phone_number": None,
+            "owner_telegram_username": None,
+            "contact_available": contact_is_available(item),
+        }
+    )
 
 
 def to_lost_pet_page_response(page: LostPetPage) -> GenericListResponse[LostPetListItem]:
     return GenericListResponse[LostPetListItem](
-        items=[LostPetListItem.model_validate(item, from_attributes=True) for item in page.items],
+        items=[to_lost_pet_list_item(item) for item in page.items],
         next_cursor=page.next_cursor,
         limit=page.limit,
     )

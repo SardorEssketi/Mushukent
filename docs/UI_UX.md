@@ -357,7 +357,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - shared profile summary surface with large avatar, display name, short bio, and secondary owner-only email, phone, and Telegram details.
   - compact stats: posts, likes received, comments. Posts and Comments open their existing activity screens.
   - Your activity section: My lost pets and My rehoming posts.
-  - Resources and account section: adoption guidance and Settings.
+  - Resources and account section: adoption guidance, Settings, and Feedback (Beta badge; see 5.17.3).
   - moderator-only Moderation reports section.
   - app bar: Donate to author (icon only on compact screens), Edit Profile, and Logout in the overflow menu.
   - donation dialog identifies Sardor Muxtorov as the recipient and shows the existing support card number as selectable text with a copy action.
@@ -378,11 +378,11 @@ Bottom navigation with 5 tabs on main tab roots:
   - same identity and stats surface as the self profile, with name, avatar, short public bio, posts, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
   - Recent posts shows up to four current Feed post cards and a See all action to the existing posts screen; comments open from the stat.
   - on wide screens, the summary stays fixed in the left column while the recent-post list scrolls within the available viewport height; compact screens use one vertical page scroll.
-  - Report and Block appear in the app bar overflow menu. A successful block disables the Block action for that screen session.
+  - Report and Block appear in the app bar overflow menu. The menu offers Block or Unblock depending on whether the viewer has blocked the user; both confirm with a snackbar. Blocked accounts are listed under Settings > Blocked users with an Unblock action.
   - one column on phones; on wide screens, identity/stats and recent posts sit side by side within AppWidths.wide.
 - Interactions:
   - open posts and comments from stats when public activity is enabled; tap a post card for its existing detail route.
-  - Report opens the existing report route. Block retains its sign-in requirement and confirmation.
+  - Report opens the existing report route. Block retains its sign-in requirement and confirmation; Unblock needs no confirmation.
 - Privacy:
   - when public activity is disabled, the profile remains visible, the activity stats do not navigate, and a calm private-activity state replaces the preview. No preview request is sent when privacy is already known.
   - a privacy response during a preview request also suppresses previews and navigation.
@@ -414,12 +414,16 @@ Bottom navigation with 5 tabs on main tab roots:
   - theme selector
   - language selector: English, Uzbek, Russian
   - privacy toggle: allow other people to view my posts and comments
+  - Notifications entry leading to grouped notification preferences
+  - Account Security entry
   - About account entry
   - Save changes button
 - Interaction:
   - theme and language changes remain pending until the user taps Save changes.
   - saving updates the app locale immediately and persists the language preference and activity privacy preference to the authenticated user's profile.
   - successful save returns the user to Profile.
+  - opening Notifications, Account Security, or About account first uses the existing discard-changes confirmation when theme, language, or privacy edits are pending.
+  - notification preferences are reached through Profile -> Settings -> Notifications. The former `/notifications/settings` link redirects to this page.
 
 5.17.2 About Account Screen
 - Purpose: show account metadata that is not part of the main profile summary.
@@ -437,6 +441,19 @@ Bottom navigation with 5 tabs on main tab roots:
   - confirming deletion deactivates the account through the backend and signs the user out.
 - Navigation:
   - Profile -> Settings -> About account.
+
+5.17.3 Feedback Screen (Beta)
+- Purpose: let a signed-in user send a bug report, feature suggestion, or other feedback to the developer.
+- Entry: Profile -> Resources and account -> Feedback (localized: Обратная связь / Feedback / Fikr-mulohaza) with a small Beta badge, directly below Settings. It exists only on the user's own Profile, never on public profiles. Route: `/profile/feedback`.
+- Layout (one column, bounded by AppWidths.readable):
+  - heading "Help improve Mushukistan" and a short friendly description.
+  - category choice as three icon chips: Bug report, Feature suggestion, Other feedback. A category is required; there is no preselected default so reports are not mislabeled.
+  - multiline message field, 10-2,000 characters (trimmed), with a character counter and inline validation.
+  - Send feedback button; while sending it shows a spinner, is disabled, and the form is read-only, so repeat taps cannot duplicate a submission.
+- Success: the form is replaced by a calm confirmation ("Thank you! Your feedback helps us improve Mushukistan.") with a Back to Profile action.
+- Errors (inline banner above the button; the draft is always kept so the user can retry): network failure, expired session (the user is asked to sign in again), rate limit (3 per hour per user), and a generic fallback.
+- Leaving with unsent text asks for confirmation using the shared unsaved-changes dialog; an empty form closes silently.
+- Platform (`web` or `android`) and the optional build-time `MUSHUKISTAN_APP_VERSION` define are attached to the submission. No device identifiers or other data are collected.
 
 5.18 Report Content Screen
 - Purpose: submit moderation report.
@@ -543,9 +560,11 @@ Required screens:
 Notifications
 -------------
 - The authenticated Feed app bar contains a bell with an unread badge. The inbox lists newest first, shows unread state and time, supports load more, and has an explicit Mark all as read action.
+- The Notification Center is the inbox only; its app bar has no settings gear. Preferences belong under Profile -> Settings -> Notifications.
 - Tapping a comment or reply opens its post at the existing comments section. Tapping a nearby Lost Pet opens its detail. A due follow-up push opens Feed so the existing persisted follow-up listener can present the due question. An inactivity push opens Feed, not an empty inbox. Unavailable content is handled without an external URL.
-- Notification settings provide independent Android push choices for comments, replies, follow-ups, nearby Lost Pets, and inactivity. Nearby alerts require an explicit map point; a one-time current-location button is available. Disabling nearby removes the saved point. The fixed radius is 500 m. No background location permission or tracking is used.
-- Android notification permission is requested only after explanatory context in settings. If denied or Firebase is not configured, the inbox remains functional and the setting explains why device push is unavailable. Web uses the inbox without browser push.
+- Profile -> Settings -> Notifications is a read-only status screen for Android permission, configured push availability, and nearby eligibility. It has no category switches, map, point controls, or save/apply buttons. Denied permissions offer the relevant Android system settings. Comments, replies, follow-ups, and inactivity use automatic defaults, including previously disabled preferences. The inbox works without push permission.
+- Nearby Lost Pet alerts use only the last authorized device location after a separate, explicit privacy disclosure and consent, plus Android location permission. The point is private, replaced on authenticated foreground launch/resume, and matched at a fixed 500 m. There is no map selection, fallback Tashkent position, background permission, continuous tracking, or location history. Consent can be withdrawn under Profile -> Settings -> Nearby alert privacy. Missing/revoked permission, disabled location services, withdrawal, and an invalid or unavailable fix clear the point and stop matching when the authenticated app next connects. Offline deletion is retried on a later active resume; a server cannot observe an offline OS permission change. One account retains one point, from the last consenting Android device; device consent is scoped to that account on that installation. Browser activity never uploads or clears an Android point.
+- A first Android push request follows a localized one-time disclosure on authenticated launch; denial does not disable the inbox. OS permission status is independent of Firebase configuration. If push is unavailable, the status screen says so. Web has the inbox without browser push or Android-only actions.
 
 11. Out of Scope for MVP UI
 ---------------------------

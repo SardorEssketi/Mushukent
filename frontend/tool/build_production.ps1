@@ -1,12 +1,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Web', 'Android')]
+    [ValidateSet('Web', 'Android', 'AndroidApk')]
     [string]$Target,
 
     [string]$ApiBaseUrl = 'https://api.mushukistan.uz/api/v1/',
 
-    [string]$GoogleWebClientId = $env:MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID
+    [string]$GoogleWebClientId = $env:MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID,
+
+    [switch]$EnableAndroidPush
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,15 +28,27 @@ if ($normalizedGoogleClientId -notmatch '^\d+-[a-z0-9]+\.apps\.googleusercontent
 }
 
 $frontendRoot = Split-Path -Parent $PSScriptRoot
+if ($Target -eq 'Web' -and $EnableAndroidPush) {
+    throw 'Android push cannot be enabled for Web.'
+}
 Push-Location $frontendRoot
 try {
     if ($Target -eq 'Web') {
         # Keep CanvasKit on the same origin. This avoids Safari/WebKit startup
         # failures when the remote gstatic CanvasKit CDN is blocked or cannot
         # complete its WebAssembly load.
-        & flutter build web --release --no-web-resources-cdn `
-            "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
-            "--dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=$normalizedGoogleClientId"
+        # Windows PowerShell can turn harmless native stderr (for example the
+        # SDK's Wasm dry-run warnings) into terminating ErrorRecords. The native
+        # exit code remains the build gate; keep validation errors terminating.
+        $nativeBuildErrorAction = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            & flutter build web --release --no-web-resources-cdn `
+                "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
+                "--dart-define=MUSHUKISTAN_GOOGLE_CLIENT_ID=$normalizedGoogleClientId"
+        } finally {
+            $ErrorActionPreference = $nativeBuildErrorAction
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "Flutter production web build failed with exit code $LASTEXITCODE."
         }
@@ -77,18 +91,44 @@ try {
         throw 'Android production release requires android/key.properties.'
     }
 
-    & flutter build appbundle --release `
-        "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
-        "--dart-define=MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID=$normalizedGoogleClientId"
+    if ($EnableAndroidPush) {
+        $firebasePath = Join-Path $frontendRoot 'android/app/google-services.json'
+        if (-not (Test-Path -LiteralPath $firebasePath -PathType Leaf)) {
+            throw 'Push-enabled builds require frontend/android/app/google-services.json.'
+        }
+        $firebaseConfig = Get-Content -LiteralPath $firebasePath -Raw | ConvertFrom-Json
+        $firebaseClients = @($firebaseConfig.client | Where-Object {
+            $_.client_info.android_client_info.package_name -eq 'uz.mushukistan.app'
+        })
+        if ($firebaseClients.Count -ne 1) {
+            throw 'Firebase configuration must contain exactly one uz.mushukistan.app Android client.'
+        }
+    }
+    $androidArtifact = if ($Target -eq 'AndroidApk') { 'apk' } else { 'appbundle' }
+    $pushBuildArguments = @()
+    if ($EnableAndroidPush) {
+        $pushBuildArguments = @('--dart-define=ENABLE_ANDROID_PUSH=true')
+    }
+    $nativeBuildErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & flutter build $androidArtifact --release `
+            "--dart-define=MUSHUKISTAN_API_BASE_URL=$normalizedApiBaseUrl" `
+            "--dart-define=MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID=$normalizedGoogleClientId" @pushBuildArguments
+    } finally {
+        $ErrorActionPreference = $nativeBuildErrorAction
+    }
     if ($LASTEXITCODE -ne 0) {
-        throw "Flutter production AAB build failed with exit code $LASTEXITCODE."
+        throw "Flutter production Android build failed with exit code $LASTEXITCODE."
     }
 
-    $appBundle = Join-Path $frontendRoot 'build/app/outputs/bundle/release/app-release.aab'
+    $appBundle = Join-Path $frontendRoot $(if ($Target -eq 'AndroidApk') {
+        'build/app/outputs/flutter-apk/app-release.apk'
+    } else { 'build/app/outputs/bundle/release/app-release.aab' })
     if (-not (Test-Path -LiteralPath $appBundle -PathType Leaf)) {
-        throw 'Android production build did not create app-release.aab.'
+        throw 'Android production build did not create the requested artifact.'
     }
-    Write-Output 'Production Android App Bundle created with explicit release configuration.'
+    Write-Output "Production Android $androidArtifact created with explicit release configuration; push enabled: $EnableAndroidPush."
 } finally {
     Pop-Location
 }

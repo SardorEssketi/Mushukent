@@ -51,7 +51,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CatSummary>>(
       'cats',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'filter': filter,
         if (lat != null) 'lat': lat,
@@ -159,6 +158,21 @@ class MushukistanApi {
     );
   }
 
+  /// Explicit, quota-limited reveal of the owner's contact (see docs/CONTACT_PRIVACY.md).
+  Future<ContactRevealData> revealLostPetContact(String lostPetId) {
+    return _client.postJson<ContactRevealData>(
+      'lost-pets/$lostPetId/contact-reveal',
+      decoder: (json) => ContactRevealData.fromJson(json),
+    );
+  }
+
+  Future<ContactRevealData> revealAdoptionContact(String adoptionPostId) {
+    return _client.postJson<ContactRevealData>(
+      'adoption-posts/$adoptionPostId/contact-reveal',
+      decoder: (json) => ContactRevealData.fromJson(json),
+    );
+  }
+
   Future<List<LostPetFollowUpData>> listDueLostPetFollowUps() {
     return _client.get<List<LostPetFollowUpData>>(
       'lost-pets/follow-ups/due',
@@ -262,7 +276,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'lost-pets',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         if (lat != null) 'lat': lat,
         if (lon != null) 'lon': lon,
@@ -285,7 +298,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<LostPetMapData>>(
       'lost-pets/map',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'bbox': bbox,
         'limit': limit,
@@ -303,7 +315,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<FeedItem>>(
       'adoption-posts',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         if (cursor != null) 'cursor': cursor,
@@ -388,7 +399,6 @@ class MushukistanApi {
   Future<UserPublicData> getPublicProfile(String userId) {
     return _client.get<UserPublicData>(
       'users/$userId',
-      authenticated: false,
       decoder: (json) => UserPublicData.fromJson(json),
     );
   }
@@ -416,7 +426,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CommentData>>(
       'posts/$postId/comments',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,
@@ -486,7 +495,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CommentData>>(
       'lost-pets/$lostPetId/comments',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,
@@ -522,7 +530,6 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<CommentData>>(
       'adoption-posts/$adoptionPostId/comments',
-      authenticated: false,
       queryParameters: <String, dynamic>{
         'limit': limit,
         'order': order,
@@ -665,6 +672,27 @@ class MushukistanApi {
     return _client.delete('users/me');
   }
 
+  /// Sends product feedback. [category] is `bug`, `suggestion` or `other`;
+  /// [platform] is `web` or `android`.
+  Future<void> submitFeedback({
+    required String category,
+    required String message,
+    String? platform,
+    String? appVersion,
+  }) {
+    return _client.postJson<Object?>(
+      'feedback',
+      body: <String, Object?>{
+        'category': category,
+        'message': message,
+        if (platform != null) 'platform': platform,
+        if (appVersion != null && appVersion.isNotEmpty)
+          'app_version': appVersion,
+      },
+      decoder: (_) => null,
+    );
+  }
+
   Future<void> blockUser(String userId) {
     return _client.postJson<Object?>(
       'users/$userId/block',
@@ -675,6 +703,17 @@ class MushukistanApi {
 
   Future<void> unblockUser(String userId) {
     return _client.delete('users/$userId/block');
+  }
+
+  Future<List<BlockedUserData>> listBlockedUsers() {
+    return _client.get<List<BlockedUserData>>(
+      'users/me/blocks',
+      decoder: (json) {
+        final items = _readMap(json)['items'];
+        if (items is! List) return const <BlockedUserData>[];
+        return items.map(BlockedUserData.fromJson).toList(growable: false);
+      },
+    );
   }
 
   Future<UserProfileData> updateAvatar({
@@ -881,12 +920,14 @@ class MushukistanApi {
     required List<LostPetPhotoUpload> photos,
     required String petName,
     String? additionalInfo,
+    bool ownerContactConsent = false,
   }) {
     final formData = FormData.fromMap(
       <String, dynamic>{
         'pet_name': petName.trim(),
         if (additionalInfo != null && additionalInfo.trim().isNotEmpty)
           'additional_info': additionalInfo.trim(),
+        'owner_contact_consent': ownerContactConsent,
         'photos': photos
             .map(
               (photo) => MultipartFile.fromBytes(
@@ -1361,12 +1402,28 @@ class LostPetFollowUpData {
   }
 }
 
+class ContactRevealData {
+  const ContactRevealData({required this.phoneNumber, this.telegramUsername});
+
+  final String phoneNumber;
+  final String? telegramUsername;
+
+  factory ContactRevealData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return ContactRevealData(
+      phoneNumber: _readString(map['phone_number']),
+      telegramUsername: _readStringOrNull(map['telegram_username']),
+    );
+  }
+}
+
 class LostPetData extends FeedItem {
   const LostPetData({
     required this.id,
     required this.petName,
     required this.ownerPhoneNumber,
     this.ownerTelegramUsername,
+    this.contactAvailable = false,
     required this.photoUrl,
     required this.photoUrls,
     required this.lastSeenLocation,
@@ -1386,6 +1443,10 @@ class LostPetData extends FeedItem {
   final String petName;
   final String? ownerPhoneNumber;
   final String? ownerTelegramUsername;
+
+  /// The owner can be contacted. Phone and Telegram are only sent to signed-in viewers on the
+  /// detail endpoint, so guests rely on this flag to see the "Contact owner" action.
+  final bool contactAvailable;
   final String photoUrl;
   final String? thumbUrl;
   final List<String> photoUrls;
@@ -1410,6 +1471,8 @@ class LostPetData extends FeedItem {
           map['author'] == null ? null : PostAuthorData.fromJson(map['author']),
       ownerPhoneNumber: _readStringOrNull(map['owner_phone_number']),
       ownerTelegramUsername: _readStringOrNull(map['owner_telegram_username']),
+      contactAvailable: _readBoolOrNull(map['contact_available']) ??
+          _readStringOrNull(map['owner_phone_number']) != null,
       photoUrl: photoUrl,
       thumbUrl: _readStringOrNull(map['thumb_url']),
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
@@ -1485,6 +1548,7 @@ class AdoptionPostData extends FeedItem {
     required this.petName,
     required this.ownerPhoneNumber,
     this.ownerTelegramUsername,
+    this.contactAvailable = false,
     required this.photoUrl,
     required this.photoUrls,
     required this.createdAt,
@@ -1503,6 +1567,9 @@ class AdoptionPostData extends FeedItem {
   final String petName;
   final String? ownerPhoneNumber;
   final String? ownerTelegramUsername;
+
+  /// See [LostPetData.contactAvailable].
+  final bool contactAvailable;
   final String photoUrl;
   final String? thumbUrl;
   final List<String> photoUrls;
@@ -1526,6 +1593,8 @@ class AdoptionPostData extends FeedItem {
           map['author'] == null ? null : PostAuthorData.fromJson(map['author']),
       ownerPhoneNumber: _readStringOrNull(map['owner_phone_number']),
       ownerTelegramUsername: _readStringOrNull(map['owner_telegram_username']),
+      contactAvailable: _readBoolOrNull(map['contact_available']) ??
+          _readStringOrNull(map['owner_phone_number']) != null,
       photoUrl: photoUrl,
       thumbUrl: _readStringOrNull(map['thumb_url']),
       photoUrls: photoUrls.isEmpty ? [photoUrl] : photoUrls,
@@ -1600,6 +1669,7 @@ class UserPublicData {
     required this.totalLikesReceived,
     required this.commentCount,
     required this.allowPublicActivityView,
+    this.isBlockedByViewer = false,
     this.name,
     this.avatarUrl,
     this.bio,
@@ -1615,6 +1685,9 @@ class UserPublicData {
   final int commentCount;
   final bool allowPublicActivityView;
 
+  /// True when the signed-in viewer has blocked this user.
+  final bool isBlockedByViewer;
+
   factory UserPublicData.fromJson(Object? json) {
     final map = _readMap(json);
     return UserPublicData(
@@ -1628,6 +1701,31 @@ class UserPublicData {
       commentCount: _readInt(map['comment_count']),
       allowPublicActivityView:
           _readBoolOrNull(map['allow_public_activity_view']) ?? true,
+      isBlockedByViewer: _readBoolOrNull(map['is_blocked_by_viewer']) ?? false,
+    );
+  }
+}
+
+class BlockedUserData {
+  const BlockedUserData({
+    required this.id,
+    required this.blockedAt,
+    this.name,
+    this.avatarUrl,
+  });
+
+  final String id;
+  final String? name;
+  final String? avatarUrl;
+  final DateTime blockedAt;
+
+  factory BlockedUserData.fromJson(Object? json) {
+    final map = _readMap(json);
+    return BlockedUserData(
+      id: _readString(map['id']),
+      name: _readStringOrNull(map['name']),
+      avatarUrl: _readStringOrNull(map['avatar_url']),
+      blockedAt: _readDateTime(map['blocked_at']),
     );
   }
 }

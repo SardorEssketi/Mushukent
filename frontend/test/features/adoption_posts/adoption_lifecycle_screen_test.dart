@@ -98,7 +98,9 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Mark as rehomed'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Mark as rehomed'));
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, 'Mark as rehomed')));
     await tester.pumpAndSettle();
     expect(resolved, isTrue);
     expect(container.read(resolvedAdoptionIdsProvider), contains('adoption-1'));
@@ -111,7 +113,7 @@ void main() {
         isNot(contains('adoption-1')));
   });
 
-  testWidgets('creation explains contact without a mandatory checkbox',
+  testWidgets('creation asks for explicit consent about who sees the contact',
       (tester) async {
     final container = _container(FakeApiClient());
     addTearDown(container.dispose);
@@ -120,10 +122,20 @@ void main() {
       child: const MaterialApp(home: AdoptionPostCreateScreen()),
     ));
     await tester.pumpAndSettle();
-    expect(find.byType(CheckboxListTile), findsNothing);
-    await tester.scrollUntilVisible(find.textContaining('Contact Owner'), 250,
+    final consent = find.textContaining('signed-in Mushukistan users');
+    await tester.scrollUntilVisible(consent, 250,
         scrollable: find.byType(Scrollable).first);
-    expect(find.textContaining('Contact Owner'), findsOneWidget);
+    expect(consent, findsOneWidget);
+    expect(
+        find.textContaining('older app versions may show it'), findsOneWidget);
+    expect(
+        find.textContaining('limited number of contacts per day and per week'),
+        findsOneWidget);
+    expect(find.textContaining('never shown to visitors who are not signed in'),
+        findsOneWidget);
+    final checkbox = tester.widget<CheckboxListTile>(
+        find.ancestor(of: consent, matching: find.byType(CheckboxListTile)));
+    expect(checkbox.value, isFalse, reason: 'consent is never pre-checked');
   });
 
   testWidgets('only owner sees edit and delete on a rehomed post',
@@ -141,8 +153,9 @@ void main() {
           home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Edit rehoming post'), 250,
-        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Edit rehoming post'), findsNothing);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     expect(find.text('Edit rehoming post'), findsOneWidget);
     expect(find.text('Delete rehoming post'), findsOneWidget);
     expect(find.text('Contact Owner'), findsNothing);
@@ -162,8 +175,11 @@ void main() {
           home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
     ));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     expect(find.text('Edit rehoming post'), findsNothing);
     expect(find.text('Delete rehoming post'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
   });
 
   testWidgets('delete requires confirmation', (tester) async {
@@ -179,8 +195,8 @@ void main() {
           home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Delete rehoming post'), 250,
-        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Delete rehoming post'));
     await tester.pumpAndSettle();
     expect(find.text('This rehoming post will be removed.'), findsOneWidget);
@@ -218,8 +234,8 @@ void main() {
     ));
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Delete rehoming post'), 250,
-        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Delete rehoming post'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete'));

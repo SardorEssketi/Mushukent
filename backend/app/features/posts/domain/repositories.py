@@ -61,6 +61,7 @@ class PostRepository(Protocol):
         include_deleted: bool = False,
         viewer_user_id: UUID | None = None,
         for_update: bool = False,
+        respect_blocks: bool = False,
     ) -> PostDetailRecord | None: ...
 
     def list_for_user(

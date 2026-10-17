@@ -76,7 +76,8 @@ Map<String, Object?> _adoption(String id) => {
     };
 
 void _size(WidgetTester tester, double width, double height) {
-  tester.view.physicalSize = Size(width, height);
+  // Guests also see the welcome card above the feed, so leave room for it.
+  tester.view.physicalSize = Size(width, height + 400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -93,6 +94,19 @@ Future<void> _pumpFeed(WidgetTester tester, FakeApiClient client) async {
 }
 
 void main() {
+  testWidgets('guests see the welcome card with sign-up and map entry points',
+      (tester) async {
+    _size(tester, 390, 844);
+    final client = FakeApiClient();
+    client.setHandler('GET', 'feed', (_) => _page([_observation('one')]));
+    await _pumpFeed(tester, client);
+    expect(
+        find.text('Helping cats and pets across Uzbekistan'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
+    expect(find.text('Map'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('initial error retries without changing the selected mode',
       (tester) async {
     _size(tester, 800, 950);
@@ -182,6 +196,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.calls.last.path, 'lost-pets');
     expect(find.text('Today'), findsNothing);
+    await tester.ensureVisible(find.text('Adoption').first);
     await tester.tap(find.text('Adoption').first);
     await tester.pumpAndSettle();
     expect(client.calls.last.path, 'adoption-posts');
@@ -217,6 +232,7 @@ void main() {
       (tester) async {
     _size(tester, 800, 950);
     var attempts = 0;
+    _size(tester, 800, 800);
     final client = FakeApiClient();
     client.setHandler('GET', 'feed', (call) {
       if (call.queryParameters?['cursor'] == 'next') {
@@ -316,6 +332,7 @@ void main() {
                 call.queryParameters?['cursor'] == 'lost-next')
             .length,
         1);
+    await tester.ensureVisible(find.text('Adoption').first);
     await tester.tap(find.text('Adoption').first);
     await tester.pumpAndSettle();
     expect(

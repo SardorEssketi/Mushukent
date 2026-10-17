@@ -5,12 +5,16 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../auth/application/auth_controller.dart';
 import '../data/notification_api.dart';
 import '../presentation/notification_center_screen.dart';
+import '../presentation/nearby_alert_privacy.dart';
+import '../presentation/notification_strings.dart';
+import 'nearby_alerts.dart';
 
 class AndroidPushConfiguration {
   static const enabled = bool.fromEnvironment('ENABLE_ANDROID_PUSH');
@@ -25,6 +29,62 @@ class AndroidPushConfiguration {
   }
 
   static bool get ready => supported && enabled && Firebase.apps.isNotEmpty;
+}
+
+enum DevicePushPermission {
+  web,
+  unavailable,
+  notDetermined,
+  denied,
+  deniedPermanently,
+  allowed,
+}
+
+final devicePushAccessProvider = Provider<DevicePushAccess>((ref) {
+  return DevicePushAccess();
+});
+
+class DevicePushAccess {
+  static const _settingsChannel =
+      MethodChannel('mushukistan/notification_settings');
+
+  bool get available => AndroidPushConfiguration.ready;
+
+  // Android 13+ reports denied both before the first prompt and after denial.
+  // A local one-time disclosure marker prevents repeated requests.
+  static bool shouldExplainPermission(DevicePushPermission status,
+          {required bool alreadyAsked}) =>
+      !alreadyAsked &&
+      (status == DevicePushPermission.notDetermined ||
+          status == DevicePushPermission.denied);
+
+  Future<DevicePushPermission> status() async {
+    if (!AndroidPushConfiguration.supported) return DevicePushPermission.web;
+    if (!AndroidPushConfiguration.ready) {
+      final status = await _settingsChannel
+          .invokeMethod<String>('notificationPermissionStatus');
+      return status == 'allowed'
+          ? DevicePushPermission.allowed
+          : DevicePushPermission.denied;
+    }
+    final settings = await FirebaseMessaging.instance.getNotificationSettings();
+    return switch (settings.authorizationStatus) {
+      AuthorizationStatus.authorized ||
+      AuthorizationStatus.provisional =>
+        DevicePushPermission.allowed,
+      AuthorizationStatus.notDetermined => DevicePushPermission.notDetermined,
+      AuthorizationStatus.deniedPermanently =>
+        DevicePushPermission.deniedPermanently,
+      AuthorizationStatus.denied => DevicePushPermission.denied,
+    };
+  }
+
+  Future<bool> requestPermission() => AndroidPushService.requestPermission();
+
+  Future<void> openSettings() async {
+    if (!AndroidPushConfiguration.supported) return;
+    await _settingsChannel.invokeMethod<void>('openNotificationSettings');
+  }
 }
 
 class AndroidPushService {
@@ -133,10 +193,15 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
   StreamSubscription<RemoteMessage>? _openSubscription;
   RemoteMessage? _pendingOpen;
   Timer? _unreadTimer;
+  late final NearbyAlerts _nearby;
 
   @override
   void initState() {
     super.initState();
+    _nearby = ref.read(nearbyAlertsProvider);
+    final initialLifecycle = WidgetsBinding.instance.lifecycleState;
+    _nearby.foreground(initialLifecycle == null ||
+        initialLifecycle == AppLifecycleState.resumed);
     WidgetsBinding.instance.addObserver(this);
     unawaited(AndroidPushService.retryPendingRevocation().catchError((_) {}));
     _unreadTimer = Timer.periodic(const Duration(minutes: 1), (_) {
@@ -185,8 +250,11 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     if (message.data['kind'] == 'lost_pet_followup' ||
         message.data['kind'] == 'adoption_followup') {
       // The existing feed shell checks the persisted due follow-ups on entry.
+      final auth = ref.read(authControllerProvider);
+      // An unconfirmed (server unreachable) session is still a signed-in user: never send
+      // them to the sign-in page.
       widget.router.go(
-        ref.read(authControllerProvider).isAuthenticated ? '/feed' : '/login',
+        auth.isAuthenticated || auth.hasUnconfirmedSession ? '/feed' : '/login',
       );
       return;
     }
@@ -212,17 +280,57 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     } catch (_) {
       // Activity reporting is advisory; do not block the app.
     }
-    if (!AndroidPushConfiguration.ready ||
-        (_registeredUser == userId && !forceRegistration)) {
+    if (!forceRegistration && mounted && _activeUser == userId) {
+      await _nearby.sync(userId, disclose: () async {
+        final dialogContext =
+            widget.router.routerDelegate.navigatorKey.currentContext;
+        if (dialogContext == null || !mounted || _activeUser != userId) {
+          return false;
+        }
+        return await discloseNearbyAlerts(
+                dialogContext, ref.read(notificationStringsProvider)) ??
+            false;
+      });
+    }
+    if (!mounted || _activeUser != userId) return;
+    if (!AndroidPushConfiguration.ready) {
       return;
     }
     try {
+      final access = ref.read(devicePushAccessProvider);
+      if (DevicePushAccess.shouldExplainPermission(await access.status(),
+          alreadyAsked:
+              await ref.read(nearbyConsentStoreProvider).pushAsked(userId))) {
+        final dialogContext =
+            widget.router.routerDelegate.navigatorKey.currentContext;
+        if (dialogContext == null || !mounted || _activeUser != userId) return;
+        await ref.read(nearbyConsentStoreProvider).markPushAsked(userId);
+        if (!dialogContext.mounted || !mounted || _activeUser != userId) return;
+        final copy = ref.read(notificationStringsProvider);
+        final allowed = await showDialog<bool>(
+            context: dialogContext,
+            builder: (context) => AlertDialog(
+                  content: Text(copy.get('permission_context')),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: Text(copy.get('cancel'))),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: Text(copy.get('allow'))),
+                  ],
+                ));
+        if (!mounted || _activeUser != userId) return;
+        if (allowed == true) await access.requestPermission();
+      }
       if (!await AndroidPushService.authorized()) {
         await AndroidPushService.revokeIfPermissionDenied(
           ref.read(notificationApiProvider),
         );
+        _registeredUser = null;
         return;
       }
+      if (_registeredUser == userId && !forceRegistration) return;
       final token = await AndroidPushService.token();
       if (token != null && mounted && _activeUser == userId) {
         await AndroidPushService.register(
@@ -239,6 +347,7 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _nearby.foreground(state == AppLifecycleState.resumed);
     if (state == AppLifecycleState.resumed && _activeUser != null) {
       unawaited(_sync(_activeUser!));
       ref.invalidate(unreadNotificationCountProvider);
@@ -265,6 +374,7 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     final user = ref.watch(currentUserProvider);
     if (_activeUser != user?.id) {
       _activeUser = user?.id;
+      _nearby.activate(_activeUser);
       _registeredUser = null;
       if (_activeUser != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -277,6 +387,7 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
 
   @override
   void dispose() {
+    _nearby.activate(null);
     WidgetsBinding.instance.removeObserver(this);
     _tokenSubscription?.cancel();
     _messageSubscription?.cancel();

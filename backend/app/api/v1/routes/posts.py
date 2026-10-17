@@ -185,14 +185,16 @@ async def create_post(
     data, uploads, is_json = await _parse_post_request(request)
     payload = _parse_json_payload(data) if is_json else _parse_multipart_payload(data)
     photo_payloads = await read_image_uploads(uploads, purpose="post_create")
-    return ApiSuccess(
-        data=await run_upload_processing(
-            posts_service.create_post,
-            current_user,
-            payload,
-            photos=photo_payloads,
-        )
+    created_post = await run_upload_processing(
+        posts_service.create_post,
+        current_user,
+        payload,
+        photos=photo_payloads,
     )
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("post_created", properties={"photo_count": len(photo_payloads)})
+    return ApiSuccess(data=created_post)
 
 
 @router.get(

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 
 from app.api.v1.uploads import read_image_upload, run_upload_processing
 from app.core.dependencies import (
@@ -29,6 +29,7 @@ from app.features.users.application.schemas import (
     AccountDeletionRequest,
     AccountDeletionRequestResponse,
     AccountDeletionRequestStatus,
+    BlockedUser,
     UserProfile,
     UserPublic,
     UserUpdate,
@@ -56,11 +57,16 @@ def read_me(
     response_model_exclude_none=True,
 )
 def update_me(
+    request: Request,
     payload: UserUpdate,
     current_user: AuthUser = Depends(get_current_active_user),
     users_service: UsersService = Depends(get_users_service),
 ) -> ApiSuccess[UserProfile]:
-    return ApiSuccess(data=users_service.update_me(current_user, payload))
+    updated_user = users_service.update_me(current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("profile_updated")
+    return ApiSuccess(data=updated_user)
 
 
 @router.delete(
@@ -97,6 +103,18 @@ def confirm_account_deletion(
 ) -> AccountDeletionConfirmResponse:
     users_service.confirm_external_account_deletion(payload.token)
     return ApiSuccess(data=AccountDeletionConfirmStatus())
+
+
+@router.get(
+    "/me/blocks",
+    response_model=ApiSuccess[GenericListResponse[BlockedUser]],
+)
+def list_blocked_users(
+    current_user: AuthUser = Depends(get_current_active_user),
+    users_service: UsersService = Depends(get_users_service),
+) -> ApiSuccess[GenericListResponse[BlockedUser]]:
+    items = users_service.list_blocked_users(current_user)
+    return ApiSuccess(data=GenericListResponse[BlockedUser](items=items, limit=200))
 
 
 @router.post(
@@ -157,9 +175,10 @@ async def update_my_avatar(
 )
 def read_public_profile(
     user_id: UUID,
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     users_service: UsersService = Depends(get_users_service),
 ) -> ApiSuccess[UserPublic]:
-    return ApiSuccess(data=users_service.get_public_profile(user_id))
+    return ApiSuccess(data=users_service.get_public_profile(user_id, current_user))
 
 
 @router.get(

@@ -1,6 +1,6 @@
 # Mushukistan Privacy Policy
 
-Version: 2026-08-21
+Version: 2026-10-15
 
 This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.
 
@@ -46,10 +46,10 @@ Location data:
 - Cat canonical location.
 - Place-search location.
 - Lost-pet last-seen location.
-- Private notification alert point saved only after explicit selection for nearby Lost Pet alerts.
+- Last authorized device location stored privately only after a separate explicit nearby-alert disclosure and consent, with Android location permission; no location history is stored.
 
 Contact data published by the user:
-- Lost-pet and adoption/rehoming posts may publicly show copied contact details only after explicit publication consent.
+- Lost-pet and adoption/rehoming posts copy your profile phone number (and Telegram username, if you added one). They are shown only after you tick the contact consent box on the post, and only to signed-in Mushukistan users. Visitors who are not signed in never see them, and they are not shown in lists, feeds, maps or notifications. In the current app a signed-in user sees them after tapping Contact Owner; older app versions may show them as soon as the post is opened. Each user can view only a limited number of owners' contacts per day and per week (currently 15 and 40; the operator may change these limits). Mushukistan records which signed-in user viewed which post's contact and when, without storing the contact itself in that record.
 
 Technical and security data:
 - API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.
@@ -86,7 +86,8 @@ Some information may be visible to other users or visitors, depending on the fea
 - Comments.
 - Public profile summaries.
 - Lost-pet photos and last-seen locations.
-- Lost-pet and adoption/rehoming contact details when the user explicitly consented to publish them.
+
+Contact details are not public information: section 2 explains who can see them.
 
 Do not publish another person's private information, photo, phone number, address, or location unless you have permission.
 
@@ -99,18 +100,19 @@ Mushukistan uses or may use these third-party services:
 - Google when a user chooses Google Sign-In.
 - Google Firebase Cloud Messaging for Android push delivery when configured and permitted.
 - OpenStreetMap for map tiles and map/place data.
+- PostHog for server-side product usage analytics, only when configured by the operator.
 
 Email provider: not configured in the verified repository.
 
 Backup provider: not configured in the verified repository.
 
-Mushukistan does not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.
+The Mushukistan apps do not include analytics SDKs, advertising SDKs, crash reporting SDKs, or AI features, and Firebase Analytics collection is disabled in the Android app. Separately, the Mushukistan server can optionally send usage data to PostHog (server-side analytics) when the operator configures it; if it is not configured, nothing is sent. When enabled, it receives event names such as post created, comment created, post liked, report submitted, profile updated, password changed and owner contacted, simple counts such as the number of photos, a pseudonymous account ID (a random identifier, not your email or name) together with your interface language and whether the account is a moderator, so that events can be linked to an account, and health-check log lines. Email addresses, names, phone numbers, Telegram handles, passwords, post text and photos are not sent, automatic error reports are turned off, and PostHog is told not to derive a location. Android notifications use Firebase Cloud Messaging (Google) after device notification permission is granted. The web app has an in-app inbox but no browser push.
 
 The notification inbox stores event type, relevant content/comment identifiers, actor and recipient references, creation time, and read time. Android push delivery stores encrypted device tokens and token hashes, preferences, bounded delivery attempts, and errors without full token values in ordinary logs. Push messages contain no phone numbers, Telegram handles, precise pet coordinates, private alert coordinates, or full comment text.
 
-Nearby Lost Pet alerts are disabled until you explicitly choose a private alert point and enable them. New active Lost Pets within a fixed 500 m radius may then produce inbox and Android push alerts. You can choose the point on a map or use your current location once when you tap the location action. Mushukistan does not collect background or continuous location for notifications. Disabling nearby alerts removes the saved point.
+Nearby Lost Pet alerts use only the last authorized device location after a separate, explicit privacy disclosure and consent, plus Android location permission. The point is private, replaced on authenticated foreground launch/resume, and matched at a fixed 500 m. There is no map selection, fallback Tashkent position, background permission, continuous tracking, or location history. Consent can be withdrawn under Profile -> Settings -> Nearby alert privacy. Missing/revoked permission, disabled location services, withdrawal, and an invalid or unavailable fix clear the point and stop matching when the authenticated app next connects. Offline deletion is retried on a later active resume; a server cannot observe an offline OS permission change. One account retains one point, from the last consenting Android device; device consent is scoped to that account on that installation. Browser activity never uploads or clears an Android point.
 
-Inactivity reminders are off by default, push-only, and sent once after seven full days without authenticated app activity. Mushukistan records a coarse last-active time on authenticated launch or resume, with database writes throttled to at most once per 15 minutes. Returning starts a new inactivity period. Separate settings control Android pushes for comments, replies, existing pet follow-ups, nearby Lost Pets, and inactivity.
+Comments, replies, pet follow-ups, and inactivity reminders are enabled automatically, including previously saved disabled category choices. Inactivity reminders are push-only, once after seven full inactive days; Android push requires operating-system permission. The in-app inbox remains available when push is denied. Nearby alerts additionally require explicit privacy consent and an authorized location as described above.
 
 ## 7. Cookies and browser storage
 

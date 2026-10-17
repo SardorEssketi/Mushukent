@@ -345,15 +345,27 @@ Feature: Users
 - Rate limit: auth-style anonymous rate limit.
 
 7) POST /api/v1/users/{user_id}/block
-- Purpose: Block another active user.
+- Purpose: Block another active user. Idempotent: repeating the call returns 204 again.
 - Auth: Bearer required
 - Response: 204 No Content
 - Errors: 401 UNAUTHORIZED, 404 USER_NOT_FOUND, 422 VALIDATION_ERROR when blocking yourself
+- Effect: the two users stop seeing and interacting with each other's content; see docs/BLOCKING.md.
 
 8) DELETE /api/v1/users/{user_id}/block
-- Purpose: Remove a block created by the current user.
+- Purpose: Remove a block created by the current user. Idempotent; never removes a block created by the other user.
 - Auth: Bearer required
 - Response: 204 No Content
+
+Owner contact details (lost-pet and adoption posts): owner_phone_number and owner_telegram_username are never returned to anonymous users or in list, feed, map and mine responses (they carry contact_available). Signed-in users obtain them with POST /api/v1/lost-pets/{id}/contact-reveal or POST /api/v1/adoption-posts/{id}/contact-reveal (200 {phone_number, telegram_username}; 401, 403 owner, 404 not active/blocked, 429 CONTACT_REVEAL_LIMIT with Retry-After; limits CONTACT_REVEAL_MAX_PER_DAY/WEEK). Clients send X-Contact-Mode: reveal; legacy clients without the header still receive contacts on detail responses within the same quota while CONTACT_LEGACY_DETAIL_ENABLED=true. Adoption create accepts owner_contact_consent (boolean; required true when X-Contact-Mode: reveal). See docs/CONTACT_PRIVACY.md.
+
+8a) POST /api/v1/auth/legal/accept (auth required): body {accept_terms, accept_privacy, terms_version, privacy_version}. Both flags must be true and the versions must equal the current ones (422 LEGAL_ACCEPTANCE_REQUIRED, 409 LEGAL_VERSION_MISMATCH with current_terms_version/current_privacy_version in details). Records the accepted versions and time and returns the user. User objects returned by login, google, refresh and users/me include legal_acceptance_required, current_terms_version and current_privacy_version; sign-in never fails because acceptance is outdated. See docs/CONTACT_PRIVACY.md.
+
+8b) GET /api/v1/users/me/blocks
+- Purpose: List users the current user has blocked, newest first.
+- Auth: Bearer required
+- Response: { items: [{ id, name, avatar_url, blocked_at }], limit }
+- Notes: GET /api/v1/users/{user_id} also returns is_blocked_by_viewer (false for anonymous viewers).
+- Blocking semantics for feed, comments, likes, contact and notifications are defined in docs/BLOCKING.md.
 
 Feature: Cats
 -------------
@@ -428,7 +440,7 @@ Feature: Cats
 3) PATCH /api/v1/cats/{cat_id}
 - Purpose: Update cat metadata
 - Auth: Bearer required
-- Authorization: moderators can change status and merged_into; normal users can suggest (for MVP allow users to update non-sensitive fields but require moderation for merges)
+- Authorization: only the creator of the cat record or a moderator may update it (others get 403); status and merged_into are moderator-only. cover_photo_url must point at platform media storage (422 otherwise). See docs/CAT_EDITING.md.
 - Request model: CatUpdate
   Example:
   {"name":"New Name","status":"healthy","cover_photo_url":"..."}
@@ -1008,6 +1020,25 @@ Feature: Leaderboards
    - deterministic tie-breaking: the selected metric descending, then user ID ascending
 - Pydantic: LeaderboardResponse
 
+Feature: Feedback
+-----------------
+1) POST /api/v1/feedback
+- Purpose: a signed-in user sends product feedback to the developer
+- Auth: Bearer (active account)
+- Request model: FeedbackCreate
+  Example:
+  {
+    "category":"bug",
+    "message":"The map freezes when switching between tabs.",
+    "platform":"android",
+    "app_version":"0.1.0+8"
+  }
+- Validation: category in bug|suggestion|other; message 10-2000 characters after trimming; platform optional, web|android; app_version optional, up to 32 characters; unknown fields are rejected
+- Response: FeedbackResponse (201) containing only id, category, created_at
+- Errors: 401, 403 (disabled account), 422 (validation), 429 `FEEDBACK_RATE_LIMITED` with a Retry-After header (more than FEEDBACK_RATE_LIMIT_PER_HOUR submissions, default 3, in a rolling hour per user)
+- Notification: after the row is committed, a best-effort Telegram message is sent to the developer in a background task. A missing or failing Telegram configuration never affects the response or the stored feedback.
+- There are no read, list, update or delete endpoints; feedback is read directly from the database and in Telegram.
+
 Feature: Moderation
 -------------------
 1) POST /api/v1/reports
@@ -1087,7 +1118,7 @@ Notification API (authenticated)
 - `GET /api/v1/notifications/unread-count`: `{count}` for the current user.
 - `POST /api/v1/notifications/{id}/read`: mark one of the caller's items read; 404 for another user's or missing item.
 - `POST /api/v1/notifications/read-all`: mark unread items read, returning `{marked}`. Opening the inbox itself does not change read state.
-- `GET/PATCH /api/v1/notifications/preferences`: owner-only product preferences `push_comments`, `push_replies`, `push_followups` (default true), `nearby_enabled`, `inactivity_enabled` (default false), and private `alert_location` (`{latitude, longitude}` or null in the response). `push_available` reports server configuration. Enabling nearby without an alert point returns 422. Setting `nearby_enabled=false` removes the stored point. These fields are never included in public profile responses.
+- `GET/PATCH /api/v1/notifications/preferences`: owner-only status, automatic category defaults `push_comments`, `push_replies`, `push_followups`, and `inactivity_enabled` (all true), `nearby_enabled`, private `alert_location`, and `push_available`. Legacy category patch fields are accepted but cannot disable automatic defaults. Every nearby enable/location upload must include `nearby_enabled=true`, `nearby_consent=true` (explicit disclosure acknowledgement), and an authorized `alert_location` pair. Without consent, enabling returns 422 `NEARBY_CONSENT_REQUIRED`; without a point, 422 `ALERT_LOCATION_REQUIRED`. `nearby_enabled=false` or `nearby_consent=false` removes the stored point. Nearby consent is never inferred from category normalization or OS permission. Automatic location writes/clears also send `expected_user_id`; a mismatch with the authenticated account returns 409 `SESSION_CHANGED` before any preference/location write, guarding account switches during token acquisition. These fields are never included in public profiles. Rollout compatibility: older installed clients may still submit the exact explicit save-point pair (`nearby_enabled=true` plus `alert_location`) without either new field. This retains their existing disclosure/owner-action contract. Bare enabling, point-only writes, explicit refusal, and modern automatic writes missing `nearby_consent=true` remain rejected; OS permission never implies consent.
 - `POST /api/v1/notifications/activity`: coarse authenticated launch/resume signal; the server limits writes to once per 15 minutes. 204.
 - `POST /api/v1/notifications/devices` and `POST /api/v1/notifications/devices/unregister`: body `{platform:"android",token:"..."}`. Registration may also include `previous_token` to replace an older token belonging to the same authenticated user atomically. These endpoints require the current user. Registration returns 503 until private FCM configuration is provisioned. Tokens are encrypted at rest, hashed for uniqueness, and never returned by public APIs.
 

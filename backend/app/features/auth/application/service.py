@@ -21,7 +21,10 @@ from app.core.auth import (
 )
 from app.core.config import Settings
 from app.core.security import api_error
-from app.features.auth.application.schemas import CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION
+from app.features.auth.application.schemas import (
+    CURRENT_PRIVACY_VERSION,
+    CURRENT_TERMS_VERSION,
+)
 from app.features.auth.domain.models import AuthUser
 from app.features.auth.domain.repositories import AuthUserRepository
 from app.features.auth.infrastructure.email import EmailVerificationSender
@@ -336,11 +339,12 @@ class AuthService(AuthenticationService):
                     accepted_legal_at=datetime.now(UTC),
                 )
             else:
-                if not self._has_current_legal_acceptance(user):
-                    self._validate_legal_acceptance(
-                        accept_terms=accept_terms,
-                        accept_privacy=accept_privacy,
-                    )
+                if not self._has_current_legal_acceptance(user) and (
+                    accept_terms and accept_privacy
+                ):
+                    # Outdated acceptance is not a reason to refuse a valid Google sign-in
+                    # (that would lock people out). Without explicit consent in this request
+                    # the session is issued and the client must ask via /auth/legal/accept.
                     user.accepted_terms_version = CURRENT_TERMS_VERSION
                     user.accepted_privacy_version = CURRENT_PRIVACY_VERSION
                     user.accepted_legal_at = datetime.now(UTC)
@@ -356,6 +360,49 @@ class AuthService(AuthenticationService):
             principal = self._principal_from_user(user)
 
         return self._issue_session(user, principal)
+
+    def accept_legal(
+        self,
+        user_id: UUID,
+        *,
+        accept_terms: bool,
+        accept_privacy: bool,
+        terms_version: str,
+        privacy_version: str,
+    ) -> AuthUser:
+        """Record an explicit acceptance of the *current* documents.
+
+        The client must name the versions it showed; a stale screen is refused (409) so a
+        user can never be recorded as accepting text they did not see. Sessions are untouched.
+        """
+        self._validate_legal_acceptance(accept_terms=accept_terms, accept_privacy=accept_privacy)
+        if terms_version != CURRENT_TERMS_VERSION or privacy_version != CURRENT_PRIVACY_VERSION:
+            raise api_error(
+                409,
+                "LEGAL_VERSION_MISMATCH",
+                "The documents changed. Review the current versions and accept again.",
+                details={
+                    "current_terms_version": CURRENT_TERMS_VERSION,
+                    "current_privacy_version": CURRENT_PRIVACY_VERSION,
+                },
+            )
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            user = repository.get_by_id_for_update(user_id)
+            if user is None or not user.is_active:
+                raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
+            if self._has_current_legal_acceptance(user):
+                return user  # idempotent: keep the original acceptance time
+            user.accepted_terms_version = CURRENT_TERMS_VERSION
+            user.accepted_privacy_version = CURRENT_PRIVACY_VERSION
+            user.accepted_legal_at = datetime.now(UTC)
+            logger.info(
+                "legal_acceptance_recorded",
+                user_id=str(user.id),
+                terms_version=CURRENT_TERMS_VERSION,
+                privacy_version=CURRENT_PRIVACY_VERSION,
+            )
+            return repository.save(user)
 
     def get_sign_in_methods(self, user_id: UUID) -> dict[str, bool]:
         with self.db_session_manager.session_scope() as session:
@@ -618,7 +665,7 @@ class AuthService(AuthenticationService):
 
     @property
     def _is_dev_verification_flow(self) -> bool:
-        return self.settings.app_env.casefold() == "development"
+        return self.settings.allows_dev_diagnostics
 
     def _emit_verification_link(self, email: str, token: str) -> None:
         self.email_verification_sender.send_verification_email(email=email, token=token)

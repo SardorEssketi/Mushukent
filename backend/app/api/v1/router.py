@@ -5,6 +5,7 @@ from app.api.v1.routes.auth import router as auth_router
 from app.api.v1.routes.cats import router as cats_router
 from app.api.v1.routes.comments import router as comments_router
 from app.api.v1.routes.feed import router as feed_router
+from app.api.v1.routes.feedback import router as feedback_router
 from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.leaderboards import router as leaderboards_router
 from app.api.v1.routes.likes import router as likes_router
@@ -29,6 +30,7 @@ api_v1_router.include_router(lost_pets_router, tags=["lost-pets"])
 api_v1_router.include_router(adoption_posts_router, tags=["adoption-posts"])
 api_v1_router.include_router(leaderboards_router, tags=["leaderboards"])
 api_v1_router.include_router(reports_router, tags=["reports"])
+api_v1_router.include_router(feedback_router, tags=["feedback"])
 api_v1_router.include_router(moderation_router, tags=["moderation"])
 api_v1_router.include_router(notifications_router, tags=["notifications"])
 api_v1_router.include_router(places_router, tags=["places"])

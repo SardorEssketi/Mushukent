@@ -75,9 +75,24 @@ Behavior:
 Notes:
 - Implementation can use in-process limiter for MVP.
 - External distributed limiter (Redis) is out of MVP scope.
-- Current MVP implementation uses an in-process fixed-window limiter. This is sufficient for a single backend process and should be replaced with a shared Redis-backed limiter before horizontal scaling.
+- Current MVP implementation uses an in-process sliding-window limiter. It is exact for a single backend process (the deployed configuration: one uvicorn process, no `--workers`) and should be replaced with a shared Redis-backed limiter before running several workers or replicas, because each process keeps its own counters.
+- Identity of a caller: a Bearer token only counts as a user when its signature, expiry, issuer, audience and type verify (bucket `user:<id>`, shared by all of that user's tokens). Anything else (missing, malformed, forged, expired, oversized) is rate-limited as an anonymous client by address. An invalid token can never create its own bucket.
+- Address identity: the rightmost `X-Forwarded-For` entry that is not itself a trusted proxy, only when the immediate peer is trusted; otherwise the peer address. IPv6 callers are keyed by their /64; IPv4-mapped IPv6 by the IPv4 address. Callers behind one NAT share one anonymous bucket by design; signed-in users keep their own bucket.
+- Memory: idle keys are swept every 30 s and the store is capped at 50,000 live keys (least recently active evicted first), so memory is bounded by traffic in the last window, not by the number of distinct identities seen.
 - The limiter is split into rate-limit policy and storage. `RATE_LIMIT_BACKEND=memory` is active now; `RATE_LIMIT_BACKEND=redis` and `RATE_LIMIT_REDIS_URL` are reserved for a future Redis-backed store so route behavior and response envelopes do not need to change.
 - Forwarded client IPs are used only when the immediate peer is in `TRUSTED_PROXY_CIDRS`; the proxy chain is walked from the trusted edge toward the first untrusted address. Direct clients cannot choose their rate-limit identity with `X-Forwarded-For`.
+
+Deployment requirements for the settings above:
+- Security-critical settings fail closed: `APP_ENV` defaults to `production` and must be one of `development`, `test`, `staging`, `production` (anything else stops startup). Production-like environments additionally require `APP_DEBUG=false`, `RATE_LIMIT_ENABLED=true`, a symmetric `JWT_ALGORITHM` (HS256/384/512) and the secrets listed below. Every process that loads settings (API, notification worker, `alembic upgrade head`, scripts) needs `APP_ENV` set explicitly, or a complete production environment. The backend must only be reachable through nginx: client addresses for rate limiting come from the `X-Forwarded-For` entry nginx appends, and `TRUSTED_PROXY_CIDRS` must cover the nginx container. If a CDN or load balancer is ever placed in front of nginx, configure nginx `real_ip` for it first, otherwise every client appears as the CDN address.
+
+Analytics (PostHog)
+-------------------
+- Optional. With `POSTHOG_PROJECT_TOKEN` and `POSTHOG_HOST` both set the API sends events and logs to PostHog; otherwise (missing or partial configuration) analytics are disabled and a warning naming the missing setting is logged. The API and the test suite start either way.
+- Startup or runtime PostHog failures (bad configuration, library errors, an unreachable host) never fail a request: every call goes through `app/core/analytics.py`, which logs the error type (never values) at most once a minute and drops the event. Application exceptions are not caught by this layer.
+- Data minimisation: PostHog receives events (names plus `photo_count`, `comment_target`, `login_method`), the pseudonymous account id, `preferred_language` and `is_moderator`. It never receives email, name, phone, Telegram, bio or free text; `enable_exception_autocapture` is **off** (stack traces and messages can contain personal data) and `disable_geoip` is on. Tests: `backend/tests/test_analytics_privacy.py` (also scans every `capture`/`set` call for unapproved properties).
+- Earlier versions sent `email` and `name` as person properties. Disabling that in code does not remove what a PostHog project already stored: if analytics were ever enabled in production, delete or anonymize the existing person properties (and review retained events) in PostHog.
+- `POSTHOG_REQUIRED=true` is the deliberate fail-fast switch: startup stops if PostHog is not configured or cannot be initialised. It is off by default, including in production, so an analytics problem cannot take the product down; enable it if missing analytics must block a release.
+- Shutdown is bounded (log flush at most 3 s) and releases the client, its exit hook and the log exporter, so restarts and repeated test runs do not accumulate them.
 
 6. File Upload Security
 -----------------------
@@ -107,6 +122,7 @@ Notes:
 - Google OAuth client configuration
 - Cloudflare R2 access key and secret key
 - Resend API key for transactional email delivery
+- Telegram bot token and feedback chat id (feedback notifications; optional)
 
 7.2 Rules
 - Secrets must come from environment variables.

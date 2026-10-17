@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mushukistan_frontend/core/localization/language_controller.dart';
 import 'package:mushukistan_frontend/core/location/location_service.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/routing/app_router.dart';
@@ -15,13 +17,21 @@ import 'package:mushukistan_frontend/features/auth/application/auth_controller.d
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/screens/login_screen.dart';
+import 'package:mushukistan_frontend/features/auth/presentation/screens/session_unavailable_screen.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/google_sign_in_entry_button.dart';
 import 'package:mushukistan_frontend/features/auth/presentation/widgets/legal_consent_text.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/notifications/application/notification_push.dart';
+import 'package:mushukistan_frontend/features/notifications/application/nearby_alerts.dart';
 import 'package:mushukistan_frontend/features/profile/presentation/screens/profile_screen.dart';
 
 import '../../support/fakes.dart';
+
+class _BrowserNotificationAccess extends DevicePushAccess {
+  @override
+  Future<DevicePushPermission> status() async => DevicePushPermission.web;
+}
 
 Widget _buildApp(ProviderContainer container,
     {bool useProductionRoot = false}) {
@@ -161,6 +171,8 @@ ProviderContainer _containerWithRepo(
         googleIdentityTokens ?? FakeGoogleIdentityTokenProvider(),
       ),
       apiClientProvider.overrideWithValue(fakeApiClient),
+      nearbyAlertsAndroidProvider.overrideWithValue(false),
+      devicePushAccessProvider.overrideWithValue(_BrowserNotificationAccess()),
       authenticatedOnboardingStoreProvider.overrideWithValue(
         InMemoryAuthenticatedOnboardingStore(
           seenUserIds: {'11111111-1111-4111-8111-111111111111'},
@@ -263,31 +275,50 @@ void main() {
     expect(find.byType(NotificationLifecycle), findsOneWidget);
   });
 
-  testWidgets('invalid and unavailable session restoration leave guest UI',
-      (tester) async {
-    for (final result in <SessionRestoreResult>[
-      const SessionRestoreInvalid(message: 'Session expired.'),
-      const SessionRestoreFailure(message: 'Backend unavailable.'),
-    ]) {
-      final container = _containerWithRepo(
-        FakeAuthRepository(restoreResult: result),
-      );
-      await _pumpApp(tester, container);
-      await tester.pumpAndSettle();
+  testWidgets('invalid session restoration leaves guest UI', (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: const SessionRestoreInvalid(message: 'Session expired.'),
+      ),
+    );
+    addTearDown(container.dispose);
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
 
-      expect(
-        container
-            .read(appRouterProvider)
-            .routeInformationProvider
-            .value
-            .uri
-            .path,
-        '/feed',
-      );
-      expect(find.textContaining('Mushu'), findsWidgets);
-      container.dispose();
-      await tester.pumpWidget(const SizedBox.shrink());
-    }
+    expect(
+      container.read(appRouterProvider).routeInformationProvider.value.uri.path,
+      '/feed',
+    );
+    expect(find.textContaining('Mushu'), findsWidgets);
+    expect(find.text('Login'), findsWidgets);
+    expect(find.text('Create account'), findsWidgets);
+  });
+
+  testWidgets('unavailable backend keeps the session and shows no guest UI',
+      (tester) async {
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: const SessionRestoreFailure(
+          message: 'Backend unavailable.',
+        ),
+      ),
+    );
+    await _pumpApp(tester, container);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final state = container.read(authControllerProvider);
+    expect(state.phase, AuthPhase.sessionUnavailable);
+    expect(
+      container.read(appRouterProvider).routeInformationProvider.value.uri.path,
+      '/feed',
+    );
+    // The signed-out welcome card and Login button would wrongly suggest a logout.
+    expect(find.text('Login'), findsNothing);
+    expect(find.text('Create account'), findsNothing);
+    expect(find.text('Can’t reach the server'), findsOneWidget);
+    expect(find.text('Retry'), findsWidgets);
+    container.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('guest like action requests authentication', (tester) async {
@@ -394,7 +425,7 @@ void main() {
     expect(container.read(authControllerProvider).isAuthenticated, isTrue);
     expect(router.routeInformationProvider.value.uri.path, '/feed');
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -426,6 +457,42 @@ void main() {
     expect(find.text('Continue browsing'), findsOneWidget);
   });
 
+  testWidgets('legacy notification settings link redirects to Settings child',
+      (tester) async {
+    final api = FakeApiClient()
+      ..setHandler(
+          'GET',
+          'notifications/preferences',
+          (_) => {
+                'push_comments': true,
+                'push_replies': true,
+                'push_followups': true,
+                'nearby_enabled': false,
+                'inactivity_enabled': false,
+                'push_available': false,
+                'alert_location': null,
+              });
+    final container = _containerWithRepo(
+      FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(AuthSession.restored(
+          accessToken: 'token-123',
+          user: testUser(),
+        )),
+      ),
+      apiClient: api,
+    );
+    addTearDown(container.dispose);
+    await _pumpApp(tester, container);
+    await tester.pumpAndSettle();
+    final router = container.read(appRouterProvider);
+    router.go('/notifications/settings');
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path,
+        '/profile/settings/notifications');
+    expect(find.text('Notifications'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('authenticated users are redirected away from login',
       (tester) async {
     final container = _containerWithRepo(
@@ -448,7 +515,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -468,7 +535,7 @@ void main() {
     container.read(appRouterProvider).go('/moderation/reports');
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(AppBar, 'Profile'), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsOneWidget);
   });
 
   testWidgets('moderators can open moderation routes', (tester) async {
@@ -502,7 +569,7 @@ void main() {
     await _pumpApp(tester, container);
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(find.text('Join Mushukistan'), findsNothing);
@@ -511,7 +578,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -545,7 +612,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(find.text('Join Mushukistan'), findsNothing);
@@ -565,7 +632,7 @@ void main() {
     expect(
         container.read(authControllerProvider).phase, AuthPhase.authenticated);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(find.text('Join Mushukistan'), findsNothing);
@@ -606,7 +673,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -784,7 +851,7 @@ void main() {
         expect(repo.lastGoogleIdToken, 'google-id-token');
         expect(repo.registerCalls, 0);
         expect(
-          find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+          find.byType(FeedScreen),
           findsOneWidget,
         );
         expect(
@@ -839,7 +906,7 @@ void main() {
               .path,
           '/feed');
       expect(
-        find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+        find.byType(FeedScreen),
         findsOneWidget,
       );
     });
@@ -913,7 +980,7 @@ void main() {
     expect(repo.lastGoogleIdToken, 'google-id-token');
     expect(find.byType(Checkbox), findsNothing);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
   });
@@ -1046,10 +1113,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Feed')),
+      find.byType(FeedScreen),
       findsOneWidget,
     );
     expect(repo.logoutCalled, isTrue);
+  });
+
+  testWidgets('switching accounts without a restart switches the UI language',
+      (tester) async {
+    FlutterSecureStorage.setMockInitialValues({});
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+    final userA = testUser(preferredLanguage: 'en');
+    final userB = testUser(
+      id: '22222222-2222-4222-8222-222222222222',
+      email: 'b@example.com',
+      name: 'User B',
+      preferredLanguage: 'ru',
+    );
+    final repo = FakeAuthRepository(
+      restoreResult: SessionRestoreSuccess(
+        AuthSession.restored(accessToken: 'access-a', user: userA),
+      ),
+      loginResult: AuthSession.restored(accessToken: 'access-b', user: userB),
+    );
+    final container = _containerWithRepo(repo);
+    await _pumpApp(tester, container, useProductionRoot: true);
+    await tester.pumpAndSettle();
+    final controller = container.read(authControllerProvider.notifier);
+    await controller.restoreSession();
+    await tester.pumpAndSettle();
+    expect(container.read(appLanguageProvider), AppLanguage.english);
+
+    await controller.logout();
+    await tester.pumpAndSettle();
+    await controller.login(
+        const AuthCredentials(email: 'b@example.com', password: 'Password123'));
+    await tester.pumpAndSettle();
+    expect(container.read(appLanguageProvider), AppLanguage.russian);
+
+    container.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   test('account switch clears cached profile and viewer overrides', () async {
@@ -1110,5 +1213,570 @@ void main() {
     expect(container.read(authControllerProvider).user, isNull);
     repo.logoutCompleter!.complete();
     await logout;
+  });
+
+  group('login opened from the feed Login button', () {
+    setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
+    // Found on a real Android device: the feed opens Login with `context.push`, and after a
+    // successful sign-in the app stayed on the Login screen until it was restarted.
+    testWidgets(
+        'a successful login from the pushed Login screen reaches the feed',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: const SessionRestoreMissing(),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-123',
+          user: testUser(),
+        ),
+      );
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Login'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsOneWidget);
+
+      await tester.enterText(
+          find.byType(TextFormField).first, 'user@example.com');
+      await tester.enterText(find.byType(TextFormField).last, 'password1');
+      await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(find.byType(LoginScreen), findsNothing,
+          reason: 'the Login screen must not stay on top after signing in');
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('the same holds after logging out and in again',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-2',
+          user: testUser(),
+        ),
+      );
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      await container.read(authControllerProvider.notifier).logout();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Login'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byType(TextFormField).first, 'user@example.com');
+      await tester.enterText(find.byType(TextFormField).last, 'password1');
+      await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LoginScreen), findsNothing);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+  });
+
+  group('versioned legal acceptance', () {
+    const pendingId = '11111111-1111-4111-8111-111111111111';
+
+    FakeAuthRepository pendingRepo({
+      Object? acceptError,
+      MushukistanUser? accepted,
+    }) {
+      return FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(
+            accessToken: 'token',
+            user: testUser(id: pendingId, legalAcceptanceRequired: true),
+          ),
+        ),
+      )
+        ..acceptLegalError = acceptError
+        ..acceptLegalResult = accepted ?? testUser(id: pendingId);
+    }
+
+    Future<ProviderContainer> start(
+      WidgetTester tester,
+      FakeAuthRepository repo,
+    ) async {
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      return container;
+    }
+
+    testWidgets('a user with outdated acceptance sees the update screen first',
+        (tester) async {
+      final repo = pendingRepo();
+      await start(tester, repo);
+
+      expect(
+          find.text('We updated our Terms and Privacy Policy'), findsWidgets);
+      expect(find.text('Accept and continue'), findsOneWidget);
+      // Opening the app is never acceptance.
+      expect(repo.acceptLegalCalls, 0);
+    });
+
+    testWidgets('the update title appears once, in every language, untruncated',
+        (tester) async {
+      final repo = pendingRepo();
+      final container = await start(tester, repo);
+      for (final entry in {
+        AppLanguage.english: 'We updated our Terms and Privacy Policy',
+        AppLanguage.russian:
+            'Мы обновили Условия и Политику конфиденциальности',
+        AppLanguage.uzbek:
+            'Foydalanish shartlari va Maxfiylik siyosatini yangiladik',
+      }.entries) {
+        container.read(appLanguageProvider.notifier).state = entry.key;
+        await tester.pumpAndSettle();
+        expect(find.text(entry.value), findsOneWidget, reason: '${entry.key}');
+        expect(find.byType(AppBar), findsNothing);
+      }
+    });
+
+    testWidgets('accepting records the named versions and continues',
+        (tester) async {
+      final repo = pendingRepo();
+      await start(tester, repo);
+
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+
+      expect(repo.acceptLegalCalls, 1);
+      expect(repo.lastAcceptedTermsVersion, '2026-10-15');
+      expect(repo.lastAcceptedPrivacyVersion, '2026-10-15');
+      expect(find.text('Accept and continue'), findsNothing);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('a failed acceptance keeps the screen, explains and can retry',
+        (tester) async {
+      final repo = pendingRepo(
+        acceptError: const MushukistanApiException(
+          kind: ApiFailureKind.network,
+          code: 'NETWORK_ERROR',
+          message: 'offline',
+        ),
+      );
+      await start(tester, repo);
+
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not save your acceptance'),
+          findsOneWidget);
+      expect(find.text('Accept and continue'), findsOneWidget);
+
+      repo.acceptLegalError = null;
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+      expect(repo.acceptLegalCalls, 2);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('changed documents are explained, not silently accepted',
+        (tester) async {
+      final repo = pendingRepo(
+        acceptError: const MushukistanApiException(
+          kind: ApiFailureKind.conflict,
+          code: 'LEGAL_VERSION_MISMATCH',
+          message: 'changed',
+        ),
+      );
+      await start(tester, repo);
+      await tester.tap(find.text('Accept and continue'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('documents changed again'), findsOneWidget);
+      expect(find.text('Accept and continue'), findsOneWidget);
+    });
+
+    testWidgets('both documents can be read and logout stays available',
+        (tester) async {
+      final repo = pendingRepo();
+      await start(tester, repo);
+
+      await tester.tap(find.text('Terms of Service'));
+      await tester.pumpAndSettle();
+      expect(find.text('Effective date: 2026-10-15'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Privacy Policy'));
+      await tester.pumpAndSettle();
+      expect(find.text('Effective date: 2026-10-15'), findsOneWidget);
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Logout'));
+      await tester.pumpAndSettle();
+      expect(repo.logoutCalled, isTrue);
+      expect(find.text('Accept and continue'), findsNothing);
+      expect(repo.acceptLegalCalls, 0, reason: 'logging out is not acceptance');
+    });
+
+    testWidgets('a user with current acceptance is not interrupted',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+      );
+      await start(tester, repo);
+      expect(find.text('Accept and continue'), findsNothing);
+      expect(find.byType(FeedScreen), findsOneWidget);
+    });
+
+    testWidgets('account switching evaluates each account on its own',
+        (tester) async {
+      final repo = FakeAuthRepository(
+        restoreResult: SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'token', user: testUser()),
+        ),
+        loginResult: AuthSession.restored(
+          accessToken: 'token-b',
+          user: testUser(
+            id: '22222222-2222-4222-8222-222222222222',
+            email: 'b@example.com',
+            legalAcceptanceRequired: true,
+          ),
+        ),
+      );
+      final container = await start(tester, repo);
+      expect(find.text('Accept and continue'), findsNothing);
+
+      final controller = container.read(authControllerProvider.notifier);
+      await controller.logout();
+      await tester.pumpAndSettle();
+      await controller.login(const AuthCredentials(
+          email: 'b@example.com', password: 'Password123'));
+      await tester.pumpAndSettle();
+      expect(find.text('Accept and continue'), findsOneWidget);
+      expect(repo.acceptLegalCalls, 0);
+    });
+  });
+
+  group('session outage routing', () {
+    SessionRestoreResult confirmed() => SessionRestoreSuccess(
+          AuthSession.restored(accessToken: 'access-a', user: testUser()),
+        );
+    const outage = SessionRestoreFailure(message: 'Backend unavailable.');
+
+    final retryOnScreen = find.descendant(
+      of: find.byType(SessionUnavailableScreen),
+      matching: find.text('Retry'),
+    );
+
+    String path(ProviderContainer container) => container
+        .read(appRouterProvider)
+        .routeInformationProvider
+        .value
+        .uri
+        .path;
+
+    testWidgets(
+        'direct navigation to /profile during an outage shows retry UI, not sign-in',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/session-unavailable');
+      expect(find.text('Can’t reach the server'), findsWidgets);
+      expect(retryOnScreen, findsOneWidget);
+      expect(find.text('Login'), findsNothing);
+      expect(find.text('Create account'), findsNothing);
+      expect(find.byType(ProfileScreen), findsNothing);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'cold load of a protected URL parked on sign-in while checking ends on the retry screen',
+        (tester) async {
+      // The browser reload case found in the real-browser run: the URL is requested while the
+      // session check is still running, then the check ends as "server unreachable".
+      final repo = FakeAuthRepository()
+        ..restoreCompleter = Completer<SessionRestoreResult>();
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pump(const Duration(milliseconds: 50));
+      container.read(appRouterProvider).go('/profile');
+      // The progress spinner animates forever, so settle by a fixed interval instead.
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(path(container), startsWith('/auth-required'));
+
+      repo.restoreCompleter!.complete(outage);
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/session-unavailable');
+      expect(find.text('Login'), findsNothing);
+
+      // Recovery returns to the page that was requested originally.
+      repo.restoreCompleter = null;
+      repo.restoreResult = confirmed();
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+      expect(path(container), '/profile');
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('Retry restores the session and returns to the requested page',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(path(container), '/session-unavailable');
+
+      // Still down: pressing Retry keeps the user on the same screen, signed in.
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+      expect(path(container), '/session-unavailable');
+      expect(container.read(authControllerProvider).phase,
+          AuthPhase.sessionUnavailable);
+
+      // Backend returns.
+      repo.restoreResult = confirmed();
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(path(container), '/profile');
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('automatic re-check recovers without user action',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/notifications');
+      await tester.pumpAndSettle();
+      expect(path(container), '/session-unavailable');
+
+      repo.restoreResult = confirmed();
+      await tester
+          .pump(const Duration(seconds: 4)); // first automatic attempt (3 s)
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(path(container), '/notifications');
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'cold start during an outage: feed stays public without signed-out UI and recovers',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/feed');
+      expect(find.text('Login'), findsNothing);
+      expect(find.text('Create account'), findsNothing);
+      expect(find.text('Can’t reach the server'), findsOneWidget);
+
+      repo.restoreResult = confirmed();
+      await tester.tap(find.text('Retry').first);
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(find.text('Can’t reach the server'), findsNothing);
+      expect(find.text('Login'), findsNothing);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'a confirmed-invalid answer while waiting ends in the sign-in flow',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+
+      repo.restoreResult =
+          const SessionRestoreInvalid(message: 'Session expired.');
+      await tester.tap(retryOnScreen);
+      await tester.pumpAndSettle();
+
+      expect(container.read(authControllerProvider).phase,
+          AuthPhase.unauthenticated);
+      expect(path(container), '/auth-required');
+      expect(find.text('Login'), findsWidgets);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+        'actions that need a session do not offer sign-in during an outage',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).push('/auth-required?redirect=%2Ffeed');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Can’t reach the server'), findsWidgets);
+      expect(find.text('Login'), findsNothing);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('moderator routes are held back by the outage, not by sign-in',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).go('/moderation/reports');
+      await tester.pumpAndSettle();
+
+      expect(path(container), '/session-unavailable');
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('after explicit logout protected pages require sign-in again',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: confirmed());
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      await container.read(authControllerProvider.notifier).logout();
+      await tester.pumpAndSettle();
+
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(path(container), '/auth-required');
+      expect(find.text('Can’t reach the server'), findsNothing);
+    });
+
+    for (final (language, title, message, retry) in [
+      (
+        AppLanguage.russian,
+        'Не удаётся связаться с сервером',
+        'Вы по-прежнему вошли в аккаунт.',
+        'Повторить',
+      ),
+      (
+        AppLanguage.uzbek,
+        'Serverga ulanib bo‘lmadi',
+        'Siz hisobingizdan chiqmadingiz.',
+        'Qayta urinish',
+      ),
+    ]) {
+      testWidgets('outage screen is localized: ${language.code}',
+          (tester) async {
+        final repo = FakeAuthRepository(restoreResult: outage);
+        final container = _containerWithRepo(repo);
+        container.read(appLanguageProvider.notifier).state = language;
+        await _pumpApp(tester, container);
+        await tester.pumpAndSettle();
+        container.read(appRouterProvider).go('/profile');
+        await tester.pumpAndSettle();
+
+        expect(find.text(title), findsWidgets);
+        expect(find.textContaining(message), findsWidgets);
+        expect(
+          find.descendant(
+            of: find.byType(SessionUnavailableScreen),
+            matching: find.text(retry),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Can’t reach the server'), findsNothing);
+        container.dispose();
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+
+    testWidgets(
+        'saved language is used on a cold start during an outage and follows later changes',
+        (tester) async {
+      FlutterSecureStorage.setMockInitialValues(
+          {'mushukistan_app_language': 'ru'});
+      addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+
+      expect(container.read(appLanguageProvider), AppLanguage.russian);
+      expect(find.text('Не удаётся связаться с сервером'), findsWidgets);
+      expect(find.text('Can’t reach the server'), findsNothing);
+
+      // A language change is persisted for the next cold start.
+      container.read(appLanguageProvider.notifier).state = AppLanguage.uzbek;
+      await tester.pumpAndSettle();
+      expect(
+        await const FlutterSecureStorage()
+            .read(key: 'mushukistan_app_language'),
+        'uz',
+      );
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('without a saved language the app starts in English',
+        (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final repo = FakeAuthRepository(restoreResult: outage);
+      final container = _containerWithRepo(repo);
+      await _pumpApp(tester, container, useProductionRoot: true);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(find.text('Can’t reach the server'), findsWidgets);
+      container.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('a signed-in user mid-session is not affected by later outages',
+        (tester) async {
+      final repo = FakeAuthRepository(restoreResult: confirmed());
+      final container = _containerWithRepo(repo);
+      addTearDown(container.dispose);
+      await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      container.read(appRouterProvider).go('/profile');
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfileScreen), findsOneWidget);
+
+      // The API now fails every call; auth state and route must not change by themselves.
+      repo.restoreResult = outage;
+      await tester.pump(const Duration(seconds: 30));
+      expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+      expect(path(container), '/profile');
+      expect(repo.restoreCalls, 1,
+          reason: 'no background polling while signed in');
+    });
   });
 }

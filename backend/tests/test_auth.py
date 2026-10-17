@@ -20,7 +20,11 @@ from app.core.config import Settings
 from app.core.container import AppContainer
 from app.core.dependencies import get_auth_service, require_moderator
 from app.core.security import api_error
-from app.features.auth.application.schemas import CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION
+from app.features.auth.application.schemas import (
+    CURRENT_PRIVACY_VERSION,
+    CURRENT_TERMS_VERSION,
+    legal_acceptance_required,
+)
 from app.features.auth.application.service import AuthService
 from app.features.auth.domain.models import AuthUser
 from app.features.auth.infrastructure import tokens as token_module
@@ -1104,7 +1108,7 @@ def test_google_service_existing_user_with_legal_acceptance_does_not_require_fla
     assert result.access_token
 
 
-def test_google_service_existing_user_without_current_legal_acceptance_requires_flags(
+def test_google_service_existing_user_without_current_legal_acceptance_records_only_with_flags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repository = InMemoryAuthUserRepository()
@@ -1117,11 +1121,12 @@ def test_google_service_existing_user_without_current_legal_acceptance_requires_
     )
     service = _auth_service_with_repository(monkeypatch, repository)
 
-    with pytest.raises(HTTPException) as excinfo:
-        service.authenticate_with_google_id_token("google-id-token")
-
-    assert excinfo.value.status_code == 422
-    assert excinfo.value.detail["error"]["code"] == "LEGAL_ACCEPTANCE_REQUIRED"
+    # Outdated acceptance never locks a valid Google sign-in out; nothing is recorded without
+    # explicit consent, and the client is told acceptance is still required.
+    pending = service.authenticate_with_google_id_token("google-id-token")
+    assert pending.user.id == existing.id
+    assert pending.user.accepted_legal_at is None
+    assert legal_acceptance_required(pending.user) is True
 
     result = service.authenticate_with_google_id_token(
         "google-id-token",
@@ -1970,7 +1975,7 @@ def test_duplicate_concurrent_google_link_requests_are_idempotent(
         assert users[0].google_subject == "google-subject"
 
 
-def test_google_login_existing_user_without_current_legal_acceptance_requires_flags(
+def test_google_login_existing_user_without_current_legal_acceptance_records_only_with_flags(
     client: TestClient,
     auth_runtime,
 ) -> None:
@@ -1986,12 +1991,17 @@ def test_google_login_existing_user_without_current_legal_acceptance_requires_fl
             is_moderator=False,
         )
 
-    rejected = client.post(
+    pending = client.post(
         "/api/v1/auth/google",
         json={"id_token": "google-id-token"},
     )
-    assert rejected.status_code == 422
-    assert rejected.json()["error"]["code"] == "LEGAL_ACCEPTANCE_REQUIRED"
+    assert pending.status_code == 200
+    assert pending.json()["data"]["user"]["legal_acceptance_required"] is True
+    with auth_service.db_session_manager.session_scope() as session:
+        unchanged = session.scalar(
+            select(schema.User).where(schema.User.email == "google-user@gmail.com")
+        )
+        assert unchanged.accepted_legal_at is None
 
     accepted = client.post(
         "/api/v1/auth/google",

@@ -143,7 +143,7 @@ def build_object_storage(settings: Settings) -> ObjectStorage | None:
             "R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY together."
         )
     if not all(configured_values):
-        if settings.app_env.casefold() in {"production", "staging"}:
+        if settings.is_production_like:
             raise StorageConfigurationError(
                 "Cloudflare R2 is required in production and staging environments."
             )

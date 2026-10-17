@@ -5,6 +5,7 @@ from typing import Protocol
 from uuid import UUID
 
 from sqlalchemy import Text, cast, delete, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from structlog import get_logger
 
 from app.core.phone import UzbekPhoneNumberError, normalize_uzbek_phone_number
@@ -14,10 +15,15 @@ from app.core.storage import (
     StorageOperationError,
     StorageValidationError,
 )
+from app.features.auth.application.schemas import (
+    CURRENT_PRIVACY_VERSION,
+    CURRENT_TERMS_VERSION,
+    legal_acceptance_required,
+)
 from app.features.auth.domain.models import AuthUser
 from app.features.auth.infrastructure.email import AccountDeletionConfirmationSender
 from app.features.auth.infrastructure.tokens import JoseAccountDeletionTokenService
-from app.features.users.application.schemas import UserProfile, UserPublic, UserUpdate
+from app.features.users.application.schemas import BlockedUser, UserProfile, UserPublic, UserUpdate
 from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
@@ -55,7 +61,7 @@ class UsersService:
 
             return self._build_self_profile(repository, profile)
 
-    def get_public_profile(self, user_id: UUID) -> UserPublic:
+    def get_public_profile(self, user_id: UUID, viewer: AuthUser | None = None) -> UserPublic:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             user = repository.get_by_id(user_id)
@@ -73,6 +79,14 @@ class UsersService:
                 total_likes_received=repository.count_likes_received(user.id),
                 comment_count=repository.count_comments(user.id),
                 allow_public_activity_view=user.allow_public_activity_view,
+                is_blocked_by_viewer=viewer is not None
+                and session.scalar(
+                    select(schema.UserBlock.id).where(
+                        schema.UserBlock.blocker_id == viewer.id,
+                        schema.UserBlock.blocked_id == user.id,
+                    )
+                )
+                is not None,
             )
 
     def update_me(self, user: AuthUser, payload: UserUpdate) -> UserProfile:
@@ -493,14 +507,35 @@ class UsersService:
             blocked = session.get(schema.User, blocked_user_id)
             if blocked is None or not blocked.is_active:
                 raise api_error(404, "USER_NOT_FOUND", "User not found.")
-            exists = session.scalar(
-                select(schema.UserBlock).where(
-                    schema.UserBlock.blocker_id == user.id,
-                    schema.UserBlock.blocked_id == blocked_user_id,
-                )
+            # Idempotent and race-safe: the unique (blocker_id, blocked_id) constraint makes
+            # concurrent duplicate requests collapse into one row instead of raising.
+            session.execute(
+                pg_insert(schema.UserBlock)
+                .values(blocker_id=user.id, blocked_id=blocked_user_id)
+                .on_conflict_do_nothing(constraint="uq_user_blocks_blocker_blocked")
             )
-            if exists is None:
-                session.add(schema.UserBlock(blocker_id=user.id, blocked_id=blocked_user_id))
+
+    def list_blocked_users(self, user: AuthUser, *, limit: int = 200) -> list[BlockedUser]:
+        with self.db_session_manager.session_scope() as session:
+            rows = session.execute(
+                select(schema.User, schema.UserBlock.created_at)
+                .join(schema.UserBlock, schema.UserBlock.blocked_id == schema.User.id)
+                .where(
+                    schema.UserBlock.blocker_id == user.id,
+                    schema.User.is_active.is_(True),
+                )
+                .order_by(schema.UserBlock.created_at.desc(), schema.UserBlock.id.desc())
+                .limit(limit)
+            ).all()
+            return [
+                BlockedUser(
+                    id=blocked.id,
+                    name=blocked.name,
+                    avatar_url=blocked.avatar_url,
+                    blocked_at=blocked_at,
+                )
+                for blocked, blocked_at in rows
+            ]
 
     def unblock_user(self, user: AuthUser, blocked_user_id: UUID) -> None:
         with self.db_session_manager.session_scope() as session:
@@ -531,4 +566,7 @@ class UsersService:
             total_likes_received=repository.count_likes_received(user.id),
             comment_count=repository.count_comments(user.id),
             is_moderator=user.is_moderator,
+            legal_acceptance_required=legal_acceptance_required(user),
+            current_terms_version=CURRENT_TERMS_VERSION,
+            current_privacy_version=CURRENT_PRIVACY_VERSION,
         )

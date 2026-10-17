@@ -165,57 +165,64 @@ class _AddObservationDetailsScreenState
                 ? strings.helpThisCatSubtitle
                 : strings.shareCatPostSubtitle),
             const SizedBox(height: AppSpacing.xl),
-            Text(strings.photos,
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (var index = 0; index < state.photos.length; index++)
-                Stack(children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(state.photos[index].bytes,
-                        width: 92, height: 92, fit: BoxFit.cover),
+            FormSection(
+              title: strings.photos,
+              trailing: Text('${state.photos.length}/5',
+                  style: Theme.of(context).textTheme.labelMedium),
+              children: [
+                if (state.photos.isNotEmpty) ...[
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (var index = 0; index < state.photos.length; index++)
+                      Stack(children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(AppRadii.md),
+                          child: Image.memory(state.photos[index].bytes,
+                              width: 96, height: 96, fit: BoxFit.cover),
+                        ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: IconButton.filledTonal(
+                            tooltip: strings.removePhoto,
+                            onPressed: _picking || state.submitting
+                                ? null
+                                : () {
+                                    final photos = [...state.photos]
+                                      ..removeAt(index);
+                                    controller.setPhotos(photos);
+                                  },
+                            icon: const Icon(Icons.close, size: 16),
+                          ),
+                        ),
+                      ]),
+                  ]),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+                AppActionGroup(children: [
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        _picking || state.submitting || state.photos.length >= 5
+                            ? null
+                            : () => unawaited(_pick(ImageSource.gallery)),
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: Text(strings.chooseFromGallery),
                   ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: IconButton.filledTonal(
-                      tooltip: strings.removePhoto,
-                      onPressed: _picking || state.submitting
-                          ? null
-                          : () {
-                              final photos = [...state.photos]..removeAt(index);
-                              controller.setPhotos(photos);
-                            },
-                      icon: const Icon(Icons.close, size: 16),
-                    ),
+                  FilledButton.tonalIcon(
+                    onPressed:
+                        _picking || state.submitting || state.photos.length >= 5
+                            ? null
+                            : () => unawaited(_pick(ImageSource.camera)),
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: Text(strings.takeAPhoto),
                   ),
                 ]),
-            ]),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(
-                onPressed:
-                    _picking || state.submitting || state.photos.length >= 5
-                        ? null
-                        : () => unawaited(_pick(ImageSource.gallery)),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: Text(strings.chooseFromGallery),
-              ),
-              OutlinedButton.icon(
-                onPressed:
-                    _picking || state.submitting || state.photos.length >= 5
-                        ? null
-                        : () => unawaited(_pick(ImageSource.camera)),
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(strings.takeAPhoto),
-              ),
-            ]),
-            if (_picking) ...[
-              const SizedBox(height: AppSpacing.sm),
-              const LinearProgressIndicator(),
-              Text(strings.preparingPhotoForUpload),
-            ],
+                if (_picking) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  const LinearProgressIndicator(),
+                  Text(strings.preparingPhotoForUpload),
+                ],
+              ],
+            ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
               initialValue: state.catName,
@@ -227,50 +234,55 @@ class _AddObservationDetailsScreenState
               onChanged: controller.setCatName,
             ),
             const SizedBox(height: AppSpacing.md),
-            Text(strings.location,
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            if (state.location == null)
-              Text(needsHelp
-                  ? strings.needsHelpLocationHelp
-                  : strings.catPostLocationHelp)
-            else
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.location_on_outlined),
-                title: Text(strings.locationSelected),
-                subtitle:
-                    Text('${state.location!.latitude.toStringAsFixed(5)}, '
-                        '${state.location!.longitude.toStringAsFixed(5)}'),
-                trailing: needsHelp
-                    ? null
-                    : IconButton(
-                        tooltip: strings.removeLocation,
-                        onPressed:
-                            state.submitting ? null : controller.clearLocation,
-                        icon: const Icon(Icons.close),
-                      ),
-              ),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(
-                onPressed:
-                    _locating || state.submitting ? null : _useCurrentLocation,
-                icon: _locating
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.my_location_outlined),
-                label: Text(strings.updateLocationFromDevice),
-              ),
-              OutlinedButton.icon(
-                onPressed: state.submitting
-                    ? null
-                    : () => context.push('/add/location'),
-                icon: const Icon(Icons.map_outlined),
-                label: Text(strings.chooseOnMap),
-              ),
-            ]),
+            FormSection(
+              title: strings.location,
+              helper: state.location == null
+                  ? (needsHelp
+                      ? strings.needsHelpLocationHelp
+                      : strings.catPostLocationHelp)
+                  : null,
+              children: [
+                if (state.location != null)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.location_on_outlined),
+                    title: Text(strings.locationSelected),
+                    subtitle:
+                        Text('${state.location!.latitude.toStringAsFixed(5)}, '
+                            '${state.location!.longitude.toStringAsFixed(5)}'),
+                    trailing: needsHelp
+                        ? null
+                        : IconButton(
+                            tooltip: strings.removeLocation,
+                            onPressed: state.submitting
+                                ? null
+                                : controller.clearLocation,
+                            icon: const Icon(Icons.close),
+                          ),
+                  ),
+                AppActionGroup(children: [
+                  OutlinedButton.icon(
+                    onPressed: _locating || state.submitting
+                        ? null
+                        : _useCurrentLocation,
+                    icon: _locating
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.my_location_outlined),
+                    label: Text(strings.updateLocationFromDevice),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: state.submitting
+                        ? null
+                        : () => context.push('/add/location'),
+                    icon: const Icon(Icons.map_outlined),
+                    label: Text(strings.chooseOnMap),
+                  ),
+                ]),
+              ],
+            ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
               initialValue: state.description,

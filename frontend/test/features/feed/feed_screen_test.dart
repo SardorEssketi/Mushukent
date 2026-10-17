@@ -63,7 +63,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(AppBar, 'Feed'), findsOneWidget);
+    expect(find.byType(FeedScreen), findsOneWidget);
     expect(find.text('Could not load this section'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
   });

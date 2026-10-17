@@ -74,7 +74,33 @@ void main() {
       final copy = NotificationStrings(language.code);
       expect(copy.get('title'), isNotEmpty);
       expect(copy.get('comment'), isNotEmpty);
-      expect(copy.get('nearby_hint'), contains('500'));
+      expect(copy.get('nearby_disclosure'), contains('500'));
+      for (final key in [
+        'automatic_hint',
+        'permission_status',
+        'permission_allowed',
+        'permission_denied',
+        'android_only',
+        'push_status',
+        'push_available',
+        'push_unavailable',
+        'nearby',
+        'nearby_available',
+        'nearby_permission_missing',
+        'nearby_consent_missing',
+        'nearby_unavailable',
+        'inbox_hint',
+        'location_privacy',
+        'consent_allow',
+        'consent_decline',
+        'open_location_settings',
+        'sync_failed',
+        'open_android_settings',
+        'retry',
+        'settings_failed',
+      ]) {
+        expect(copy.get(key), isNot(key));
+      }
     }
   });
 
@@ -110,6 +136,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Aziz commented on your post'), findsOneWidget);
+    expect(find.byIcon(Icons.settings_outlined), findsNothing);
     expect(client.markedAll, isFalse);
     await tester.tap(find.text('Mark all as read'));
     await tester.pumpAndSettle();

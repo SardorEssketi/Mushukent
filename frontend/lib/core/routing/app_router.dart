@@ -13,12 +13,14 @@ import '../../features/add_observation/presentation/screens/add_observation_scre
 import '../../features/add_observation/application/add_observation_controller.dart';
 import '../../features/auth/presentation/screens/auth_gate_screen.dart';
 import '../../features/auth/presentation/screens/auth_required_screen.dart';
+import '../../features/auth/presentation/screens/session_unavailable_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/verify_email_screen.dart';
 import '../../features/feed/presentation/screens/feed_screen.dart';
 import '../../features/leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../features/legal/presentation/screens/legal_document_screen.dart';
+import '../../features/legal/presentation/screens/legal_update_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_create_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_detail_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_edit_screen.dart';
@@ -37,6 +39,8 @@ import '../../features/profile/presentation/screens/edit_profile_screen.dart';
 import '../../features/profile/presentation/screens/about_account_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/public_profile_screen.dart';
+import '../../features/profile/presentation/screens/feedback_screen.dart';
+import '../../features/profile/presentation/screens/blocked_users_screen.dart';
 import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/account_security_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
@@ -56,6 +60,28 @@ final _profileNavigatorKey = GlobalKey<NavigatorState>();
 bool _isAuthenticationEntryRoute(String path) =>
     path == '/login' || path == '/register' || path == '/auth-required';
 
+/// Where protected routes go while a stored session could not be confirmed (server unreachable).
+/// Deliberately not the sign-in flow: the user is still signed in as far as we know.
+String sessionUnavailableLocation(Uri intendedLocation) {
+  final redirect =
+      validatedPostAuthRedirect(intendedLocation.toString()) ?? '/feed';
+  return Uri(
+    path: '/session-unavailable',
+    queryParameters: {'redirect': redirect},
+  ).toString();
+}
+
+/// The route the user is looking at. The router's own URI only knows the declarative location; a
+/// screen opened with `context.push` (the Feed's Login button) is the last match of the delegate's
+/// configuration instead.
+Uri _visibleUri(GoRouter router) {
+  final configuration = router.routerDelegate.currentConfiguration;
+  final declared = router.routeInformationProvider.value.uri;
+  if (configuration.isEmpty) return declared;
+  final visiblePath = configuration.last.matchedLocation;
+  return visiblePath == declared.path ? declared : Uri(path: visiblePath);
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     navigatorKey: _rootNavigatorKey,
@@ -65,6 +91,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       if (location == '/' || location == '/auth-gate') {
         return '/feed';
+      }
+
+      // Outdated legal acceptance: documents, the acceptance screen and logout stay reachable;
+      // everything else waits for an explicit acceptance. Evaluated per signed-in account.
+      final legalPending = authState.isAuthenticated &&
+          authState.user?.legalAcceptanceRequired == true;
+      if (legalPending) {
+        if (location == '/legal-update' || location.startsWith('/legal/')) {
+          return null;
+        }
+        return Uri(
+          path: '/legal-update',
+          queryParameters: {
+            'redirect':
+                validatedPostAuthRedirect(state.uri.toString()) ?? '/feed',
+          },
+        ).toString();
+      }
+      if (location == '/legal-update') {
+        return validatedPostAuthRedirect(
+                state.uri.queryParameters['redirect']) ??
+            '/feed';
       }
 
       final isAuthEntryRoute = _isAuthenticationEntryRoute(location);
@@ -77,6 +125,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   location.startsWith('/lost-pets/') ||
                   location.startsWith('/adoption-posts/')) &&
               location.endsWith('/edit'));
+
+      if (location == '/auth-required' &&
+          authState.phase == AuthPhase.sessionUnavailable) {
+        // A cold load of a protected URL parks on /auth-required while the session is being
+        // checked; once the check ends as "server unreachable" this is not a sign-in problem.
+        return sessionUnavailableLocation(
+          Uri.parse(
+            validatedPostAuthRedirect(state.uri.queryParameters['redirect']) ??
+                '/feed',
+          ),
+        );
+      }
+
+      if (location == '/session-unavailable' &&
+          authState.phase != AuthPhase.sessionUnavailable) {
+        // Recovered (or the session was confirmed gone): continue to where the user was going.
+        return validatedPostAuthRedirect(
+                state.uri.queryParameters['redirect']) ??
+            '/feed';
+      }
+
+      if ((isModeratorRoute || isProtectedRoute) &&
+          authState.phase == AuthPhase.sessionUnavailable) {
+        return sessionUnavailableLocation(state.uri);
+      }
 
       if (isModeratorRoute) {
         if (!authState.isAuthenticated) {
@@ -98,6 +171,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       switch (authState.phase) {
         case AuthPhase.initial:
         case AuthPhase.restoring:
+        case AuthPhase.sessionUnavailable:
         case AuthPhase.failure:
         case AuthPhase.unauthenticated:
         case AuthPhase.authenticating:
@@ -127,6 +201,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/auth-gate',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AuthGateScreen(),
+      ),
+      GoRoute(
+        path: '/legal-update',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const LegalUpdateScreen(),
+      ),
+      GoRoute(
+        path: '/session-unavailable',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => const SessionUnavailableScreen(),
       ),
       GoRoute(
         path: '/auth-required',
@@ -280,6 +364,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     builder: (context, state) => const MyAdoptionPostsScreen(),
                   ),
                   GoRoute(
+                    path: 'feedback',
+                    builder: (context, state) => const FeedbackScreen(),
+                  ),
+                  GoRoute(
                     path: 'settings',
                     builder: (context, state) => const SettingsScreen(),
                     routes: [
@@ -287,6 +375,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                         path: 'security',
                         builder: (context, state) =>
                             const AccountSecurityScreen(),
+                      ),
+                      GoRoute(
+                        path: 'notifications',
+                        builder: (context, state) =>
+                            const NotificationSettingsScreen(),
+                      ),
+                      GoRoute(
+                        path: 'blocked-users',
+                        builder: (context, state) => const BlockedUsersScreen(),
                       ),
                       GoRoute(
                         path: 'about-account',
@@ -327,7 +424,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: 'settings',
-            builder: (context, state) => const NotificationSettingsScreen(),
+            redirect: (context, state) => '/profile/settings/notifications',
           ),
         ],
       ),
@@ -455,7 +552,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       router.go('/feed');
       return;
     }
-    final currentUri = router.routeInformationProvider.value.uri;
+    // The router's URI only knows the declarative location. A screen opened with `context.push`
+    // (the Feed's Login button) is not part of it, so the visible route is the last match of the
+    // delegate's configuration, which includes pushed pages.
+    final currentUri = _visibleUri(router);
     final isAuthEntryRoute = _isAuthenticationEntryRoute(currentUri.path) ||
         currentUri.path == '/verify-email';
 

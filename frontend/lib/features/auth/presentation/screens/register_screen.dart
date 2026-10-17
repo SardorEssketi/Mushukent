@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/localization/app_strings.dart';
+import '../../../../core/theme/app_design_tokens.dart';
+import '../../../../core/widgets/brand_header.dart';
 import '../../../../core/localization/account_security_strings.dart';
 import '../../../../core/localization/language_controller.dart';
 import '../../../../core/routing/auth_navigation.dart';
@@ -85,11 +87,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             padding: const EdgeInsets.all(24),
             shrinkWrap: true,
             children: [
-              Text(
-                strings.joinMushukistan,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 20),
+              BrandHeader(title: strings.joinMushukistan),
+              const SizedBox(height: AppSpacing.xl),
               LegalAgreementText(
                 prefixText: strings.googleLegalLeading,
                 betweenText: strings.agreementBetween,

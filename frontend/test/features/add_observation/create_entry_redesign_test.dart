@@ -354,7 +354,8 @@ void main() {
     );
     router.go('/add/details');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Publish help request'));
+    await tester.scrollUntilVisible(find.text('Publish help request'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Publish help request'));
     await tester.pumpAndSettle();
     expect(find.text('A location is required for a Cat needs help post.'),
@@ -363,7 +364,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).last, const Offset(0, -250));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Publish help request'));
+    await tester.scrollUntilVisible(find.text('Publish help request'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Publish help request'));
     await tester.pumpAndSettle();
     expect(find.text('Describe what help the cat needs.'), findsOneWidget);
@@ -402,7 +404,8 @@ void main() {
     controller.setDescription('Injured paw');
     router.go('/add/details');
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Publish help request'));
+    await tester.scrollUntilVisible(find.text('Publish help request'), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Publish help request'));
     await tester.pumpAndSettle();
     expect(find.text('Feed destination'), findsOneWidget);

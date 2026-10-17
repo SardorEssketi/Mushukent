@@ -27,6 +27,7 @@ from app.features.posts.domain.models import (
 )
 from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import exclude_blocked
 
 
 class SqlAlchemyCommentRepository(CommentRepository):
@@ -38,11 +39,14 @@ class SqlAlchemyCommentRepository(CommentRepository):
         post_id: UUID,
         *,
         viewer_user_id: UUID | None,
+        respect_blocks: bool = False,
     ) -> PostDetailRecord | None:
         statement = self._post_statement(
             viewer_user_id=viewer_user_id,
             include_deleted=False,
         ).where(schema.Post.id == post_id)
+        if respect_blocks:
+            statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
         row = self.session.execute(statement.with_for_update(of=schema.Post)).mappings().first()
         if row is None:
             return None
@@ -129,10 +133,12 @@ class SqlAlchemyCommentRepository(CommentRepository):
         limit: int,
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.ASC,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage:
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.post_id == post_id
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]
@@ -150,10 +156,12 @@ class SqlAlchemyCommentRepository(CommentRepository):
         limit: int,
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.ASC,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage:
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.lost_pet_id == lost_pet_id
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]
@@ -171,10 +179,12 @@ class SqlAlchemyCommentRepository(CommentRepository):
         limit: int,
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.ASC,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage:
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.adoption_post_id == adoption_post_id
         )
+        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]
@@ -193,6 +203,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.DESC,
         include_private: bool,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage:
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.user_id == user_id
@@ -220,6 +231,10 @@ class SqlAlchemyCommentRepository(CommentRepository):
                     ),
                 )
             )
+        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
+        statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
+        statement = exclude_blocked(statement, viewer_user_id, schema.LostPet.user_id)
+        statement = exclude_blocked(statement, viewer_user_id, schema.AdoptionPost.user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]

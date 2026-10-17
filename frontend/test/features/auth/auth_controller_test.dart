@@ -74,7 +74,9 @@ void main() {
     expect(controller.state.message, contains('expired'));
   });
 
-  test('startup network failure remains distinguishable', () async {
+  test(
+      'startup network failure keeps the session as unavailable, not signed out',
+      () async {
     final repo = FakeAuthRepository();
     repo.restoreResult = const SessionRestoreFailure(
       message: 'Network request failed.',
@@ -84,8 +86,11 @@ void main() {
 
     await settle();
 
-    expect(controller.state.phase, AuthPhase.failure);
+    expect(controller.state.phase, AuthPhase.sessionUnavailable);
+    expect(controller.state.isAuthenticated, isFalse);
+    expect(controller.state.hasUnconfirmedSession, isTrue);
     expect(controller.state.retryable, isTrue);
+    controller.dispose();
   });
 
   test('startup restore exception becomes retryable failure', () async {
@@ -110,9 +115,10 @@ void main() {
 
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    expect(controller.state.phase, AuthPhase.failure);
+    expect(controller.state.phase, AuthPhase.sessionUnavailable);
     expect(controller.state.message, contains('timed out'));
     expect(controller.state.retryable, isTrue);
+    controller.dispose();
   });
 
   test('login success transitions to authenticated', () async {

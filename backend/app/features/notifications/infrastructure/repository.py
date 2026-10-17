@@ -12,15 +12,23 @@ from geoalchemy2 import Geography
 from geoalchemy2.elements import WKTElement
 from sqlalchemy import and_, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import (
+    blocked_between,
+    exclude_blocked,
+    users_are_blocked,
+)
 
 NEARBY_RADIUS_METERS = 500
 ACTIVITY_WRITE_INTERVAL = timedelta(minutes=15)
 # A throttled activity write can lag the real event by up to 15 minutes.
 # Grace ensures the reminder is never earlier than seven full inactive days.
 INACTIVITY_THRESHOLD = timedelta(days=7) + ACTIVITY_WRITE_INTERVAL
+AUTOMATIC_DEFAULTS = dict(
+    push_comments=True, push_replies=True, push_followups=True, inactivity_enabled=True
+)
 
 
 class NotificationRepository:
@@ -30,10 +38,42 @@ class NotificationRepository:
     def preferences(self, user_id: UUID) -> schema.NotificationPreference:
         self.session.execute(
             insert(schema.NotificationPreference)
-            .values(user_id=user_id)
+            .values(user_id=user_id, **AUTOMATIC_DEFAULTS)
             .on_conflict_do_nothing(index_elements=["user_id"])
         )
-        return self.session.get(schema.NotificationPreference, user_id)
+        preference = self.session.get(schema.NotificationPreference, user_id)
+        for field, value in AUTOMATIC_DEFAULTS.items():
+            setattr(preference, field, value)
+        return preference
+
+    def normalize_defaults(self) -> None:
+        """Upgrade legacy category choices, including users who have not reopened the app.
+
+        Nearby consent and the private point are deliberately untouched. Explicit
+        insert values also override the historical database's inactivity default.
+        """
+        self.session.execute(
+            insert(schema.NotificationPreference)
+            .from_select(
+                ["user_id", *AUTOMATIC_DEFAULTS],
+                select(schema.User.id, *[True for _ in AUTOMATIC_DEFAULTS]).where(
+                    schema.User.is_active.is_(True)
+                ),
+            )
+            .on_conflict_do_nothing(index_elements=["user_id"])
+        )
+        self.session.execute(
+            update(schema.NotificationPreference)
+            .where(
+                or_(
+                    *[
+                        getattr(schema.NotificationPreference, field).is_(False)
+                        for field in AUTOMATIC_DEFAULTS
+                    ]
+                )
+            )
+            .values(**AUTOMATIC_DEFAULTS)
+        )
 
     def create_event(
         self,
@@ -49,6 +89,9 @@ class NotificationRepository:
     ) -> UUID | None:
         user = self.session.get(schema.User, recipient_id)
         if user is None or not user.is_active or recipient_id == actor_id:
+            return None
+        # A block in either direction suppresses the notification and its push jobs.
+        if users_are_blocked(self.session, actor_id, recipient_id):
             return None
         notification_id = self.session.execute(
             insert(schema.Notification)
@@ -116,6 +159,7 @@ class NotificationRepository:
                     schema.NotificationPreference.alert_location.is_not(None),
                     schema.User.is_active.is_(True),
                     schema.User.id != owner_id,
+                    ~blocked_between(owner_id, schema.User.id),
                     func.ST_DWithin(
                         cast(schema.NotificationPreference.alert_location, Geography),
                         cast(point, Geography),
@@ -180,15 +224,34 @@ class NotificationRepository:
             )
         return len(rows)
 
+    @staticmethod
+    def _visible(statement, user_id: UUID):
+        """Recipient's notifications minus anything caused by or about a blocked user.
+
+        Comment/reply notifications carry the actor; nearby lost-pet alerts have no actor, so
+        the lost pet's owner is checked instead. Filtering in SQL keeps pagination and the
+        unread count consistent, and unblocking makes the notifications visible again.
+        """
+        owner = aliased(schema.LostPet)
+        statement = statement.outerjoin(
+            owner,
+            and_(
+                schema.Notification.kind == "nearby_lost_pet",
+                owner.id == schema.Notification.target_id,
+            ),
+        ).where(schema.Notification.recipient_id == user_id)
+        statement = exclude_blocked(statement, user_id, schema.Notification.actor_id)
+        return exclude_blocked(statement, user_id, owner.user_id)
+
     def list_page(
         self, user_id: UUID, limit: int, cursor: str | None
     ) -> tuple[list[tuple], str | None]:
-        statement = (
-            select(schema.Notification, schema.User.name)
-            .outerjoin(schema.User, schema.User.id == schema.Notification.actor_id)
-            .where(schema.Notification.recipient_id == user_id)
-            .order_by(schema.Notification.created_at.desc(), schema.Notification.id.desc())
-        )
+        statement = self._visible(
+            select(schema.Notification, schema.User.name).outerjoin(
+                schema.User, schema.User.id == schema.Notification.actor_id
+            ),
+            user_id,
+        ).order_by(schema.Notification.created_at.desc(), schema.Notification.id.desc())
         if cursor:
             try:
                 data = json.loads(
@@ -226,8 +289,7 @@ class NotificationRepository:
     def unread_count(self, user_id: UUID) -> int:
         return int(
             self.session.scalar(
-                select(func.count(schema.Notification.id)).where(
-                    schema.Notification.recipient_id == user_id,
+                self._visible(select(func.count(schema.Notification.id)), user_id).where(
                     schema.Notification.read_at.is_(None),
                 )
             )

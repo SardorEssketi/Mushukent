@@ -21,6 +21,7 @@ from app.features.adoption_posts.application.schemas import (
     AdoptionPostResponse,
     AdoptionPostUpdateRequest,
     AdoptionResolutionRequest,
+    contact_is_available,
     to_adoption_post_page_response,
     to_adoption_post_response,
 )
@@ -31,6 +32,16 @@ from app.features.adoption_posts.domain.models import (
 )
 from app.features.adoption_posts.domain.repositories import AdoptionPostRepository
 from app.features.auth.domain.models import AuthUser
+from app.features.contact_reveal.schemas import ContactRevealResponse
+from app.features.contact_reveal.service import (
+    KIND_ADOPTION,
+    MODE_EXPLICIT,
+    ContactRevealLimitExceeded,
+    RevealRequest,
+    limit_exceeded_error,
+    record_reveal,
+    resolve_detail_contact,
+)
 from app.features.posts.application.schemas import GenericListResponse
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
@@ -60,6 +71,7 @@ class AdoptionPostsService:
         payload: AdoptionPostCreateRequest,
         *,
         photos: list[tuple[bytes, str | None, str | None]],
+        reveal_mode: bool = False,
     ) -> AdoptionPostResponse:
         phone = user.phone_number.strip() if user.phone_number else ""
         if not phone:
@@ -76,6 +88,16 @@ class AdoptionPostsService:
                 "INVALID_PHONE_NUMBER",
                 "Use Uzbekistan phone format: +998 XX XXX XXXX.",
             ) from exc
+        # Clients that show the contact-visibility checkbox (reveal mode) must send it checked;
+        # an explicit refusal is never overridden. Older clients send nothing and keep the
+        # previous implicit behaviour.
+        consent = payload.owner_contact_consent
+        if consent is False or (reveal_mode and consent is not True):
+            raise api_error(
+                422,
+                "CONTACT_CONSENT_REQUIRED",
+                "Confirm who may see your contact details for this adoption post.",
+            )
         if not photos:
             raise api_error(400, "INVALID_PAYLOAD", "At least one photo is required.")
         if len(photos) > 5:
@@ -113,6 +135,7 @@ class AdoptionPostsService:
                         owner_phone_number=phone,
                         owner_telegram_username=user.telegram_username,
                         owner_phone_publication_consent=True,
+                        contact_consent_version=1 if reveal_mode and consent is True else None,
                         additional_info=(
                             payload.additional_info.strip() if payload.additional_info else None
                         ),
@@ -138,19 +161,64 @@ class AdoptionPostsService:
             raise
 
     def get_adoption_post(
-        self, adoption_post_id: UUID, user: AuthUser | None = None
+        self,
+        adoption_post_id: UUID,
+        user: AuthUser | None = None,
+        *,
+        reveal_mode: bool = False,
     ) -> AdoptionPostResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            item = repository.get_by_id(adoption_post_id)
+            item = repository.get_by_id(
+                adoption_post_id,
+                viewer_user_id=user.id if user is not None else None,
+                respect_blocks=True,
+            )
             if item is None:
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
-            response = to_adoption_post_response(item)
+            # See docs/CONTACT_PRIVACY.md for who may receive contact details here.
+            include_contact = resolve_detail_contact(
+                session,
+                kind=KIND_ADOPTION,
+                post_id=item.id,
+                owner_id=item.user_id,
+                viewer_id=user.id if user is not None else None,
+                contact_available=contact_is_available(item),
+                reveal_mode=reveal_mode,
+            )
+            response = to_adoption_post_response(item, include_contact=include_contact)
             if item.is_resolved and (user is None or user.id != item.user_id):
                 return response.model_copy(
                     update={"owner_phone_number": None, "owner_telegram_username": None}
                 )
             return response
+
+    def reveal_contact(self, adoption_post_id: UUID, user: AuthUser) -> ContactRevealResponse:
+        with self.db_session_manager.session_scope() as session:
+            item = self.repository_factory(session).get_by_id(
+                adoption_post_id, viewer_user_id=user.id, respect_blocks=True
+            )
+            if item is None or not contact_is_available(item):
+                raise api_error(404, "ADOPTION_POST_NOT_ACTIVE", "Active adoption post not found.")
+            if item.user_id == user.id:
+                raise api_error(403, "CONTACT_OWNER_FORBIDDEN", "You own this adoption post.")
+            try:
+                record_reveal(
+                    session,
+                    RevealRequest(
+                        user_id=user.id,
+                        kind=KIND_ADOPTION,
+                        post_id=item.id,
+                        owner_id=item.user_id,
+                        mode=MODE_EXPLICIT,
+                    ),
+                )
+            except ContactRevealLimitExceeded as exc:
+                raise limit_exceeded_error(exc) from exc
+            return ContactRevealResponse(
+                phone_number=item.owner_phone_number,
+                telegram_username=item.owner_telegram_username,
+            )
 
     def update_adoption_post(
         self,
@@ -344,11 +412,16 @@ class AdoptionPostsService:
         *,
         limit: int = 20,
         cursor: str | None = None,
+        viewer: AuthUser | None = None,
     ) -> GenericListResponse[AdoptionPostListItem]:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             try:
-                page = repository.list_public(limit=limit, cursor=cursor)
+                page = repository.list_public(
+                    limit=limit,
+                    cursor=cursor,
+                    viewer_user_id=viewer.id if viewer is not None else None,
+                )
             except ValueError as exc:
                 raise api_error(
                     422,

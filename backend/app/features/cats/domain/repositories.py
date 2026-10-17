@@ -40,7 +40,9 @@ class CatRepository(Protocol):
 
     def get_by_id(self, cat_id: UUID) -> CatRecord | None: ...
 
-    def get_detail(self, cat_id: UUID) -> CatDetailRecord | None: ...
+    def get_detail(
+        self, cat_id: UUID, *, viewer_user_id: UUID | None = None
+    ) -> CatDetailRecord | None: ...
 
     def list_cats(
         self,
@@ -53,6 +55,7 @@ class CatRepository(Protocol):
         radius_meters: int | None = None,
         bbox: tuple[float, float, float, float] | None = None,
         kind: PostKind | None = None,
+        viewer_user_id: UUID | None = None,
     ) -> CatListPage: ...
 
     def list_history(
@@ -62,4 +65,5 @@ class CatRepository(Protocol):
         limit: int,
         cursor: str | None = None,
         order: ObservationSortOrder = ObservationSortOrder.LATEST,
+        viewer_user_id: UUID | None = None,
     ) -> PostListPage: ...

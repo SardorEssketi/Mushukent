@@ -11,6 +11,7 @@ import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../../auth/presentation/screens/session_unavailable_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../widgets/feed_card_parts.dart';
@@ -324,6 +325,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final period = ref.watch(feedPopularPeriodProvider);
     final userId = ref.watch(currentUserProvider)?.id;
     final authenticated = userId != null;
+    // A stored session the server could not confirm is not a signed-out guest.
+    final sessionUnconfirmed = ref.watch(
+      authControllerProvider.select((state) => state.hasUnconfirmedSession),
+    );
     final key = _feedKey(mode, period, userId);
     final pageAsync = ref.watch(feedPostsProvider);
     final strings = ref.watch(appStringsProvider);
@@ -350,18 +355,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        titleSpacing: 0,
-        title: AppContentWidth(
-          maxWidth: AppWidths.readable,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Align(
-                alignment: Alignment.centerLeft, child: Text(strings.feed)),
-          ),
-        ),
         actions: [
           if (authenticated) const NotificationBell(),
-          if (!authenticated)
+          if (!authenticated && !sessionUnconfirmed)
             TextButton(
               onPressed: () => context.push('/login'),
               child: Text(strings.login),
@@ -376,6 +372,20 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (sessionUnconfirmed)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: SessionUnavailableBanner(),
+                  ),
+                )
+              else if (!authenticated)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _GuestWelcomeCard(strings: strings),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -462,6 +472,67 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   }
 }
 
+/// First-impression card for signed-out visitors: states the product purpose
+/// and offers the two ways in (account or just exploring the map).
+class _GuestWelcomeCard extends StatelessWidget {
+  const _GuestWelcomeCard({required this.strings});
+
+  final AppStrings strings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.primaryContainer,
+        borderRadius: BorderRadius.circular(AppRadii.card),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.pets_rounded, color: colors.onPrimaryContainer),
+            const SizedBox(height: AppSpacing.md),
+            Semantics(
+              header: true,
+              child: Text(
+                strings.welcomeHeadline,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: colors.onPrimaryContainer,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              strings.welcomeBody,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                FilledButton(
+                  onPressed: () => context.push('/register'),
+                  child: Text(strings.createAccount),
+                ),
+                OutlinedButton(
+                  onPressed: () => context.go('/map'),
+                  child: Text(strings.map),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _FeedLoading extends StatelessWidget {
   const _FeedLoading();
 
@@ -517,9 +588,10 @@ class _FeedFilterBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: 56,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(children: [
           _FilterTab(
             value: 'recent',
@@ -574,25 +646,39 @@ class _FilterTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final selected = selectedValue == value;
-    return InkWell(
-      onTap: () => onSelected(value),
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 64, minHeight: 48),
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: Border(
-              bottom: BorderSide(
-            color: selected ? colors.primary : Colors.transparent,
-            width: 2,
-          )),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: selected ? colors.primary : colors.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpacing.sm),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        child: ExcludeSemantics(
+          child: AnimatedContainer(
+            duration: AppMotion.of(context, AppMotion.fast),
+            curve: AppMotion.curve,
+            decoration: BoxDecoration(
+              color: selected ? colors.primary : colors.surface,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+              border: Border.all(
+                color: selected ? colors.primary : colors.outlineVariant,
               ),
+            ),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+              onTap: () => onSelected(value),
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: selected ? colors.onPrimary : colors.onSurface,
+                      ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -17,11 +17,21 @@ class AdoptionPostRepository(Protocol):
     def create(self, draft: AdoptionPostCreateDraft) -> AdoptionPostRecord: ...
 
     def get_by_id(
-        self, adoption_post_id: UUID, *, for_update: bool = False, include_deleted: bool = False
+        self,
+        adoption_post_id: UUID,
+        *,
+        for_update: bool = False,
+        include_deleted: bool = False,
+        viewer_user_id: UUID | None = None,
+        respect_blocks: bool = False,
     ) -> AdoptionPostRecord | None: ...
 
     def get_by_ids(
-        self, adoption_post_ids: list[UUID], *, active_only: bool = False
+        self,
+        adoption_post_ids: list[UUID],
+        *,
+        active_only: bool = False,
+        viewer_user_id: UUID | None = None,
     ) -> list[AdoptionPostRecord]: ...
 
     def update(
@@ -53,4 +63,5 @@ class AdoptionPostRepository(Protocol):
         *,
         limit: int,
         cursor: str | None = None,
+        viewer_user_id: UUID | None = None,
     ) -> AdoptionPostPage: ...

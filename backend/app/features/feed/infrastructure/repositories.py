@@ -15,6 +15,7 @@ from app.features.feed.domain.models import (
 from app.features.posts.domain.models import PostRecord
 from app.features.posts.infrastructure.repositories import SqlAlchemyPostRepository
 from app.infrastructure.db.models import schema
+from app.infrastructure.repositories.blocking import exclude_blocked
 
 
 class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
@@ -62,6 +63,7 @@ class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
                 post_index,
                 viewer_user_id=viewer_user_id,
             )
+        post_index = exclude_blocked(post_index, viewer_user_id, schema.Post.user_id)
         if reference_geom is not None:
             post_index = post_index.where(
                 schema.Post.location.is_not(None),
@@ -89,6 +91,7 @@ class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
             schema.LostPet.is_public.is_(True),
             schema.LostPet.is_resolved.is_(False),
         )
+        lost_pet_index = exclude_blocked(lost_pet_index, viewer_user_id, schema.LostPet.user_id)
         if reference_geom is not None:
             lost_pet_index = lost_pet_index.where(
                 func.ST_DWithin(
@@ -110,6 +113,9 @@ class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
                 schema.AdoptionPost.deleted_at.is_(None),
                 schema.AdoptionPost.is_public.is_(True),
                 schema.AdoptionPost.is_resolved.is_(False),
+            )
+            adoption_index = exclude_blocked(
+                adoption_index, viewer_user_id, schema.AdoptionPost.user_id
             )
             source_indexes.append(adoption_index)
 
@@ -195,5 +201,6 @@ class SqlAlchemyFeedRepository(SqlAlchemyPostRepository):
                 statement,
                 viewer_user_id=viewer_user_id,
             )
+        statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
         rows = self.session.execute(statement.where(schema.Post.id.in_(post_ids))).mappings().all()
         return self._rows_to_records(rows)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
 
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
@@ -25,6 +25,8 @@ from app.features.adoption_posts.application.schemas import (
 from app.features.adoption_posts.application.service import AdoptionPostsService
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
+from app.features.contact_reveal.schemas import ContactRevealResponse
+from app.features.contact_reveal.service import is_reveal_mode, mark_private
 from app.features.posts.application.schemas import GenericListResponse
 
 router = APIRouter(prefix="/adoption-posts")
@@ -33,12 +35,14 @@ router = APIRouter(prefix="/adoption-posts")
 def _parse_create_payload(
     pet_name: str,
     additional_info: str | None,
+    owner_contact_consent: bool | None = None,
 ) -> AdoptionPostCreateRequest:
     try:
         return AdoptionPostCreateRequest.model_validate(
             {
                 "pet_name": pet_name,
                 "additional_info": additional_info,
+                "owner_contact_consent": owner_contact_consent,
             }
         )
     except ValidationError as exc:
@@ -53,8 +57,10 @@ def _parse_create_payload(
     response_model_exclude_none=True,
 )
 async def create_adoption_post(
+    request: Request,
     pet_name: str = Form(...),
     additional_info: str | None = Form(default=None),
+    owner_contact_consent: bool | None = Form(default=None),
     photos: list[UploadFile] = File(...),
     current_user: AuthUser = Depends(get_current_active_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
@@ -62,16 +68,23 @@ async def create_adoption_post(
     payload = _parse_create_payload(
         pet_name,
         additional_info,
+        owner_contact_consent,
     )
     photo_payloads = await read_image_uploads(photos, purpose="adoption_create")
-    return ApiSuccess(
-        data=await run_upload_processing(
-            adoption_posts_service.create_adoption_post,
-            current_user,
-            payload,
-            photos=photo_payloads,
-        )
+    created_post = await run_upload_processing(
+        adoption_posts_service.create_adoption_post,
+        current_user,
+        payload,
+        photos=photo_payloads,
+        reveal_mode=is_reveal_mode(request),
     )
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture(
+            "adoption_post_created",
+            properties={"photo_count": len(photo_payloads)},
+        )
+    return ApiSuccess(data=created_post)
 
 
 @router.get(
@@ -82,12 +95,14 @@ async def create_adoption_post(
 def list_adoption_posts(
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> ApiSuccess[GenericListResponse[AdoptionPostListItem]]:
     return ApiSuccess(
         data=adoption_posts_service.list_adoption_posts(
             limit=limit,
             cursor=cursor,
+            viewer=current_user,
         )
     )
 
@@ -124,25 +139,46 @@ def answer_follow_up(
     )
 
 
+@router.post(
+    "/{adoption_post_id}/contact-reveal",
+    response_model=ApiSuccess[ContactRevealResponse],
+)
+def reveal_contact(
+    response: Response,
+    adoption_post_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
+) -> ApiSuccess[ContactRevealResponse]:
+    mark_private(response, authenticated=True)
+    return ApiSuccess(data=adoption_posts_service.reveal_contact(adoption_post_id, current_user))
+
+
 @router.post("/{adoption_post_id}/contact", status_code=status.HTTP_204_NO_CONTENT)
 def contact_owner(
+    request: Request,
     adoption_post_id: UUID,
     current_user: AuthUser = Depends(get_current_active_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> None:
     adoption_posts_service.contact_owner(adoption_post_id, current_user)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("adoption_owner_contacted")
 
 
 @router.patch("/{adoption_post_id}/resolution", response_model=ApiSuccess[AdoptionPostResponse])
 def set_resolution(
+    request: Request,
     adoption_post_id: UUID,
     payload: AdoptionResolutionRequest,
     current_user: AuthUser = Depends(get_current_active_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> ApiSuccess[AdoptionPostResponse]:
-    return ApiSuccess(
-        data=adoption_posts_service.set_resolution(adoption_post_id, current_user, payload)
-    )
+    resolved_post = adoption_posts_service.set_resolution(adoption_post_id, current_user, payload)
+    posthog_client = getattr(request.app.state, "posthog_client", None)
+    if posthog_client is not None:
+        posthog_client.capture("adoption_post_resolved")
+    return ApiSuccess(data=resolved_post)
 
 
 @router.patch(
@@ -207,8 +243,15 @@ def delete_adoption_post(
     response_model_exclude_none=True,
 )
 def get_adoption_post(
+    request: Request,
+    response: Response,
     adoption_post_id: UUID,
     current_user: AuthUser | None = Depends(get_optional_current_user),
     adoption_posts_service: AdoptionPostsService = Depends(get_adoption_posts_service),
 ) -> ApiSuccess[AdoptionPostResponse]:
-    return ApiSuccess(data=adoption_posts_service.get_adoption_post(adoption_post_id, current_user))
+    mark_private(response, authenticated=current_user is not None)
+    return ApiSuccess(
+        data=adoption_posts_service.get_adoption_post(
+            adoption_post_id, current_user, reveal_mode=is_reveal_mode(request)
+        )
+    )

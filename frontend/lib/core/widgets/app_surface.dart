@@ -48,19 +48,34 @@ class AppCard extends StatelessWidget {
       child: child,
     );
 
-    return Material(
-      color: color ?? theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
+    final isDark = theme.brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadii.card),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: theme.colorScheme.shadow.withValues(alpha: 0.06),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: onTap == null
-          ? content
-          : InkWell(
-              onTap: onTap,
-              child: content,
-            ),
+      child: Material(
+        color: color ?? theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.card),
+          side: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: onTap == null
+            ? content
+            : InkWell(
+                onTap: onTap,
+                child: content,
+              ),
+      ),
     );
   }
 }
@@ -83,8 +98,7 @@ class AppBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(AppRadii.pill),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -132,8 +146,17 @@ class AppStatePanel extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 32, color: theme.colorScheme.primary),
-              const SizedBox(height: AppSpacing.md),
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon,
+                    size: 32, color: theme.colorScheme.onPrimaryContainer),
+              ),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 title,
                 textAlign: TextAlign.center,
@@ -160,5 +183,90 @@ class AppStatePanel extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Titled form group: groups related fields into one card so long forms read
+/// as a few clear steps rather than one flat list.
+class FormSection extends StatelessWidget {
+  const FormSection({
+    super.key,
+    required this.title,
+    required this.children,
+    this.trailing,
+    this.helper,
+  });
+
+  final String title;
+  final String? helper;
+  final Widget? trailing;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(title, style: theme.textTheme.titleMedium),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          if (helper != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              helper!,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+/// Lays secondary actions side by side when there is room and stacks them as
+/// full-width, thumb-friendly buttons on narrow screens or long translations.
+class AppActionGroup extends StatelessWidget {
+  const AppActionGroup({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth < 440) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < children.length; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpacing.sm),
+              children[i],
+            ],
+          ],
+        );
+      }
+      return Row(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0) const SizedBox(width: AppSpacing.sm),
+            Expanded(child: children[i]),
+          ],
+        ],
+      );
+    });
   }
 }

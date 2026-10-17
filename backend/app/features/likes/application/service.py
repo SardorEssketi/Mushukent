@@ -32,7 +32,9 @@ class LikesService:
     def like_post(self, post_id: UUID, user: AuthUser) -> LikeResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            post = repository.lock_visible_post(post_id, viewer_user_id=user.id)
+            post = repository.lock_visible_post(
+                post_id, viewer_user_id=user.id, respect_blocks=True
+            )
             if post is None or not self._can_view_post(post, user):
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")
 

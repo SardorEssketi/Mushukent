@@ -27,6 +27,9 @@ from app.features.comments.application.service import CommentsService
 from app.features.comments.infrastructure.repositories import SqlAlchemyCommentRepository
 from app.features.feed.application.service import FeedService
 from app.features.feed.infrastructure.repositories import SqlAlchemyFeedRepository
+from app.features.feedback.application.service import FeedbackService
+from app.features.feedback.infrastructure.repository import SqlAlchemyFeedbackRepository
+from app.features.feedback.infrastructure.telegram import TelegramFeedbackNotifier
 from app.features.leaderboards.application.service import LeaderboardService
 from app.features.leaderboards.infrastructure.repositories import SqlAlchemyLeaderboardRepository
 from app.features.likes.application.service import LikesService
@@ -174,6 +177,20 @@ def get_reports_service(request: Request) -> ReportsService:
         lost_pet_repository_factory=SqlAlchemyLostPetRepository,
         adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,
+    )
+
+
+def get_feedback_service(request: Request) -> FeedbackService:
+    container = get_container(request)
+    settings = container.settings
+    return FeedbackService(
+        db_session_manager=container.db_session_manager,
+        repository_factory=SqlAlchemyFeedbackRepository,
+        notifier=TelegramFeedbackNotifier(
+            bot_token=settings.telegram_bot_token,
+            chat_id=settings.telegram_feedback_chat_id,
+        ),
+        max_per_hour=settings.feedback_rate_limit_per_hour,
     )
 
 

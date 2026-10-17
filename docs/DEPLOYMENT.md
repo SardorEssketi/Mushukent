@@ -158,19 +158,100 @@ Back up the database, apply forward Alembic migration `20261007_0025`, then acti
 
 ## Website deployment
 
+### Public homepage release addition
+
+Build the static homepage from reviewed source before assembling a **new**
+versioned release directory:
+
+```powershell
+python website/build.py
+python -m unittest discover -s website -p 'test_*.py' -v
+node website/test_interactions.js
+python website/tool/check_flutter_bundle.py frontend/build/web
+python website/tool/check_nginx_http.py --flutter frontend/build/web --website website/dist --report .data/nginx-http.json
+```
+
+The release must contain both complete, independently built directories:
+`frontend/build/web` mounted read-only at `/usr/share/nginx/html`, and
+`website/dist` mounted read-only at `/var/www/landing`. The root `/` and the
+localized `/ru/` and `/uz/` are exact Nginx routes; `/landing-assets/` is a
+separate static namespace. Flutter stays at its existing root route structure:
+`/feed`, `/map`, shared post/profile links, authentication, and Flutter legal
+routes continue through its fallback. `/privacy`, `/child-safety`, and
+`/delete-account` keep their existing static behavior. The new homepage does
+not change the API, media, database, Google Sign-In origin, Flutter bootstrap,
+or CanvasKit layout. The web manifest launches at `/feed`.
+
+Integrate the homepage against the exact deployed source commit by
+reviewing the Git diff, resolving any overlap in a new integration worktree,
+and running website tests and relevant Flutter tests. Rebuild both outputs from
+the integrated commit. Do not copy old Flutter `index.html`, `main.dart.js`, or
+CanvasKit files into the new release; keep the validated Flutter build together.
+Run Compose configuration validation and Nginx syntax validation against the
+new directory, then check an isolated preview or staging instance before the
+active release is switched. Unfinished notification UI work must stay outside
+the release. A homepage-only release is safe when its base contains all deployed
+functionality; compare the deployed source archive, image revision, and relevant
+source hashes with that base. The isolated HTTP harness uses disposable Docker
+containers, random localhost ports, and a generated test certificate. It needs
+Python's `cryptography` package and the `nginx:1.27-alpine` and
+`python:3.13-slim` images. It tests the production configuration and exact built
+artifacts, including proxies, security headers, cache behavior, and deep links.
+
+Before switching the active release, verify `/`, `/ru/`, `/uz/`, `/feed`,
+`/map`, shared `/posts/:id`, `/lost-pets/:id`, `/adoption-posts/:id`, and
+`/users/:id` links; `/login`, `/register`, and `/verify-email`; the three public
+legal/account pages; `/api/` and `/media/`; locale links, both themes, mobile
+navigation, robots and sitemap, SEO metadata, and PWA launch from the installed
+app. Test Google Sign-In with the real production OAuth configuration only in
+an authorized release window. Confirm Cloudflare respects `no-store` on
+homepage HTML and the Flutter shell and immutable caching on hashed landing
+assets. Submit the sitemap in Google Search Console only after ownership is
+verified there; record the actual result.
+
+Rollback is a release-directory switch back to the previously validated
+Flutter bundle, Nginx config, Compose files, and artifact mounts as one set.
+Do not remove the database or media volumes. No migration is needed for the
+homepage. Record the old and new release identifiers and recheck `/` and
+`/feed` after rollback.
+
 Use the existing production Compose project and Nginx/TLS setup. Preserve the
 active `.env`, named PostgreSQL/media volumes, `/etc/letsencrypt`, R2 settings,
-and domains. Copy only the reviewed release source and the single final
-`frontend/build/web` artifact into a new versioned release directory, preserve
-its `.env`, and validate the complete artifact before switching the active
-Compose project to that directory. Never rebuild or copy individual web files
-inside the directory currently bind-mounted by Nginx: doing so can expose a
+and domains. Copy only the reviewed release source, the single final
+`frontend/build/web` artifact, and the final `website/dist` artifact into a new
+versioned release directory, preserve its `.env`, and validate both artifacts
+before switching the active Compose project to that directory. Preserve the
+active notification overlays and backend/worker image pins as well. Never rebuild
+or copy individual web files inside the directory currently bind-mounted by
+Nginx: doing so can expose a
 mixed shell, Dart bundle, and renderer asset set. Then run from the new release:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose --profile notifications -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.notifications.yml -f docker-compose.notification-release.yml config --quiet
+docker compose --profile notifications -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.notifications.yml -f docker-compose.notification-release.yml up -d --no-deps --no-build --force-recreate nginx
 ```
+
+The example includes the currently deployed notification profile, credential
+mount overlay, and private release image-pin overlay. Use the exact active
+overlay set recorded from the Nginx container's Compose labels. Do not replace
+the backend, worker, or database for this static homepage change. Save their
+container IDs before switching and assert the IDs are identical afterwards.
+Validate the staged configuration with `nginx -t` in a disposable container
+using the existing Docker network and read-only TLS/config/artifact mounts,
+without publishing ports. Keep the previous versioned release intact.
+
+Run the read-only public HTTPS gate immediately after the Nginx switch:
+
+```powershell
+python website/tool/check_production_http.py --flutter frontend/build/web --website website/dist --report .data/production-http.json
+```
+
+This compares public response hashes with the complete validated artifacts,
+checks locale redirects, cache/security headers, API health, and notification
+API authentication. It does not log in, create data, or bypass TLS validation.
+If an important check fails, switch only Nginx back from the previous directory
+with the same overlay set and the same `--no-deps --no-build` command, then
+verify the old bundle, health endpoints, and retained container IDs.
 
 After deployment, inspect container health/logs and the real HTTPS site. Check
 the registration and login screens, Google button initialization, email auth,
@@ -178,6 +259,40 @@ session restore/refresh/logout, feed, map, profile, observations, places,
 media, likes/comments where credentials permit, and browser console/network
 errors. Report uncompleted interactive OAuth or authenticated flows as
 `NOT VERIFIED`, never as working.
+
+## Website-only visual refinement
+
+When a release changes only `website/` and documentation, preserve the complete
+deployed `frontend/build/web` directory byte-for-byte. Do not rebuild Flutter or
+copy individual shells, bundles, manifests, or CanvasKit files from another
+revision. Record the active release commit and Nginx mount paths, hash every
+Flutter file, and compare those hashes with the candidate release before and
+after the Nginx switch. This is an explicit alternative to the paired rebuild
+above for a verified static website-only change.
+
+Run the static build, all website unit/interaction tests, screenshot publication
+checks, the browser gate in `website/tool/check_browser.py`, and the isolated
+production Nginx HTTP gate against the preserved Flutter bundle. The screenshot
+privacy/rights review and repeatable processing recipe live in
+`website/SCREENSHOTS.md`. Original screenshots stay in ignored local storage and
+must not enter the source archive, generated site, or production release.
+
+Assemble a new versioned release with reviewed Git source, the new complete
+`website/dist`, and the complete preserved Flutter artifact. Retain private
+environment, notification overlays/image pins, TLS, named volumes, and unrelated
+service configurations. Compare resolved Compose configurations without logging
+secrets; only Nginx artifact/config bind paths may change. Validate the staged
+Nginx config with its real read-only mounts, preserve the old release and a
+database backup as required above, then recreate **only Nginx** using the exact
+active overlay set and `--no-deps --no-build --force-recreate nginx`.
+
+Immediately run the public HTTPS artifact gate, production browser gate, API and
+media smoke tests, and service/log review. Confirm protected containers retain
+their IDs/images/start times. If an important check fails, switch Nginx back to
+the retained release and verify the original artifact hashes/routes/health. No
+migration, database restore, worker replacement, or backend deployment is needed
+for this static refinement. Keep before/after browser captures with the release
+record and mark credential-dependent or real-device scenarios NOT VERIFIED.
 
 ## Canonical production AAB build
 
@@ -208,3 +323,100 @@ Record the Git commit, changed files, exact commands, production URLs, database
 backup and Alembic revisions, website/auth/smoke/runtime results, AAB path/size,
 package/version/signing/config results, and automated tests. Mark each important
 flow `VERIFIED`, `FAILED`, or `NOT VERIFIED`.
+
+
+## Automatic notification release
+
+Use an isolated integration worktree descended from the exact active web
+release, preserving homepage/showcase/loading-icon changes. The completed
+notification settings prerequisite is `1477900` (equivalent integrated patch
+`3f0838d`), followed by `2412679` and reviewed rollout fixes. Keep main and
+other worktrees intact; do not push or publish as part of a test APK release.
+
+The automatic-default rollout uses the existing `20261007_0025` schema.
+Do not run Alembic upgrades on this release. Override the backend image's
+default migration/startup command in the private release overlay with
+`["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]`.
+Backend and worker use the same immutable new image/revision; retain old
+images, environment, Firebase credential mounts, and token encryption key.
+Record Alembic current/head, preserve and validate a custom-format backup,
+validate Compose and staged Nginx, then replace backend/worker and the Web
+release together without recreating PostgreSQL or its volumes. Drain/freeze
+the old worker with no sending jobs before replacement; never run old/new
+workers simultaneously. Event/device unique keys and retry state stay intact.
+Physical FCM delivery remains best effort; an ambiguously acknowledged send
+cannot be proven exactly once by database deduplication alone.
+
+Run the focused notification/PostGIS tests, Flutter notification/location/
+consent/routing/auth tests, and focused lint/analyze. Build complete Flutter
+Web output using the canonical `-Target Web` script and production OAuth
+configuration; validate local CanvasKit, startup protection and `/feed` PWA
+launch. Build the unchanged static website and compare all hashes with the
+active homepage; perform HTTP artifact/routing checks without a browser matrix.
+
+For a signed physical-test APK, set the existing public production Google Web
+client ID in the build session and use ignored owner signing/Firebase files:
+
+```powershell
+.\frontend\tool\build_production.ps1 -Target AndroidApk -EnableAndroidPush
+```
+
+The script passes the production API, `MUSHUKISTAN_GOOGLE_SERVER_CLIENT_ID`,
+and `ENABLE_ANDROID_PUSH=true`; missing Firebase config fails the build.
+Verify the generated APK package/version/certificate, merged manifest
+notification and foreground location permissions, Firebase resources/project,
+AOT API/OAuth values, file size and SHA-256. No background location permission
+is allowed. An FCM-only Firebase project may differ from Google Sign-In's
+project: this app explicitly supplies `serverClientId`, so do not replace the
+production OAuth ID with an unrelated auto-generated Firebase Web ID.
+Google Cloud must authorize the APK's signing SHA-1 for `uz.mushukistan.app`
+in the project owning that server client; console allowlisting and actual
+device Google authentication remain manual checks where access is unavailable.
+
+Android 13+ can report denied before the first OS prompt; the app tracks its
+one-time disclosure marker and does not repeatedly prompt. Failed private-point
+deletion retries every 30 seconds only while foreground, without fetching GPS.
+Pausing, logout and account changes cancel that retry; the next authenticated
+launch/resume also retries. Existing clients' explicit save-point requests
+remain compatible, while new automatic uploads require their separate consent
+and expected-account guard.
+
+After activation check HTTPS artifacts/routes/homepage, API health, inbox,
+preferences, registration/unregistration and consent/radius behavior using
+temporary controlled accounts; delete only those accounts afterward. Do not
+send synthetic notifications to real users. Inspect worker/backend logs and
+retained database identity. Keep a complete rollback directory/config and old
+backend/worker image pins; rollback code and web as one set without restoring
+or replacing data. Normalized category values are not undone by code rollback.
+Share the new APK only after production gates pass; if the backend is rolled
+back later, stop testing that new APK until its compatible API is restored.
+The owner confirms real-device receipt, permission behavior, deep links and
+Google authentication; backend acceptance/send success is not proof of receipt.
+
+## Feedback and Telegram notifications
+
+Users send feedback from Profile -> Feedback (`POST /api/v1/feedback`, see
+`docs/API.md`). Each stored submission triggers a best-effort Telegram message to
+the developer. Configure it in the backend `.env` (never commit real values):
+
+| Variable | Purpose |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
+| `TELEGRAM_FEEDBACK_CHAT_ID` | Destination chat id (message the bot once, then read `getUpdates`) |
+| `FEEDBACK_RATE_LIMIT_PER_HOUR` | Per-user cap, default `3` |
+
+If either Telegram value is empty, feedback is still stored and the notification
+is skipped. Telegram failures are logged (exception type and status only, never
+the token) and never affect the user's submission. Deploying requires the normal
+`alembic upgrade head` for revision `20261013_0026`.
+
+Test locally without real credentials:
+
+1. Start the local stack (`docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`)
+   and open the app, sign in, and use Profile -> Feedback.
+2. Check storage: `docker exec mushukistan-db psql -U <db user> -d <db name> -c "select category, left(message, 40), platform, created_at from feedback order by created_at desc limit 5"`.
+3. Run backend tests: `pytest tests/test_feedback.py` (HTTP, validation, rate limit,
+   Telegram formatting/failure tests use mocks; the repository test needs
+   `RUN_DB_INTEGRATION_TESTS=1` and `TEST_DATABASE_URL`).
+4. For a real Telegram check, set the two variables to a personal test bot and chat.
+

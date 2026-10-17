@@ -1,6 +1,6 @@
 # Mushukistan Terms of Service
 
-Version: 2026-08-01
+Version: 2026-10-15
 
 These Terms of Service ("Terms") explain the rules for using Mushukistan. By creating an account or using Mushukistan, you agree to these Terms and to the Mushukistan Privacy Policy.
 
@@ -38,9 +38,9 @@ You remain responsible for making sure your content does not violate another per
 
 Mushukistan uses location information for map, cat observation, nearby-place, and lost-pet features.
 
-Some information you submit may be public, including cat photos, observation descriptions and locations, comments, public profile summaries, lost-pet photos and last-seen locations, adoption or rehoming photos, and contact details that you approve for publication.
+Some information you submit may be public, including cat photos, observation descriptions and locations, comments, public profile summaries, lost-pet photos and last-seen locations, and adoption or rehoming photos. Contact details you approve are not public: they are shown only to signed-in users, as described below.
 
-Lost-pet and adoption or rehoming posts may publish copied contact details only after you explicitly confirm that they may be displayed publicly.
+Lost-pet and adoption or rehoming posts share copied contact details only after you explicitly tick the contact consent box on the post. They are shown only after you tick the contact consent box on the post, and only to signed-in Mushukistan users. Visitors who are not signed in never see them, and they are not shown in lists, feeds, maps or notifications. In the current app a signed-in user sees them after tapping Contact Owner; older app versions may show them as soon as the post is opened. Each user can view only a limited number of owners' contacts per day and per week (currently 15 and 40; the operator may change these limits). Mushukistan records which signed-in user viewed which post's contact and when, without storing the contact itself in that record.
 
 ## 7. Prohibited conduct
 

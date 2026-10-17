@@ -21,6 +21,7 @@ from app.features.comments.domain.models import CommentOrder
 from app.features.comments.domain.repositories import CommentCreateDraft, CommentRepository
 from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.session import DatabaseSessionManager
+from app.infrastructure.repositories.blocking import users_are_blocked
 
 logger = get_logger(__name__)
 
@@ -67,13 +68,17 @@ class CommentsService:
     ) -> CommentResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            post = repository.lock_visible_post(post_id, viewer_user_id=user.id)
+            post = repository.lock_visible_post(
+                post_id, viewer_user_id=user.id, respect_blocks=True
+            )
             if post is None or not self._can_view_post(post, user):
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")
             parent = self._validate_parent_comment(
                 repository,
                 payload.parent_comment_id,
                 post_id=post_id,
+                actor_id=user.id,
+                session=session,
             )
 
             created = repository.create(
@@ -115,12 +120,16 @@ class CommentsService:
     ) -> CommentResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            if not repository.lost_pet_exists(lost_pet_id):
+            if not repository.lost_pet_exists(lost_pet_id) or users_are_blocked(
+                session, user.id, repository.lost_pet_owner_id(lost_pet_id)
+            ):
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
             parent = self._validate_parent_comment(
                 repository,
                 payload.parent_comment_id,
                 lost_pet_id=lost_pet_id,
+                actor_id=user.id,
+                session=session,
             )
 
             created = repository.create(
@@ -164,12 +173,16 @@ class CommentsService:
     ) -> CommentResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            if not repository.adoption_post_exists(adoption_post_id):
+            if not repository.adoption_post_exists(adoption_post_id) or users_are_blocked(
+                session, user.id, repository.adoption_post_owner_id(adoption_post_id)
+            ):
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
             parent = self._validate_parent_comment(
                 repository,
                 payload.parent_comment_id,
                 adoption_post_id=adoption_post_id,
+                actor_id=user.id,
+                session=session,
             )
 
             created = repository.create(
@@ -219,13 +232,16 @@ class CommentsService:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             viewer_id = current_user.id if current_user is not None else None
-            post = repository.lock_visible_post(post_id, viewer_user_id=viewer_id)
+            post = repository.lock_visible_post(
+                post_id, viewer_user_id=viewer_id, respect_blocks=True
+            )
             if post is None or not self._can_view_post(post, current_user):
                 raise api_error(404, "POST_NOT_FOUND", "Post not found.")
 
             try:
                 page = repository.list_for_post(
                     post_id,
+                    viewer_user_id=viewer_id,
                     limit=limit,
                     cursor=cursor,
                     order=order,
@@ -253,12 +269,16 @@ class CommentsService:
     ) -> GenericListResponse[CommentResponse]:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            if not repository.adoption_post_exists(adoption_post_id):
+            viewer_id = current_user.id if current_user is not None else None
+            if not repository.adoption_post_exists(adoption_post_id) or users_are_blocked(
+                session, viewer_id, repository.adoption_post_owner_id(adoption_post_id)
+            ):
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")
 
             try:
                 page = repository.list_for_adoption_post(
                     adoption_post_id,
+                    viewer_user_id=viewer_id,
                     limit=limit,
                     cursor=cursor,
                     order=order,
@@ -286,12 +306,16 @@ class CommentsService:
     ) -> GenericListResponse[CommentResponse]:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            if not repository.lost_pet_exists(lost_pet_id):
+            viewer_id = current_user.id if current_user is not None else None
+            if not repository.lost_pet_exists(lost_pet_id) or users_are_blocked(
+                session, viewer_id, repository.lost_pet_owner_id(lost_pet_id)
+            ):
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
 
             try:
                 page = repository.list_for_lost_pet(
                     lost_pet_id,
+                    viewer_user_id=viewer_id,
                     limit=limit,
                     cursor=cursor,
                     order=order,
@@ -342,6 +366,7 @@ class CommentsService:
                     cursor=cursor,
                     order=order,
                     include_private=include_private,
+                    viewer_user_id=current_user.id if current_user is not None else None,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -496,12 +521,16 @@ class CommentsService:
         post_id: UUID | None = None,
         lost_pet_id: UUID | None = None,
         adoption_post_id: UUID | None = None,
+        actor_id: UUID | None = None,
+        session=None,
     ):
         if parent_comment_id is None:
             return None
 
         parent = repository.get_by_id(parent_comment_id)
         if parent is None or parent.deleted_at is not None:
+            raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
+        if users_are_blocked(session, actor_id, parent.user_id):
             raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")
 
         same_target = (
@@ -532,6 +561,7 @@ class CommentsService:
             self.notification_repository_factory is None
             or recipient_id is None
             or recipient_id == actor_id
+            or users_are_blocked(session, actor_id, recipient_id)
         ):
             return
         notifications = self.notification_repository_factory(session)

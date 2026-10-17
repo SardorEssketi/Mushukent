@@ -33,6 +33,7 @@ class CommentRepository(Protocol):
         post_id: UUID,
         *,
         viewer_user_id: UUID | None,
+        respect_blocks: bool = False,
     ) -> PostDetailRecord | None: ...
 
     def lost_pet_exists(self, lost_pet_id: UUID) -> bool: ...
@@ -62,6 +63,7 @@ class CommentRepository(Protocol):
         limit: int,
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.ASC,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage: ...
 
     def list_for_lost_pet(
@@ -71,6 +73,7 @@ class CommentRepository(Protocol):
         limit: int,
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.ASC,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage: ...
 
     def list_for_adoption_post(
@@ -80,6 +83,7 @@ class CommentRepository(Protocol):
         limit: int,
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.ASC,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage: ...
 
     def list_for_user(
@@ -90,6 +94,7 @@ class CommentRepository(Protocol):
         cursor: str | None = None,
         order: CommentOrder = CommentOrder.DESC,
         include_private: bool,
+        viewer_user_id: UUID | None = None,
     ) -> CommentPage: ...
 
     def mark_deleted(

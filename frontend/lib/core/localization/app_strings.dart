@@ -811,11 +811,11 @@ class AppStrings {
   String get privacyPolicySummary {
     return switch (this) {
       _UzbekStrings() =>
-        'Mushukistan xarita va lenta uchun hisob, profil, ochiq postlar, rasmlar, izohlar, shikoyatlar va joylashuv ma’lumotlarini saqlaydi. Tekshirilgan MVP’da analitika, reklama, push, crash SDK yoki AI funksiyasi yo‘q.',
+        'Mushukistan xarita va lenta uchun hisob, profil, ochiq postlar, rasmlar, izohlar, shikoyatlar va joylashuv ma’lumotlarini saqlaydi. Ilovada analitika SDK, reklama, crash SDK yoki AI funksiyasi yo‘q. Operator sozlasa, server PostHog’ga foydalanish hodisalarini (email va ismsiz, taxalluslangan hisob identifikatori bilan) yuborishi mumkin. Android push xabarlari Firebase Cloud Messaging orqali, bildirishnoma ruxsati berilgandan keyin yuboriladi. Kontakt ma’lumotlari faqat tizimga kirgan foydalanuvchilarga, cheklov bilan ko‘rsatiladi.',
       _RussianStrings() =>
-        'Mushukistan хранит данные аккаунта, профиля, публичные посты, фото, комментарии, жалобы и местоположения для карты и ленты. В проверенном MVP нет аналитики, рекламы, push-уведомлений, crash SDK или AI-функций.',
+        'Mushukistan хранит данные аккаунта, профиля, публичные посты, фото, комментарии, жалобы и местоположения для карты и ленты. В приложении нет аналитических SDK, рекламы, crash SDK и AI-функций. Если оператор включит PostHog, сервер может отправлять туда события использования, привязанные к псевдонимному идентификатору аккаунта (без email и имени). Android push-уведомления идут через Firebase Cloud Messaging после вашего разрешения. Контакты показываются только вошедшим пользователям и с ограничением.',
       _ =>
-        'Mushukistan stores account data, profile data, public posts, photos, comments, reports, and locations needed for map and feed features. No analytics, ads, push, crash SDK, or AI feature is included in the verified MVP.',
+        'Mushukistan stores account data, profile data, public posts, photos, comments, reports, and locations needed for map and feed features. The apps include no analytics SDK, ads, crash SDK, or AI feature. If the operator enables PostHog, the server may send it usage events linked to a pseudonymous account ID (no email or name). Android push uses Firebase Cloud Messaging after you allow notifications. Contact details are shown only to signed-in users, within limits.',
     };
   }
 
@@ -1781,25 +1781,6 @@ class AppStrings {
     };
   }
 
-  String get showPhonePublicly {
-    return switch (this) {
-      _UzbekStrings() => 'Telefon raqamim ochiq koʻrsatilsin',
-      _RussianStrings() => 'Показывать мой номер телефона публично',
-      _ => 'Show my phone number publicly',
-    };
-  }
-
-  String get adoptionPhoneHelp {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Profilingizdagi telefon raqami bu postda ochiq ko‘rsatiladi. Kirgan foydalanuvchilar «Egasi bilan bogʻlanish» orqali qo‘ng‘iroq qilishi mumkin.',
-      _RussianStrings() =>
-        'Номер телефона из профиля будет виден всем в этом объявлении. Вошедшие пользователи смогут позвонить через «Связаться с владельцем».',
-      _ =>
-        'Your profile phone number is public on this post. Signed-in users can use Contact Owner to call you.',
-    };
-  }
-
   String get addAtLeastOnePhoto {
     return switch (this) {
       _UzbekStrings() => 'Kamida bitta rasm qoʻshing.',
@@ -1808,12 +1789,74 @@ class AppStrings {
     };
   }
 
-  String get confirmPhonePublic {
+  String get confirmContactConsent {
     return switch (this) {
-      _UzbekStrings() => 'Telefon raqamingiz ochiq koʻrsatilishini tasdiqlang.',
+      _UzbekStrings() =>
+        'Kontakt ma’lumotlaringizni tizimga kirgan foydalanuvchilar ko‘rishiga rozilik bering.',
       _RussianStrings() =>
-        'Подтвердите, что ваш номер телефона можно показать публично.',
-      _ => 'Confirm that your phone number may be shown publicly.',
+        'Подтвердите согласие на показ ваших контактов вошедшим пользователям.',
+      _ => 'Confirm that signed-in users may see your contact details.',
+    };
+  }
+
+  String get legalUpdateTitle {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Foydalanish shartlari va Maxfiylik siyosatini yangiladik',
+      _RussianStrings() => 'Мы обновили Условия и Политику конфиденциальности',
+      _ => 'We updated our Terms and Privacy Policy',
+    };
+  }
+
+  String get legalUpdateBody {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Mushukistan’dan foydalanishni davom ettirish uchun yangilangan Foydalanish shartlari va Maxfiylik siyosati bilan tanishing. O‘zgarishlar, jumladan, egalarining kontaktlari ko‘rsatilishiga (faqat tizimga kirgan foydalanuvchilarga va cheklov bilan) hamda ixtiyoriy analitika va bildirishnomalar ishlashiga tegishli. «Qabul qilish va davom etish» tugmasini bosish orqali ikkala hujjatni o‘qiganingizni va qabul qilishingizni tasdiqlaysiz.',
+      _RussianStrings() =>
+        'Чтобы продолжить пользоваться Mushukistan, ознакомьтесь с обновлёнными Условиями использования и Политикой конфиденциальности. Изменения касаются в том числе показа контактов владельцев (только вошедшим пользователям и с ограничениями) и работы необязательной аналитики и уведомлений. Нажимая «Принять и продолжить», вы подтверждаете, что прочитали оба документа и принимаете их.',
+      _ =>
+        'To keep using Mushukistan, please review the updated Terms of Service and Privacy Policy. Changes include how owner contact details are shared (only with signed-in users, within limits) and how optional analytics and notifications work. Tapping Accept and continue confirms that you have read and accept both documents.',
+    };
+  }
+
+  String get legalUpdateAccept {
+    return switch (this) {
+      _UzbekStrings() => 'Qabul qilish va davom etish',
+      _RussianStrings() => 'Принять и продолжить',
+      _ => 'Accept and continue',
+    };
+  }
+
+  String get legalUpdateFailed {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Roziligingizni saqlab bo‘lmadi. Ulanishni tekshirib, qayta urinib ko‘ring.',
+      _RussianStrings() =>
+        'Не удалось сохранить согласие. Проверьте соединение и попробуйте ещё раз.',
+      _ =>
+        'Could not save your acceptance. Check your connection and try again.',
+    };
+  }
+
+  String get legalUpdateChanged {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Hujjatlar yana o‘zgardi. Joriy versiyalarni ko‘rib chiqing va qaytadan qabul qiling.',
+      _RussianStrings() =>
+        'Документы снова изменились. Ознакомьтесь с актуальными версиями и примите их ещё раз.',
+      _ =>
+        'The documents changed again. Review the current versions and accept again.',
+    };
+  }
+
+  String get contactRevealLimit {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Siz hozircha ruxsat etilgan maksimal miqdordagi kontaktni ko‘rdingiz. Keyinroq urinib ko‘ring.',
+      _RussianStrings() =>
+        'Вы открыли максимально допустимое число контактов. Попробуйте позже.',
+      _ =>
+        'You have viewed the maximum number of owner contacts for now. Try again later.',
     };
   }
 
@@ -2089,11 +2132,79 @@ class AppStrings {
   String get blockUserMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Foydalanuvchi haqoratli yoki xavfli boʻlsa, shundan foydalaning. Blokdan chiqarish interfeysi qoʻshilguncha supportdan yordam soʻrashingiz mumkin.',
+        'Siz bu foydalanuvchining eʼlonlari va izohlarini koʻrmaysiz, u ham sizniki bilan muloqot qila olmaydi va sizga bildirishnoma yubora olmaydi. Blokdan chiqarish: Sozlamalar > Bloklangan foydalanuvchilar.',
       _RussianStrings() =>
-        'Используйте это, если пользователь ведет себя оскорбительно или небезопасно. Пока интерфейс разблокировки не добавлен, можно попросить support разблокировать пользователя.',
+        'Вы не будете видеть публикации и комментарии этого пользователя, а он не сможет взаимодействовать с вашим контентом и отправлять вам уведомления. Разблокировать можно в Настройки > Заблокированные пользователи.',
       _ =>
-        'Use this when a user is abusive or unsafe. You can ask support to unblock them until the unblock UI is added.',
+        'You will no longer see this user\'s posts or comments, and they cannot interact with your content or send you notifications. You can unblock them in Settings > Blocked users.',
+    };
+  }
+
+  String get unblockUser {
+    return switch (this) {
+      _UzbekStrings() => 'Blokdan chiqarish',
+      _RussianStrings() => 'Разблокировать',
+      _ => 'Unblock',
+    };
+  }
+
+  String get userUnblocked {
+    return switch (this) {
+      _UzbekStrings() => 'Foydalanuvchi blokdan chiqarildi.',
+      _RussianStrings() => 'Пользователь разблокирован.',
+      _ => 'User unblocked.',
+    };
+  }
+
+  String get sessionUnavailableTitle {
+    return switch (this) {
+      _UzbekStrings() => 'Serverga ulanib bo‘lmadi',
+      _RussianStrings() => 'Не удаётся связаться с сервером',
+      _ => 'Can’t reach the server',
+    };
+  }
+
+  String get sessionUnavailableMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Siz hisobingizdan chiqmadingiz. Aloqa tiklanishi bilan avtomatik qayta urinamiz.',
+      _RussianStrings() =>
+        'Вы по-прежнему вошли в аккаунт. Как только связь восстановится, мы проверим сессию автоматически.',
+      _ =>
+        'You are still signed in. We will check again automatically when the connection is back.',
+    };
+  }
+
+  String get sessionReconnecting {
+    return switch (this) {
+      _UzbekStrings() => 'Ulanmoqda...',
+      _RussianStrings() => 'Подключаемся...',
+      _ => 'Reconnecting...',
+    };
+  }
+
+  String get blockedUsers {
+    return switch (this) {
+      _UzbekStrings() => 'Bloklangan foydalanuvchilar',
+      _RussianStrings() => 'Заблокированные пользователи',
+      _ => 'Blocked users',
+    };
+  }
+
+  String get blockedUsersEmpty {
+    return switch (this) {
+      _UzbekStrings() => 'Siz hech kimni bloklamagansiz.',
+      _RussianStrings() => 'Вы никого не блокировали.',
+      _ => 'You have not blocked anyone.',
+    };
+  }
+
+  String get couldNotUpdateBlock {
+    return switch (this) {
+      _UzbekStrings() => 'Blokni oʻzgartirib boʻlmadi. Qayta urinib koʻring.',
+      _RussianStrings() =>
+        'Не удалось изменить блокировку. Попробуйте ещё раз.',
+      _ => 'Could not update the block. Please try again.',
     };
   }
 
@@ -2708,11 +2819,11 @@ class AppStrings {
 
   String get createLostPetAlertHelp => switch (this) {
         _UzbekStrings() =>
-          'Odamlar siz bilan tez bog‘lanishi uchun aniq suratlar, oxirgi ko‘rilgan joy va telefon raqamini ochiq ko‘rsatishga rozilik kiriting.',
+          'Odamlar siz bilan tez bog‘lanishi uchun aniq suratlar, oxirgi ko‘rilgan joyni va kontaktlaringizni ko‘rsatishga rozilikni qo‘shing.',
         _RussianStrings() =>
-          'Добавьте чёткие фото, место последнего обнаружения и согласие на публикацию номера телефона, чтобы с вами могли быстро связаться.',
+          'Добавьте чёткие фото, место, где питомца видели в последний раз, и согласие на показ ваших контактов, чтобы с вами могли быстро связаться.',
         _ =>
-          'Use clear photos, a last-seen point, and public contact consent so people can reach you quickly.',
+          'Use clear photos, a last-seen point, and contact consent so signed-in users can reach you quickly.',
       };
 
   String get pointLastSeenLocation {
@@ -2724,23 +2835,25 @@ class AppStrings {
     };
   }
 
-  String get phonePublicConsent {
+  String get contactConsentTitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Profilimdagi telefon raqamini bu yo‘qolgan jonivor postida ochiq ko‘rsatish.',
+        'Tizimga kirgan Mushukistan foydalanuvchilariga ushbu e’londa telefon raqamimni (va qo‘shsam, Telegramni) ko‘rishga ruxsat berish.',
       _RussianStrings() =>
-        'Публично показать номер телефона из моего профиля в этом посте о потерянном питомце.',
-      _ => 'Show my profile phone number publicly on this lost-pet post.',
+        'Разрешить вошедшим в аккаунт пользователям Mushukistan видеть мой номер телефона (и Telegram, если я его добавлю) в этом объявлении.',
+      _ =>
+        'Allow signed-in Mushukistan users to see my phone number (and Telegram, if I add it) on this post.',
     };
   }
 
-  String get phonePublicConsentSubtitle {
+  String get contactConsentSubtitle {
     return switch (this) {
       _UzbekStrings() =>
-        'Lenta yoki yo‘qolgan jonivor sahifasini ko‘rgan odamlar shu raqamga qo‘ng‘iroq qilishi mumkin.',
+        'Kontaktni faqat tizimga kirgan foydalanuvchilar ko‘ra oladi. Ilovaning joriy versiyasida u «Egasi bilan bog‘lanish» tugmasi bosilgandan keyin ko‘rinadi; eski versiyalarda e’lon ochilishi bilan darhol ko‘rinishi mumkin. Har bir foydalanuvchi kuniga va haftasiga cheklangan miqdordagi kontaktni ko‘ra oladi. Tizimga kirmagan tashrifchilarga, ro‘yxatlarda, lentada va xaritada kontakt ko‘rsatilmaydi.',
       _RussianStrings() =>
-        'Люди, которые увидят ленту или страницу потерянного питомца, смогут позвонить на этот номер.',
-      _ => 'People who view the feed or lost-pet page can call this number.',
+        'Контакты видны только вошедшим в аккаунт пользователям. В текущей версии приложения они появляются после нажатия «Связаться с владельцем»; в старых версиях приложения контакт может отображаться сразу при открытии объявления. Каждый пользователь может открыть лишь ограниченное число контактов в день и в неделю. Посетителям без входа, в списках, ленте и на карте контакты не показываются.',
+      _ =>
+        'Only signed-in users can see it. In the current app it appears after they tap Contact Owner; older app versions may show it as soon as the post is opened. Each user can view only a limited number of contacts per day and per week. It is never shown to visitors who are not signed in, or in lists, feeds or on the map.',
     };
   }
 
@@ -3221,6 +3334,25 @@ class AppStrings {
         'Просматривать можно без аккаунта. Для этого действия нужно войти.',
       _ =>
         'You can keep browsing without an account. Sign in to complete this action.',
+    };
+  }
+
+  String get welcomeHeadline {
+    return switch (this) {
+      _UzbekStrings() => 'O‘zbekiston bo‘ylab mushuklarga yordam beramiz',
+      _RussianStrings() => 'Помогаем кошкам и питомцам по всему Узбекистану',
+      _ => 'Helping cats and pets across Uzbekistan',
+    };
+  }
+
+  String get welcomeBody {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Xaritada mushuklarni belgilang, yo‘qolgan uy hayvonlari haqida xabar bering va ularga uy topishga yordam bering.',
+      _RussianStrings() =>
+        'Отмечайте кошек на карте, сообщайте о пропавших питомцах и помогайте им найти дом.',
+      _ =>
+        'Spot cats on the map, report lost pets, and help animals find a home, together with your community.',
     };
   }
 

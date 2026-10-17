@@ -4,17 +4,30 @@ from pathlib import Path
 from typing import Self
 
 from cryptography.fernet import Fernet
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEVELOPMENT_ENVIRONMENTS = frozenset({"development", "test"})
+PRODUCTION_ENVIRONMENTS = frozenset({"production", "staging"})
+KNOWN_ENVIRONMENTS = DEVELOPMENT_ENVIRONMENTS | PRODUCTION_ENVIRONMENTS
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = Field(default="Mushukistan API", alias="APP_NAME")
-    app_env: str = Field(default="development", alias="APP_ENV")
+    # Fail closed: an unset APP_ENV means production. Development-only behaviour (returning
+    # verification tokens in API responses, skipping email delivery, weak secrets, open docs)
+    # must be requested explicitly with APP_ENV=development or APP_ENV=test.
+    app_env: str = Field(default="production", alias="APP_ENV")
     app_debug: bool = Field(default=False, alias="APP_DEBUG")
     enable_api_docs: bool = Field(default=False, alias="ENABLE_API_DOCS")
+
+    posthog_project_token: str = Field(default="", alias="POSTHOG_PROJECT_TOKEN")
+    posthog_host: str = Field(default="", alias="POSTHOG_HOST")
+    # Analytics are optional by default. Set POSTHOG_REQUIRED=true to fail startup instead when
+    # PostHog is not configured or cannot be initialised.
+    posthog_required: bool = Field(default=False, alias="POSTHOG_REQUIRED")
 
     api_prefix: str = Field(default="/api/v1", alias="API_PREFIX")
     cors_allowed_origins: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")
@@ -49,6 +62,10 @@ class Settings(BaseSettings):
         alias="RESEND_FROM_EMAIL",
     )
 
+    telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
+    telegram_feedback_chat_id: str = Field(default="", alias="TELEGRAM_FEEDBACK_CHAT_ID")
+    feedback_rate_limit_per_hour: int = Field(default=3, alias="FEEDBACK_RATE_LIMIT_PER_HOUR")
+
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
     rate_limit_auth_per_minute: int = Field(default=10, alias="RATE_LIMIT_AUTH_PER_MINUTE")
     rate_limit_anon_per_minute: int = Field(default=30, alias="RATE_LIMIT_ANON_PER_MINUTE")
@@ -58,6 +75,15 @@ class Settings(BaseSettings):
     )
     rate_limit_user_per_minute: int = Field(default=60, alias="RATE_LIMIT_USER_PER_MINUTE")
     rate_limit_upload_per_minute: int = Field(default=10, alias="RATE_LIMIT_UPLOAD_PER_MINUTE")
+    # Contact reveal: unique posts whose owner contact a user may view per rolling window.
+    contact_reveal_max_per_day: int = Field(default=15, ge=1, alias="CONTACT_REVEAL_MAX_PER_DAY")
+    contact_reveal_max_per_week: int = Field(default=40, ge=1, alias="CONTACT_REVEAL_MAX_PER_WEEK")
+    contact_reveal_min_account_age_hours: int = Field(
+        default=0, ge=0, alias="CONTACT_REVEAL_MIN_ACCOUNT_AGE_HOURS"
+    )
+    # Old app versions read contact details from the detail response. While this is true they still
+    # get them (signed in, non-owner, within the same reveal quota). Turn off after they are gone.
+    contact_legacy_detail_enabled: bool = Field(default=True, alias="CONTACT_LEGACY_DETAIL_ENABLED")
     rate_limit_backend: str = Field(default="memory", alias="RATE_LIMIT_BACKEND")
     rate_limit_redis_url: str = Field(default="", alias="RATE_LIMIT_REDIS_URL")
     trusted_proxy_cidrs_value: str = Field(
@@ -99,9 +125,24 @@ class Settings(BaseSettings):
     r2_public_base_url: str = Field(default="", alias="R2_PUBLIC_BASE_URL")
     media_storage_root: str = Field(default=".data/media", alias="MEDIA_STORAGE_ROOT")
 
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def normalize_app_env(cls, value: object) -> str:
+        normalized = str(value).strip().casefold()
+        if normalized not in KNOWN_ENVIRONMENTS:
+            raise ValueError(
+                "APP_ENV must be one of: " + ", ".join(sorted(KNOWN_ENVIRONMENTS)) + "."
+            )
+        return normalized
+
     @property
     def is_production_like(self) -> bool:
-        return self.app_env.casefold() in {"production", "staging"}
+        return self.app_env in PRODUCTION_ENVIRONMENTS
+
+    @property
+    def allows_dev_diagnostics(self) -> bool:
+        """True only for explicit development/test runs (tokens in responses, no email)."""
+        return self.app_env in DEVELOPMENT_ENVIRONMENTS
 
     @property
     def allowed_cors_origins(self) -> list[str]:
@@ -118,6 +159,12 @@ class Settings(BaseSettings):
 
         insecure_values = {"", "change_me", "change-me", "mushukistan"}
         errors: list[str] = []
+        if self.app_debug:
+            errors.append("APP_DEBUG must be false in production.")
+        if not self.rate_limit_enabled:
+            errors.append("RATE_LIMIT_ENABLED must be true in production.")
+        if self.jwt_algorithm not in {"HS256", "HS384", "HS512"}:
+            errors.append("JWT_ALGORITHM must be one of HS256, HS384 or HS512.")
         if self.jwt_secret_key in insecure_values or len(self.jwt_secret_key) < 32:
             errors.append("JWT_SECRET_KEY must be set to a strong production secret.")
         if self.postgres_password in insecure_values:

@@ -10,6 +10,7 @@ import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_repository.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/lost_pets/presentation/screens/lost_pet_detail_screen.dart';
+import 'package:mushukistan_frontend/features/posts/presentation/widgets/publication_detail_parts.dart';
 import 'package:mushukistan_frontend/features/lost_pets/presentation/screens/lost_pet_edit_screen.dart';
 import 'package:mushukistan_frontend/features/lost_pets/presentation/screens/my_lost_pets_screen.dart';
 
@@ -106,7 +107,9 @@ void main() {
     await tester.tap(find.text('Mark as found'));
     await tester.pumpAndSettle();
     expect(find.textContaining('leave Feed and Map'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Mark as found'));
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.widgetWithText(FilledButton, 'Mark as found')));
     await tester.pumpAndSettle();
     expect(resolved, isTrue);
     expect(container.read(resolvedLostPetIdsProvider), contains('pet-1'));
@@ -153,13 +156,13 @@ void main() {
       child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Edit lost pet'),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
+    expect(find.text('Edit lost pet'), findsNothing);
+    expect(find.text('Delete lost pet'), findsNothing);
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     expect(find.text('Edit lost pet'), findsOneWidget);
     expect(find.text('Delete lost pet'), findsOneWidget);
+    expect(find.text('Report'), findsNothing);
     await tester.tap(find.text('Delete lost pet'));
     await tester.pumpAndSettle();
     expect(find.text('This lost pet post will be removed.'), findsOneWidget);
@@ -181,10 +184,11 @@ void main() {
       child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.tap(find.byTooltip('Post actions'));
     await tester.pumpAndSettle();
     expect(find.text('Edit lost pet'), findsNothing);
     expect(find.text('Delete lost pet'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
   });
 
   testWidgets('guest does not see Lost Pet edit or delete controls',
@@ -201,10 +205,11 @@ void main() {
       child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
     ));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -900));
+    await tester.tap(find.byTooltip('Post actions'));
     await tester.pumpAndSettle();
     expect(find.text('Edit lost pet'), findsNothing);
     expect(find.text('Delete lost pet'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
   });
 
   testWidgets('Lost Pet detail uses a readable column and Report overflow',
@@ -225,22 +230,25 @@ void main() {
       child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
     ));
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(ListView).first).width, 760);
-    expect(find.widgetWithText(OutlinedButton, 'Report'), findsNothing);
+    // Desktop: media sits beside the content instead of stretching.
     expect(
-        find.widgetWithText(FilledButton, 'Delete lost pet'), findsOneWidget);
+        tester.getSize(find.byType(PublicationGallery)).width, lessThan(600));
+    expect(find.widgetWithText(OutlinedButton, 'Report'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Delete lost pet'), findsNothing);
     await tester.tap(find.byTooltip('Post actions'));
     await tester.pumpAndSettle();
-    expect(find.text('Report'), findsOneWidget);
+    expect(find.text('Delete lost pet'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
 
     tester.view.physicalSize = const Size(800, 900);
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(ListView).first).width, 760);
+    expect(tester.getSize(find.byType(PublicationGallery)).width, 712);
 
     tester.view.physicalSize = const Size(390, 844);
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byType(ListView).first).width, 390);
+    expect(tester.getSize(find.byType(PublicationGallery)).width, 390);
     expect(tester.takeException(), isNull);
   });
 
@@ -318,11 +326,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Destination'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Delete lost pet'),
-      250,
-      scrollable: find.byType(Scrollable).first,
-    );
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Delete lost pet'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Delete', skipOffstage: false).last);

@@ -85,7 +85,12 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         connectTimeout: environment.requestTimeout,
         receiveTimeout: environment.requestTimeout,
         sendTimeout: environment.requestTimeout,
-        headers: const {'accept': 'application/json'},
+        // `x-contact-mode: reveal` tells the server this app fetches owner contacts through the
+        // explicit reveal endpoints, so detail responses never need to carry them.
+        headers: const {
+          'accept': 'application/json',
+          'x-contact-mode': 'reveal',
+        },
         validateStatus: (_) => true,
       ),
     );

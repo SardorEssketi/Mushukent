@@ -27,6 +27,7 @@ def test_metadata_discovers_application_tables() -> None:
         "adoption_posts",
         "adoption_contact_events",
         "adoption_follow_ups",
+        "contact_reveals",
         "reports",
         "user_blocks",
         "leaderboard_cache",
@@ -37,6 +38,7 @@ def test_metadata_discovers_application_tables() -> None:
         "notifications",
         "notification_devices",
         "notification_push_jobs",
+        "feedback",
     }
     assert Base.metadata.naming_convention == NAMING_CONVENTION
 

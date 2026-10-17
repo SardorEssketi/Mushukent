@@ -14,6 +14,16 @@ from app.core.storage import (
     StorageValidationError,
 )
 from app.features.auth.domain.models import AuthUser
+from app.features.contact_reveal.schemas import ContactRevealResponse
+from app.features.contact_reveal.service import (
+    KIND_LOST_PET,
+    MODE_EXPLICIT,
+    ContactRevealLimitExceeded,
+    RevealRequest,
+    limit_exceeded_error,
+    record_reveal,
+    resolve_detail_contact,
+)
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
     LostPetFollowUpAnswer,
@@ -23,6 +33,7 @@ from app.features.lost_pets.application.schemas import (
     LostPetResolutionRequest,
     LostPetResponse,
     LostPetUpdateRequest,
+    contact_is_available,
     to_lost_pet_map_page_response,
     to_lost_pet_page_response,
     to_lost_pet_response,
@@ -64,6 +75,7 @@ class LostPetsService:
         payload: LostPetCreateRequest,
         *,
         photos: list[tuple[bytes, str | None, str | None]],
+        contact_consent_version: int | None = None,
     ) -> LostPetResponse:
         phone = user.phone_number.strip() if user.phone_number else ""
         if not phone:
@@ -123,6 +135,7 @@ class LostPetsService:
                         owner_phone_number=phone,
                         owner_telegram_username=user.telegram_username,
                         owner_phone_publication_consent=True,
+                        contact_consent_version=contact_consent_version,
                         last_seen_latitude=payload.last_seen_location.latitude,
                         last_seen_longitude=payload.last_seen_location.longitude,
                         additional_info=(
@@ -159,13 +172,30 @@ class LostPetsService:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise
 
-    def get_lost_pet(self, lost_pet_id: UUID, user: AuthUser | None = None) -> LostPetResponse:
+    def get_lost_pet(
+        self, lost_pet_id: UUID, user: AuthUser | None = None, *, reveal_mode: bool = False
+    ) -> LostPetResponse:
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
-            item = repository.get_by_id(lost_pet_id)
+            item = repository.get_by_id(
+                lost_pet_id,
+                viewer_user_id=user.id if user is not None else None,
+                respect_blocks=True,
+            )
             if item is None:
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
-            response = to_lost_pet_response(item)
+            # Contact details follow docs/CONTACT_PRIVACY.md: the owner always, legacy clients
+            # within the reveal quota, everyone else through the explicit reveal endpoint.
+            include_contact = resolve_detail_contact(
+                session,
+                kind=KIND_LOST_PET,
+                post_id=item.id,
+                owner_id=item.user_id,
+                viewer_id=user.id if user is not None else None,
+                contact_available=contact_is_available(item),
+                reveal_mode=reveal_mode,
+            )
+            response = to_lost_pet_response(item, include_contact=include_contact)
             if item.is_resolved and (user is None or user.id != item.user_id):
                 return response.model_copy(
                     update={
@@ -175,6 +205,33 @@ class LostPetsService:
                     }
                 )
             return response
+
+    def reveal_contact(self, lost_pet_id: UUID, user: AuthUser) -> ContactRevealResponse:
+        with self.db_session_manager.session_scope() as session:
+            item = self.repository_factory(session).get_by_id(
+                lost_pet_id, viewer_user_id=user.id, respect_blocks=True
+            )
+            if item is None or not contact_is_available(item):
+                raise api_error(404, "LOST_PET_NOT_ACTIVE", "Active lost pet post not found.")
+            if item.user_id == user.id:
+                raise api_error(403, "CONTACT_OWNER_FORBIDDEN", "You own this lost pet post.")
+            try:
+                record_reveal(
+                    session,
+                    RevealRequest(
+                        user_id=user.id,
+                        kind=KIND_LOST_PET,
+                        post_id=item.id,
+                        owner_id=item.user_id,
+                        mode=MODE_EXPLICIT,
+                    ),
+                )
+            except ContactRevealLimitExceeded as exc:
+                raise limit_exceeded_error(exc) from exc
+            return ContactRevealResponse(
+                phone_number=item.owner_phone_number,
+                telegram_username=item.owner_telegram_username,
+            )
 
     def update_lost_pet(
         self,
@@ -377,6 +434,7 @@ class LostPetsService:
         radius_meters: int | None = None,
         valid_for_map: bool = False,
         bbox: str | None = None,
+        viewer: AuthUser | None = None,
     ) -> GenericListResponse[LostPetListItem]:
         parsed_bbox = self._parse_bbox(bbox)
         with self.db_session_manager.session_scope() as session:
@@ -390,6 +448,7 @@ class LostPetsService:
                     radius_meters=radius_meters,
                     valid_for_map=valid_for_map,
                     bbox=parsed_bbox,
+                    viewer_user_id=viewer.id if viewer is not None else None,
                 )
             except ValueError as exc:
                 raise api_error(
@@ -405,6 +464,7 @@ class LostPetsService:
         *,
         limit: int,
         bbox: str,
+        viewer: AuthUser | None = None,
     ) -> GenericListResponse[LostPetMapListItem]:
         parsed_bbox = self._parse_bbox(bbox)
         if parsed_bbox is None:
@@ -413,6 +473,7 @@ class LostPetsService:
             page = self.repository_factory(session).list_map_markers(
                 limit=limit,
                 bbox=parsed_bbox,
+                viewer_user_id=viewer.id if viewer is not None else None,
             )
             return to_lost_pet_map_page_response(page)
 

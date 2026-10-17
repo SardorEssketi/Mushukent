@@ -1,7 +1,7 @@
 name: mushukistan_frontend
 description: Mushukistan Flutter MVP skeleton
 publish_to: "none"
-version: 0.1.0+8
+version: 0.2.0+9
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
@@ -53,6 +53,10 @@ flutter:
   uses-material-design: true
   assets:
     - assets/app_icon.png
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope.ttf
 
 flutter_launcher_icons:
   android: true

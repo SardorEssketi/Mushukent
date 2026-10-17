@@ -55,6 +55,7 @@ def _production_settings(**overrides: object) -> Settings:
         "APP_ENV": "production",
         "APP_DEBUG": False,
         "ENABLE_API_DOCS": False,
+        "RATE_LIMIT_ENABLED": True,  # conftest disables it process-wide; production requires it
         "CORS_ALLOWED_ORIGINS": "https://mushukistan.uz",
         "PUBLIC_APP_BASE_URL": "https://mushukistan.uz",
         "POSTGRES_PASSWORD": "strong-db-password",

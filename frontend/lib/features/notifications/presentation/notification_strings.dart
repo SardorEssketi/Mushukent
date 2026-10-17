@@ -14,115 +14,150 @@ class NotificationStrings {
   static const _copy = <String, Map<String, String>>{
     'en': {
       'title': 'Notifications',
-      'settings': 'Notification settings',
       'empty': 'No notifications yet',
       'error': 'Could not load notifications',
       'mark_all': 'Mark all as read',
       'load_more': 'Load more',
       'comment': 'commented on your post',
       'reply': 'replied to your comment',
-      'nearby_lost_pet': 'A lost pet was reported near your alert point',
       'deleted_actor': 'Someone',
       'unavailable': 'This content is no longer available.',
-      'push_comments': 'Comments on my posts',
-      'push_replies': 'Replies to my comments',
-      'push_followups': 'Pet follow-up reminders',
-      'nearby': 'Nearby Lost Pets',
-      'inactivity': 'Inactivity reminders',
-      'point': 'Alert point',
-      'choose_point': 'Choose a point on the map',
-      'use_location': 'Use my current location once',
-      'save_point': 'Save alert point',
-      'disable_nearby': 'Disable and remove saved alert point',
-      'nearby_hint':
-          'Alerts for new Lost Pets within 500 m of your saved point. Your point is private.',
-      'inactivity_hint':
-          'One reminder after seven full days away. Returning resets the cycle.',
-      'push_unavailable':
-          'Android push is not configured or allowed. The in-app inbox still works.',
       'permission_context':
           'Allow Android notifications to receive these alerts on this device?',
       'allow': 'Continue',
       'cancel': 'Cancel',
-      'saved': 'Notification settings saved',
-      'save_failed': 'Could not save notification settings',
-      'location_failed': 'Could not find your current location',
-      'select_point': 'Select a point first',
+      'open_android_settings': 'Open Android settings',
+      'retry': 'Try again',
+      'settings_failed': 'Could not open Android settings',
+      'nearby_lost_pet':
+          "A lost pet was reported near your last authorized location",
+      'automatic_hint':
+          "Comments, replies, pet follow-ups and inactivity reminders are enabled automatically.",
+      'permission_status': "Android notification permission",
+      'permission_allowed': "Allowed",
+      'permission_denied': "Not allowed",
+      'android_only': "Available in the Android app",
+      'push_status': "Push delivery",
+      'push_available': "Available on this device",
+      'push_unavailable':
+          "Unavailable: Android permission and configured push delivery are required.",
+      'nearby': "Nearby lost-pet alerts",
+      'nearby_available':
+          "Available within 500 m of your last authorized location",
+      'nearby_permission_missing':
+          "Unavailable: location permission and enabled location services are required.",
+      'nearby_consent_missing':
+          "Unavailable: location privacy consent is required.",
+      'nearby_unavailable':
+          "Unavailable: a current device location has not been confirmed.",
+      'inbox_hint':
+          "The Notification Center works even when Android push permission is denied.",
+      'location_privacy': "Nearby alert privacy",
+      'nearby_disclosure':
+          "With your consent and Android location permission, Mushukistan privately stores only your last device location for lost-pet alerts within 500 m. It refreshes on app launch or resume, without background tracking or location history. Withdraw consent under Profile → Settings → Nearby alert privacy; revoking permission also removes the point when the app next connects.",
+      'consent_allow': "Allow private nearby alerts",
+      'consent_decline': "Do not use my location",
+      'open_location_settings': "Open Android location permissions",
+      'sync_failed':
+          "Could not sync nearby alerts. Changes will retry when the app is active and online.",
     },
     'ru': {
       'title': 'Уведомления',
-      'settings': 'Настройки уведомлений',
       'empty': 'Пока нет уведомлений',
       'error': 'Не удалось загрузить уведомления',
       'mark_all': 'Отметить все как прочитанные',
       'load_more': 'Загрузить ещё',
       'comment': 'прокомментировал(а) вашу публикацию',
       'reply': 'ответил(а) на ваш комментарий',
-      'nearby_lost_pet': 'Рядом с выбранной точкой ищут питомца',
       'deleted_actor': 'Пользователь',
       'unavailable': 'Этот материал больше недоступен.',
-      'push_comments': 'Комментарии к моим публикациям',
-      'push_replies': 'Ответы на мои комментарии',
-      'push_followups': 'Напоминания о питомцах',
-      'nearby': 'Пропавшие питомцы рядом',
-      'inactivity': 'Напоминания о возвращении',
-      'point': 'Точка оповещений',
-      'choose_point': 'Выберите точку на карте',
-      'use_location': 'Однократно использовать моё местоположение',
-      'save_point': 'Сохранить точку',
-      'disable_nearby': 'Отключить и удалить точку оповещений',
-      'nearby_hint':
-          'Новые объявления о пропавших питомцах в радиусе 500 м. Ваша точка приватна.',
-      'inactivity_hint':
-          'Одно напоминание через семь полных дней. После возвращения отсчёт начнётся заново.',
-      'push_unavailable':
-          'Android-уведомления не настроены или запрещены. Уведомления в приложении работают.',
       'permission_context':
           'Разрешить уведомления Android для получения оповещений на этом устройстве?',
       'allow': 'Продолжить',
       'cancel': 'Отмена',
-      'saved': 'Настройки уведомлений сохранены',
-      'save_failed': 'Не удалось сохранить настройки уведомлений',
-      'location_failed': 'Не удалось определить местоположение',
-      'select_point': 'Сначала выберите точку',
+      'open_android_settings': 'Открыть настройки Android',
+      'retry': 'Повторить',
+      'settings_failed': 'Не удалось открыть настройки Android',
+      'nearby_lost_pet':
+          "Рядом с вашим последним разрешённым местоположением ищут питомца",
+      'automatic_hint':
+          "Комментарии, ответы, напоминания о питомцах и возвращении включены автоматически.",
+      'permission_status': "Разрешение на уведомления Android",
+      'permission_allowed': "Разрешено",
+      'permission_denied': "Не разрешено",
+      'android_only': "Доступно в приложении Android",
+      'push_status': "Доставка push",
+      'push_available': "Доступна на этом устройстве",
+      'push_unavailable':
+          "Недоступна: нужны разрешение Android и настроенная доставка push.",
+      'nearby': "Пропавшие питомцы рядом",
+      'nearby_available':
+          "Доступно в радиусе 500 м от последнего разрешённого местоположения",
+      'nearby_permission_missing':
+          "Недоступно: нужны разрешение на геолокацию и включённые службы местоположения.",
+      'nearby_consent_missing':
+          "Недоступно: нужно согласие на приватное использование местоположения.",
+      'nearby_unavailable':
+          "Недоступно: текущее местоположение устройства ещё не подтверждено.",
+      'inbox_hint':
+          "Центр уведомлений работает, даже если push-уведомления запрещены в Android.",
+      'location_privacy': "Приватность геолокации для оповещений",
+      'nearby_disclosure':
+          "С вашего согласия и при разрешении Android Mushukistan приватно хранит только последнее местоположение устройства для оповещений о пропавших питомцах в радиусе 500 м. Оно обновляется при запуске или возвращении в приложение, без фонового отслеживания и истории перемещений. Отозвать согласие можно в Профиль → Настройки → Приватность геолокации для оповещений. При отзыве разрешения точка удалится, когда приложение снова подключится.",
+      'consent_allow': "Разрешить приватные оповещения рядом",
+      'consent_decline': "Не использовать моё местоположение",
+      'open_location_settings': "Открыть разрешения геолокации Android",
+      'sync_failed':
+          "Не удалось синхронизировать оповещения рядом. Повторим при активном приложении и подключении к сети.",
     },
     'uz': {
       'title': 'Bildirishnomalar',
-      'settings': 'Bildirishnoma sozlamalari',
       'empty': 'Hozircha bildirishnomalar yo‘q',
       'error': 'Bildirishnomalarni yuklab bo‘lmadi',
       'mark_all': 'Barchasini o‘qilgan deb belgilash',
       'load_more': 'Yana yuklash',
       'comment': 'postingizga izoh qoldirdi',
       'reply': 'izohingizga javob berdi',
-      'nearby_lost_pet':
-          'Tanlangan joy yaqinida jonivor yo‘qolgani e’lon qilindi',
       'deleted_actor': 'Foydalanuvchi',
       'unavailable': 'Bu kontent endi mavjud emas.',
-      'push_comments': 'Postlarimga izohlar',
-      'push_replies': 'Izohlarimga javoblar',
-      'push_followups': 'Jonivor bo‘yicha eslatmalar',
-      'nearby': 'Yaqindagi yo‘qolgan jonivorlar',
-      'inactivity': 'Qaytish eslatmalari',
-      'point': 'Ogohlantirish nuqtasi',
-      'choose_point': 'Xaritadan nuqta tanlang',
-      'use_location': 'Joylashuvimdan bir marta foydalanish',
-      'save_point': 'Nuqtani saqlash',
-      'disable_nearby': 'O‘chirib, saqlangan nuqtani olib tashlash',
-      'nearby_hint':
-          'Saqlangan nuqtadan 500 m ichidagi yangi yo‘qolgan jonivorlar. Nuqta maxfiy.',
-      'inactivity_hint':
-          'Yetti to‘liq kundan keyin bir eslatma. Qaytgach davr yangilanadi.',
-      'push_unavailable':
-          'Android bildirishnomalari sozlanmagan yoki ruxsat berilmagan. Ilova ichidagi xabarlar ishlaydi.',
       'permission_context':
           'Ushbu qurilmada ogohlantirishlar uchun Android bildirishnomalariga ruxsat berasizmi?',
       'allow': 'Davom etish',
       'cancel': 'Bekor qilish',
-      'saved': 'Bildirishnoma sozlamalari saqlandi',
-      'save_failed': 'Bildirishnoma sozlamalarini saqlab bo‘lmadi',
-      'location_failed': 'Joylashuvni aniqlab bo‘lmadi',
-      'select_point': 'Avval nuqta tanlang',
+      'open_android_settings': 'Android sozlamalarini ochish',
+      'retry': 'Qayta urinish',
+      'settings_failed': 'Android sozlamalarini ochib bo‘lmadi',
+      'nearby_lost_pet':
+          "Oxirgi ruxsat berilgan joylashuvingiz yaqinida jonivor yo‘qolgani e’lon qilindi",
+      'automatic_hint':
+          "Izohlar, javoblar, jonivorlar va qaytish haqidagi eslatmalar avtomatik yoqilgan.",
+      'permission_status': "Android bildirishnoma ruxsati",
+      'permission_allowed': "Ruxsat berilgan",
+      'permission_denied': "Ruxsat berilmagan",
+      'android_only': "Android ilovasida mavjud",
+      'push_status': "Push xabarlarni yetkazish",
+      'push_available': "Ushbu qurilmada mavjud",
+      'push_unavailable':
+          "Mavjud emas: Android ruxsati va sozlangan push xizmati kerak.",
+      'nearby': "Yaqindagi yo‘qolgan jonivorlar",
+      'nearby_available':
+          "Oxirgi ruxsat berilgan joylashuvdan 500 m ichida mavjud",
+      'nearby_permission_missing':
+          "Mavjud emas: joylashuv ruxsati va yoqilgan joylashuv xizmatlari kerak.",
+      'nearby_consent_missing':
+          "Mavjud emas: joylashuvdan maxfiy foydalanishga rozilik kerak.",
+      'nearby_unavailable':
+          "Mavjud emas: qurilmaning joriy joylashuvi hali tasdiqlanmagan.",
+      'inbox_hint':
+          "Android push ruxsati rad etilsa ham Bildirishnomalar markazi ishlaydi.",
+      'location_privacy': "Yaqin atrof ogohlantirishlari maxfiyligi",
+      'nearby_disclosure':
+          "Roziligingiz va Android joylashuv ruxsati bilan Mushukistan 500 m ichidagi yo‘qolgan jonivorlar haqida ogohlantirish uchun faqat qurilmangizning oxirgi joylashuvini maxfiy saqlaydi. U ilova ishga tushganda yoki unga qaytganda yangilanadi; fon kuzatuvi va joylashuv tarixi yo‘q. Rozilikni Profil → Sozlamalar → Yaqin atrof ogohlantirishlari maxfiyligi orqali bekor qilishingiz mumkin. Ruxsat bekor qilinsa, ilova keyingi ulanishda nuqtani o‘chiradi.",
+      'consent_allow': "Maxfiy yaqin atrof ogohlantirishlariga roziman",
+      'consent_decline': "Joylashuvimdan foydalanmang",
+      'open_location_settings': "Android joylashuv ruxsatlarini ochish",
+      'sync_failed':
+          "Yaqin atrof ogohlantirishlarini sinxronlab bo‘lmadi. Ilova faol va tarmoqqa ulanganda qayta uriniladi.",
     },
   };
 

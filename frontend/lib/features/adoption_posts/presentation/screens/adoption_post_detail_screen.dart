@@ -9,14 +9,17 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
-import '../../../../core/widgets/app_remote_image.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
+import '../../../feed/presentation/widgets/feed_card_parts.dart';
+import '../../../posts/presentation/widgets/publication_detail_parts.dart';
 
 final adoptionPostDetailProvider = FutureProvider.autoDispose
     .family<AdoptionPostData, String>((ref, adoptionPostId) async {
+  // Contact details are only sent to signed-in viewers: reload when the session changes.
+  ref.watch(authControllerProvider.select((state) => state.isAuthenticated));
   try {
     return await ref
         .watch(mushukistanApiProvider)
@@ -44,7 +47,9 @@ class AdoptionPostDetailScreen extends ConsumerStatefulWidget {
 class _AdoptionPostDetailScreenState
     extends ConsumerState<AdoptionPostDetailScreen> {
   bool _contactInFlight = false;
+  ContactRevealData? _revealed;
   bool _statusInFlight = false;
+  final GlobalKey _commentsKey = GlobalKey();
 
   Future<void> _setResolution(AdoptionPostData post, AppStrings strings) async {
     if (_statusInFlight) return;
@@ -122,13 +127,27 @@ class _AdoptionPostDetailScreenState
     }
     _contactInFlight = true;
     try {
-      await ref.read(mushukistanApiProvider).contactAdoptionOwner(post.id);
+      final api = ref.read(mushukistanApiProvider);
+      // The server no longer sends contact details with the post: ask for them explicitly.
+      // The owner's own details and older servers still arrive with the post.
+      var contact = _revealed;
+      final inline = post.ownerPhoneNumber;
+      if (contact == null && inline != null) {
+        contact = ContactRevealData(
+          phoneNumber: inline,
+          telegramUsername: post.ownerTelegramUsername,
+        );
+      }
+      contact ??= await api.revealAdoptionContact(post.id);
+      if (mounted) setState(() => _revealed = contact);
+      await api.contactAdoptionOwner(post.id);
       if (!context.mounted) return;
       if (telegram) {
-        await _openTelegram(post.ownerTelegramUsername!);
+        final handle = contact.telegramUsername;
+        if (handle != null) await _openTelegram(handle);
       } else {
         await launchPublicPhone(context,
-            phone: post.ownerPhoneNumber!, strings: strings);
+            phone: contact.phoneNumber, strings: strings);
       }
     } on MushukistanApiException catch (error) {
       if (error.code == 'ADOPTION_POST_NOT_ACTIVE') {
@@ -137,7 +156,11 @@ class _AdoptionPostDetailScreenState
       }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(strings.couldNotSaveChanges)),
+          SnackBar(
+            content: Text(error.code == 'CONTACT_REVEAL_LIMIT'
+                ? strings.contactRevealLimit
+                : strings.couldNotSaveChanges),
+          ),
         );
       }
     } catch (_) {
@@ -213,132 +236,188 @@ class _AdoptionPostDetailScreenState
     );
   }
 
+  void _openComments() {
+    final target = _commentsKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: AppMotion.of(target, const Duration(milliseconds: 300)),
+      curve: AppMotion.curve,
+      alignment: 0.04,
+    );
+  }
+
+  void _report(AdoptionPostData post) {
+    context.push(
+      Uri(
+        path: '/report',
+        queryParameters: {
+          'type': 'adoption_post',
+          'id': widget.adoptionPostId,
+          'label': post.petName,
+        },
+      ).toString(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final adoptionPostId = widget.adoptionPostId;
     final adoptionAsync = ref.watch(adoptionPostDetailProvider(adoptionPostId));
     final strings = ref.watch(appStringsProvider);
+    final viewerId = ref.watch(currentUserProvider)?.id;
+    final loaded = adoptionAsync.valueOrNull;
+    final loadedIsOwner = viewerId != null && loaded?.author?.id == viewerId;
 
     return Scaffold(
-      appBar: AppBar(title: Text(strings.adoption)),
+      appBar: AppBar(
+        title: Text(strings.adoption),
+        actions: [
+          if (loaded != null)
+            PublicationActionsMenu<_AdoptionDetailAction>(
+              tooltip: strings.postActions,
+              entries: [
+                if (loadedIsOwner) ...[
+                  PublicationMenuEntry(
+                    value: _AdoptionDetailAction.edit,
+                    label: strings.editAdoptionPost,
+                    icon: Icons.edit_outlined,
+                  ),
+                  PublicationMenuEntry(
+                    value: _AdoptionDetailAction.delete,
+                    label: strings.deleteAdoptionPost,
+                    icon: Icons.delete_outline,
+                    destructive: true,
+                  ),
+                ] else
+                  PublicationMenuEntry(
+                    value: _AdoptionDetailAction.report,
+                    label: strings.report,
+                    icon: Icons.flag_outlined,
+                  ),
+              ],
+              onSelected: (action) => switch (action) {
+                _AdoptionDetailAction.report => _report(loaded),
+                _AdoptionDetailAction.edit => _editPost(loaded),
+                _AdoptionDetailAction.delete =>
+                  _deletePost(context, strings, loaded),
+              },
+            ),
+        ],
+      ),
       body: adoptionAsync.when(
         data: (post) {
           final info = post.additionalInfo?.trim();
-          final viewerId = ref.watch(currentUserProvider)?.id;
           final isOwner = viewerId != null && post.author?.id == viewerId;
           final canContact = !post.isResolved &&
-              post.ownerPhoneNumber != null &&
+              post.contactAvailable &&
               post.author?.id != null &&
               post.author?.id != viewerId;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _AdoptionPhotoGallery(photoUrls: post.photoUrls),
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _AdoptionBadge(
-                    label: post.isResolved
-                        ? strings.rehomedAdoptionPost
-                        : strings.adoption),
+          final authorId = post.author?.id;
+          return PublicationDetailLayout(
+            commentsKey: _commentsKey,
+            gallery: PublicationGallery(photoUrls: post.photoUrls),
+            details: [
+              PublicationAuthorRow(
+                author: post.author,
+                createdAt: post.createdAt,
+                strings: strings,
+                onAuthorTap: authorId == null
+                    ? null
+                    : () => context.push('/users/$authorId'),
               ),
-              const SizedBox(height: 12),
-              Text(
-                post.petName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w700),
+              const SizedBox(height: AppSpacing.md),
+              PublicationTitle(
+                title: post.petName,
+                badge: post.isResolved
+                    ? AppBadge(
+                        label: strings.rehomedAdoptionPost,
+                        icon: Icons.check_circle_outline,
+                        color: AppPalette.found,
+                      )
+                    : FeedKindBadge(
+                        kind: FeedKind.rehoming,
+                        label: strings.adoption,
+                      ),
               ),
               if (post.isResolved) ...[
-                const SizedBox(height: 8),
-                Text(strings.rehomedPostPrivateDetails),
-              ],
-              const SizedBox(height: 16),
-              if (canContact)
-                _DetailActionTile(
-                  icon: Icons.phone_outlined,
-                  title: strings.contactOwner,
-                  subtitle: post.ownerPhoneNumber!,
-                  onTap: () => _contactOwner(context, strings, post),
-                ),
-              if (canContact && post.ownerTelegramUsername != null) ...[
-                const SizedBox(height: 10),
-                _DetailActionTile(
-                  icon: Icons.alternate_email,
-                  title: 'Telegram',
-                  subtitle: '@${post.ownerTelegramUsername}',
-                  onTap: () =>
-                      _contactOwner(context, strings, post, telegram: true),
+                const SizedBox(height: AppSpacing.md),
+                PublicationCallout(
+                  icon: Icons.home_outlined,
+                  color: AppPalette.found,
+                  body: strings.rehomedPostPrivateDetails,
                 ),
               ],
               if (info != null && info.isNotEmpty) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: AppSpacing.md),
                 Text(
                   strings.additionalInformation,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 6),
-                Text(info),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  info,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(height: 1.45),
+                ),
+              ],
+              if (canContact) ...[
+                const SizedBox(height: AppSpacing.lg),
+                PublicationContactButton(
+                  icon: Icons.phone_outlined,
+                  label: strings.contactOwner,
+                  value: _revealed?.phoneNumber ?? post.ownerPhoneNumber,
+                  onPressed: () => _contactOwner(context, strings, post),
+                ),
+                if ((_revealed?.telegramUsername ??
+                        post.ownerTelegramUsername) !=
+                    null) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  PublicationContactButton(
+                    primary: false,
+                    icon: Icons.alternate_email,
+                    label: 'Telegram',
+                    value:
+                        '@${_revealed?.telegramUsername ?? post.ownerTelegramUsername}',
+                    onPressed: () =>
+                        _contactOwner(context, strings, post, telegram: true),
+                  ),
+                ],
               ],
               if (isOwner) ...[
-                const SizedBox(height: 20),
-                Wrap(spacing: 12, runSpacing: 12, children: [
-                  OutlinedButton.icon(
-                    onPressed: _statusInFlight
-                        ? null
-                        : () => _setResolution(post, strings),
-                    icon: Icon(post.isResolved
-                        ? Icons.replay_outlined
-                        : Icons.check_circle_outline),
-                    label: Text(post.isResolved
-                        ? strings.reopenRehoming
-                        : strings.markRehomed),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _editPost(post),
-                    icon: const Icon(Icons.edit_outlined),
-                    label: Text(strings.editAdoptionPost),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _deletePost(context, strings, post),
-                    icon: const Icon(Icons.delete_outline),
-                    label: Text(strings.deleteAdoptionPost),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ]),
+                const SizedBox(height: AppSpacing.md),
+                post.isResolved
+                    ? OutlinedButton.icon(
+                        onPressed: _statusInFlight
+                            ? null
+                            : () => _setResolution(post, strings),
+                        icon: const Icon(Icons.replay_outlined),
+                        label: Text(strings.reopenRehoming),
+                      )
+                    : FilledButton.tonalIcon(
+                        onPressed: _statusInFlight
+                            ? null
+                            : () => _setResolution(post, strings),
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: Text(strings.markRehomed),
+                      ),
               ],
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: () => context.push(
-                    Uri(
-                      path: '/report',
-                      queryParameters: {
-                        'type': 'adoption_post',
-                        'id': adoptionPostId,
-                        'label': post.petName,
-                      },
-                    ).toString(),
-                  ),
-                  icon: const Icon(Icons.flag_outlined),
-                  label: Text(strings.report),
-                ),
-              ),
-              const SizedBox(height: 24),
-              CommentDeepLinkFocus(
-                focus: widget.focusComments,
-                child: AdoptionPostCommentsSection(
-                  adoptionPostId: adoptionPostId,
-                  padding: EdgeInsets.zero,
-                ),
+              const SizedBox(height: AppSpacing.lg),
+              PublicationEngagementBar(
+                strings: strings,
+                commentCount: post.commentCount,
+                onComments: _openComments,
               ),
             ],
+            comments: CommentDeepLinkFocus(
+              focus: widget.focusComments,
+              child: AdoptionPostCommentsSection(
+                adoptionPostId: adoptionPostId,
+                padding: EdgeInsets.zero,
+              ),
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -358,249 +437,4 @@ class _AdoptionPostDetailScreenState
   }
 }
 
-class _AdoptionPhotoGallery extends StatefulWidget {
-  const _AdoptionPhotoGallery({required this.photoUrls});
-
-  final List<String> photoUrls;
-
-  @override
-  State<_AdoptionPhotoGallery> createState() => _AdoptionPhotoGalleryState();
-}
-
-class _AdoptionPhotoGalleryState extends State<_AdoptionPhotoGallery> {
-  late final PageController _controller = PageController();
-  int _currentIndex = 0;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _move(int delta) {
-    final next = (_currentIndex + delta).clamp(0, widget.photoUrls.length - 1);
-    _controller.animateToPage(
-      next,
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final photoCount = widget.photoUrls.length;
-    final desktop = MediaQuery.sizeOf(context).width >= 700;
-    return SizedBox(
-      height: desktop ? 420 : 260,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PageView.builder(
-            controller: _controller,
-            itemCount: photoCount,
-            onPageChanged: (index) => setState(() => _currentIndex = index),
-            itemBuilder: (context, index) {
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: AppRemoteImage(
-                  widget.photoUrls[index],
-                  fit: desktop ? BoxFit.contain : BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const _GalleryImageUnavailable(),
-                ),
-              );
-            },
-          ),
-          if (photoCount > 1) ...[
-            Positioned(
-              top: 12,
-              right: 12,
-              child: _GalleryCounter(
-                current: _currentIndex + 1,
-                total: photoCount,
-              ),
-            ),
-            Positioned(
-              left: 8,
-              top: 0,
-              bottom: 0,
-              child: _GalleryArrow(
-                icon: Icons.chevron_left,
-                onPressed: _currentIndex == 0 ? null : () => _move(-1),
-              ),
-            ),
-            Positioned(
-              right: 8,
-              top: 0,
-              bottom: 0,
-              child: _GalleryArrow(
-                icon: Icons.chevron_right,
-                onPressed:
-                    _currentIndex == photoCount - 1 ? null : () => _move(1),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _GalleryCounter extends StatelessWidget {
-  const _GalleryCounter({required this.current, required this.total});
-
-  final int current;
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.68),
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Text(
-          '$current / $total',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GalleryArrow extends StatelessWidget {
-  const _GalleryArrow({required this.icon, required this.onPressed});
-
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: IconButton.filledTonal(
-        visualDensity: VisualDensity.compact,
-        onPressed: onPressed,
-        icon: Icon(icon),
-      ),
-    );
-  }
-}
-
-class _GalleryImageUnavailable extends StatelessWidget {
-  const _GalleryImageUnavailable();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      color: colorScheme.surfaceContainerHighest,
-      alignment: Alignment.center,
-      child: Icon(
-        Icons.image_not_supported_outlined,
-        color: colorScheme.onSurfaceVariant,
-        size: 48,
-      ),
-    );
-  }
-}
-
-class _AdoptionBadge extends StatelessWidget {
-  const _AdoptionBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.home_outlined,
-                size: 16, color: colorScheme.onTertiaryContainer),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onTertiaryContainer,
-                    fontWeight: FontWeight.w800,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailActionTile extends StatelessWidget {
-  const _DetailActionTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Icon(icon, color: colorScheme.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+enum _AdoptionDetailAction { report, edit, delete }

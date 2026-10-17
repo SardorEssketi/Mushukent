@@ -5,6 +5,11 @@ from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
+from db_safety import (
+    UnsafeTestDatabaseError,
+    allowed_extra_hosts,
+    assert_safe_test_database,
+)
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 
-os.environ["APP_ENV"] = "development"
+os.environ["APP_ENV"] = "test"
 os.environ["APP_DEBUG"] = "false"
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
@@ -33,6 +38,12 @@ def integration_database_url() -> str:
     database_url = _database_url()
     if not database_url:
         pytest.skip("Set TEST_DATABASE_URL or DATABASE_URL to point at a live test database.")
+
+    # The fixtures below truncate every table: refuse anything that is not clearly a local test DB.
+    try:
+        assert_safe_test_database(database_url, extra_hosts=allowed_extra_hosts())
+    except UnsafeTestDatabaseError as exc:
+        pytest.fail(str(exc), pytrace=False)
 
     return database_url
 

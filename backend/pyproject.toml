@@ -25,7 +25,11 @@ dependencies = [
   "firebase-admin>=6.5.0,<8.0.0",
   "passlib[argon2]>=1.7.4,<2.0.0",
   "structlog>=24.2.0,<25.0.0",
-  "openpyxl>=3.1.0,<4.0.0"
+  "openpyxl>=3.1.0,<4.0.0",
+  "posthog>=7.29.0,<8.0.0",
+  "opentelemetry-api",
+  "opentelemetry-sdk",
+  "opentelemetry-exporter-otlp"
 ]
 
 [project.optional-dependencies]
@@ -52,6 +56,15 @@ exclude = ["alembic"]
 select = ["E", "F", "I", "B", "UP"]
 ignore = ["B008", "UP037", "UP046"]
 
+[tool.ruff.lint.per-file-ignores]
+# These tests reuse pytest fixtures imported from sibling test modules; the fixture parameters
+# then "redefine" the imported names, which is intended.
+"tests/test_cat_editing_policy.py" = ["F811"]
+"tests/test_contact_privacy.py" = ["F811"]
+"tests/test_contact_reveal.py" = ["F811"]
+"tests/test_contact_consent.py" = ["F811"]
+"tests/test_legal_acceptance.py" = ["F811"]
+
 [tool.mypy]
 python_version = "3.13"
 warn_unused_configs = true
@@ -66,6 +79,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = [".", ".."]
 markers = [
   "integration: tests that require a live PostgreSQL/PostGIS database",
 ]

@@ -7,6 +7,7 @@ import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../application/auth_controller.dart';
+import 'session_unavailable_screen.dart';
 
 class AuthRequiredScreen extends ConsumerWidget {
   const AuthRequiredScreen({super.key, this.redirect});
@@ -18,6 +19,11 @@ class AuthRequiredScreen extends ConsumerWidget {
     final strings = ref.watch(appStringsProvider);
     final authState = ref.watch(authControllerProvider);
     final checkingSession = authState.phase == AuthPhase.restoring;
+    if (authState.phase == AuthPhase.sessionUnavailable) {
+      // Opened by an action that needs a session while the server is unreachable: this is not a
+      // sign-in problem, so do not offer sign-in.
+      return const SessionUnavailableScreen();
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.signInToMushukistan)),
