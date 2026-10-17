@@ -4,6 +4,8 @@ Branch `fix/release-readiness`, local head `5b2e312` (two commits ahead of `orig
 
 ## 0. Assessment
 
+**Update 2026-10-18 (final gate).** Pushed `0bfdbfd`, `5b2e312`, `fb1f6d4` (remote head `fb1f6d4`); CI run 39070552415 passed all three jobs. Production state from the owner's manual inspection of 2026-10-16: Alembic `20261013_0026`, backend image `mushukistan-backend:4eff1f2`, PostgreSQL 15.8 / PostGIS 3.4, about 28 GB free, backend and database healthy. The disk requirement in section 4 is therefore met. Still unread (SSH from the agent is blocked by the permission layer; not bypassed): the container start commands, the active overlay set, the worker image and any change since 16 October. Phase 1.2 records these immediately before the window and is the **drift check**: stop if `alembic current` is not `20261013_0026` or the backend image is not `4eff1f2`.
+
 **NOT READY to execute today. The code, migration and configuration are ready; two preconditions are open:**
 1. The production server state has never been read: free disk, the active Compose overlay set, the backend start command and the image tags. The existing read-only script `docs/audits/release-handoff/prod_readonly_inspect.sh` was blocked from running by the permission layer.
 2. The two local commits are unpushed, so CI has not run on the head that will be deployed (they change only `pubspec.yaml` and docs, so the risk is low, but the deployed SHA should be CI-green).
@@ -39,7 +41,7 @@ Unrelated local changes are untouched.
 | Google OAuth | `GOOGLE_OAUTH_CLIENT_ID` (mandatory); must equal the AAB `serverClientId` | Backend and AAB values identical. Android OAuth client + SHA-1 **unverified** (console) |
 | Firebase FCM | `FIREBASE_PROJECT_ID`, `PUSH_TOKEN_ENCRYPTION_KEY`, `FIREBASE_CREDENTIALS_HOST_PATH` (mounted by `docker-compose.notifications.yml`); all-or-none, enforced at startup | Present; project IDs agree (`FIREBASE_PROJECT_ID` = service account = `google-services.json`); dry-run authenticated. **Never change the encryption key**: stored device tokens become unreadable |
 | Contact reveal | `CONTACT_REVEAL_MAX_PER_DAY` (15), `..._PER_WEEK` (40), `..._MIN_ACCOUNT_AGE_HOURS` (0), `CONTACT_LEGACY_DETAIL_ENABLED` (true) | Not set in the reviewed `.env`, so the defaults apply, which is the intended launch config. Keep legacy **true**: installed Android `0.1.0` (code 8) and web depend on it. Reveals are counted in the database, so the quota does not depend on the in-memory rate limiter |
-| PostHog | `POSTHOG_PROJECT_TOKEN` + `POSTHOG_HOST` (both or analytics are off); `POSTHOG_REQUIRED` unset | Both names present. Code sends only event names, pseudonymous id, language, moderator flag; no email/name/free text; exception autocapture off; GeoIP off (`test_analytics_privacy.py`). **Owner action:** older code sent `email`/`name` person properties; if analytics ever ran in production, purge them in PostHog (code cannot) |
+| PostHog | `POSTHOG_PROJECT_TOKEN` + `POSTHOG_HOST` (both or analytics are off); `POSTHOG_REQUIRED` unset | Both names present. Code sends only event names, pseudonymous id, language, moderator flag; no email/name/free text; exception autocapture off; GeoIP off (`test_analytics_privacy.py`). **Owner action:** the old production image (`4eff1f2`) refuses to start without PostHog settings, so analytics **are** active in production and that code sent `email`/`name` person properties: purge them in PostHog (the new code cannot) |
 | Rate limit / proxy | `RATE_LIMIT_ENABLED=true` (required), `TRUSTED_PROXY_CIDRS` | Defaults trust loopback and `172.16.0.0/12` (Docker bridge). Single uvicorn process assumed |
 | Other mandatory | `APP_ENV=production`, `APP_DEBUG=false`, strong `JWT_SECRET_KEY`, `POSTGRES_PASSWORD`, `CORS_ALLOWED_ORIGINS`, `PUBLIC_APP_BASE_URL` | Startup refuses to run if any is wrong |
 
@@ -59,7 +61,9 @@ Stop on any FAIL.
 
 Approach (works in both states): run the migration as an **explicit, separate step** from the new image after the backup and while the old backend still serves (the schema change is additive, so the old code ignores it), then swap the containers. At swap time the start-up `alembic upgrade head` is a no-op, or is skipped by the overlay.
 
-Rollback hazard found while reading the Dockerfile: after `0027` is applied, an **old image whose CMD runs `alembic upgrade head` will crash-loop** ("Can't locate revision 20261015_0027"). Rollback therefore must override the command (section 6).
+Rollback hazard, **reproduced locally** (disposable PostGIS, old image built from `4eff1f2`, database migrated to `0027` by the new image): the old image started with its default CMD exits with `FAILED: Can't locate revision identified by '20261015_0027'` and never serves. With the command overridden to `uvicorn app.main:app --host 0.0.0.0 --port 8000` it starts and `/api/v1/health` returns 200 against the `0027` schema. Rollback therefore must override the command (section 6).
+
+Worker compatibility: backend and worker use one image. `0027` adds a table and nullable columns only and the worker touches none of them, so the old worker keeps running correctly against `0027` during the migration step, and the new worker runs against `0027` after it. The old worker is stopped before the new image's worker starts, so the two never run together. The old and new image CMDs differ only in the migration prefix; the worker's command (`python -m app.features.notifications.application.worker`) never migrates.
 
 ## 4. Rollout (commands for operator review)
 
@@ -166,7 +170,7 @@ Watch for 24 h: 5xx, 429, login failures, worker `failed` jobs.
 
 **Prefer a forward fix.** Rolling back only the application is safe for data (the schema is additive, rows written stay valid) but it is a **privacy regression**: the previous production backend returns owner phone/Telegram in detail responses to every signed-in user with no quota, and, because it predates the contact-privacy work, probably to anonymous users and in list responses too (the Phase 2.3 baseline measures this). New Android `0.2.0` clients get `404` on reveal under the old backend, so stop testing/distributing the AAB while rolled back. Rollback returns to today's production privacy level, not below it.
 
-6.1 Application rollback (backend + worker together):
+6.1 Application rollback (backend + worker together). **Tested locally** on a disposable database (see section 3): the override below is what makes the old image start. The production image `mushukistan-backend:4eff1f2` already exists on the server; `pre-0.2.0` is a second pointer to the same image, so either tag works:
 ```bash
 $DC stop -t 60 notification-worker
 docker tag mushukistan-backend:pre-0.2.0 mushukistan-backend:local
@@ -190,12 +194,12 @@ Then verify health, login with the owner's account, and that Nginx/db IDs are un
 
 | # | Blocks | Owner action |
 |---|---|---|
-| 1 | Backend deploy | Run the read-only inspect script on the VPS and share the output (no secrets): `ssh root@<host> 'sh -s' < docs/audits/release-handoff/prod_readonly_inspect.sh > prod_inspect.txt` |
-| 2 | Backend deploy | Approve push of `0bfdbfd`, `5b2e312` (+ the docs commit) and CI on the head; merge PR #1 yourself |
+| 1 | Backend deploy | Operator runs the drift check on the VPS (start commands, overlay set, worker image): see the PowerShell command in the final report. Not blocking if it matches 16 October |
+| 2 | Backend deploy | Merge PR #1 yourself (CI is green on `fb1f6d4`) and name the release SHA |
 | 3 | Backend deploy | Confirm the server `.env` renames `EMAIL_FROM` to `RESEND_FROM_EMAIL`; run `prod_preflight.py` on a copy |
 | 4 | Android rollout | Android OAuth client + upload and Play App Signing SHA-1 for `uz.mushukistan.app`; Play versionCode history (9 unused) |
 | 5 | Android rollout | One controlled verification email and Resend domain status; one push to a test token |
-| 6 | Hygiene | Purge legacy PostHog person properties if analytics ever ran with the old code; native/legal review of RU/UZ wording |
+| 6 | Hygiene | Purge legacy PostHog person properties (analytics are confirmed active); native/legal review of RU/UZ wording |
 
 ## 8. Smallest next action
-Run the one-line inspect script (blocker 1) and send the output. It resolves free disk, the real overlay set and whether the backend already skips migrations at start, which are the only unknowns in this plan.
+Run the drift-check command (blocker 1) and send the output: it resolves the real overlay set and whether the backend already skips migrations at start, the only unknowns left.

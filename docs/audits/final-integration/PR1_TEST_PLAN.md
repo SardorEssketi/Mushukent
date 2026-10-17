@@ -2,7 +2,7 @@
 Legend: PROD = executed against a production service (read-only or disposable object). ISOLATED = disposable local database/backend or restored backup copy, no production. BLOCKED = needs access or approval not available to the agent. NOT RUN = not yet executed.
 
 ### Completed
-- [x] GitHub Actions on `d757911`: Backend lint and format, Backend tests (PostGIS), Flutter analyze and tests, all green. Commits after it (`0bfdbfd` version bump, `5b2e312` docs) change only `pubspec.yaml` and docs and have **not run on GitHub yet** (not pushed)
+- [x] GitHub Actions on `d757911`: Backend lint and format, Backend tests (PostGIS), Flutter analyze and tests, all green. Later commits `0bfdbfd`, `5b2e312`, `fb1f6d4` (version bump and docs) are pushed and green
 - [x] Backend suite, disposable PostGIS (ISOLATED): 536 passed, 1 skipped (live R2), ruff and black clean (latest recorded run, `release-handoff/ROLLOUT_CHECKLIST.md`)
 - [x] Flutter (ISOLATED): analyze clean, 452 passed, 4 skipped
 - [x] Browser regression against an isolated backend (ISOLATED): 25/25
