@@ -107,7 +107,8 @@ def main() -> int:
             print(message)
             ok = ok and read_ok
         _ = uploaded
-    except Exception as exc:  # noqa: BLE001 - report the class only, never details that may hold keys
+    # Report the class only, never details that may hold keys.
+    except Exception as exc:  # noqa: BLE001
         print(f"FAIL {type(exc).__name__}")
         ok = False
     finally:
