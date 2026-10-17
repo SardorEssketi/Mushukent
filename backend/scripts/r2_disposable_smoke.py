@@ -20,7 +20,8 @@ import struct
 import sys
 import zlib
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,6 +29,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.infrastructure.storage.r2 import R2ObjectStorage, R2StorageConfig  # noqa: E402
 
 REQUIRED = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
+
+# urllib's default "Python-urllib/x" User-Agent is rejected by Cloudflare's Browser Integrity
+# Check (HTTP 403, body "error code: 1010") on the public media domain, while browsers and the
+# app are served normally. Identify the probe explicitly instead of weakening the protection.
+USER_AGENT = "Mozilla/5.0 (compatible; MushukistanSmoke/1.0)"
+SAFE_HEADERS = ("server", "content-type", "cache-control", "cf-cache-status", "cf-ray")
 
 
 def _png() -> bytes:
@@ -42,6 +49,23 @@ def _png() -> bytes:
         + chunk(b"IDAT", zlib.compress(rows))
         + chunk(b"IEND", b"")
     )
+
+
+def public_read(url: str, *, opener=urlopen) -> tuple[bool, str]:
+    """Fetch `url` and describe the outcome without echoing the URL, body or credentials."""
+    request = Request(url, headers={"User-Agent": USER_AGENT})  # noqa: S310 - https URL
+    try:
+        with opener(request, timeout=15) as response:
+            status = response.status
+            return status == 200, f"{'PASS' if status == 200 else 'FAIL'} public read ({status})"
+    except HTTPError as exc:
+        headers = {k: exc.headers.get(k) for k in SAFE_HEADERS if exc.headers.get(k)}
+        hint = ""
+        if exc.code == 403:
+            hint = " (403 from the edge: check Cloudflare WAF / Browser Integrity Check rules)"
+        return False, f"FAIL public read HTTP {exc.code} {exc.reason}; headers={headers}{hint}"
+    except URLError as exc:
+        return False, f"FAIL public read {type(exc.reason).__name__} (DNS/TLS/connection)"
 
 
 def main() -> int:
@@ -79,14 +103,11 @@ def main() -> int:
         print("PASS exists")
         if config.public_base_url:
             url = config.public_base_url.rstrip("/") + "/" + key
-            with urlopen(url, timeout=15) as response:  # noqa: S310 - operator-provided https URL
-                status = response.status
-                print(f"{'PASS' if status == 200 else 'FAIL'} public read ({status})")
-                ok = ok and status == 200
+            read_ok, message = public_read(url)
+            print(message)
+            ok = ok and read_ok
         _ = uploaded
-    except (
-        Exception
-    ) as exc:  # noqa: BLE001 - report the class only, never details that may hold keys
+    except Exception as exc:  # noqa: BLE001 - report the class only, never details that may hold keys
         print(f"FAIL {type(exc).__name__}")
         ok = False
     finally:
