@@ -135,7 +135,7 @@ until [ "$(docker inspect -f '{{.State.Health.Status}}' mushukistan-backend)" = 
 $DC up -d --no-deps --no-build --force-recreate notification-worker
 docker ps -q --filter name=mushukistan | xargs docker inspect --format '{{.Name}} {{.Id}}' | diff - /root/pre-release-ids.txt
 ```
-Expected diff: only the backend and the worker differ. Nginx and the database keep their IDs (they are never recreated here). Backend downtime is the container restart (seconds).
+**Required follow-up (found in the 2026-10-18 production run):** Nginx resolves `backend` once at start and keeps the old container IP, so recreating the backend causes 502 on the whole API until Nginx re-resolves. Immediately after the backend is healthy run `docker exec mushukistan-nginx nginx -t && docker exec mushukistan-nginx nginx -s reload` (graceful, no container recreate), then re-check `https://api.mushukistan.uz/api/v1/health`. Rollback (section 6) needs the same reload. Expected diff: only the backend and the worker differ. Nginx and the database keep their IDs (they are never recreated here). Backend downtime is the container restart (seconds).
 
 ### Phase 5: verification (all non-mutating; no users created, no email or push sent)
 ```bash
