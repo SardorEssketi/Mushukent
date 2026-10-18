@@ -4,7 +4,7 @@
     "start_url": "/feed",
     "scope": "/",
     "display": "standalone",
-    "background_color": "#B8431F",
+    "background_color": "#014032",
     "theme_color": "#B8431F",
     "description": "A social map for street cats and lost pets in Tashkent.",
     "orientation": "portrait-primary",
