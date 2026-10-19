@@ -24,7 +24,12 @@ $env:MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID = '<production-web-oauth-client-id>'
 Production backend configuration remains in the server-side `.env`. At minimum
 it must contain the production database/JWT/Resend/R2 values documented in
 `infrastructure/README.md`, plus `GOOGLE_OAUTH_CLIENT_ID`. The backend value must
-accept the same Web OAuth client ID embedded in both Flutter targets.
+accept the same Web OAuth client ID embedded in both Flutter targets. Android
+ID tokens can carry the Android OAuth client as `azp`, and the backend requires
+`azp` to be allowed too, so list both IDs, comma-separated:
+`GOOGLE_OAUTH_CLIENT_ID=<web-client-id>,<android-client-id>`. A rejected
+`aud`/`azp` is logged as `google_token_audience_rejected` /
+`google_token_azp_rejected`.
 
 Google Cloud must have:
 

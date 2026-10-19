@@ -316,12 +316,14 @@ class GoogleOAuthIdTokenVerifier:
 
         audiences = self._token_audiences(payload.get("aud"))
         if not audiences or not set(audiences).intersection(allowed_audiences):
+            logger.warning("google_token_audience_rejected", aud=audiences)
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
         authorized_party = payload.get("azp")
         if (len(audiences) > 1 and authorized_party not in allowed_audiences) or (
             authorized_party is not None and authorized_party not in allowed_audiences
         ):
+            logger.warning("google_token_azp_rejected", azp=authorized_party)
             raise api_error(401, "INVALID_GOOGLE_TOKEN", "Invalid Google token.")
 
         expiration_at = self._timestamp(payload.get("exp"))
