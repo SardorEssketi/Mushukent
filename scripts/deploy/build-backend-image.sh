@@ -38,13 +38,19 @@ fi
 git merge-base --is-ancestor "$sha" origin/main 2>/dev/null \
   || echo "WARN: $short is not contained in origin/main (release branch). Production releases come from a pushed main commit." >&2
 
-ctx="$(mktemp -d)"; trap 'rm -rf "$ctx"' EXIT
+# Context inside the (gitignored) .data/ with a relative path: a native Windows docker.exe cannot
+# read an MSYS /tmp directory.
+mkdir -p .data
+ctx=".data/build-ctx-$short-$$"; rm -rf "$ctx"; mkdir -p "$ctx"; trap 'rm -rf "$ctx"' EXIT
 git archive "$sha" backend | tar -x -C "$ctx"
 $DOCKER build --platform linux/amd64 -t "$tag" "$ctx/backend"
 
 heads="$($DOCKER run --rm --entrypoint alembic "$tag" heads 2>/dev/null | grep -c '(head)' || true)"
 [ "$heads" = "1" ] || die "expected exactly one Alembic head in the image, found $heads"
 echo "Alembic head in image: $($DOCKER run --rm --entrypoint alembic "$tag" heads 2>/dev/null | head -1)"
+
+echo "Key dependency versions in this image (compare with production before shipping):"
+$DOCKER run --rm --entrypoint pip "$tag" list 2>/dev/null | grep -iE '^(fastapi|starlette|pydantic|python-multipart|uvicorn|sqlalchemy|alembic) ' || true
 
 mkdir -p release
 out="release/mushukistan-backend-$short.tar.gz"

@@ -225,7 +225,8 @@ uvicorn-only command (no migration on start) with the overlay pinning
    web release that should stay live (symlinks, as `20261018-fb1f6d4-backend` does).
    Validate with `$DC config --quiet` (never print the output). Use `--no-build` on every
    `up` so Compose can never trigger a build on the server.
-3. **Build locally, never on the server.** `bash scripts/deploy/build-backend-image.sh`
+3. **Precondition: dependencies must be locked** (see "Next-release readiness"); an unlocked
+   rebuild already changes behavior today. **Build locally, never on the server.** `bash scripts/deploy/build-backend-image.sh`
    (from the pushed `main` commit) builds `linux/amd64`, checks for exactly one
    Alembic head, and writes `release/mushukistan-backend-<sha7>.tar.gz` plus a
    checksum. After approval (G2) upload it and run `gunzip -c ... | docker load` on
@@ -323,6 +324,7 @@ private key. A restore rehearsal was done on 2026-10-19 (below) and takes minute
 | Rollback restarts Nginx again (second short outage) | Accepted. |
 | `verify-public.sh` needs the server to reach its own public HTTPS | Verified on 2026-10-19 (hairpin works, `curl` present). |
 | Migrations are manual; old images cannot parse newer revisions | Overlay keeps the uvicorn-only command; backups precede every migration. |
+| Unpinned backend dependencies: a rebuild silently upgrades FastAPI/Starlette | **Open blocker** for backend releases; see "Next-release readiness". Compare `pip list` of the new image with production before shipping (`build-backend-image.sh` prints it). |
 | Backups: no automation, no confirmed off-server copy, a zero-byte August dump exists | See the proposal above. |
 | Root SSH login with a workstation key; agent access is permission-gated | Unchanged by this work; do not alter SSH security settings without approval. |
 | `.env.bak-*` files with secrets sit in release directories | Hygiene issue; clean up only with approval. |
@@ -336,8 +338,18 @@ private key. A restore rehearsal was done on 2026-10-19 (below) and takes minute
 | Read-only inspection and public smoke check (`remote-inspect.sh`, `verify-public.sh`) | **VERIFIED** against production on 2026-10-19, including from the server itself. |
 | Database backup | **VERIFIED**: baseline `mushukistan-20261019-155853-baseline-0027.dump` created, `pg_restore --list` (240 entries), SHA-256 `8bf8ebe15fab0bcd118d4cf143ad6d689d195e2a90541cb7d8e50814cffdfcbb`, restored into a disposable PostGIS with identical Alembic revision and row counts. Pulled to the workstation under the gitignored `.data/backups/`; no confirmed off-site copy. `backup-db.sh --execute` itself has only run against stubs (no terminal available to the agent). |
 | Web activation (`activate-web-release.sh`) | **VERIFIED** in a disposable Linux + real Docker Compose rehearsal (`scripts/deploy/e2e_disposable.sh`): symlinked backend-only release layout, label/mount parsing, dry run, wrong confirmation, success, idempotent re-run, rollback restoring the previous release, failed verification, refused release; only the Nginx container changed. **NOT VERIFIED** on the real server (never run there). |
-| Backend/worker release (procedure B) | **NOT VERIFIED**: manual steps only; image `docker load` flow and a real swap untested. |
+| Backend/worker release (procedure B) | **NOT READY**: dependency drift blocker (above); manual steps only; image `docker load` flow and a real swap untested. Backend suite on today's fresh dependencies: 535 passed, 2 failed, 2 skipped; ruff and black clean. |
 | Android | Local build procedure only; not exercised in this audit. |
+
+### Next-release readiness (audit of 2026-10-19)
+
+| Item | Status |
+| --- | --- |
+| **Backend dependencies are unpinned (blocker for any backend image build)** | `backend/pyproject.toml` uses open ranges (`fastapi>=0.115,<1.0`, ...) and the Dockerfile runs a plain `pip install -e .`. Production runs FastAPI 0.143.3 / Starlette 1.8.0; a fresh install on 2026-10-19 resolved FastAPI 0.149.0 / Starlette 1.9.0. With the fresh versions two tests fail (`test_older_adoption_clients_without_a_checkbox_still_create_posts`, `test_adoption_create_needs_contact_phone_but_no_publication_checkbox`: an absent optional `bool` form field is read as `False`, so older app versions would get `422 CONTACT_CONSENT_REQUIRED` when posting an adoption). With production's FastAPI/Starlette pinned, `test_contact_consent.py` + `test_posts.py` pass (28 passed). The backend source equals the deployed `fb1f6d4` except two auth-logging lines, so the code is not the cause. **Do not build or ship a new backend image until the dependencies are locked** (for example a `constraints.txt` generated from the running image's `pip freeze`, used by the Dockerfile) or the endpoint is fixed; either is a backend change that needs the user's approval. A web-only release is unaffected. |
+| Deployed backend vs `origin/main` | `origin/main` is 7 commits ahead of production; the only backend change is two lines of Google-token audience logging. The rest is web icons/branding, docs, and the Android version bump. |
+| Uncommitted Russian-default website changes | Technically ready: `website/` unit tests, the interaction test, `check_flutter_bundle.py`, and the isolated production-Nginx harness (62 checks) pass. Not covered by automation: the legacy `/ru` and `/ru/` -> `/` 301 redirects (the harness no longer checks them), Search Console resubmission of the new sitemap (`/`, `/en/`, `/uz/`), a real-browser pass (`check_browser.py`, not run), and a rebuild of `frontend/build/web` from the intended `main` commit (the local build is from 2026-10-14). They must be committed to `main` through the user's normal review before packaging. |
+| Deploy tooling on `origin/main` | The commits that add `scripts/deploy/`, `CLAUDE.md`, and this runbook exist only on the local branch `fix/release-readiness`. They are not pushed; pushing and merging need the user's permission. |
+| Staged old web releases (`20261018-bf9c91d-*`) | Not to be activated (owner decision). |
 
 ### Open questions for the user
 
