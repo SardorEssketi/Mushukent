@@ -5,6 +5,204 @@ Play Android App Bundle. Run commands from the repository root unless a step
 says otherwise. Never commit `.env`, `frontend/android/key.properties`, a
 keystore, or any service-account credentials.
 
+## Agent runbook: read this first
+
+Last audited 2026-10-19 against the repository, Git history, and earlier release
+records. Scripts live in `scripts/deploy/` and are tested offline with
+`bash scripts/deploy/test_deploy_scripts.sh`.
+
+### Ground rules for every deployment
+
+1. Deploy only when the user asks in the current conversation, and ask again
+   before each production-changing step. Approval of one step is not approval of
+   the next. Nothing in this file authorizes a deploy by itself.
+2. Never guess an SSH target, container name, path, or environment variable. Use
+   the values below; if they are not listed or marked unknown, ask.
+3. Never print, copy into Git, or overwrite a production `.env`, keystore,
+   `key.properties`, Firebase file, or OAuth secret. Compare `.env` key *names*
+   only. Never remove the database or media volumes (`docker compose down -v`,
+   `docker volume rm`, `docker system prune --volumes`) or run
+   `alembic downgrade` without explicit approval.
+4. Claude Code's permission classifier blocked agent SSH to the server
+   ("Production Reads") in the earlier recorded audit sessions and again on
+   2026-10-19, even for read-only inspection. Do not work around it. Give the user the
+   exact command to run themselves (the `!` prefix runs it in the session, for
+   example `! ssh -t root@143.198.192.201 ...`) and ask for the output.
+5. Mark every flow `VERIFIED`, `FAILED`, or `NOT VERIFIED` in the release record.
+
+### Fact status
+
+| Status | Fact |
+| --- | --- |
+| Verified in the repo | Compose project name is `mushukistan` (`docker-compose.yml`). Services: `db` (`postgis/postgis:15-3.4`, container `mushukistan-db`), `backend` (built from `./backend`, image `mushukistan-backend:local`, container `mushukistan-backend`, port 8000 internal), `notification-worker` (profile `notifications`, same image, no fixed container name), `nginx` (`nginx:1.27-alpine`, container `mushukistan-nginx`). Named volumes `postgres_data` and `backend_media`. |
+| Verified in the repo | `docker-compose.prod.yml` removes the backend host port and gives Nginx 80/443 plus read-only mounts: `./frontend/build/web` -> `/usr/share/nginx/html`, `./website/dist` -> `/var/www/landing`, `/etc/letsencrypt`, `./infrastructure/certbot/www`. `docker-compose.notifications.yml` mounts the Firebase service account from `$FIREBASE_CREDENTIALS_HOST_PATH`. |
+| Verified in the repo | `backend/Dockerfile` default command is `alembic upgrade head && uvicorn ...`: **starting a new backend image migrates the database.** Nginx proxies to the fixed name `backend:8000` with no `resolver`. Production hostnames: `mushukistan.uz`, `www.mushukistan.uz`, `api.mushukistan.uz` (`infrastructure/nginx/default.conf`). |
+| Verified 2026-10-19 (local/public) | DNS for `mushukistan.uz` and `api.mushukistan.uz` resolves directly to `143.198.192.201`. `~/.ssh/known_hosts` on the operator workstation has host keys for that IP. `~/.ssh/config` is empty, so there is **no SSH alias**: use the explicit target. `scripts/deploy/verify-public.sh` passed all checks against the live site (health, landing, Flutter routes, no-store shell, legal pages, http->https, API docs closed). |
+| Documented by earlier records, not re-verified here | SSH user/host `root@143.198.192.201` (`docs/audits/release-handoff/`, `backend/scripts/export_production_places_readonly.py`). Releases live in `/opt/mushukistan-releases/<YYYYMMDD>-<sha7>-<label>` (`PLACES_V2_PRODUCTION_DEPLOYMENT_20261004.md`, `MAP_PERFORMANCE_DEPLOYMENT_20261004.md`). Backups go to `/root/mushukistan-backups/` (`mushukistan-YYYYMMDD-HHMMSS[-label].dump`). Production Alembic was `20261013_0026` on 2026-10-16 (owner inspection); the backend image tag was `mushukistan-backend:4eff1f2`. Cloudflare fronts `media.mushukistan.uz` (R2). |
+| **Unknown: ask or read-only inspect** | Which release directory is active *now* (last recorded: `20261005-a2ff885-ui`, since superseded by the homepage and notification releases whose paths are not recorded in Git). Exact active Compose overlay set (the labels hold it). Contents of the private `docker-compose.notification-release.yml` (it is not in Git; it pins images and overrides the backend command). Whether a `current` symlink exists (nothing in the repo uses one: activation is by running Compose from the release directory). Hosting provider (docs say Hetzner; the IP range is not verified). GitHub remote/branch policy for releases. How the user normally logs in to SSH beyond the key in `~/.ssh` (key type seen: ed25519; passphrase unknown). |
+
+To resolve the unknowns, ask the user to run, from the repository root:
+
+```powershell
+ssh root@143.198.192.201 'sh -s' < scripts/deploy/remote-inspect.sh > prod_inspect.txt
+```
+
+The script is read-only and prints no secrets (config is reported as set/unset).
+
+### What each component is and what deploying it touches
+
+| Component | Built from | Runs as | Deploy touches |
+| --- | --- | --- | --- |
+| Backend API | `backend/` Docker image | container `mushukistan-backend` | image, container, DB migrations (on start) |
+| Notification worker | same image as backend | `notification-worker` (profile `notifications`) | must be replaced together with the backend, never two at once |
+| Flutter Web | `frontend/` via `frontend/tool/build_production.ps1 -Target Web` -> `frontend/build/web` | static files in the Nginx container | Nginx container only |
+| Landing page | `python website/build.py` -> `website/dist` | static files in the Nginx container (`/var/www/landing`) | Nginx container only |
+| Android | `build_production.ps1 -Target Android` (AAB) / `AndroidApk` | Google Play (internal testing, then staged rollout) | nothing on the server |
+| Database | `postgis/postgis:15-3.4` | container `mushukistan-db`, volume `mushukistan_postgres_data` | **never recreated**; only Alembic migrations and backups |
+| Media | Cloudflare R2 (`R2_*` in `.env`), served from `media.mushukistan.uz` | external | nothing (local `backend_media` volume is dev only) |
+| TLS | Let's Encrypt on the host, `/etc/letsencrypt` | host files mounted read-only | nothing |
+
+Flutter Web and the landing page are **one release unit** with the Nginx config.
+They are always replaced as complete directories, never file by file.
+
+### Release strategy (unchanged)
+
+Each release is a new versioned directory `/opt/mushukistan-releases/<YYYYMMDD>-<sha7>-<label>`
+containing the reviewed source, the finished `frontend/build/web` and
+`website/dist`, a copy of the active `.env`, and the private overlay
+`docker-compose.notification-release.yml`. The Compose project (`name:
+mushukistan`) is run from that directory, so volumes, networks, and container
+names stay the same. The previous directory is kept intact and is the rollback
+target. The active release is whichever directory the running `mushukistan-nginx`
+container reports in its `com.docker.compose.project.working_dir` label.
+
+### Which procedure to use
+
+| Change | Procedure |
+| --- | --- |
+| Flutter Web and/or landing/Nginx config only | A |
+| Backend code, with or without Web | B (then A for the Web part) |
+| Android app only | C |
+| Migration | B, with the gate in "Database backup and migration gate" below |
+
+### A. Web / landing release (Nginx only)
+
+No backend, worker, database, or volume is touched. Container IDs of everything
+except Nginx must be identical before and after.
+
+1. **Build locally, from a clean committed tree** (PowerShell, repo root):
+   `$env:MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID` is set from the user's secure
+   configuration (ask; never commit it). Then run the canonical sequence in
+   "Canonical production web build" and "Public homepage release addition"
+   below: `build_production.ps1 -Target Web`, `python website/build.py`, website
+   tests, `check_flutter_bundle.py`, and `check_nginx_http.py`.
+2. **Package** (local, uploads nothing):
+   `bash scripts/deploy/package-release.sh --label <short-label>`. It refuses a
+   dirty tracked tree (unless `--allow-dirty`, which is recorded), a missing or
+   non-production bundle, and any secret-like file. Output: `release/<name>.tar.gz`
+   plus `.sha256` (the directory is gitignored).
+3. **Stage on the server** (needs user approval; the script prints the commands):
+   upload the archive to `/opt/mushukistan-releases/`, verify the checksum,
+   extract, then copy `.env` and `docker-compose.notification-release.yml`
+   from the **active** release into the new directory (copy only; never modify
+   the active directory).
+4. **Dry run** (changes nothing), on the server:
+   `bash /opt/mushukistan-releases/<name>/scripts/deploy/activate-web-release.sh <name>`.
+   It reads the active release from the running container, re-uses the exact
+   overlay set, verifies artifacts and `.env` key names, validates `docker
+   compose config`, and runs `nginx -t` in a disposable container.
+5. **Backup** (needs approval): `ssh -t ... bash <name>/scripts/deploy/backup-db.sh --label web-<name> --execute`.
+   Copy the dump and `.sha256` off the server.
+6. **Switch** (needs approval; run in a real terminal because it requires typing
+   the confirmation): `ssh -t root@143.198.192.201 bash /opt/mushukistan-releases/<name>/scripts/deploy/activate-web-release.sh <name> --execute --backup-file <dump>`.
+   It runs only `up -d --no-deps --no-build --force-recreate nginx`, then
+   `verify-public.sh` against the new bundle hash, and prints the rollback
+   command if anything fails.
+7. **Verify** with the checks in "Health checks", then record the result.
+
+Re-running step 6 for the already-active release is a safe no-op that only
+re-verifies.
+
+### B. Backend (+ worker) release
+
+Higher risk and intentionally **not** automated: it depends on the private
+overlay (image pins and command override), the real Alembic state, and a
+coordinated worker swap. The complete, reviewed worked example is
+`docs/audits/final-integration/BACKEND_DEPLOYMENT_PLAN.md` (written for 0.2.0 /
+migration `20261015_0027`, never executed as written; reuse the structure, not
+its revision numbers). Mandatory order:
+
+1. Drift check with `remote-inspect.sh`: stop if `alembic current` or the image
+   tag differs from what the plan assumes.
+2. Stage a new release directory (as in A.2-A.3), validate `docker compose ... config --quiet`.
+3. **Tag the running image first** (`docker tag mushukistan-backend:local mushukistan-backend:pre-<label>`):
+   building overwrites the `:local` tag.
+4. `backup-db.sh --execute`; verify with `pg_restore --list`; copy off-server.
+5. Run `prod_preflight.py` on a *copy* of `.env` (names only; stop on any FAIL).
+6. Migrate explicitly while the old backend still serves
+   (`$DC run --rm --no-deps -T backend alembic upgrade head`), additive migrations only.
+7. Stop the old worker, wait until no job is `sending`, recreate backend, wait
+   healthy, recreate worker. Never run two workers together.
+8. **Immediately** run `docker exec mushukistan-nginx nginx -t && docker exec mushukistan-nginx nginx -s reload`
+   (Nginx caches the old backend IP; see Troubleshooting).
+9. Verify health, logs, guest endpoints, and container IDs of db/nginx unchanged.
+
+### C. Android
+
+Local only, nothing is deployed to the server. Increment the build number
+(`+N` in `frontend/pubspec.yaml`) only after confirming in Play Console that the
+code was never uploaded, set `MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID`, then run
+`.\frontend\tool\build_production.ps1 -Target Android` (AAB) or `-Target AndroidApk`
+(add `-EnableAndroidPush` for push builds). Upload happens in Play Console by the
+user (internal testing first, then staged rollout). Signing inputs
+(`frontend/android/key.properties`, keystore, `google-services.json`) are ignored
+by Git; if missing, the build fails by design. Artifacts are written under
+`frontend/build/app/outputs/` (gitignored); `release/` is the gitignored place
+for kept copies.
+
+### Health checks
+
+| Check | Command / expectation |
+| --- | --- |
+| Public smoke (read-only) | `bash scripts/deploy/verify-public.sh [--flutter-dir frontend/build/web]` -> `ALL CHECKS PASSED` |
+| Deep artifact/header gate | `python website/tool/check_production_http.py --flutter frontend/build/web --website website/dist --report .data/production-http.json` |
+| API | `curl -sf https://api.mushukistan.uz/api/v1/health` |
+| Containers | `docker ps --format '{{.Names}} {{.Status}}'` shows backend `healthy`; no restart loops |
+| Migration state | `docker exec mushukistan-backend alembic current` equals `alembic heads` |
+| Logs | `docker logs --since 10m mushukistan-backend 2>&1 \| grep -ciE 'error\|traceback\|critical'` is 0 |
+| Isolation | Container IDs of everything except the replaced services are unchanged |
+
+### Rollback
+
+| Situation | Action |
+| --- | --- |
+| Web/landing release failed | Switch only Nginx back: run the rollback command printed by `activate-web-release.sh` (Compose from the previous release directory, same overlay set, `up -d --no-deps --no-build --force-recreate nginx`), then `verify-public.sh`. No data or migration is involved. |
+| Backend failed, schema additive | Roll back backend and worker together to the retained image with the command override `["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]` (the old image cannot parse a newer revision and exits otherwise), then `nginx -s reload`. Keep the migrated schema; do not `alembic downgrade`. Check whether the rollback regresses privacy (see the plan's section 6). |
+| Data loss/corruption | Last resort and the user's decision: restore the pre-release dump to a scratch database first, compare, and only with explicit approval restore to production. Never delete `mushukistan_postgres_data`. |
+
+### Troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| Whole API returns 502 after recreating the backend | Nginx resolved `backend` once. `docker exec mushukistan-nginx nginx -s reload`. |
+| New backend image exits with `Can't locate revision` | Old image against a newer schema; start it with the uvicorn-only command override. |
+| `docker compose up --build` on the server replaced my backend | The default command migrates on start and `--build` retags `:local`. Never use the quick-start line in `infrastructure/README.md` on the production host; use the procedures above. |
+| `config` fails on `FIREBASE_CREDENTIALS_HOST_PATH` | Overlay `docker-compose.notifications.yml` needs it set in `.env`. |
+| Safari/old shell mismatch after a release | Files were copied into a live directory. Always switch to a complete new directory. |
+| `main.dart.js` download times out on the workstation | The bundle is about 4.7 MB; slow links need 20-60 s. `verify-public.sh` allows 180 s for it. |
+| `flutter build web` output lacks `useLocalCanvasKit` | A plain `flutter build web` was run after the script. Rebuild with `build_production.ps1 -Target Web`. |
+| Backend refuses to start in production | Startup validation rejects placeholder secrets, `APP_DEBUG=true`, missing R2/CORS values. Read `docker logs mushukistan-backend`; names only, never values. |
+| `.env` has `EMAIL_FROM` | Nothing reads it; the key is `RESEND_FROM_EMAIL`. Rename during a window. |
+| Agent SSH denied | Expected (see ground rule 4). Ask the user to run the command. |
+
+### Open questions for the user
+
+1. Confirm the SSH target `root@143.198.192.201` and how you authenticate (key in `~/.ssh`, passphrase, agent).
+2. Which directory under `/opt/mushukistan-releases/` is active right now, and is there a symlink or marker for it?
+3. Should the permission rule allowing read-only SSH to this host be added to Claude Code settings, so inspection can run without manual relaying?
+4. Where is the canonical Git remote and which branch should releases be cut from (`main`, with `production-deploy` stale)?
+5. Where is the private `docker-compose.notification-release.yml` backed up, in case the server copy is lost?
+
 ## Required release configuration
 
 Flutter production builds require all of the following compile-time values:

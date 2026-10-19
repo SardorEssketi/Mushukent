@@ -25,6 +25,11 @@ docker compose up --build
 Notification worker: see `docs/DEPLOYMENT.md` for the optional `notifications` Compose profile, private Firebase credential mount, encryption key, migration, and validation steps. It must be deployed from the same backend release image as the API.
 
 ## Production deployment
+> **Do not run this section on the production host.** Production uses versioned
+> release directories with a private Compose overlay, a mandatory backup, and
+> gated steps. Follow the "Agent runbook" in `docs/DEPLOYMENT.md`. The commands
+> below describe a first-time or local-style bring-up only.
+
 1. Set real production values in `.env`.
 2. Set `MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID` from the secure operator
    configuration and run the canonical production web build:
