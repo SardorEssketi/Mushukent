@@ -32,7 +32,39 @@ records. Scripts live in `scripts/deploy/` and are tested offline with
    script: the user runs those with `! ssh -t root@143.198.192.201 ...`. If SSH is
    denied, do not work around it; give the user the exact command and ask for the
    output.
-5. Mark every flow `VERIFIED`, `FAILED`, or `NOT VERIFIED` in the release record.
+5. **Release branch: `main`** (owner decision, 2026-10-19). Release only from a
+   commit that is on `origin/main`, pushed, and CI-green. Never release from a
+   feature branch, from `production-deploy` (stale), or from a dirty tree. The
+   packaging scripts refuse a dirty tree; `build-backend-image.sh` warns when the
+   commit is not on `origin/main`.
+6. **Every production deployment needs the user's explicit approval**, given in the
+   current conversation for the specific commit. Use the approval gates below.
+   Do not activate old staged releases (for example the `20261018-bf9c91d-*`
+   directories): build each release from the intended, verified `main` commit.
+7. **Never build Docker images on the production VPS** (2 GB RAM, no swap). Build
+   locally with `scripts/deploy/build-backend-image.sh`, move the tarball, and
+   `docker load` it on the server.
+8. The hosting provider is **unverified** (hostname suggests DigitalOcean; older
+   docs say Hetzner). Do not state a provider as fact until the user confirms.
+9. Mark every flow `VERIFIED`, `FAILED`, or `NOT VERIFIED` in the release record.
+
+### Approval gates
+
+Each gate is a separate question to the user; one "yes" does not carry over. State
+the commit SHA, the exact command, what it changes, the rollback, and any downtime.
+
+| Gate | Action | Server impact |
+| --- | --- | --- |
+| G0 | Build and package locally (`build_production.ps1`, `package-release.sh`, `build-backend-image.sh`) | none |
+| G1 | Read-only inspection over SSH (`remote-inspect.sh`) | none; permitted once the user has granted the agent's SSH read rule |
+| G2 | Upload and extract a release / load an image; create a new release directory | adds files and an image tag; running containers untouched |
+| G3 | Database backup (`backup-db.sh --execute`) | adds a dump file; brief read load |
+| G4 | Activation: `activate-web-release.sh --execute`, or backend/worker recreate | **replaces containers**; Nginx recreate is a few seconds of downtime, backend swap is longer |
+| G5 | Migration (`alembic upgrade head`) | schema change; needs its own review of the revision |
+| G6 | Rollback | replaces containers; do it as soon as a stop condition hits, then report |
+
+G4-G6 are always run by the user in a real terminal (`! ssh -t root@143.198.192.201 ...`):
+the scripts need a typed confirmation and refuse without a terminal.
 
 ### Fact status
 
@@ -67,6 +99,7 @@ inspection before every deployment: this state changes with each release.
 - Database: PostgreSQL 15.8 / PostGIS 3.4.3, 22 MB, Alembic **`20261015_0027`** (head of the deployed code). Row counts at inspection: 37 users, 21 posts, 2 lost pets, 3 adoption posts, 34 comments.
 - `.env` provides every required name (R2, Resend, Google, Firebase, JWT, PostHog). `TRUSTED_PROXY_CIDRS` and `CONTACT_*` are unset (code defaults apply). Both `EMAIL_FROM` and `RESEND_FROM_EMAIL` are present. `APP_ENV=production`, `APP_DEBUG=false`.
 - Backups: `/root/mushukistan-backups/` holds 43 `mushukistan-*.dump` files plus old ad-hoc files (several zero-byte August dumps). Two naming schemes exist: `mushukistan-YYYYMMDD-HHMMSS-<label>.dump` and `mushukistan-YYYYMMDDTHHMMSSZ-<label>.dump` (+ `.sha256`). The newest seen is `mushukistan-20261017T214538Z-pre-0.2.0.dump`, taken **before** migration `0027` ran, so no backup of the current schema was seen. Take a fresh backup before any change. Off-server copies were not checked.
+- Fresh baseline backup (2026-10-19, after the facts above): `/root/mushukistan-backups/mushukistan-20261019-155853-baseline-0027.dump` (+ `.sha256`), SHA-256 `8bf8ebe1...ffdfcbb`, 166,391 bytes, 240 catalog entries. Restore rehearsal in a disposable local PostGIS: Alembic `20261015_0027`, row counts identical to the inspection. A copy is on the operator workstation in the gitignored `.data/backups/`. Containers were not restarted by this.
 - Public DNS for `mushukistan.uz` and `api.mushukistan.uz` points directly at `143.198.192.201`. `scripts/deploy/verify-public.sh` passes against the live site.
 
 **RECORD only (not re-verified)**: Cloudflare in front of `media.mushukistan.uz` (R2) and its cache rules; Google Cloud OAuth clients and SHA-1s; Play Console version codes; Firebase project setup.
@@ -190,9 +223,13 @@ uvicorn-only command (no migration on start) with the overlay pinning
    the overlay), then edit **only the two image tags** in the new overlay to
    `mushukistan-backend:<sha7>` and set `frontend/build/web`/`website/dist` to the
    web release that should stay live (symlinks, as `20261018-fb1f6d4-backend` does).
-   Validate with `$DC config --quiet` (never print the output).
-3. Build the image on the server (`$DC build backend`; it is tagged with the new
-   sha7, old tags stay). The host has 2 GB RAM and no swap: check `free -m` first.
+   Validate with `$DC config --quiet` (never print the output). Use `--no-build` on every
+   `up` so Compose can never trigger a build on the server.
+3. **Build locally, never on the server.** `bash scripts/deploy/build-backend-image.sh`
+   (from the pushed `main` commit) builds `linux/amd64`, checks for exactly one
+   Alembic head, and writes `release/mushukistan-backend-<sha7>.tar.gz` plus a
+   checksum. After approval (G2) upload it and run `gunzip -c ... | docker load` on
+   the server; that adds an image tag and touches no running container.
 4. `backup-db.sh --execute`; confirm with `pg_restore --list`; copy off-server.
 5. Run `backend/scripts/prod_preflight.py` on a *copy* of `.env` (it prints
    PASS/FAIL names only; remove the copy afterwards).
@@ -256,14 +293,58 @@ for kept copies.
 | `.env` has both `EMAIL_FROM` and `RESEND_FROM_EMAIL` | Only `RESEND_FROM_EMAIL` is read; `EMAIL_FROM` is a harmless leftover. |
 | Agent SSH denied | The permission classifier blocks it unless the user grants a rule (see ground rule 4). Ask the user. |
 
+### Off-server backups (proposal, NOT implemented; needs the user's decision)
+
+Nothing below copies a secret anywhere. Today there is no automated backup (only the
+OS `dpkg-db-backup` timer) and no confirmed off-server copy of anything.
+
+| Asset | Sensitivity | Proposed strategy |
+| --- | --- | --- |
+| Database dumps (`/root/mushukistan-backups/*.dump`) | personal data (emails, phones, posts) | 1) pre-release: `backup-db.sh` (G3), then pull with `scp` to the operator workstation and verify the `.sha256`. 2) Nightly `pg_dump -Fc` by cron on the server (a 22 MB database), keep 14 daily + 8 weekly. 3) Off-site copy **encrypted before it leaves the server** with `age` (public key on the server, private key kept offline by the owner), uploaded to a private bucket separate from the media bucket with a write-only token. Quarterly restore rehearsal. |
+| Server `.env` per release (mode 0600) | secrets (JWT, DB, R2, Resend, Firebase key, Fernet key) | Never in Git, chat, or an unencrypted cloud folder. Owner keeps one current copy in a password manager or an `age`-encrypted file made on the server and pulled as ciphertext. `PUSH_TOKEN_ENCRYPTION_KEY` must never change (stored device tokens become unreadable). |
+| Private overlay `docker-compose.notification-release.yml` | no secrets (verified) | Template in Git (`infrastructure/docker-compose.notification-release.example.yml`); the real one is a copy of the active file with the tag changed, and each release directory keeps its own. |
+| Firebase service account (`/etc/mushukistan/secrets/firebase-admin.json`) | secret | Same vault as `.env`; can be re-issued from the Firebase console if lost. |
+| Release directories | source copies, `.env` copies | Rebuildable from `main`; keep at least the active and previous release. No retention policy exists yet (51 directories; do not prune without approval). |
+
+Decisions needed from the user: off-site destination (external drive, a private
+bucket, or both), whether to approve the nightly cron, and who holds the `age`
+private key. A restore rehearsal was done on 2026-10-19 (below) and takes minutes.
+
+### Known risks of the activation procedure
+
+| Risk | Status / mitigation |
+| --- | --- |
+| Nginx recreate drops connections for a few seconds (single container, no blue/green) | Accepted; schedule low-traffic windows; the script is Nginx-only. |
+| Backend swap has more downtime and needs an Nginx reload | Manual procedure B; the reload is a mandatory step. Untested end to end on the real server. |
+| First `activate-web-release.sh` run happens from a freshly extracted release (the scripts are not on the server yet) | The package includes `scripts/deploy/`. Dry run first. |
+| `.env` copied into a new release can be stale | The script compares key *names* with the active `.env`; values are not compared. Copy it from the active directory at staging time. |
+| Different overlay versions across releases (image pins) | Always copy from the active working directory; only the backend procedure edits image tags. |
+| Rollback relies on the previous directory and its symlink targets still existing | Never delete `20261013-4eff1f2-main` or `20261018-fb1f6d4-backend` until a newer pair is proven; `PREVIOUS_STATE.txt` records the targets. |
+| Rollback restarts Nginx again (second short outage) | Accepted. |
+| `verify-public.sh` needs the server to reach its own public HTTPS | Verified on 2026-10-19 (hairpin works, `curl` present). |
+| Migrations are manual; old images cannot parse newer revisions | Overlay keeps the uvicorn-only command; backups precede every migration. |
+| Backups: no automation, no confirmed off-server copy, a zero-byte August dump exists | See the proposal above. |
+| Root SSH login with a workstation key; agent access is permission-gated | Unchanged by this work; do not alter SSH security settings without approval. |
+| `.env.bak-*` files with secrets sit in release directories | Hygiene issue; clean up only with approval. |
+| No monitoring or alerting | Out of MVP scope; rely on `verify-public.sh` and manual checks. |
+
+### Readiness by deployment path
+
+| Path | Status |
+| --- | --- |
+| Local build + package (`package-release.sh`, `build-backend-image.sh`) | Package: **VERIFIED** offline (tests, Debian). Image build script: syntax checked; see the release record for a real build. |
+| Read-only inspection and public smoke check (`remote-inspect.sh`, `verify-public.sh`) | **VERIFIED** against production on 2026-10-19, including from the server itself. |
+| Database backup | **VERIFIED**: baseline `mushukistan-20261019-155853-baseline-0027.dump` created, `pg_restore --list` (240 entries), SHA-256 `8bf8ebe15fab0bcd118d4cf143ad6d689d195e2a90541cb7d8e50814cffdfcbb`, restored into a disposable PostGIS with identical Alembic revision and row counts. Pulled to the workstation under the gitignored `.data/backups/`; no confirmed off-site copy. `backup-db.sh --execute` itself has only run against stubs (no terminal available to the agent). |
+| Web activation (`activate-web-release.sh`) | **VERIFIED** in a disposable Linux + real Docker Compose rehearsal (`scripts/deploy/e2e_disposable.sh`): symlinked backend-only release layout, label/mount parsing, dry run, wrong confirmation, success, idempotent re-run, rollback restoring the previous release, failed verification, refused release; only the Nginx container changed. **NOT VERIFIED** on the real server (never run there). |
+| Backend/worker release (procedure B) | **NOT VERIFIED**: manual steps only; image `docker load` flow and a real swap untested. |
+| Android | Local build procedure only; not exercised in this audit. |
+
 ### Open questions for the user
 
 1. Which provider hosts the server (hostname suggests DigitalOcean, docs say Hetzner)? Fix `PROJECT_BIBLE.md` and `DATABASE.md` if the docs are wrong (needs approval).
-2. May releases be cut from `origin/main` after review, and who approves a production deploy?
-3. Where are the private overlay and the server `.env` files backed up off the server? (Neither is in Git; the overlay has a template in `infrastructure/`.)
-4. Are the staged web releases `20261018-bf9c91d-*` (new icons, Russian default) intended to be activated, or should they be rebuilt from current `main`?
-5. Should a post-0027 database backup be taken and copied off the server now, as a baseline?
-6. Do you want the agent's SSH permission to stay limited to read-only inspection, with every production change run by you via `! ssh -t ...`? (This runbook assumes yes.)
+2. Off-server backup destination and the nightly-cron decision (see the proposal above).
+3. Which commit of `main` is the next release, and may the deploy tooling commits be pushed so `origin/main` contains them (they are currently only on the local branch `fix/release-readiness`)?
+4. Are the uncommitted Russian-default website changes approved for the next web release (they pass all automated checks; see the release notes)?
 
 ## Required release configuration
 

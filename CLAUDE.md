@@ -23,3 +23,9 @@ changes without approval, small commits).
    do not work around it; ask the user to run the command and share the output.
 7. After a release, update the facts in the runbook that changed (active release path,
    Alembic revision) and report each flow as VERIFIED, FAILED, or NOT VERIFIED.
+8. Release branch is `main` (owner decision). Release only a pushed, CI-green `main` commit;
+   never activate old staged release directories; every production change needs the user's
+   explicit approval for that commit (approval gates G0-G6 in the runbook).
+9. Never build Docker images on the production VPS (2 GB RAM, no swap): use
+   `scripts/deploy/build-backend-image.sh` locally and `docker load` on the server.
+10. The hosting provider is unverified until the user confirms it.

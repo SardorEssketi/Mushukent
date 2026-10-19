@@ -19,7 +19,7 @@ check() { # description, expected_exit(0|nonzero), output_must_contain(optional)
   if [ $good -eq 1 ]; then echo "PASS  $desc"; else echo "FAIL  $desc (exit $rc)"; echo "$out" | tail -8 | sed 's/^/        /'; fails=$((fails+1)); fi
 }
 
-for s in remote-inspect backup-db activate-web-release verify-public package-release; do
+for s in remote-inspect backup-db activate-web-release verify-public package-release build-backend-image e2e_disposable; do
   check "syntax: $s.sh" 0 "" bash -n "$HERE/$s.sh"
 done
 
@@ -53,15 +53,16 @@ cat > "$BIN/docker" <<'EOF'
 echo "docker $*" >> "$STUB_LOG"
 a="$*"
 case "$a" in
-  *'"/usr/share/nginx/html"'*) echo "$STUB_ACTIVE/frontend/build/web" ;;
-  *'"/var/www/landing"'*) echo "$STUB_ACTIVE/website/dist" ;;
-  *'"/etc/nginx/conf.d/default.conf"'*) echo "$STUB_ACTIVE/infrastructure/nginx/default.conf" ;;
+  *'"/usr/share/nginx/html"'*) echo "$(cat "$STUB_STATE" 2>/dev/null || echo "$STUB_ACTIVE")/frontend/build/web" ;;
+  *'"/var/www/landing"'*) echo "$(cat "$STUB_STATE" 2>/dev/null || echo "$STUB_ACTIVE")/website/dist" ;;
+  *'"/etc/nginx/conf.d/default.conf"'*) echo "$(cat "$STUB_STATE" 2>/dev/null || echo "$STUB_ACTIVE")/infrastructure/nginx/default.conf" ;;
+  compose*' up '*) [ -n "${STUB_UP_FAIL:-}" ] && exit 1; pwd > "$STUB_STATE" ;;
   *'Labels "com.docker.compose.project"}}'*) echo "${STUB_PROJECT:-mushukistan}" ;;
   *project.working_dir*) echo "$STUB_ACTIVE" ;;
   *config_files*) echo "$STUB_FILES" ;;
   *Networks*) echo "mushukistan_default " ;;
   *'.Config.Image'*) echo "nginx:1.27-alpine" ;;
-  *'.State.Running'*) echo true ;;
+  *'.State.Running'*) [ -n "${STUB_NGINX_DOWN:-}" ] && echo false || echo true ;;
   "ps -q"*) [ -n "${STUB_WORKER:-}" ] && echo c5c4aca7cade ;;
   "ps -a"*) printf 'mushukistan-nginx aaa111\nmushukistan-db bbb222\n' ;;
   "exec -i"*pg_restore*) seq 1 40 ;;
@@ -87,7 +88,7 @@ esac
 printf '%s' "$code"
 EOF
 chmod +x "$BIN/docker" "$BIN/curl"
-export PATH="$BIN:$PATH" STUB_LOG="$T/stub.log"
+export PATH="$BIN:$PATH" STUB_LOG="$T/stub.log" STUB_STATE="$T/stub.state"
 
 # ---------- verify-public.sh ----------
 : > "$STUB_LOG"
@@ -144,6 +145,43 @@ printf 'A=1\nB=2\n' > "$NEW/.env"; printf 'x="http://localhost:8000/api/v1/https
 check "activate: dev API host in bundle refused" nonzero "development API host" bash "$A" 20260202-bbbbbbb-new
 printf 'x="https://api.mushukistan.uz/api/v1/"' > "$NEW/frontend/build/web/main.dart.js"
 STUB_PROJECT=other check "activate: wrong compose project refused" nonzero "not in Compose project" bash "$A" 20260202-bbbbbbb-new
+
+
+# ---------- activate-web-release.sh --execute through a real pty ----------
+if command -v script >/dev/null 2>&1 && script -qec true /dev/null >/dev/null 2>&1; then
+  export NGINX_WAIT_TRIES=1
+  rm -f "$STUB_STATE"; : > "$STUB_LOG"
+  pty() { # phrase, then script args
+    local phrase="$1"; shift
+    printf '%s\n' "$phrase" | script -qec "bash $A $*" /dev/null
+  }
+  fresh() { printf 'dump' > "$T/b.dump"; rm -f "$STUB_STATE" "$NEW/PREVIOUS_STATE.txt"; : > "$STUB_LOG"; }
+  fresh
+  check "execute: wrong phrase aborts" nonzero "confirmation did not match" pty "nope" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  check "execute: wrong phrase recreated nothing" nonzero "" grep -q force-recreate "$STUB_LOG"
+  check "execute: no PREVIOUS_STATE before confirmation" nonzero "" test -f "$NEW/PREVIOUS_STATE.txt"
+  fresh; touch -d '3 days ago' "$T/b.dump"
+  check "execute: stale backup refused" nonzero "older than" pty "ACTIVATE 20260202-bbbbbbb-new" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  fresh
+  check "execute: success path" 0 "public verification passed" pty "ACTIVATE 20260202-bbbbbbb-new" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  check "execute: recreated exactly nginx, no deps, no build" 0 "up -d --no-deps --no-build --force-recreate nginx" grep "force-recreate" "$STUB_LOG"
+  check "execute: nothing else was recreated" nonzero "" grep -E "force-recreate (backend|db|notification)" "$STUB_LOG"
+  check "execute: PREVIOUS_STATE records the rollback" 0 "previous_working_dir=$ACT" cat "$NEW/PREVIOUS_STATE.txt"
+  check "execute: PREVIOUS_STATE has rollback command" 0 "rollback=cd $ACT" cat "$NEW/PREVIOUS_STATE.txt"
+  check "execute: rerun is an idempotent no-op" 0 "VERIFY-CALLED" pty "x" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  fresh
+  STUB_UP_FAIL=1 check "execute: compose failure prints rollback" nonzero "Roll back ONLY Nginx" pty "ACTIVATE 20260202-bbbbbbb-new" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  fresh
+  STUB_NGINX_DOWN=1 check "execute: nginx not running prints rollback" nonzero "not running after the switch" pty "ACTIVATE 20260202-bbbbbbb-new" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  fresh; printf '#!/usr/bin/env bash\necho VERIFY-FAILED; exit 1\n' > "$T/verify-bad.sh"
+  VERIFY_SCRIPT="$T/verify-bad.sh" check "execute: failed public verification prints rollback" nonzero "Roll back ONLY Nginx" pty "ACTIVATE 20260202-bbbbbbb-new" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
+  fresh
+  check "execute: rollback command points at the previous directory" 0 "cd $ACT" bash "$A" 20260202-bbbbbbb-new
+  unset NGINX_WAIT_TRIES
+else
+  echo "SKIP  pty execute tests (no usable 'script' command)"
+fi
+rm -f "$STUB_STATE"
 
 # ---------- backup-db.sh ----------
 export BACKUP_DIR="$T/backups"

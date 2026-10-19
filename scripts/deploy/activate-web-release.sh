@@ -184,7 +184,7 @@ if ! (cd "$REL" && "${dc[@]}" up -d --no-deps --no-build --force-recreate nginx)
   echo "ERROR: compose up failed" >&2; roll_back_hint; exit 1
 fi
 running=0
-for _ in $(seq 1 30); do
+for _ in $(seq 1 "${NGINX_WAIT_TRIES:-30}"); do
   if [ "$($DOCKER inspect -f '{{.State.Running}}' "$NGINX_CONTAINER" 2>/dev/null)" = "true" ]; then running=1; break; fi
   sleep 2
 done
