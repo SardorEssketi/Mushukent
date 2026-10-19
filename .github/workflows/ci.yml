@@ -32,7 +32,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[dev]
+          pip install -c constraints.txt -e .[dev]
       - name: Ruff
         run: ruff check app tests scripts
       - name: Black
@@ -83,7 +83,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # The research extra provides beautifulsoup4, needed by the places-import parser tests.
-          pip install -e .[dev,research]
+          pip install -c constraints.txt -e .[dev,research]
       - name: Migrations apply, roll back and re-apply on an empty database
         env:
           DATABASE_URL: postgresql+psycopg://ci_user:ci_password_not_a_secret@localhost:5432/mushukistan_migrations_test
