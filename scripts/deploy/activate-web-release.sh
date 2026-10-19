@@ -50,8 +50,21 @@ $DOCKER inspect "$NGINX_CONTAINER" >/dev/null 2>&1 || die "$NGINX_CONTAINER not 
 active_dir="$(label com.docker.compose.project.working_dir)"
 active_files="$(label com.docker.compose.project.config_files)"
 [ -n "$active_dir" ] && [ -n "$active_files" ] || die "active release labels are empty"
-ok "active release : $active_dir"
-ok "active files   : $active_files"
+ok "compose working dir : $active_dir"
+ok "active files        : $active_files"
+# The working dir is NOT necessarily the web release: a backend-only release keeps
+# frontend/build/web and website/dist as symlinks to the web release being served.
+# What Nginx really serves is what its bind mounts resolve to.
+mount_src() { $DOCKER inspect -f "{{range .Mounts}}{{if eq .Destination \"$1\"}}{{.Source}}{{end}}{{end}}" "$NGINX_CONTAINER"; }
+resolve() { readlink -f "$1" 2>/dev/null || echo "$1"; }
+cur_web="$(resolve "$(mount_src /usr/share/nginx/html)")"
+cur_dist="$(resolve "$(mount_src /var/www/landing)")"
+cur_conf="$(resolve "$(mount_src /etc/nginx/conf.d/default.conf)")"
+[ -n "$cur_web" ] && [ -n "$cur_dist" ] && [ -n "$cur_conf" ] || die "could not read the Nginx bind mounts"
+ok "web currently served from  : $cur_web"
+ok "landing currently served   : $cur_dist"
+ok "nginx conf currently used  : $cur_conf"
+[ -d "$cur_web" ] || die "currently served web directory does not exist; refusing to continue"
 
 echo "== 2. staged release contents"
 for f in docker-compose.yml docker-compose.prod.yml .env infrastructure/nginx/default.conf \
@@ -119,12 +132,17 @@ echo "$before"
 rollback_cmd="cd $active_dir && $DOCKER compose$profile_flag$rollback_flags up -d --no-deps --no-build --force-recreate nginx"
 switch_cmd="cd $REL && ${dc[*]} up -d --no-deps --no-build --force-recreate nginx"
 
-if [ "$REL" = "$active_dir" ]; then
-  echo "== $rel_name is already the active release: nothing to switch (idempotent)"
-  exec bash "$VERIFY" --flutter-dir "$REL/frontend/build/web"
+new_web="$(resolve "$REL/frontend/build/web")"
+new_dist="$(resolve "$REL/website/dist")"
+new_conf="$(resolve "$REL/infrastructure/nginx/default.conf")"
+if [ "$new_web" = "$cur_web" ] && [ "$new_dist" = "$cur_dist" ] && [ "$new_conf" = "$cur_conf" ]; then
+  echo "== $rel_name is already what Nginx serves: nothing to switch (idempotent)"
+  exec bash "$VERIFY" --flutter-dir "$new_web"
 fi
 
 echo "== 6. plan"
+echo "web      : $cur_web  ->  $new_web"
+echo "landing  : $cur_dist  ->  $new_dist"
 echo "switch   : $switch_cmd"
 echo "rollback : $rollback_cmd"
 
@@ -146,14 +164,35 @@ printf 'Type "ACTIVATE %s" to replace ONLY the production Nginx container: ' "$r
 read -r answer
 [ "$answer" = "ACTIVATE $rel_name" ] || die "confirmation did not match; nothing changed"
 
-echo "== 8. switching Nginx"
-(cd "$REL" && "${dc[@]}" up -d --no-deps --no-build --force-recreate nginx)
+echo "== 8. recording previous state in the NEW release directory, then switching Nginx"
+{
+  echo "recorded_utc=$(date -u +%FT%TZ)"
+  echo "previous_working_dir=$active_dir"
+  echo "previous_config_files=$active_files"
+  echo "previous_web=$cur_web"
+  echo "previous_landing=$cur_dist"
+  echo "previous_nginx_conf=$cur_conf"
+  echo "rollback=$rollback_cmd"
+  echo "container_ids_before:"; echo "$before"
+} > "$REL/PREVIOUS_STATE.txt"
+ok "wrote $REL/PREVIOUS_STATE.txt (no secrets)"
+roll_back_hint() {
+  echo "Nginx may be down or wrong. Roll back ONLY Nginx with:" >&2
+  echo "  $rollback_cmd" >&2
+}
+if ! (cd "$REL" && "${dc[@]}" up -d --no-deps --no-build --force-recreate nginx); then
+  echo "ERROR: compose up failed" >&2; roll_back_hint; exit 1
+fi
+running=0
 for _ in $(seq 1 30); do
-  [ "$($DOCKER inspect -f '{{.State.Running}}' "$NGINX_CONTAINER" 2>/dev/null)" = "true" ] && break
+  if [ "$($DOCKER inspect -f '{{.State.Running}}' "$NGINX_CONTAINER" 2>/dev/null)" = "true" ]; then running=1; break; fi
   sleep 2
 done
+[ "$running" -eq 1 ] || { echo "ERROR: $NGINX_CONTAINER is not running after the switch" >&2; roll_back_hint; exit 1; }
 
 echo "== 9. post-switch checks"
+$DOCKER exec "$NGINX_CONTAINER" nginx -t || { roll_back_hint; exit 1; }
+[ "$(resolve "$(mount_src /usr/share/nginx/html)")" = "$new_web" ] && [ "$(resolve "$(mount_src /var/www/landing)")" = "$new_dist" ]   && ok "Nginx now serves $new_web and $new_dist"   || { echo "ERROR: Nginx mounts do not point at the new release" >&2; roll_back_hint; exit 1; }
 after="$(snapshot)"
 changed="$(diff <(echo "$before") <(echo "$after") | grep -E '^[<>]' | grep -v "$NGINX_CONTAINER" || true)"
 [ -z "$changed" ] && ok "only $NGINX_CONTAINER changed container ID" || echo "WARN  unexpected container changes:"$'\n'"$changed"
@@ -161,7 +200,7 @@ if bash "$VERIFY" --flutter-dir "$REL/frontend/build/web"; then
   ok "public verification passed for $rel_name"
   echo "Done. Previous release $active_dir is untouched and kept for rollback."
 else
-  echo "FAILED public verification. Roll back ONLY Nginx with:" >&2
-  echo "  $rollback_cmd" >&2
+  echo "FAILED public verification." >&2
+  roll_back_hint
   exit 1
 fi

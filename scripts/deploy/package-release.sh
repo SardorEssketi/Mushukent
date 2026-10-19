@@ -59,6 +59,7 @@ mkdir -p "$stage/$name/frontend/build" "$stage/$name/website"
 cp -R "$web" "$stage/$name/frontend/build/web"
 cp -R website/dist "$stage/$name/website/dist"
 
+echo "$sha" > "$stage/$name/RELEASE_COMMIT.txt"   # same convention as existing server releases
 js_sha="$(sha256sum "$web/main.dart.js" | cut -d' ' -f1)"
 cat > "$stage/$name/RELEASE_MANIFEST.txt" <<EOF
 name=$name

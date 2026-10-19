@@ -35,6 +35,46 @@ docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}} w
 docker ps -a --filter label=com.docker.compose.project=mushukistan --format '{{.Names}}\t{{.ID}}\t{{.Image}}\t{{.Label "com.docker.compose.service"}}'
 section "release directories (listing only)"
 ls -ldt /opt/mushukistan-releases/* 2>&1 | head -15
+section "active release: compose file listing, SHA-256 (no contents) and .env permissions only"
+WD=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' mushukistan-nginx 2>/dev/null)
+CF=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' mushukistan-nginx 2>/dev/null)
+if [ -n "$WD" ] && [ -d "$WD" ]; then
+  ls -la "$WD" | cut -c1-120
+  oldifs=$IFS; IFS=,
+  for f in $CF; do ls -l "$f" 2>&1; sha256sum "$f" 2>&1; done
+  IFS=$oldifs
+  for p in frontend/build/web/index.html frontend/build/web/main.dart.js frontend/build/web/canvaskit website/dist/index.html infrastructure/nginx/default.conf infrastructure/certbot/www scripts/deploy; do
+    if [ -e "$WD/$p" ]; then echo "present: $p"; else echo "MISSING: $p"; fi
+  done
+  ls -l "$WD/.env" 2>&1 | cut -c1-60
+fi
+section "what Nginx REALLY serves (bind mounts, symlinks resolved) and the served bundle hash"
+docker inspect --format '{{range .Mounts}}{{.Source}} -> {{.Destination}} rw={{.RW}}{{println}}{{end}}' mushukistan-nginx 2>/dev/null
+for p in frontend/build/web website/dist; do
+  printf '%s -> ' "$p"; readlink -f "$WD/$p"
+done
+sha256sum "$(readlink -f "$WD/frontend/build/web")/main.dart.js" 2>&1
+cat "$(readlink -f "$WD/frontend/build/web")/../../../RELEASE_COMMIT.txt" 2>&1 | head -1
+section "effective NON-SECRET compose config (images, commands, ports, mounts, env var NAMES only)"
+if [ -n "$WD" ] && [ -d "$WD" ]; then
+  set --
+  oldifs=$IFS; IFS=,
+  for f in $CF; do set -- "$@" -f "$f"; done
+  IFS=$oldifs
+  (cd "$WD" && docker compose --profile notifications "$@" config --format json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    c = json.load(sys.stdin)
+except Exception:
+    print("config unavailable (python3 or compose config failed)"); sys.exit(0)
+for n, s in sorted(c.get("services", {}).items()):
+    print(n, "image=%s container_name=%s profiles=%s" % (s.get("image"), s.get("container_name"), s.get("profiles")))
+    print("  command=%s entrypoint=%s restart=%s" % (s.get("command"), s.get("entrypoint"), s.get("restart")))
+    print("  ports=%s" % [(p.get("host_ip"), p.get("published"), p.get("target")) for p in s.get("ports", [])])
+    print("  mounts=%s" % [(v.get("type"), v.get("source"), v.get("target"), v.get("read_only", False)) for v in s.get("volumes", [])])
+    print("  env_var_names=%s" % sorted((s.get("environment") or {}).keys()))
+')
+fi
 section "docker networks and nginx image"
 docker inspect --format 'image={{.Config.Image}} networks={{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' mushukistan-nginx 2>/dev/null
 section "PostgreSQL / PostGIS versions (read-only SQL)"

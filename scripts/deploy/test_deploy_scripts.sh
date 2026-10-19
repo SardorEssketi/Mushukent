@@ -53,13 +53,16 @@ cat > "$BIN/docker" <<'EOF'
 echo "docker $*" >> "$STUB_LOG"
 a="$*"
 case "$a" in
+  *'"/usr/share/nginx/html"'*) echo "$STUB_ACTIVE/frontend/build/web" ;;
+  *'"/var/www/landing"'*) echo "$STUB_ACTIVE/website/dist" ;;
+  *'"/etc/nginx/conf.d/default.conf"'*) echo "$STUB_ACTIVE/infrastructure/nginx/default.conf" ;;
   *'Labels "com.docker.compose.project"}}'*) echo "${STUB_PROJECT:-mushukistan}" ;;
   *project.working_dir*) echo "$STUB_ACTIVE" ;;
   *config_files*) echo "$STUB_FILES" ;;
   *Networks*) echo "mushukistan_default " ;;
   *'.Config.Image'*) echo "nginx:1.27-alpine" ;;
   *'.State.Running'*) echo true ;;
-  "ps -q"*) : ;;
+  "ps -q"*) [ -n "${STUB_WORKER:-}" ] && echo c5c4aca7cade ;;
   "ps -a"*) printf 'mushukistan-nginx aaa111\nmushukistan-db bbb222\n' ;;
   "exec -i"*pg_restore*) seq 1 40 ;;
   *psql*) echo 123456 ;;
@@ -124,6 +127,15 @@ check "activate: execute never recreated without confirmation" nonzero "" grep -
 : > "$T/empty.dump"
 check "activate: empty backup refused" nonzero "missing or empty" bash "$A" 20260202-bbbbbbb-new --execute --backup-file "$T/empty.dump"
 check "activate: already-active is idempotent" 0 "VERIFY-CALLED" bash "$A" 20260101-aaaaaaa-active
+STUB_WORKER=1 check "activate: worker running -> notifications profile in switch and rollback" 0 "--profile notifications" bash "$A" 20260202-bbbbbbb-new
+# Backend-only release layout seen in production: web/dist are symlinks to another release.
+SYM="$ROOT/20260303-ccccccc-backend"; mk "$SYM"; rm -rf "$SYM/frontend/build/web" "$SYM/website/dist"
+ln -s "$ACT/frontend/build/web" "$SYM/frontend/build/web"; ln -s "$ACT/website/dist" "$SYM/website/dist"
+cp "$ACT/infrastructure/nginx/default.conf" "$SYM/infrastructure/nginx/default.conf"
+if [ "$(readlink -f "$SYM/frontend/build/web")" = "$ACT/frontend/build/web" ]; then
+  check "activate: symlinked release resolving to the served web is a no-op" nonzero "" grep -q force-recreate "$STUB_LOG"
+  check "activate: dry run reports resolved web paths" 0 "web currently served from  : $ACT/frontend/build/web" bash "$A" 20260303-ccccccc-backend
+fi
 rm "$NEW/docker-compose.notification-release.yml"
 check "activate: missing private overlay refused" nonzero "missing in" bash "$A" 20260202-bbbbbbb-new
 : > "$NEW/docker-compose.notification-release.yml"; printf 'A=1\n' > "$NEW/.env"
