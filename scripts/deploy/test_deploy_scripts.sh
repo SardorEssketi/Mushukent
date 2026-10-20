@@ -44,6 +44,13 @@ printf 'const a="https://api.mushukistan.uz/api/v1/";' > "$R/frontend/build/web/
 echo changed >> "$R/backend/a.py"
 check "package: dirty tree refused" nonzero "uncommitted" bash "$P" --label dirty
 check "package: dirty tree allowed explicitly" 0 "NOT UPLOADED" bash "$P" --label dirty --allow-dirty
+# --source-only: no web artifacts needed or shipped (for releases that keep the live web files)
+rm -rf "$R/frontend/build" "$R/website/dist"
+check "package: normal mode needs the built web artifacts" nonzero "is missing" bash "$P" --label nosrc --allow-dirty
+check "package: --source-only works without artifacts" 0 "SOURCE-ONLY release" bash "$P" --label srconly --allow-dirty --source-only
+tb2="$(ls "$R"/release/*srconly.tar.gz | head -1)"
+check "package: source-only archive contains no web artifacts" nonzero "" bash -c "tar -tzf '$tb2' | grep -E 'frontend/build/web|website/dist'"
+check "package: source-only manifest says so" 0 "source_only=yes" bash -c "tar -xzOf '$tb2' --wildcards '*/RELEASE_MANIFEST.txt'"
 unset REPO_ROOT
 
 # ---------- stub binaries ----------

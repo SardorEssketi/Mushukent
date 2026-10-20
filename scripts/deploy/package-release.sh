@@ -2,19 +2,22 @@
 # Build a versioned release tarball on the operator machine. Local only: it never
 # contacts the server and never uploads anything.
 #
-#   scripts/deploy/package-release.sh --label NAME [--sha REV] [--allow-dirty]
+#   scripts/deploy/package-release.sh --label NAME [--sha REV] [--allow-dirty] [--source-only]
 #
 # Contents: `git archive` of the committed source at REV (default HEAD), plus the
 # already-built frontend/build/web and website/dist. Secrets are never included
 # (.env, key.properties, keystores and Firebase files are untracked/ignored; the
 # archive is also scanned for them). The release name is YYYYMMDD-<sha7>-<label>,
 # the same convention as /opt/mushukistan-releases on the server.
+# --source-only: no built web artifacts. For a release that keeps serving the web files that are
+# already live (Compose/Nginx-config-only changes): on the server, frontend/build/web and
+# website/dist are then created as symlinks to the live release's directories.
 # Output: release/<name>.tar.gz and a .sha256 (the release/ directory is gitignored).
 set -euo pipefail
 
 ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
 API_URL="https://api.mushukistan.uz/api/v1/"
-label=""; rev="HEAD"; allow_dirty=0
+label=""; rev="HEAD"; allow_dirty=0; source_only=0
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -23,6 +26,7 @@ while [ $# -gt 0 ]; do
     --label) label="${2:?--label needs a value}"; shift 2 ;;
     --sha) rev="${2:?--sha needs a value}"; shift 2 ;;
     --allow-dirty) allow_dirty=1; shift ;;
+    --source-only) source_only=1; shift ;;
     -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
@@ -45,28 +49,33 @@ if [ "$rev" = "HEAD" ] || [ "$sha" = "$(git rev-parse HEAD)" ]; then :; else
 fi
 
 web=frontend/build/web
+if [ "$source_only" -eq 0 ]; then
 [ -f "$web/main.dart.js" ] && [ -f "$web/flutter_bootstrap.js" ] || die "$web is missing: run .\\frontend\\tool\\build_production.ps1 -Target Web"
 [ -f website/dist/index.html ] || die "website/dist is missing: run python website/build.py"
 [ -d "$web/canvaskit" ] || die "$web/canvaskit is missing (CanvasKit must be local)"
 grep -qF "$API_URL" "$web/main.dart.js" || die "main.dart.js lacks the production API URL"
 grep -qE 'http://(localhost|10\.0\.2\.2|127\.0\.0\.1)' "$web/main.dart.js" && die "main.dart.js contains a development API host"
 grep -qF '"useLocalCanvasKit":true' "$web/flutter_bootstrap.js" || die "flutter_bootstrap.js does not use local CanvasKit"
+fi
 
 stage="$(mktemp -d)"; trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/$name"
 git archive "$sha" | tar -x -C "$stage/$name"
-mkdir -p "$stage/$name/frontend/build" "$stage/$name/website"
-cp -R "$web" "$stage/$name/frontend/build/web"
-cp -R website/dist "$stage/$name/website/dist"
+if [ "$source_only" -eq 0 ]; then
+  mkdir -p "$stage/$name/frontend/build" "$stage/$name/website"
+  cp -R "$web" "$stage/$name/frontend/build/web"
+  cp -R website/dist "$stage/$name/website/dist"
+fi
 
 echo "$sha" > "$stage/$name/RELEASE_COMMIT.txt"   # same convention as existing server releases
-js_sha="$(sha256sum "$web/main.dart.js" | cut -d' ' -f1)"
+if [ "$source_only" -eq 0 ]; then js_sha="$(sha256sum "$web/main.dart.js" | cut -d' ' -f1)"; else js_sha="n/a (source-only release)"; fi
 cat > "$stage/$name/RELEASE_MANIFEST.txt" <<EOF
 name=$name
 git_sha=$sha
 packaged_at_utc=$(date -u +%FT%TZ)
 uncommitted_tracked_changes=$([ -n "$dirty" ] && echo yes || echo no)
 main_dart_js_sha256=$js_sha
+source_only=$([ "$source_only" -eq 1 ] && echo yes || echo no)
 EOF
 
 forbidden="$(cd "$stage" && find "$name" \( -name '.env' -o -name '.env.*' -o -name 'key.properties' -o -name '*.jks' -o -name '*.keystore' -o -name 'google-services.json' -o -name 'firebase-admin*.json' -o -name 'service-account*.json' \) ! -name '.env.example' -print)"
@@ -88,3 +97,13 @@ documented in docs/DEPLOYMENT.md):
 Then, on the server, copy the private files from the ACTIVE release into the new directory
 (cp without overwriting anything in the active one): .env and docker-compose.notification-release.yml.
 EOF
+if [ "$source_only" -eq 1 ]; then cat <<EOF
+
+SOURCE-ONLY release: on the server, after extracting and BEFORE the dry run, link the web files that are
+live now (the directories Nginx currently serves; read them from \`remote-inspect.sh\`), so not a single
+served byte changes:
+  mkdir -p $name/frontend/build $name/website
+  ln -s <live release>/frontend/build/web $name/frontend/build/web
+  ln -s <live release>/website/dist       $name/website/dist
+EOF
+fi
