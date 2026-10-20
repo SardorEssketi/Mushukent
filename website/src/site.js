@@ -11,6 +11,36 @@
   function isDark() {
     return root.dataset.theme === "dark" || (root.dataset.theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
   }
+  // Cookieless page-view beacon: no cookies, no storage, no person profile. The id is random per
+  // page load, so PostHog counts page loads, not unique people. The token is a public write-only key.
+  try {
+    var host = location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1" && navigator.doNotTrack !== "1") {
+      fetch("https://eu.i.posthog.com/i/v0/e/", {
+        method: "POST",
+        keepalive: true,
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({
+          api_key: "phc_mmQo5L8B4scoCC4dg4ofuxuncefhwoAdMpcHrFSU3PCm",
+          event: "$pageview",
+          distinct_id: crypto.randomUUID(),
+          properties: {
+            $process_person_profile: false,
+            $lib: "mushukistan-site",
+            $current_url: location.href,
+            $host: host,
+            $pathname: location.pathname,
+            $referrer: document.referrer || "$direct",
+            $referring_domain: document.referrer ? new URL(document.referrer).hostname : "$direct",
+            $screen_width: screen.width,
+            $screen_height: screen.height,
+            $language: navigator.language,
+            site_lang: root.lang
+          }
+        })
+      }).catch(function () {});
+    }
+  } catch (_) {}
   if (toggle) {
     toggle.setAttribute("aria-pressed", String(isDark()));
     toggle.addEventListener("click", function () {
