@@ -1,8 +1,8 @@
 # TLS certificate renewal (Let's Encrypt, certbot webroot)
 
-**Status:** designed and tested in a disposable environment. The production switch needs the
-owner's explicit approval (see "Production procedure"). Nothing in this file changes production
-by itself.
+**Status:** phase 1 **applied in production on 2026-10-20** (see "Production record"); phase 2 happens
+with the next release. Nothing in this file changes production by itself; every production step needs
+the owner's explicit approval.
 
 ## Root cause (found 2026-10-20)
 
@@ -98,6 +98,24 @@ Nothing here edits the backend, worker, database, `.env` files, or any container
 | Weekly unattended check (example, not installed) | `infrastructure/tls/mushukistan-tls-check.{service,timer}.example` |
 | Offline unit tests | `bash scripts/tls/test_tls_scripts.sh` |
 | Disposable end-to-end rehearsal with a real ACME server (Pebble) | `bash scripts/tls/e2e_tls_renewal.sh` |
+
+## Production record
+
+| Date | Step | Result |
+| --- | --- | --- |
+| 2026-10-20 | Scripts installed under `/usr/local/lib/mushukistan-tls/` (hashes equal the repository's) | done |
+| 2026-10-20 | `set-webroot.sh <active ACME dir> --execute` | Let's Encrypt **staging** validation passed for all three hostnames; saved config passed `certbot renew --dry-run`; hook installed; private backup of the old config kept. No container touched. |
+| 2026-10-20 | Real renewal with `systemctl start certbot.service` (the timer's own command) | success in about 12 s; new certificate valid until **2027-01-18** (89 days); Nginx **reloaded gracefully** (SIGHUP), container id and start time unchanged; backend, worker and database untouched. |
+| 2026-10-20 | `check-tls.sh --all` on the server and `check-tls.sh` publicly | all checks pass (certificate days, HTTP-01 routing for all three hostnames, renewal webroot == Nginx mount, hook, timer enabled, last run success, probe file served). |
+
+Live probe during the renewal: the landing page returned 200 for all 47 requests, Nginx logged no `error/emerg/crit/alert`, and Let's
+Encrypt's validation requests all got 200. The probe's other 11 responses were HTTP **429** from the API's anonymous rate limiter
+(30 requests/minute): the probe called `/api/v1/health` about five times a second. Lesson: probe the API gently (at most about 20 requests
+per minute) or probe only static pages.
+
+**Still to do:** (1) phase 2 with the next release, which needs these changes merged to `main` first (the stable
+`/var/www/certbot` mount lives in `docker-compose.prod.yml`); (2) the first *unattended* timer-triggered renewal will occur about 30 days
+before expiry (mid-December); until then the timer runs twice a day and exits without doing anything. Re-run `check-tls.sh --all` after it.
 
 ## Test evidence (2026-10-20, disposable environment, no production change)
 
