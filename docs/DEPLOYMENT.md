@@ -108,6 +108,7 @@ the user's explicit permission rule for it.
 - Release directory conventions: name `<YYYYMMDD>-<sha7>-<label>`; files `RELEASE_COMMIT.txt` (full SHA), `README_RELEASE.txt`, and in some releases `PREVIOUS_STATE.*` and `ROLLBACK.sh`. Releases are copied source, not Git clones. Each has its own `.env` (mode 0600). Never print `.env` files.
 - Database: PostgreSQL 15 / PostGIS 3.4, Alembic revision `20261015_0027` (head of the deployed code). `.env` provides every required variable name; `TRUSTED_PROXY_CIDRS` and `CONTACT_*` are unset (code defaults apply); `APP_ENV=production`, `APP_DEBUG=false`.
 - Backups: manual dumps exist under `/root/mushukistan-backups/` with the naming `mushukistan-YYYYMMDD-HHMMSS-<label>.dump` (+ `.sha256`). A baseline backup taken on 2026-10-19 passed `pg_restore --list` and a restore rehearsal in a disposable PostGIS (details in the private state file). Automated encrypted backups are prepared but **not enabled** (`docs/BACKUP.md`). Take a fresh backup before any change.
+- Automatic TLS renewal (certbot, `certbot.timer`) was failing until it is switched to the webroot method (`docs/TLS_RENEWAL.md`); expiry is visible publicly via `scripts/tls/check-tls.sh --cert`.
 - The server can reach its own public HTTPS (needed by `activate-web-release.sh`), and has `curl`, `script`, `sha256sum`, `readlink`, `git`, `python3`, Docker Compose v2. `scripts/deploy/verify-public.sh` passes against the live site.
 
 **RECORD only (not re-verified)**: Cloudflare in front of `media.mushukistan.uz` (R2) and its cache rules; Google Cloud OAuth clients and SHA-1s; Play Console version codes; Firebase project setup.
@@ -211,6 +212,11 @@ except Nginx must be identical before and after.
 7. **Verify** with "Health checks" and the browser/route lists in "Website
    deployment" below, then record the result in `docs/` or the release record.
 
+**TLS renewal and Nginx replacement.** The dry run (step 4b) and the post-switch check compare certbot's
+webroot with the ACME directory the release mounts. If a release changes that mount, run the printed
+`set-webroot.sh <path> --execute` right after activation (and after any Nginx rollback to an older
+release). See `docs/TLS_RENEWAL.md`.
+
 Re-running step 6 for what Nginx already serves is a safe no-op that only
 re-verifies.
 
@@ -276,7 +282,7 @@ for kept copies.
 | Migration state | `docker exec mushukistan-backend alembic current` equals `alembic heads` |
 | Logs | `docker logs --since 10m mushukistan-backend 2>&1 \| grep -ciE 'error\|traceback\|critical'` is 0 |
 | Isolation | Container IDs of everything except the replaced services are unchanged |
-| Certificate renewal | Read-only: `certbot certificates` shows more than 30 days left, and `journalctl -u certbot.service --since -10days` has no failures. Check before every release. |
+| Certificate renewal | `bash scripts/tls/check-tls.sh` (public: days left, HTTP-01 routing) and, on the server, `bash /usr/local/lib/mushukistan-tls/check-tls.sh --all` (renewal webroot equals Nginx's ACME mount, deploy hook, timer, end-to-end probe). Check before every release; procedure in `docs/TLS_RENEWAL.md`. |
 
 ### Rollback
 
@@ -300,6 +306,8 @@ for kept copies.
 | `flutter build web` output lacks `useLocalCanvasKit` | A plain `flutter build web` was run after the script. Rebuild with `build_production.ps1 -Target Web`. |
 | Backend refuses to start in production | Startup validation rejects placeholder secrets, `APP_DEBUG=true`, missing R2/CORS values. Read `docker logs mushukistan-backend`; names only, never values. |
 | `.env` has both `EMAIL_FROM` and `RESEND_FROM_EMAIL` | Only `RESEND_FROM_EMAIL` is read; `EMAIL_FROM` is a harmless leftover. |
+| `certbot renew` fails with `Could not bind TCP port 80` | The lineage uses the `standalone` authenticator, which cannot work while the Nginx container owns port 80. Use the webroot method: `docs/TLS_RENEWAL.md` (never stop Nginx to renew). |
+| `check-tls.sh --server` says the renewal webroot is not what Nginx serves | An Nginx (re)creation or rollback changed the ACME mount. Run the printed `set-webroot.sh <path> --execute` (typed confirmation); no container change. |
 | Agent SSH denied | The permission classifier blocks it unless the user grants a rule (see ground rule 4). Ask the user. |
 
 ### Off-server backups (proposal, NOT implemented; needs the user's decision)
