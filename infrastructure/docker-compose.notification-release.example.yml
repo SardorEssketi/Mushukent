@@ -1,0 +1,13 @@
+# TEMPLATE for the private, per-release overlay `docker-compose.notification-release.yml`.
+# The real file is NOT in Git and lives in every server release directory; copy it from the
+# active release and change only the image tag. It contains no secrets (verified 2026-10-19).
+# It pins backend + worker to one immutable image tag (sha7 of the release commit) and starts
+# the backend WITHOUT `alembic upgrade head`, so migrations are always an explicit step.
+services:
+  backend:
+    image: mushukistan-backend:<sha7>
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      start_interval: 2s
+  notification-worker:
+    image: mushukistan-backend:<sha7>

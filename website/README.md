@@ -1,6 +1,6 @@
 # Public homepage
 
-`website/` builds a static, English-default homepage for `/`, `/ru/`, and `/uz/`.
+`website/` builds a static, Russian-default homepage for `/`, `/en/`, and `/uz/`.
 The build uses Python 3.10+ and the standard library. No package install or
 production runtime is needed. The checked-in logo and social cards derive from
 the real app icon in `frontend/assets/app_icon.png`; the hero is an original SVG
@@ -16,10 +16,10 @@ python website/tool/check_nginx_http.py --flutter frontend/build/web --website w
 python -m http.server 8765 --directory website/dist
 ```
 
-Open `http://localhost:8765/`, `/ru/`, or `/uz/` for a site-only preview. This
+Open `http://localhost:8765/`, `/en/`, or `/uz/` for a site-only preview. This
 Python server does not provide Flutter routes, API proxying, or production
 headers. The generated output is `website/dist/` (ignored by Git): `index.html`,
-`ru/index.html`, `uz/index.html`, `robots.txt`, `sitemap.xml`, and hashed files
+`en/index.html`, `uz/index.html`, `robots.txt`, `sitemap.xml`, and hashed files
 under `landing-assets/`. A build recreates only that ignored directory. Do not
 copy its contents into `frontend/build/web`.
 

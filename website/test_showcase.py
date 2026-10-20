@@ -54,7 +54,7 @@ class ShowcaseTest(unittest.TestCase):
     def test_localized_showcase_is_complete_without_javascript(self):
         for lang, content in CONTENT.items():
             with self.subTest(lang=lang):
-                page = OUT / ("index.html" if lang == "en" else f"{lang}/index.html")
+                page = OUT / ("index.html" if lang == "ru" else f"{lang}/index.html")
                 document = page.read_text(encoding="utf-8")
                 parsed = Tags()
                 parsed.feed(document)
