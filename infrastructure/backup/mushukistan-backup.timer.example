@@ -1,0 +1,13 @@
+# EXAMPLE ONLY - not installed, not enabled.
+# Enable (only after approval): systemctl enable --now mushukistan-backup.timer
+[Unit]
+Description=Nightly encrypted PostgreSQL backup for Mushukistan
+
+[Timer]
+# 03:15 UTC = 08:15 Asia/Tashkent, a low-traffic hour; adjust with the owner.
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,16 @@
+# EXAMPLE ONLY - not installed. See docs/BACKUP.md before enabling anything.
+# Install (after the owner approves destination and key ownership):
+#   install -m 0750 scripts/backup/backup-nightly.sh /usr/local/sbin/mushukistan-backup
+#   cp infrastructure/backup/mushukistan-backup.service.example /etc/systemd/system/mushukistan-backup.service
+[Unit]
+Description=Encrypted PostgreSQL backup for Mushukistan
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/mushukistan-backup
+# Optional settings live in /etc/mushukistan/backup/backup.env (no secrets: public key path, retention).
+EnvironmentFile=-/etc/mushukistan/backup/backup.env
+Nice=10
+IOSchedulingClass=idle

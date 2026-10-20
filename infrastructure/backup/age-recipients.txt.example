@@ -1,0 +1,4 @@
+# EXAMPLE ONLY. Put the owner's PUBLIC age key(s) here, one per line (they start with "age1").
+# Generate the key pair on the OWNER's machine with `age-keygen -o mushukistan-backup-identity.txt`
+# and keep that identity file offline. Never put an AGE-SECRET-KEY on the server.
+# age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
