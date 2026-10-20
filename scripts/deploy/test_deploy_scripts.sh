@@ -119,6 +119,18 @@ A="$HERE/activate-web-release.sh"
 check "activate: dry run passes" 0 "DRY RUN complete" bash "$A" 20260202-bbbbbbb-new
 check "activate: dry run printed rollback to active release" 0 "rollback : cd $ACT" bash "$A" 20260202-bbbbbbb-new
 check "activate: dry run never recreates anything" nonzero "" grep -E 'force-recreate|compose .* up ' "$STUB_LOG"
+# --- TLS renewal webroot consistency (step 4b): warning only, never blocks ---
+LEC="$T/le.conf"
+printf '[renewalparams]\nauthenticator = webroot\nwebroot_path = %s,\n[[webroot_map]]\nmushukistan.uz = %s\n' "$NEW/infrastructure/certbot/www" "$NEW/infrastructure/certbot/www" > "$LEC"
+LE_RENEWAL_CONF="$LEC" check "activate: renewal webroot == release ACME mount -> ok" 0 "renewal webroot equals the ACME directory" bash "$A" 20260202-bbbbbbb-new
+printf '[renewalparams]\nauthenticator = webroot\nwebroot_path = /elsewhere,\n[[webroot_map]]\nmushukistan.uz = /elsewhere\n' > "$LEC"
+LE_RENEWAL_CONF="$LEC" check "activate: webroot drift -> WARN with the exact remedy, dry run still succeeds" 0 "set-webroot.sh $NEW/infrastructure/certbot/www --execute" bash "$A" 20260202-bbbbbbb-new
+printf '[renewalparams]\nauthenticator = standalone\n' > "$LEC"
+LE_RENEWAL_CONF="$LEC" check "activate: standalone authenticator -> WARN, dry run still succeeds" 0 "not webroot: renewal will fail" bash "$A" 20260202-bbbbbbb-new
+printf '      - /var/www/certbot:/var/www/certbot:ro\n' > "$NEW/docker-compose.prod.yml"
+printf '[renewalparams]\nauthenticator = webroot\nwebroot_path = /var/www/certbot,\n[[webroot_map]]\nmushukistan.uz = /var/www/certbot\n' > "$LEC"
+LE_RENEWAL_CONF="$LEC" check "activate: release mounting the stable /var/www/certbot matches a stable renewal webroot" 0 "renewal webroot equals the ACME directory this release mounts (/var/www/certbot)" bash "$A" 20260202-bbbbbbb-new
+: > "$NEW/docker-compose.prod.yml"
 check "activate: unknown release" nonzero "not found" bash "$A" nope
 check "activate: release outside root refused" nonzero "must live under" bash "$A" "$T"
 check "activate: no --backup-file refused" nonzero "--backup-file is required" bash "$A" 20260202-bbbbbbb-new --execute

@@ -1,0 +1,10 @@
+# EXAMPLE ONLY - not installed, not enabled.
+[Unit]
+Description=Weekly Mushukistan TLS renewal health check
+
+[Timer]
+OnCalendar=Mon *-*-* 06:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

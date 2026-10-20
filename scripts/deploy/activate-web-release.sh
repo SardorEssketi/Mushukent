@@ -111,6 +111,15 @@ ok "compose files: $(for f in "${files[@]}"; do basename "$f"; done | tr '\n' ' 
 (cd "$REL" && "${dc[@]}" config --quiet) || die "docker compose config failed"
 ok "docker compose config is valid (output not printed: it contains secrets)"
 
+# ACME challenge directory that the NEW release will mount into Nginx (docker-compose.prod.yml).
+acme_line="$({ grep -E ':/var/www/certbot' "$REL/docker-compose.prod.yml" || true; } | head -1 | sed -E 's/^[[:space:]]*-[[:space:]]*//; s/:\/var\/www\/certbot.*$//')"
+case "$acme_line" in
+  "") acme_src="$REL/infrastructure/certbot/www" ;;
+  ./*) acme_src="$REL/${acme_line#./}" ;;
+  *) acme_src="$acme_line" ;;
+esac
+[ -d "$acme_src" ] && acme_mount="$acme_src" || acme_mount="$REL/infrastructure/certbot/www"   # never create host dirs in a dry run
+
 echo "== 4. Nginx syntax check in a disposable container (no ports published)"
 net="$($DOCKER inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$NGINX_CONTAINER" | awk '{print $1}')"
 image="$($DOCKER inspect -f '{{.Config.Image}}' "$NGINX_CONTAINER")"
@@ -120,9 +129,26 @@ $DOCKER run --rm --pull=never --network "$net" \
   -v "$REL/frontend/build/web:/usr/share/nginx/html:ro" \
   -v "$REL/website/dist:/var/www/landing:ro" \
   -v /etc/letsencrypt:/etc/letsencrypt:ro \
-  -v "$REL/infrastructure/certbot/www:/var/www/certbot:ro" \
+  -v "$acme_mount:/var/www/certbot:ro" \
   "$image" nginx -t || die "nginx -t failed for the staged release"
 ok "nginx -t passed on network $net"
+
+echo "== 4b. TLS renewal webroot must match what Nginx will serve (warning only)"
+le_conf="${LE_RENEWAL_CONF:-/etc/letsencrypt/renewal/mushukistan.uz.conf}"
+if [ -r "$le_conf" ]; then
+  le_auth="$(sed -nE 's/^authenticator *= *([^ ]+).*/\1/p' "$le_conf" | head -1)"
+  le_root="$(awk '/^\[\[webroot_map\]\]/{f=1;next} /^\[/{f=0} f&&/=/{sub(/^[^=]*= */,""); print; exit}' "$le_conf")"
+  if [ "$le_auth" != "webroot" ]; then
+    echo "WARN  certificate renewal authenticator is '${le_auth:-unknown}', not webroot: renewal will fail (docs/TLS_RENEWAL.md)"
+  elif [ "$(resolve "$le_root")" = "$(resolve "$acme_src")" ]; then
+    ok "renewal webroot equals the ACME directory this release mounts ($acme_src)"
+  else
+    echo "WARN  renewal webroot is '$le_root' but this release mounts '$acme_src' for ACME challenges."
+    echo "      After activation run: bash $REL/scripts/tls/set-webroot.sh $acme_src --execute   (docs/TLS_RENEWAL.md)"
+  fi
+else
+  echo "note  $le_conf not readable here; TLS renewal check skipped"
+fi
 
 snapshot() { $DOCKER ps -a --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Names}} {{.ID}}' | sort; }
 before="$(snapshot)"
@@ -198,6 +224,10 @@ changed="$(diff <(echo "$before") <(echo "$after") | grep -E '^[<>]' | grep -v "
 [ -z "$changed" ] && ok "only $NGINX_CONTAINER changed container ID" || echo "WARN  unexpected container changes:"$'\n'"$changed"
 if bash "$VERIFY" --flutter-dir "$REL/frontend/build/web"; then
   ok "public verification passed for $rel_name"
+  if [ -x "$REL/scripts/tls/check-tls.sh" ]; then
+    echo "== 10. TLS renewal consistency (informational)"
+    bash "$REL/scripts/tls/check-tls.sh" --server || echo "WARN  fix with: bash $REL/scripts/tls/set-webroot.sh $acme_src --execute   (docs/TLS_RENEWAL.md)"
+  fi
   echo "Done. Previous release $active_dir is untouched and kept for rollback."
 else
   echo "FAILED public verification." >&2

@@ -20,4 +20,6 @@ services:
       - ./frontend/build/web:/usr/share/nginx/html:ro
       - ./website/dist:/var/www/landing:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - ./infrastructure/certbot/www:/var/www/certbot:ro
+      # ACME HTTP-01 challenge webroot: a fixed host directory, independent of release directories,
+      # written by the host's certbot (webroot authenticator) and served by Nginx. See docs/TLS_RENEWAL.md.
+      - /var/www/certbot:/var/www/certbot:ro

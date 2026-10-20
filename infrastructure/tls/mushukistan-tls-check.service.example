@@ -1,0 +1,11 @@
+# EXAMPLE ONLY - not installed. See docs/TLS_RENEWAL.md.
+# Runs the read-only TLS renewal checks; the unit FAILS (visible in `systemctl --failed` and
+# `journalctl -u mushukistan-tls-check`) when the certificate is close to expiry, the renewal config
+# drifted from Nginx's ACME directory, or the HTTP-01 path is redirected.
+[Unit]
+Description=Mushukistan TLS renewal health check
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/mushukistan-tls/check-tls.sh --all
