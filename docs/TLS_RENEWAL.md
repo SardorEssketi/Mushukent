@@ -77,6 +77,47 @@ by `check-tls.sh --server` (currently the active release's `infrastructure/certb
    hook, zero dropped requests.
 7. **Next release**: follow phase 2 above.
 
+## Phase 2 activation plan: make `/var/www/certbot` a persistent mount
+
+Goal: after this, **no release directory is involved in certificate renewal any more**: Nginx mounts the fixed host
+directory `/var/www/certbot`, certbot writes challenges there, and every later release inherits that from
+`docker-compose.prod.yml`. Nothing else changes.
+
+**What changes (verified by rendering the effective Compose config before and after):** exactly one bind-mount source of the
+`nginx` service, `<release>/infrastructure/certbot/www` becomes `/var/www/certbot`. Backend, worker and database
+configuration are identical; the repository's compose files and `default.conf` are byte-identical to the ones running.
+
+**How (minimal):** a *source-only* release built from the merged `main` commit, whose web and landing directories are
+**symlinks to the directories already being served** (the verified backend-only-release pattern), so not one served byte changes.
+Only the Nginx container is recreated (`up -d --no-deps --no-build --force-recreate nginx`). Expected downtime: a few seconds
+(the same recreate as every web release; about 3 s measured on 2026-10-20). Every step needs the owner's approval.
+
+1. **Package (local, no server contact):** `bash scripts/deploy/package-release.sh --label acme-mount --sha <main sha> --source-only`.
+2. **Stage (adds files only):** upload and checksum-verify the archive; extract it; copy `.env` and
+   `docker-compose.notification-release.yml` with `cp -p` from the current Nginx working directory (compare hashes, never print);
+   create the two web symlinks to the live directories (printed by the package script); `install -d -m 755 -o root -g root /var/www/certbot`
+   (so Docker never auto-creates it with surprising ownership).
+3. **Dry run (read-only):** `activate-web-release.sh <name>`. Expect: `web: X -> X` (same resolved directories), the Compose file set
+   identical, `nginx -t` OK, and the step 4b **WARN** that certbot's webroot (the old release directory) differs from the
+   `/var/www/certbot` this release mounts, with the exact `set-webroot.sh` command. That warning is the expected, documented state.
+4. **Backup** (`backup-db.sh`, under 12 h old) and the confirmation-gated **activation** (`--execute --backup-file ...`).
+5. **Immediately after activation** (renewal is not due until mid-December, so this window is harmless):
+   `set-webroot.sh /var/www/certbot --execute`. It refuses unless Nginx really serves that path, validates the webroot method against
+   Let's Encrypt **staging** with the new mount, rewrites the lineage, validates again with `certbot renew --dry-run`, and restores
+   the old config on any failure.
+6. **Verify:** `verify-public.sh` (served bundle hash unchanged), `check-tls.sh --all` (all green incl. the probe file now written under
+   `/var/www/certbot`), `certbot renew --dry-run`, Nginx mounts show `/var/www/certbot`, backend/worker/database container ids and
+   image ids identical to the pre-change snapshot, and a log scan since the recreate.
+
+**Rollback:** the activation script prints (and saves in the new release's `PREVIOUS_STATE.txt`) the command that recreates only Nginx from the
+previous working directory, which restores the previous release-relative ACME mount. If step 5 had already run, follow it with
+`set-webroot.sh <previous ACME directory> --execute` (or `check-tls.sh --server`, which prints the exact command); if step 5 had not run,
+certbot's config still points to the previous directory and is already consistent. A failed step 5 restores the renewal config itself.
+
+**Why future releases cannot break renewal:** every release that is built from `main` carries the stable mount; the activation dry run and
+post-switch step compare certbot's webroot with the release's ACME mount and print the fix; `check-tls.sh --server` detects drift at any
+time; the weekly check unit example can run it unattended.
+
 ## Rollback
 
 | Situation | Action |
