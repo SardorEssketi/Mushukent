@@ -11,6 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "dist"
 BASE = "https://mushukistan.uz"
+DEFAULT_LANG = "ru"
+PATHS = {"ru": "/", "en": "/en/", "uz": "/uz/"}
 
 CONTENT = {
     "en": {
@@ -170,9 +172,9 @@ def screenshot_assets() -> dict:
 
 
 def page(lang: str, c: dict, assets: dict[str, str]) -> str:
-    path = "/" if lang == "en" else f"/{lang}/"
-    hreflang = "\n".join(f'<link rel="alternate" hreflang="{code}" href="{BASE}{url}">' for code, url in [("en", "/"), ("ru", "/ru/"), ("uz", "/uz/"), ("x-default", "/")])
-    links = "".join(f'<a href="{url}" hreflang="{code}" lang="{code}" aria-current="{"page" if code == lang else "false"}">{label}</a>' for code, url, label in [("en", "/", "EN"), ("ru", "/ru/", "RU"), ("uz", "/uz/", "UZ")])
+    path = PATHS[lang]
+    hreflang = "\n".join(f'<link rel="alternate" hreflang="{code}" href="{BASE}{url}">' for code, url in [("ru", "/"), ("en", "/en/"), ("uz", "/uz/"), ("x-default", "/")])
+    links = "".join(f'<a href="{url}" hreflang="{code}" lang="{code}" aria-current="{"page" if code == lang else "false"}">{label}</a>' for code, url, label in [("ru", "/", "RU"), ("en", "/en/", "EN"), ("uz", "/uz/", "UZ")])
     features = "\n".join(f'<article class="feature"><span class="feature-number">{n}</span><div><h3>{e(title)}</h3><p>{e(body)}</p><a class="text-link" href="{url}">{e(action)} <span aria-hidden="true">↗</span></a></div></article>' for n, title, body, url, action in c["features"])
     steps = "\n".join(f'<li><span class="step-number">0{i}</span><h3>{e(title)}</h3><p>{e(body)}</p></li>' for i, (title, body) in enumerate(c["steps"], 1))
     screens = []
@@ -236,11 +238,11 @@ def main() -> None:
         "screens": screenshot_assets(),
     }
     for lang, content in CONTENT.items():
-        target = OUT if lang == "en" else OUT / lang
+        target = OUT if lang == DEFAULT_LANG else OUT / lang
         target.mkdir(parents=True, exist_ok=True)
         (target / "index.html").write_text(page(lang, content, assets), encoding="utf-8")
     (OUT / "robots.txt").write_text("User-agent: *\nAllow: /\nSitemap: https://mushukistan.uz/sitemap.xml\n", encoding="utf-8")
-    urls = "".join(f"<url><loc>{BASE}{path}</loc></url>" for path in ["/", "/ru/", "/uz/"])
+    urls = "".join(f"<url><loc>{BASE}{path}</loc></url>" for path in ["/", "/en/", "/uz/"])
     (OUT / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>', encoding="utf-8")
     print(f"Built {OUT}")
 

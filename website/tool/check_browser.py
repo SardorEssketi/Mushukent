@@ -124,7 +124,7 @@ def main():
         cdp("Runtime.enable")
         cdp("Page.addScriptToEvaluateOnNewDocument", {"source": "window.__landingCLS=0;new PerformanceObserver(list=>{for(const e of list.getEntries()) if(!e.hadRecentInput) window.__landingCLS+=e.value}).observe({type:'layout-shift',buffered:true});"})
         viewports = [(1280, 720), (1366, 768), (1440, 900), (1024, 768), (768, 1024), (390, 844), (320, 740)]
-        for lang, path in [("en", "/"), ("ru", "/ru/"), ("uz", "/uz/")]:
+        for lang, path in [("ru", "/"), ("en", "/en/"), ("uz", "/uz/")]:
             for width, height in viewports:
                 cdp("Emulation.setDeviceMetricsOverride", {"width": width, "height": height,
                                                           "deviceScaleFactor": 1, "mobile": width < 800})
@@ -193,7 +193,7 @@ def main():
             print(f"Checked {lang}: hero, themes and {'baseline captures' if args.capture_only else 'native gallery'}.", flush=True)
         if not args.capture_only:
             cdp("Emulation.setScriptExecutionDisabled", {"value": True})
-            for lang, path in [("en", "/"), ("ru", "/ru/"), ("uz", "/uz/")]:
+            for lang, path in [("ru", "/"), ("en", "/en/"), ("uz", "/uz/")]:
                 navigate(path)
                 assert evaluate('document.body.innerText.length>1500 && document.querySelectorAll(".phone-preview img").length===4')
                 assert evaluate('document.documentElement.scrollWidth <= innerWidth+1')

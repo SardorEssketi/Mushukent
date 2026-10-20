@@ -55,7 +55,7 @@ def main() -> None:
                                  'edge_cache': headers.get('cf-cache-status')})
 
     try:
-        for path, relative in [('/', 'index.html'), ('/ru/', 'ru/index.html'), ('/uz/', 'uz/index.html')]:
+        for path, relative in [('/', 'index.html'), ('/en/', 'en/index.html'), ('/uz/', 'uz/index.html')]:
             check_file(path, args.website / relative, 'no-store')
         for path in ['/feed', '/map', '/posts/release-probe', '/lost-pets/release-probe',
                      '/adoption-posts/release-probe', '/users/release-probe', '/login', '/register',
@@ -80,9 +80,13 @@ def main() -> None:
             if path.startswith('/landing-assets/'):
                 assert 'no-store' in headers.get('cache-control', ''), path
             report['checks'].append({'path': path, 'status': status})
-        for path in ['/ru', '/uz']:
+        for path in ['/en', '/uz']:
             status, _, _, final = fetch(origin + path)
             assert status == 200 and final == origin + path + '/', (path, status, final)
+            report['checks'].append({'path': path, 'status': status, 'final': final})
+        for path in ['/ru', '/ru/']:  # legacy Russian URLs now redirect to the root
+            status, _, _, final = fetch(origin + path)
+            assert status == 200 and final == origin + '/', (path, status, final)
             report['checks'].append({'path': path, 'status': status, 'final': final})
         for url in [origin + '/health', origin + '/api/v1/health', 'https://api.mushukistan.uz/api/v1/health']:
             status, _, data, _ = fetch(url)

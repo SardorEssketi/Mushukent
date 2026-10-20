@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import struct
+import re
 import unittest
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
@@ -49,7 +50,7 @@ class SiteBuildTest(unittest.TestCase):
     def test_localized_html_is_complete_without_js(self) -> None:
         for lang, content in CONTENT.items():
             with self.subTest(lang=lang):
-                page = OUT / ("index.html" if lang == "en" else f"{lang}/index.html")
+                page = OUT / ("index.html" if lang == "ru" else f"{lang}/index.html")
                 document = page.read_text(encoding="utf-8")
                 parsed = Tags()
                 parsed.feed(document)
@@ -65,12 +66,12 @@ class SiteBuildTest(unittest.TestCase):
     def test_metadata_and_assets(self) -> None:
         for lang, content in CONTENT.items():
             with self.subTest(lang=lang):
-                page = OUT / ("index.html" if lang == "en" else f"{lang}/index.html")
+                page = OUT / ("index.html" if lang == "ru" else f"{lang}/index.html")
                 document = page.read_text(encoding="utf-8")
                 parsed = Tags()
                 parsed.feed(document)
                 canonical = next(a["href"] for a in parsed.all("link") if a.get("rel") == "canonical")
-                self.assertEqual(canonical, "https://mushukistan.uz" + ("/" if lang == "en" else f"/{lang}/"))
+                self.assertEqual(canonical, "https://mushukistan.uz" + ("/" if lang == "ru" else f"/{lang}/"))
                 alternates = {a["hreflang"]: a["href"] for a in parsed.all("link") if a.get("rel") == "alternate"}
                 self.assertEqual(set(alternates), {"en", "ru", "uz", "x-default"})
                 self.assertEqual(len(parsed.all("title")), 1)
@@ -97,10 +98,23 @@ class SiteBuildTest(unittest.TestCase):
                 self.assertNotIn('href="/child-safety"', document)
                 self.assertIn('href="/delete-account"', document)
 
+    def test_russian_is_the_default_and_legacy_url_is_not_indexed(self) -> None:
+        ru = (OUT / "index.html").read_text(encoding="utf-8")
+        en = (OUT / "en/index.html").read_text(encoding="utf-8")
+        self.assertIn('<html lang="ru"', ru)
+        self.assertIn('<html lang="en"', en)
+        self.assertFalse((OUT / "ru").exists(), "the old /ru/ page must not be built any more")
+        for document in (ru, en):
+            alternates = dict(re.findall(r'<link rel="alternate" hreflang="([^"]+)" href="([^"]+)">', document))
+            self.assertEqual(alternates, {"ru": "https://mushukistan.uz/", "en": "https://mushukistan.uz/en/",
+                                          "uz": "https://mushukistan.uz/uz/", "x-default": "https://mushukistan.uz/"})
+        sitemap = (OUT / "sitemap.xml").read_text(encoding="utf-8")
+        self.assertNotIn("/ru/", sitemap)
+
     def test_sitemap_robots_and_manifest(self) -> None:
         sitemap = ET.parse(OUT / "sitemap.xml")
         locs = [e.text for e in sitemap.findall(".//{http://www.sitemaps.org/schemas/sitemap/0.9}loc")]
-        self.assertEqual(locs, ["https://mushukistan.uz/", "https://mushukistan.uz/ru/", "https://mushukistan.uz/uz/"])
+        self.assertEqual(locs, ["https://mushukistan.uz/", "https://mushukistan.uz/en/", "https://mushukistan.uz/uz/"])
         robots = (OUT / "robots.txt").read_text(encoding="utf-8")
         self.assertIn("Allow: /", robots)
         self.assertIn("Sitemap: https://mushukistan.uz/sitemap.xml", robots)
@@ -124,9 +138,12 @@ class SiteBuildTest(unittest.TestCase):
         production = (ROOT.parent / "infrastructure/nginx/default.conf").read_text(encoding="utf-8")
         local = (ROOT.parent / "infrastructure/nginx/local.conf").read_text(encoding="utf-8")
         for config in (production, local):
-            for path in ("/", "/ru/", "/uz/", "/robots.txt", "/sitemap.xml"):
+            for path in ("/", "/en/", "/uz/", "/robots.txt", "/sitemap.xml"):
                 self.assertIn(f"location = {path} {{", config)
             self.assertIn("location ^~ /landing-assets/", config)
+            self.assertRegex(config, r"location = /ru \{ return 301 /; \}")
+            self.assertRegex(config, r"location = /ru/ \{ return 301 /; \}")
+            self.assertNotRegex(config, r"location = /ru/ \{\s*root")
             self.assertRegex(config, r"location / \{\s*try_files \$uri \$uri/ /index.html;")
             self.assertIn("location /api/", config)
             self.assertIn("location /media/", config)

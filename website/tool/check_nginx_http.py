@@ -146,7 +146,7 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
                                      "sha256": hashlib.sha256(data).hexdigest(),
                                      "cache_control": headers.get("cache-control")})
 
-        for path, relative in [("/", "index.html"), ("/ru/", "ru/index.html"), ("/uz/", "uz/index.html")]:
+        for path, relative in [("/", "index.html"), ("/en/", "en/index.html"), ("/uz/", "uz/index.html")]:
             check_file(path, website / relative, "no-store")
         for path in ["/feed", "/map", "/posts/test-post", "/lost-pets/test-lost",
                      "/adoption-posts/test-adoption", "/users/test-user", "/login", "/register",
@@ -174,11 +174,16 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
             if path.startswith("/landing-assets/"):
                 assert "no-store" in headers.get("cache-control", ""), (path, headers)
             report["checks"].append({"path": path, "status": status})
-        for path in ["/ru", "/uz"]:
+        for path in ["/en", "/uz"]:
             status, headers, _ = request(path)
             assert status == 308 and urlsplit(headers["location"]).path == path + "/"
             assert request(path + "/")[0] == 200
             report["checks"].append({"path": path, "status": status, "location": headers["location"]})
+        for path in ["/ru", "/ru/"]:   # Russian moved to the root; the old URLs must keep working
+            status, headers, _ = request(path)
+            assert status == 301 and urlsplit(headers["location"]).path == "/", (path, status, headers.get("location"))
+            report["checks"].append({"path": path, "status": status, "location": headers["location"]})
+        assert b'<html lang="ru"' in request("/")[2] and b'<html lang="en"' in request("/en/")[2]
         status, headers, _ = request("/feed?test=1", tls=False)
         assert status == 301 and headers["location"] == "https://mushukistan.uz/feed?test=1"
         report["checks"].append({"path": "http:/feed?test=1", "status": status})
