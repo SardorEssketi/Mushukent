@@ -102,6 +102,7 @@ the user's explicit permission rule for it.
 - Four containers run under the Compose project: Nginx, backend, notification worker, database. Backend and worker run `mushukistan-backend:<sha7>` (image tag = release commit's sha7). Older images are retained for rollback.
 - Compose labels of every container name one working directory under `/opt/mushukistan-releases/` and this file order: `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.notifications.yml`, `docker-compose.notification-release.yml`.
 - **The Compose working directory is not necessarily the web release.** On 2026-10-19 it was a *backend-only* release (its `README_RELEASE.txt`: "frontend/build/web, website/dist are symlinks to the active web release") whose web and landing directories were symlinks into an older web release. The public `main.dart.js` hash matched that older web release. Always determine the served web release from Nginx's bind mounts with symlinks resolved (the inspect script and `activate-web-release.sh` do this), and never delete either directory of the current pair: together they are the rollback target.
+- After the 2026-10-20 web release, Nginx's labels and bind mounts name the web release `20261020-b117e64-web-posthog`, while backend and worker still name the backend-only release; this mixed state is expected (see the release record).
 - Staged web releases from 2026-10-18 exist but are **not** active and must not be activated (owner decision); build each release from the intended verified `main` commit.
 - The private overlay `docker-compose.notification-release.yml` (not in Git, about 250 bytes) is identified and contains no secrets. It pins backend and worker to `mushukistan-backend:<sha7>`, overrides the backend command to `uvicorn app.main:app --host 0.0.0.0 --port 8000` (no auto-migration), and sets `healthcheck.start_interval: 2s`. A sanitized template is `infrastructure/docker-compose.notification-release.example.yml`. Releases carry different versions of it, so always copy it from the *active* working directory and change only the tag.
 - Release directory conventions: name `<YYYYMMDD>-<sha7>-<label>`; files `RELEASE_COMMIT.txt` (full SHA), `README_RELEASE.txt`, and in some releases `PREVIOUS_STATE.*` and `ROLLBACK.sh`. Releases are copied source, not Git clones. Each has its own `.env` (mode 0600). Never print `.env` files.
@@ -275,6 +276,7 @@ for kept copies.
 | Migration state | `docker exec mushukistan-backend alembic current` equals `alembic heads` |
 | Logs | `docker logs --since 10m mushukistan-backend 2>&1 \| grep -ciE 'error\|traceback\|critical'` is 0 |
 | Isolation | Container IDs of everything except the replaced services are unchanged |
+| Certificate renewal | Read-only: `certbot certificates` shows more than 30 days left, and `journalctl -u certbot.service --since -10days` has no failures. Check before every release. |
 
 ### Rollback
 
@@ -347,9 +349,30 @@ private key. A restore rehearsal was done on 2026-10-19 (below) and takes minute
 | Item | Status |
 | --- | --- |
 | Backend dependency drift (found 2026-10-19) | **Resolved on `main`.** `backend/constraints.txt` is the `pip freeze` of the production image and is used by the Dockerfile and CI. Cause: with unpinned FastAPI 0.149 / Starlette 1.9 an absent optional `bool` form field is parsed as `False` (instead of `None`), so older app versions posting an adoption without the consent checkbox got `422 CONTACT_CONSENT_REQUIRED`. With the locked 0.143.3 / 1.8.0 they work (two regression tests cover it). The rebuilt image's package set is identical to production's (90 pins). To change dependencies, follow the header of `constraints.txt` and rerun the full suite. |
-| Backend code vs production | Production runs `fb1f6d4`. `main` differs only by two lines of Google-token audience logging in `auth/infrastructure/tokens.py` and the dependency lock. No behavior change, so a backend release is optional and can wait for the next real backend change. |
-| Web, landing and Nginx | `main` (merged PR #2) contains the Russian-default landing at `/` with `/ru` and `/ru/` redirecting to `/`, `/en/` for English, the cookieless PostHog page-view beacon (the CSP already allows the PostHog host), new icons/manifest, and the updated legal page. Packaged as `release/20261020-b117e64-web-posthog.tar.gz` (clean `main` tree, no secret-like files, production API URL, local CanvasKit). Regression results before this release: website unit tests, interaction test, Flutter bundle check, 64 isolated production-Nginx HTTP checks (including the legacy `/ru` redirects) and a 24-case headless-Chrome gate all passed. |
+| Backend code vs production | Production runs `fb1f6d4`. Full backend suite with the locked dependencies: 537 passed, 2 skipped, 0 failed; ruff and black clean. `main` differs only by two lines of Google-token audience logging in `auth/infrastructure/tokens.py` and the dependency lock. No behavior change, so a backend release is optional and can wait for the next real backend change. |
+| Web, landing and Nginx | **Deployed 2026-10-20** as `20261020-b117e64-web-posthog` (see the release record). Rollback target retained. |
 | Staged old web releases (`20261018-bf9c91d-*`) | Not to be activated (owner decision). |
+
+### Release record
+
+| Date | Release | Scope | Result |
+| --- | --- | --- | --- |
+| 2026-10-20 | `20261020-b117e64-web-posthog` (`main` commit `b117e64`, CI green) | Web only: Russian-default landing at `/`, `/ru` and `/ru/` -> `/` (301), `/en/`, cookieless PostHog page-view beacon, rebuilt Flutter web bundle (icons, manifest, privacy page), updated Nginx config. | **Activated by the owner** (typed confirmation); Nginx recreated (about 3 s). Backend, worker and database untouched (container and image IDs identical before and after). Rollback target retained: Compose from `20261018-fb1f6d4-backend` (whose web/dist symlinks point to `20261013-4eff1f2-main`). |
+
+Verification after activation (all read-only; **VERIFIED**): served `main.dart.js` SHA-256 equals the release (`2767e35a...32c47`); 63 deep public HTTPS artifact checks passed; `/` is `lang="ru"` with canonical `/` and hreflang ru/en/uz/x-default; `/en/` and `/uz/` serve; `/ru`, `/ru/` return 301 to `/`; the sitemap lists `/`, `/en/`, `/uz/`; the manifest (`start_url=/feed`), all five icons and the privacy page match the release byte for byte; the page's PostHog `$pageview` (EU host) returned HTTP 200 with no cookies, no local/session storage, no CSP violations, `$process_person_profile=false`, and only these fields: random per-load UUID, page URL/path/host, referrer, screen size, browser language, page language; backend `healthy`, worker running, zero restarts, no new errors in Nginx, backend, worker or database logs. Not exercised: Google sign-in, authenticated flows, real-device behavior (**NOT VERIFIED**).
+
+Lessons learned (apply to the next release):
+
+- **Order that worked:** package -> upload -> checksum on the server -> extract with `--no-same-owner` -> copy `.env` and the overlay with `cp -p` (compare hashes, never print) -> dry run -> fresh backup (<12 h) -> the owner types the activation -> read-only verification.
+- **Mixed Compose labels are expected.** After a web release, Nginx's `working_dir` label names the new web release while backend and worker still name the backend-only release. Read each service's own labels; the overlay set is read from Nginx and is identical in both.
+- **Check certificate renewal before every release** (read-only: `certbot certificates` and `journalctl -u certbot.service`). It is a release-independent risk that went unnoticed until this audit.
+- **Windows Python cannot verify the Let's Encrypt chain** (an expired cross-signed path). `curl` works. Run the Python checkers with `SSL_CERT_FILE=$(python -c "import certifi;print(certifi.where())")`, or from Linux.
+- **`check_production_http.py` cannot run over stdin** (it locates its repo from its own path); run it from a checkout.
+- **Git Bash rewrites `/path` arguments** (also inside `curl -w` formats). Set `MSYS_NO_PATHCONV=1` for ad-hoc checks and any `docker` call with Unix paths.
+- **Log scans:** a broad regex such as `5[0-9][0-9] ` matches byte counts in access logs and `200 OK` health lines. Use `" 5[0-9][0-9] "` against the status field and expect the known `http2` deprecation warnings from Nginx 1.27.
+- **Expected benign results:** `/docs` returns 404 (API docs are closed, and `verify-public.sh` requests it); `/ru/index.html` falls back to the Flutter shell (200), which is harmless.
+- **The repository is public.** Never commit host addresses, backup inventories, row counts, hardening notes or secrets; keep them in `docs/private/PRODUCTION_STATE.md` and `scripts/deploy/local.env` (both gitignored).
+- **Analytics note:** PostHog receives the visitor's IP address as part of the HTTP request (inherent to any beacon). The payload itself carries no identifiers; confirm the project's IP/GeoIP handling in PostHog settings.
 
 ### Open questions for the user
 
