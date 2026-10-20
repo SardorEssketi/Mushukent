@@ -29,7 +29,7 @@ records. Scripts live in `scripts/deploy/` and are tested offline with
    reviewed read-only inspection only. That grant covers `remote-inspect.sh` and
    equivalent read-only reads (`cat`/`ls`/`sha256sum`/`docker inspect`). It does
    **not** cover uploads, backups, container changes, or `--execute` of any
-   script: the user runs those with `! ssh -t root@143.198.192.201 ...`. If SSH is
+   script: the user runs those with `! ssh -t <ssh-target> ...`. If SSH is
    denied, do not work around it; give the user the exact command and ask for the
    output.
 5. **Release branch: `main`** (owner decision, 2026-10-19). Release only from a
@@ -41,11 +41,11 @@ records. Scripts live in `scripts/deploy/` and are tested offline with
    current conversation for the specific commit. Use the approval gates below.
    Do not activate old staged releases (for example the `20261018-bf9c91d-*`
    directories): build each release from the intended, verified `main` commit.
-7. **Never build Docker images on the production VPS** (2 GB RAM, no swap). Build
+7. **Never build Docker images on the production VPS** (a small host with limited memory). Build
    locally with `scripts/deploy/build-backend-image.sh`, move the tarball, and
    `docker load` it on the server.
-8. The hosting provider is **unverified** (hostname suggests DigitalOcean; older
-   docs say Hetzner). Do not state a provider as fact until the user confirms.
+8. The hosting provider is **unverified**. Do not state a provider as fact, and do
+   not change infrastructure documentation based on a hostname, until the user confirms.
 9. Mark every flow `VERIFIED`, `FAILED`, or `NOT VERIFIED` in the release record.
 
 ### Approval gates
@@ -63,7 +63,7 @@ the commit SHA, the exact command, what it changes, the rollback, and any downti
 | G5 | Migration (`alembic upgrade head`) | schema change; needs its own review of the revision |
 | G6 | Rollback | replaces containers; do it as soon as a stop condition hits, then report |
 
-G4-G6 are always run by the user in a real terminal (`! ssh -t root@143.198.192.201 ...`):
+G4-G6 are always run by the user in a real terminal (`! ssh -t <ssh-target> ...`):
 the scripts need a typed confirmation and refuse without a terminal.
 
 ### Fact status
@@ -73,46 +73,53 @@ inspection with `scripts/deploy/remote-inspect.sh`, public HTTPS, `git`); **RECO
 = only stated in older documents; **UNKNOWN** = nobody has confirmed it. Re-run the
 inspection before every deployment: this state changes with each release.
 
+**This repository is public.** Host addresses, sizing, backup inventories, row counts and
+hardening notes are therefore kept out of Git, in the gitignored
+`docs/private/PRODUCTION_STATE.md` on the operator machine. If that file is missing, run the
+inspection and ask the user; do not reconstruct it from memory.
+
+**SSH target.** It is not stored in Git. It comes from the gitignored `scripts/deploy/local.env`
+(`MUSHUKISTAN_SSH_TARGET=user@host`, see `local.env.example`) or the `MUSHUKISTAN_SSH_TARGET`
+environment variable; `bash scripts/deploy/ssh-target.sh` prints it. Below, `<ssh-target>` means
+that output. If none is configured, ask the user. SSH works non-interactively from the operator
+workstation with `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes <ssh-target>`; the agent needs
+the user's explicit permission rule for it.
+
 **Repository (VERIFIED)**
 
-- Compose project `mushukistan`. Services: `db` (`postgis/postgis:15-3.4`, `mushukistan-db`), `backend` (`./backend`, container `mushukistan-backend`), `notification-worker` (profile `notifications`, same image), `nginx` (`nginx:1.27-alpine`, `mushukistan-nginx`). Volumes `postgres_data`, `backend_media`.
-- `docker-compose.prod.yml` mounts `./frontend/build/web` -> `/usr/share/nginx/html`, `./website/dist` -> `/var/www/landing`, `./infrastructure/nginx/default.conf`, `/etc/letsencrypt`, `./infrastructure/certbot/www`. `docker-compose.notifications.yml` mounts the Firebase file from `$FIREBASE_CREDENTIALS_HOST_PATH`.
+- Compose project `mushukistan`. Services: `db` (`postgis/postgis:15-3.4`, `mushukistan-db`), `backend` (`./backend`, container `mushukistan-backend`), `notification-worker` (profile `notifications`, same image, auto-named `mushukistan-notification-worker-1`), `nginx` (`nginx:1.27-alpine`, `mushukistan-nginx`). Volumes `postgres_data`, `backend_media`.
+- `docker-compose.prod.yml` mounts `./frontend/build/web` -> `/usr/share/nginx/html`, `./website/dist` -> `/var/www/landing`, `./infrastructure/nginx/default.conf`, `/etc/letsencrypt`, `./infrastructure/certbot/www`. `docker-compose.notifications.yml` mounts the Firebase service-account file from `$FIREBASE_CREDENTIALS_HOST_PATH`.
 - `backend/Dockerfile` runs `alembic upgrade head && uvicorn`, but production overrides it (below), so production does **not** migrate on start.
+- Backend runtime dependencies are locked in `backend/constraints.txt` (a `pip freeze` of the production image) and used by the Dockerfile and CI.
 - Nginx proxies to `backend:8000` without a `resolver`: it must be reloaded after the backend container is recreated.
 
 **Git (VERIFIED 2026-10-19)**
 
-- Canonical remote: `origin` = `ssh://git@ssh.github.com:443/SardorEssketi/Mushukent.git` (reachable). `origin/main` is the integration branch: it contains the deployed backend commit `fb1f6d4` and the web commit `4eff1f2`. `origin/production-deploy` (`da5f847`) is stale; do not use it.
-- A release-branch policy is not written anywhere (**UNKNOWN**); cut releases from a clean, pushed commit of `main` unless the user says otherwise. At inspection time `origin/main` (`7956e91`) was 7 commits ahead of production, including a backend change (Google token audience logging) and the new app icons.
+- Canonical remote: `origin` (GitHub, public repository). **`main` is the release branch** (owner decision). `production-deploy` is stale; do not use it.
 
-**Production host (VERIFIED)**
+**Production (VERIFIED by read-only inspection on 2026-10-19)**
 
-- SSH works non-interactively from the operator workstation: `ssh -o BatchMode=yes -o StrictHostKeyChecking=yes root@143.198.192.201` (default key in `~/.ssh`; `~/.ssh/config` has no alias). The agent needed the user's explicit permission rule for it.
-- Host `ubuntu-s-1vcpu-2gb-sgp1`: Ubuntu 24.04, 1 vCPU, 2 GB RAM, **no swap**, 48 GB disk (27 GB free), Docker Compose 2.40.3, `git` and `python3` installed. The hostname pattern indicates a DigitalOcean droplet in Singapore, while `docs/PROJECT_BIBLE.md` and `docs/DATABASE.md` say Hetzner (discrepancy; **UNKNOWN** which is right; do not edit those architecture docs without approval). With 2 GB RAM, building images on the server is a risk: watch memory.
-- Containers: `mushukistan-nginx` (no healthcheck), `mushukistan-backend` (healthy), `mushukistan-notification-worker-1` (note the auto-generated name), `mushukistan-db` (healthy). Backend and worker run `mushukistan-backend:fb1f6d4`; image tags are the release commit's sha7. Older images are retained for rollback (`4eff1f2`, `629c0ab`, `rollback-eb9da57-notifications`, ...).
-- Compose labels of every container: working dir `/opt/mushukistan-releases/20261018-fb1f6d4-backend`, files in this order: `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.notifications.yml`, `docker-compose.notification-release.yml`. Network `mushukistan_default`.
-- **The Compose working directory is not the web release.** That directory is a *backend-only* release (`README_RELEASE.txt`: "frontend/build/web, website/dist are symlinks to the active web release"). They point to `/opt/mushukistan-releases/20261013-4eff1f2-main/{frontend/build/web,website/dist}`. The public `main.dart.js` SHA-256 (`a3b931e6...edd9c`) matched that directory. Always determine the served web release from Nginx's bind mounts with symlinks resolved (the inspect script and `activate-web-release.sh` do this). Do not delete `20261013-4eff1f2-main` or `20261018-fb1f6d4-backend`: together they are the current rollback target.
-- Newer web releases `20261018-bf9c91d-icons-ru-redirect` and `20261018-bf9c91d-logo-ru-default` exist but are **not** active; their completeness was not checked.
-- The private overlay `docker-compose.notification-release.yml` (244 bytes, not in Git) is identified and contains no secrets. It pins backend and worker to `mushukistan-backend:<sha7>`, overrides the backend command to `uvicorn app.main:app --host 0.0.0.0 --port 8000` (no auto-migration), and sets `healthcheck.start_interval: 2s`. A sanitized template is `infrastructure/docker-compose.notification-release.example.yml`. Releases carry different versions of it (five distinct hashes across 12 releases), so always copy it from the *active* working directory and change only the tag.
-- Firebase service account on the host: `/etc/mushukistan/secrets/firebase-admin.json` (directory mode 0700), set via `FIREBASE_CREDENTIALS_HOST_PATH` in `.env`. Never print or copy it.
-- Release directory conventions: name `<YYYYMMDD>-<sha7>-<label>`; files `RELEASE_COMMIT.txt` (full SHA), `README_RELEASE.txt`, and in some releases `PREVIOUS_STATE.*` and `ROLLBACK.sh`. 51 entries exist under `/opt/mushukistan-releases/`; only one inspected release had a `.git`, so releases are copied source, not clones. Each release has its own `.env` (mode 0600; the active one also has `.env.bak-20261019`). Never print `.env` files.
-- Database: PostgreSQL 15.8 / PostGIS 3.4.3, 22 MB, Alembic **`20261015_0027`** (head of the deployed code). Row counts at inspection: 37 users, 21 posts, 2 lost pets, 3 adoption posts, 34 comments.
-- `.env` provides every required name (R2, Resend, Google, Firebase, JWT, PostHog). `TRUSTED_PROXY_CIDRS` and `CONTACT_*` are unset (code defaults apply). Both `EMAIL_FROM` and `RESEND_FROM_EMAIL` are present. `APP_ENV=production`, `APP_DEBUG=false`.
-- Backups: `/root/mushukistan-backups/` holds 43 `mushukistan-*.dump` files plus old ad-hoc files (several zero-byte August dumps). Two naming schemes exist: `mushukistan-YYYYMMDD-HHMMSS-<label>.dump` and `mushukistan-YYYYMMDDTHHMMSSZ-<label>.dump` (+ `.sha256`). The newest seen is `mushukistan-20261017T214538Z-pre-0.2.0.dump`, taken **before** migration `0027` ran, so no backup of the current schema was seen. Take a fresh backup before any change. Off-server copies were not checked.
-- Fresh baseline backup (2026-10-19, after the facts above): `/root/mushukistan-backups/mushukistan-20261019-155853-baseline-0027.dump` (+ `.sha256`), SHA-256 `8bf8ebe1...ffdfcbb`, 166,391 bytes, 240 catalog entries. Restore rehearsal in a disposable local PostGIS: Alembic `20261015_0027`, row counts identical to the inspection. A copy is on the operator workstation in the gitignored `.data/backups/`. Containers were not restarted by this.
-- Public DNS for `mushukistan.uz` and `api.mushukistan.uz` points directly at `143.198.192.201`. `scripts/deploy/verify-public.sh` passes against the live site.
+- Four containers run under the Compose project: Nginx, backend, notification worker, database. Backend and worker run `mushukistan-backend:<sha7>` (image tag = release commit's sha7). Older images are retained for rollback.
+- Compose labels of every container name one working directory under `/opt/mushukistan-releases/` and this file order: `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.notifications.yml`, `docker-compose.notification-release.yml`.
+- **The Compose working directory is not necessarily the web release.** On 2026-10-19 it was a *backend-only* release (its `README_RELEASE.txt`: "frontend/build/web, website/dist are symlinks to the active web release") whose web and landing directories were symlinks into an older web release. The public `main.dart.js` hash matched that older web release. Always determine the served web release from Nginx's bind mounts with symlinks resolved (the inspect script and `activate-web-release.sh` do this), and never delete either directory of the current pair: together they are the rollback target.
+- Staged web releases from 2026-10-18 exist but are **not** active and must not be activated (owner decision); build each release from the intended verified `main` commit.
+- The private overlay `docker-compose.notification-release.yml` (not in Git, about 250 bytes) is identified and contains no secrets. It pins backend and worker to `mushukistan-backend:<sha7>`, overrides the backend command to `uvicorn app.main:app --host 0.0.0.0 --port 8000` (no auto-migration), and sets `healthcheck.start_interval: 2s`. A sanitized template is `infrastructure/docker-compose.notification-release.example.yml`. Releases carry different versions of it, so always copy it from the *active* working directory and change only the tag.
+- Release directory conventions: name `<YYYYMMDD>-<sha7>-<label>`; files `RELEASE_COMMIT.txt` (full SHA), `README_RELEASE.txt`, and in some releases `PREVIOUS_STATE.*` and `ROLLBACK.sh`. Releases are copied source, not Git clones. Each has its own `.env` (mode 0600). Never print `.env` files.
+- Database: PostgreSQL 15 / PostGIS 3.4, Alembic revision `20261015_0027` (head of the deployed code). `.env` provides every required variable name; `TRUSTED_PROXY_CIDRS` and `CONTACT_*` are unset (code defaults apply); `APP_ENV=production`, `APP_DEBUG=false`.
+- Backups: manual dumps exist under `/root/mushukistan-backups/` with the naming `mushukistan-YYYYMMDD-HHMMSS-<label>.dump` (+ `.sha256`). A baseline backup taken on 2026-10-19 passed `pg_restore --list` and a restore rehearsal in a disposable PostGIS (details in the private state file). Automated encrypted backups are prepared but **not enabled** (`docs/BACKUP.md`). Take a fresh backup before any change.
+- The server can reach its own public HTTPS (needed by `activate-web-release.sh`), and has `curl`, `script`, `sha256sum`, `readlink`, `git`, `python3`, Docker Compose v2. `scripts/deploy/verify-public.sh` passes against the live site.
 
 **RECORD only (not re-verified)**: Cloudflare in front of `media.mushukistan.uz` (R2) and its cache rules; Google Cloud OAuth clients and SHA-1s; Play Console version codes; Firebase project setup.
 
-**UNKNOWN**: hosting provider (above); who may merge to `main` and the release approval flow; where the private overlay and server `.env` files are backed up off the server; why the inspect script's uvicorn process count printed 0 (probably `ps` is missing in the image; ignore that line).
+**UNKNOWN**: the hosting provider (**unverified; do not state one as fact**: older docs say Hetzner); who may merge to `main` and the release approval flow beyond the gates below; where the private overlay and server `.env` files are backed up off the server.
 
-To refresh these facts, run from the repository root (read-only, no secrets in the output):
+To refresh these facts (read-only, no secrets in the output):
 
 ```powershell
-ssh root@143.198.192.201 'sh -s' < scripts/deploy/remote-inspect.sh > prod_inspect.txt
+ssh (bash scripts/deploy/ssh-target.sh) 'sh -s' < scripts/deploy/remote-inspect.sh > prod_inspect.txt
 ```
 
-Keep `prod_inspect*.txt` out of Git (it names hosts, container IDs, and row counts).
+`prod_inspect*.txt` is gitignored (it names hosts, container IDs, and row counts).
 
 ### What each component is and what deploying it touches
 
@@ -190,10 +197,10 @@ except Nginx must be identical before and after.
    API URL, no dev hosts, local CanvasKit), compares `.env` key *names* with the
    current one, validates `docker compose config`, and runs `nginx -t` in a
    disposable container.
-5. **Backup** (needs approval): `ssh -t root@143.198.192.201 bash /opt/mushukistan-releases/<name>/scripts/deploy/backup-db.sh --label web-<sha7> --execute`.
+5. **Backup** (needs approval): `ssh -t <ssh-target> bash /opt/mushukistan-releases/<name>/scripts/deploy/backup-db.sh --label web-<sha7> --execute`.
    Copy the dump and `.sha256` off the server.
 6. **Switch** (needs approval; run it in a real terminal because it requires
-   typing `ACTIVATE <name>`): `ssh -t root@143.198.192.201 bash /opt/mushukistan-releases/<name>/scripts/deploy/activate-web-release.sh <name> --execute --backup-file <dump>`.
+   typing `ACTIVATE <name>`): `ssh -t <ssh-target> bash /opt/mushukistan-releases/<name>/scripts/deploy/activate-web-release.sh <name> --execute --backup-file <dump>`.
    It refuses without a non-empty dump younger than 12 h that passes
    `pg_restore --list`, writes `PREVIOUS_STATE.txt` (including the rollback
    command) into the new directory, runs only `up -d --no-deps --no-build
@@ -225,8 +232,7 @@ uvicorn-only command (no migration on start) with the overlay pinning
    web release that should stay live (symlinks, as `20261018-fb1f6d4-backend` does).
    Validate with `$DC config --quiet` (never print the output). Use `--no-build` on every
    `up` so Compose can never trigger a build on the server.
-3. **Precondition: dependencies must be locked** (see "Next-release readiness"); an unlocked
-   rebuild already changes behavior today. **Build locally, never on the server.** `bash scripts/deploy/build-backend-image.sh`
+3. **Build locally, never on the server** (dependencies are locked in `backend/constraints.txt`). `bash scripts/deploy/build-backend-image.sh`
    (from the pushed `main` commit) builds `linux/amd64`, checks for exactly one
    Alembic head, and writes `release/mushukistan-backend-<sha7>.tar.gz` plus a
    checksum. After approval (G2) upload it and run `gunzip -c ... | docker load` on
@@ -286,7 +292,7 @@ for kept copies.
 | A rolled-back backend exits with `Can't locate revision` | Old image against a newer schema without the uvicorn-only command; the overlay must keep the command override. |
 | `docker compose up --build` on the server replaced my backend | `--build` rebuilds and recreates dependents. Never use the quick-start in `infrastructure/README.md` on the production host; use the procedures above. |
 | The Compose working dir looks like the wrong web release | Expected for backend-only releases: web/dist are symlinks. Read the resolved Nginx mounts. |
-| `config` fails on `FIREBASE_CREDENTIALS_HOST_PATH` | `docker-compose.notifications.yml` needs it set in the release's `.env` (value points at `/etc/mushukistan/secrets/firebase-admin.json`). |
+| `config` fails on `FIREBASE_CREDENTIALS_HOST_PATH` | `docker-compose.notifications.yml` needs it set in the release's `.env`. |
 | Safari/old shell mismatch after a release | Files were changed inside a live directory. Always switch to a complete new directory. |
 | `main.dart.js` download times out on the workstation | The bundle is about 4.7 MB; slow links need 20-60 s. `verify-public.sh` allows 180 s for it. |
 | `flutter build web` output lacks `useLocalCanvasKit` | A plain `flutter build web` was run after the script. Rebuild with `build_production.ps1 -Target Web`. |
@@ -296,16 +302,16 @@ for kept copies.
 
 ### Off-server backups (proposal, NOT implemented; needs the user's decision)
 
-Nothing below copies a secret anywhere. Today there is no automated backup (only the
-OS `dpkg-db-backup` timer) and no confirmed off-server copy of anything.
+Nothing below copies a secret anywhere. Automated encrypted backups are prepared but not
+enabled (`docs/BACKUP.md`); there is no confirmed off-server copy of anything yet.
 
 | Asset | Sensitivity | Proposed strategy |
 | --- | --- | --- |
 | Database dumps (`/root/mushukistan-backups/*.dump`) | personal data (emails, phones, posts) | 1) pre-release: `backup-db.sh` (G3), then pull with `scp` to the operator workstation and verify the `.sha256`. 2) Nightly `pg_dump -Fc` by cron on the server (a 22 MB database), keep 14 daily + 8 weekly. 3) Off-site copy **encrypted before it leaves the server** with `age` (public key on the server, private key kept offline by the owner), uploaded to a private bucket separate from the media bucket with a write-only token. Quarterly restore rehearsal. |
 | Server `.env` per release (mode 0600) | secrets (JWT, DB, R2, Resend, Firebase key, Fernet key) | Never in Git, chat, or an unencrypted cloud folder. Owner keeps one current copy in a password manager or an `age`-encrypted file made on the server and pulled as ciphertext. `PUSH_TOKEN_ENCRYPTION_KEY` must never change (stored device tokens become unreadable). |
 | Private overlay `docker-compose.notification-release.yml` | no secrets (verified) | Template in Git (`infrastructure/docker-compose.notification-release.example.yml`); the real one is a copy of the active file with the tag changed, and each release directory keeps its own. |
-| Firebase service account (`/etc/mushukistan/secrets/firebase-admin.json`) | secret | Same vault as `.env`; can be re-issued from the Firebase console if lost. |
-| Release directories | source copies, `.env` copies | Rebuildable from `main`; keep at least the active and previous release. No retention policy exists yet (51 directories; do not prune without approval). |
+| Firebase service account file (host path in `FIREBASE_CREDENTIALS_HOST_PATH`) | secret | Same vault as `.env`; can be re-issued from the Firebase console if lost. |
+| Release directories | source copies, `.env` copies | Rebuildable from `main`; keep at least the active and previous release. No retention policy exists yet; do not prune without approval. |
 
 Decisions needed from the user: off-site destination (external drive, a private
 bucket, or both), whether to approve the nightly cron, and who holds the `age`
@@ -324,11 +330,6 @@ private key. A restore rehearsal was done on 2026-10-19 (below) and takes minute
 | Rollback restarts Nginx again (second short outage) | Accepted. |
 | `verify-public.sh` needs the server to reach its own public HTTPS | Verified on 2026-10-19 (hairpin works, `curl` present). |
 | Migrations are manual; old images cannot parse newer revisions | Overlay keeps the uvicorn-only command; backups precede every migration. |
-| Unpinned backend dependencies: a rebuild silently upgrades FastAPI/Starlette | **Open blocker** for backend releases; see "Next-release readiness". Compare `pip list` of the new image with production before shipping (`build-backend-image.sh` prints it). |
-| Backups: no automation, no confirmed off-server copy, a zero-byte August dump exists | See the proposal above. |
-| Root SSH login with a workstation key; agent access is permission-gated | Unchanged by this work; do not alter SSH security settings without approval. |
-| `.env.bak-*` files with secrets sit in release directories | Hygiene issue; clean up only with approval. |
-| No monitoring or alerting | Out of MVP scope; rely on `verify-public.sh` and manual checks. |
 
 ### Readiness by deployment path
 
@@ -336,27 +337,26 @@ private key. A restore rehearsal was done on 2026-10-19 (below) and takes minute
 | --- | --- |
 | Local build + package (`package-release.sh`, `build-backend-image.sh`) | Package: **VERIFIED** offline (tests, Debian). Image build script: syntax checked; see the release record for a real build. |
 | Read-only inspection and public smoke check (`remote-inspect.sh`, `verify-public.sh`) | **VERIFIED** against production on 2026-10-19, including from the server itself. |
-| Database backup | **VERIFIED**: baseline `mushukistan-20261019-155853-baseline-0027.dump` created, `pg_restore --list` (240 entries), SHA-256 `8bf8ebe15fab0bcd118d4cf143ad6d689d195e2a90541cb7d8e50814cffdfcbb`, restored into a disposable PostGIS with identical Alembic revision and row counts. Pulled to the workstation under the gitignored `.data/backups/`; no confirmed off-site copy. `backup-db.sh --execute` itself has only run against stubs (no terminal available to the agent). |
+| Database backup | **VERIFIED**: a baseline backup on 2026-10-19 passed `pg_restore --list` and a restore rehearsal in a disposable PostGIS (identical Alembic revision and row counts); details are in the private state file. A copy is on the operator workstation (gitignored). No confirmed off-site copy. `backup-db.sh --execute` has only run against stubs (no terminal available to the agent). |
 | Web activation (`activate-web-release.sh`) | **VERIFIED** in a disposable Linux + real Docker Compose rehearsal (`scripts/deploy/e2e_disposable.sh`): symlinked backend-only release layout, label/mount parsing, dry run, wrong confirmation, success, idempotent re-run, rollback restoring the previous release, failed verification, refused release; only the Nginx container changed. **NOT VERIFIED** on the real server (never run there). |
-| Backend/worker release (procedure B) | **NOT READY**: dependency drift blocker (above); manual steps only; image `docker load` flow and a real swap untested. Backend suite on today's fresh dependencies: 535 passed, 2 failed, 2 skipped; ruff and black clean. |
+| Backend/worker release (procedure B) | Dependencies are locked and the image rebuilds reproducibly; manual steps only; the image `docker load` flow and a real backend swap are **NOT VERIFIED** on the server. |
 | Android | Local build procedure only; not exercised in this audit. |
 
-### Next-release readiness (audit of 2026-10-19)
+### Next-release readiness (updated 2026-10-20)
 
 | Item | Status |
 | --- | --- |
-| **Backend dependencies are unpinned (blocker for any backend image build)** | `backend/pyproject.toml` uses open ranges (`fastapi>=0.115,<1.0`, ...) and the Dockerfile runs a plain `pip install -e .`. Production runs FastAPI 0.143.3 / Starlette 1.8.0; a fresh install on 2026-10-19 resolved FastAPI 0.149.0 / Starlette 1.9.0. With the fresh versions two tests fail (`test_older_adoption_clients_without_a_checkbox_still_create_posts`, `test_adoption_create_needs_contact_phone_but_no_publication_checkbox`: an absent optional `bool` form field is read as `False`, so older app versions would get `422 CONTACT_CONSENT_REQUIRED` when posting an adoption). With production's FastAPI/Starlette pinned, `test_contact_consent.py` + `test_posts.py` pass (28 passed). The backend source equals the deployed `fb1f6d4` except two auth-logging lines, so the code is not the cause. **Do not build or ship a new backend image until the dependencies are locked** (for example a `constraints.txt` generated from the running image's `pip freeze`, used by the Dockerfile) or the endpoint is fixed; either is a backend change that needs the user's approval. A web-only release is unaffected. |
-| Deployed backend vs `origin/main` | `origin/main` is 7 commits ahead of production; the only backend change is two lines of Google-token audience logging. The rest is web icons/branding, docs, and the Android version bump. |
-| Uncommitted Russian-default website changes | Technically ready: `website/` unit tests, the interaction test, `check_flutter_bundle.py`, and the isolated production-Nginx harness (62 checks) pass. Not covered by automation: the legacy `/ru` and `/ru/` -> `/` 301 redirects (the harness no longer checks them), Search Console resubmission of the new sitemap (`/`, `/en/`, `/uz/`), a real-browser pass (`check_browser.py`, not run), and a rebuild of `frontend/build/web` from the intended `main` commit (the local build is from 2026-10-14). They must be committed to `main` through the user's normal review before packaging. |
-| Deploy tooling on `origin/main` | The commits that add `scripts/deploy/`, `CLAUDE.md`, and this runbook exist only on the local branch `fix/release-readiness`. They are not pushed; pushing and merging need the user's permission. |
+| Backend dependency drift (found 2026-10-19) | **Resolved on `main`.** `backend/constraints.txt` is the `pip freeze` of the production image and is used by the Dockerfile and CI. Cause: with unpinned FastAPI 0.149 / Starlette 1.9 an absent optional `bool` form field is parsed as `False` (instead of `None`), so older app versions posting an adoption without the consent checkbox got `422 CONTACT_CONSENT_REQUIRED`. With the locked 0.143.3 / 1.8.0 they work (two regression tests cover it). The rebuilt image's package set is identical to production's (90 pins). To change dependencies, follow the header of `constraints.txt` and rerun the full suite. |
+| Backend code vs production | Production runs `fb1f6d4`. `main` differs only by two lines of Google-token audience logging in `auth/infrastructure/tokens.py` and the dependency lock. No behavior change, so a backend release is optional and can wait for the next real backend change. |
+| Web, landing and Nginx | `main` (merged PR #2) contains the Russian-default landing at `/` with `/ru` and `/ru/` redirecting to `/`, `/en/` for English, the cookieless PostHog page-view beacon (the CSP already allows the PostHog host), new icons/manifest, and the updated legal page. Packaged as `release/20261020-b117e64-web-posthog.tar.gz` (clean `main` tree, no secret-like files, production API URL, local CanvasKit). Regression results before this release: website unit tests, interaction test, Flutter bundle check, 64 isolated production-Nginx HTTP checks (including the legacy `/ru` redirects) and a 24-case headless-Chrome gate all passed. |
 | Staged old web releases (`20261018-bf9c91d-*`) | Not to be activated (owner decision). |
 
 ### Open questions for the user
 
-1. Which provider hosts the server (hostname suggests DigitalOcean, docs say Hetzner)? Fix `PROJECT_BIBLE.md` and `DATABASE.md` if the docs are wrong (needs approval).
-2. Off-server backup destination and the nightly-cron decision (see the proposal above).
-3. Which commit of `main` is the next release, and may the deploy tooling commits be pushed so `origin/main` contains them (they are currently only on the local branch `fix/release-readiness`)?
-4. Are the uncommitted Russian-default website changes approved for the next web release (they pass all automated checks; see the release notes)?
+1. Which provider hosts the server? It stays unverified until the user confirms; do not edit `PROJECT_BIBLE.md`/`DATABASE.md` on a guess.
+2. Off-server backup destination, who owns the `age` private key, and approval to enable the nightly timer (see `docs/BACKUP.md`).
+3. Should earlier commits that exposed host details in public Git history be rewritten (force-push), or accepted? Rewriting needs the owner's explicit approval.
+4. Is the optional backend release (token-logging change only) wanted, or should it wait for the next real backend change?
 
 ## Required release configuration
 
@@ -532,7 +532,7 @@ python website/tool/check_nginx_http.py --flutter frontend/build/web --website w
 The release must contain both complete, independently built directories:
 `frontend/build/web` mounted read-only at `/usr/share/nginx/html`, and
 `website/dist` mounted read-only at `/var/www/landing`. The root `/` and the
-localized `/ru/` and `/uz/` are exact Nginx routes; `/landing-assets/` is a
+localized `/en/` and `/uz/` are exact Nginx routes; `/landing-assets/` is a
 separate static namespace. Flutter stays at its existing root route structure:
 `/feed`, `/map`, shared post/profile links, authentication, and Flutter legal
 routes continue through its fallback. `/privacy`, `/child-safety`, and
@@ -556,7 +556,7 @@ Python's `cryptography` package and the `nginx:1.27-alpine` and
 `python:3.13-slim` images. It tests the production configuration and exact built
 artifacts, including proxies, security headers, cache behavior, and deep links.
 
-Before switching the active release, verify `/`, `/ru/`, `/uz/`, `/feed`,
+Before switching the active release, verify `/`, `/en/`, `/uz/`, `/feed`,
 `/map`, shared `/posts/:id`, `/lost-pets/:id`, `/adoption-posts/:id`, and
 `/users/:id` links; `/login`, `/register`, and `/verify-email`; the three public
 legal/account pages; `/api/` and `/media/`; locale links, both themes, mobile

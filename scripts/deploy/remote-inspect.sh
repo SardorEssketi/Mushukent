@@ -5,7 +5,7 @@
 # no backup, no secret values (configuration is reported as set/unset only).
 #
 # Run it from the operator's machine (see docs/DEPLOYMENT.md, "Server access"):
-#   ssh root@143.198.192.201 'sh -s' < scripts/deploy/remote-inspect.sh > prod_inspect.txt
+#   ssh "$(bash scripts/deploy/ssh-target.sh)" 'sh -s' < scripts/deploy/remote-inspect.sh > prod_inspect.txt
 # The output contains no secrets. Review the script first.
 #
 # Container names come from docker-compose.yml: mushukistan-backend, mushukistan-db, mushukistan-nginx.

@@ -51,3 +51,11 @@ _chrome-*.png
 /data/map_performance/
 /data/media_cache_release/
 
+
+# Local release artifacts (AAB/APK and reports)
+/release/
+
+# Private production state and local deployment settings (repository is public)
+/docs/private/
+/scripts/deploy/local.env
+prod_inspect*.txt
