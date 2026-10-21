@@ -1,8 +1,8 @@
 # TLS certificate renewal (Let's Encrypt, certbot webroot)
 
-**Status:** phase 1 **applied in production on 2026-10-20** (see "Production record"); phase 2 happens
-with the next release. Nothing in this file changes production by itself; every production step needs
-the owner's explicit approval.
+**Status:** phase 1 (2026-10-20) and phase 2 (2026-10-21) **applied in production**: Nginx mounts the
+persistent host directory `/var/www/certbot` and certbot's renewal webroot is that same directory.
+Every further production step still needs the owner's explicit approval.
 
 ## Root cause (found 2026-10-20)
 
@@ -148,15 +148,21 @@ Nothing here edits the backend, worker, database, `.env` files, or any container
 | 2026-10-20 | `set-webroot.sh <active ACME dir> --execute` | Let's Encrypt **staging** validation passed for all three hostnames; saved config passed `certbot renew --dry-run`; hook installed; private backup of the old config kept. No container touched. |
 | 2026-10-20 | Real renewal with `systemctl start certbot.service` (the timer's own command) | success in about 12 s; new certificate valid until **2027-01-18** (89 days); Nginx **reloaded gracefully** (SIGHUP), container id and start time unchanged; backend, worker and database untouched. |
 | 2026-10-20 | `check-tls.sh --all` on the server and `check-tls.sh` publicly | all checks pass (certificate days, HTTP-01 routing for all three hostnames, renewal webroot == Nginx mount, hook, timer enabled, last run success, probe file served). |
+| 2026-10-21 | Phase 2: source-only release `20261021-e4bd3f9-acme-mount` (main `e4bd3f9`, CI green), Nginx-only activation typed by the owner | Nginx recreated in about 2 s; it now mounts `/var/www/certbot`; web and landing are symlinks to the previously served directories and the served bytes are identical (aggregate hashes over all files and the `main.dart.js` hash unchanged); backend, worker and database container ids and image ids unchanged. |
+| 2026-10-21 | `set-webroot.sh /var/www/certbot --execute` | Let's Encrypt **staging** validation passed through the new mount for all three hostnames; saved config passed `certbot renew --dry-run`; renewal webroot now equals Nginx's ACME mount. The valid certificate (to 2027-01-18) was not touched. |
+| 2026-10-21 | Verification | `check-tls.sh --all` all PASS (incl. probe file through `/var/www/certbot`), standalone `certbot renew --dry-run` success, 63 deep public artifact checks and 20 public smoke checks pass, no 5xx and no backend/worker/database errors since the switch. |
 
 Live probe during the renewal: the landing page returned 200 for all 47 requests, Nginx logged no `error/emerg/crit/alert`, and Let's
 Encrypt's validation requests all got 200. The probe's other 11 responses were HTTP **429** from the API's anonymous rate limiter
 (30 requests/minute): the probe called `/api/v1/health` about five times a second. Lesson: probe the API gently (at most about 20 requests
 per minute) or probe only static pages.
 
-**Still to do:** (1) phase 2 with the next release, which needs these changes merged to `main` first (the stable
-`/var/www/certbot` mount lives in `docker-compose.prod.yml`); (2) the first *unattended* timer-triggered renewal will occur about 30 days
-before expiry (mid-December); until then the timer runs twice a day and exits without doing anything. Re-run `check-tls.sh --all` after it.
+**Still to do:** the first *unattended* timer-triggered renewal will occur about 30 days before expiry (mid-December 2026);
+until then the timer runs twice a day and exits without doing anything. Re-run `check-tls.sh --all` after it.
+
+Note for log reviews: `check-tls.sh --acme` requests random `check-<n>` tokens on purpose, so Nginx logs
+`open() ".../acme-challenge/check-..." failed (2: No such file or directory)` at error level for each of them. Those lines and
+their 404 responses are the expected result of the check, not a fault.
 
 ## Test evidence (2026-10-20, disposable environment, no production change)
 
