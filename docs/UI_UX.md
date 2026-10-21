@@ -275,14 +275,14 @@ Bottom navigation with 5 tabs on main tab roots:
 - Layout:
   - one lazy scrolling column, nearly full width on mobile (12px gutter, 16px from 560px) and centered at a readable maximum width on tablet/web; the header aligns with that column.
   - compact header: the Mushukistan paw and wordmark on phones, or the localized Feed title when the navigation rail already shows the brand; notification bell for signed-in users, Login for guests.
-  - horizontal, scrollable filters directly under the header: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default. The guest welcome card follows the filters.
+  - horizontal, scrollable filters directly under the header: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default. The compact guest welcome card (short headline and one-line purpose, Create account and Map actions) follows the filters.
   - tapping the selected filter keeps it selected.
   - Popular alone shows compact Today, Month, All time period chips.
   - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface.
-  - media uses a contained (never cropped) image in a neutral frame: near-square on phones (0.8 of the card width, at most 360px) and at most 400px on tablet/web. Multiple photos have a count and quiet previous/next controls.
+  - media uses a contained (never cropped) image in a fixed frame: 0.9 of the card width on phones (at most 380px) and at most 420px on tablet/web. A softly blurred, dimmed copy of the same photo fills any remaining space; failed images keep the neutral frame and icon. Multiple photos have a count and compact previous/next controls (36px visual, 48px target).
 - Post card contents:
   - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.
-  - ordinary Cat posts remain neutral, showing a useful cat name and note without a kind badge; Cat needs help uses a calm semantic badge and top accent.
+  - ordinary Cat posts remain neutral, showing a useful cat name and note without a kind badge; Cat needs help uses a calm semantic badge and top accent, and adds View on Map beside likes and comments when its location lies inside the Map area (the action is hidden otherwise); it opens the Map centered on the post coordinates with a tertiary focus ring.
   - Lost Pet uses a restrained error accent and badge, pet name, additional information, comments, and View on Map.
   - Adoption/Rehoming uses a tertiary accent and badge, pet name, additional information, and comments.
   - ordinary post actions show like/count and comments/count; other kinds only show supported actions.

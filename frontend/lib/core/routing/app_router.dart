@@ -287,6 +287,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   return MapScreen(
                     focusLocation: focusLocation,
                     focusLostPetId: state.uri.queryParameters['lostPetId'],
+                    focusNeedsHelp:
+                        state.uri.queryParameters['focus'] == 'needs_help',
                   );
                 },
               ),

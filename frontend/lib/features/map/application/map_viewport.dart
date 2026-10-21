@@ -11,6 +11,15 @@ final tashkentMapBounds = LatLngBounds(
   const LatLng(41.4300, 69.4700),
 );
 
+/// Whether a coordinate lies inside the area the Map can show. The Map clamps
+/// anything outside it, so callers hide location actions for such points
+/// instead of opening a misleading spot.
+bool isInsideTashkentMap(double latitude, double longitude) =>
+    latitude >= tashkentMapBounds.south &&
+    latitude <= tashkentMapBounds.north &&
+    longitude >= tashkentMapBounds.west &&
+    longitude <= tashkentMapBounds.east;
+
 enum MapDensityTier { low, medium, high }
 
 enum MapMarkerKind { observation, needsHelp, lostPet }

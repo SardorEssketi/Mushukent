@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -242,11 +243,12 @@ class _FeedMediaState extends State<FeedMedia> {
     final photos = _photos;
     final mobile = MediaQuery.sizeOf(context).width < 700;
     return LayoutBuilder(builder: (context, constraints) {
-      // A near-square frame on phones keeps photos large while letting the
-      // next card peek in; wider layouts cap the height so tall photos cannot
-      // dominate. Photos stay contained, never cropped.
+      // The API has no photo dimensions, so the frame is fixed (no layout
+      // shift when images arrive): near-square on phones, height-capped on
+      // wider layouts. Photos stay contained, never cropped; a blurred copy
+      // of the same photo fills the remaining space.
       final height = math.min(
-          constraints.maxWidth * (mobile ? 0.8 : 0.6), mobile ? 360.0 : 400.0);
+          constraints.maxWidth * (mobile ? 0.9 : 0.6), mobile ? 380.0 : 420.0);
       return SizedBox(
         key: const ValueKey('feed-media'),
         height: height,
@@ -257,15 +259,18 @@ class _FeedMediaState extends State<FeedMedia> {
             onPageChanged: (index) => setState(() => _index = index),
             itemBuilder: (context, index) => ColoredBox(
               color: colors.surfaceContainer,
-              child: AppRemoteImage(
-                photos[index],
-                fit: BoxFit.contain,
-                width: double.infinity,
-                errorBuilder: (_, __, ___) => Center(
-                  child: Icon(Icons.image_not_supported_outlined,
-                      size: 36, color: colors.onSurfaceVariant),
+              child: Stack(fit: StackFit.expand, children: [
+                _PhotoBackdrop(url: photos[index]),
+                AppRemoteImage(
+                  photos[index],
+                  fit: BoxFit.contain,
+                  width: double.infinity,
+                  errorBuilder: (_, __, ___) => Center(
+                    child: Icon(Icons.image_not_supported_outlined,
+                        size: 36, color: colors.onSurfaceVariant),
+                  ),
                 ),
-              ),
+              ]),
             ),
           ),
           if (photos.length > 1) ...[
@@ -327,6 +332,112 @@ class _FeedMediaState extends State<FeedMedia> {
   }
 }
 
+/// Soft, blurred fill behind a contained photo so letterbox space reads as
+/// part of the picture instead of an empty band.
+///
+/// It listens to the same [NetworkImage] the foreground [Image.network] uses,
+/// so the bytes and decoded frame come from the shared image cache (no extra
+/// request or decode). The blur runs on a 1/8-size surface that is scaled up,
+/// which keeps scrolling cheap. Failed loads simply leave the neutral frame.
+class _PhotoBackdrop extends StatefulWidget {
+  const _PhotoBackdrop({required this.url});
+
+  final String url;
+
+  @override
+  State<_PhotoBackdrop> createState() => _PhotoBackdropState();
+}
+
+class _PhotoBackdropState extends State<_PhotoBackdrop> {
+  static const _downscale = 8.0;
+
+  ImageStream? _stream;
+  ImageInfo? _info;
+  late final ImageStreamListener _listener = ImageStreamListener(
+    (info, _) {
+      if (!mounted) {
+        info.dispose();
+        return;
+      }
+      setState(() {
+        _info?.dispose();
+        _info = info;
+      });
+    },
+    onError: (_, __) {},
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoBackdrop oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _info?.dispose();
+      _info = null;
+      _resolve();
+    }
+  }
+
+  void _resolve() {
+    final stream = NetworkImage(widget.url)
+        .resolve(createLocalImageConfiguration(context));
+    if (stream.key == _stream?.key) return;
+    _stream?.removeListener(_listener);
+    _stream = stream..addListener(_listener);
+  }
+
+  @override
+  void dispose() {
+    _stream?.removeListener(_listener);
+    _info?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final info = _info;
+    if (info == null) return const SizedBox.shrink();
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final scrim = dark
+        ? Colors.black.withValues(alpha: 0.4)
+        : Theme.of(context).colorScheme.surface.withValues(alpha: 0.35);
+    return ExcludeSemantics(
+      child: RepaintBoundary(
+        child: ClipRect(
+          child: LayoutBuilder(
+            builder: (context, constraints) => Stack(
+              fit: StackFit.expand,
+              children: [
+                Center(
+                  child: Transform.scale(
+                    // Overscaled so the blur's soft edge falls outside the clip.
+                    scale: _downscale * 1.3,
+                    filterQuality: FilterQuality.low,
+                    child: SizedBox(
+                      width: constraints.maxWidth / _downscale,
+                      height: constraints.maxHeight / _downscale,
+                      child: ImageFiltered(
+                        imageFilter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                        child: RawImage(image: info.image, fit: BoxFit.cover),
+                      ),
+                    ),
+                  ),
+                ),
+                ColoredBox(color: scrim),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GalleryArrow extends StatelessWidget {
   const _GalleryArrow({
     required this.icon,
@@ -341,13 +452,19 @@ class _GalleryArrow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surface.withValues(alpha: 0.9),
-      shape: const CircleBorder(),
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        icon: Icon(icon),
+    // A 36px disc keeps the control light over the photo; the padded tap
+    // target still gives a 48px hit area.
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      icon: Icon(icon, size: 22),
+      style: IconButton.styleFrom(
+        backgroundColor: colors.surface.withValues(alpha: 0.88),
+        foregroundColor: colors.onSurface,
+        fixedSize: const Size.square(36),
+        minimumSize: const Size.square(36),
+        padding: EdgeInsets.zero,
+        tapTargetSize: MaterialTapTargetSize.padded,
       ),
     );
   }

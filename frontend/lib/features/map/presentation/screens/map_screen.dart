@@ -55,13 +55,21 @@ final _mapLayersProvider = StateProvider<Set<_MapLayer>>(
 );
 
 class MapScreen extends ConsumerStatefulWidget {
-  const MapScreen({super.key, this.focusLocation, this.focusLostPetId});
+  const MapScreen({
+    super.key,
+    this.focusLocation,
+    this.focusLostPetId,
+    this.focusNeedsHelp = false,
+  });
 
   @visibleForTesting
   static int debugBuildCount = 0;
 
   final GeoPoint? focusLocation;
   final String? focusLostPetId;
+
+  /// Rings [focusLocation] as the place a Cat needs help post was reported.
+  final bool focusNeedsHelp;
 
   @override
   ConsumerState<MapScreen> createState() => _MapScreenState();
@@ -138,6 +146,24 @@ class _MapScreenState extends ConsumerState<MapScreen>
       return null;
     }
     return showNeedsHelp ? 'needs_help' : 'observation';
+  }
+
+  @override
+  void didUpdateWidget(covariant MapScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The Map tab keeps its state, so a new deep link to a location must move
+    // the existing camera; the initial camera only applies on first build.
+    final focus = widget.focusLocation;
+    final previous = oldWidget.focusLocation;
+    if (focus != null &&
+        _mapReady &&
+        (focus.latitude != previous?.latitude ||
+            focus.longitude != previous?.longitude)) {
+      _centerOnLocation(
+        _clampToTashkent(LatLng(focus.latitude, focus.longitude)),
+        16,
+      );
+    }
   }
 
   void _onMapReady() {
@@ -632,7 +658,23 @@ class _MapScreenState extends ConsumerState<MapScreen>
           point: center,
           width: 52,
           height: 52,
-          child: const IgnorePointer(child: _FocusedLostPetMarker()),
+          child: IgnorePointer(
+            child: _FocusRingMarker(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+      if (focusLocation != null &&
+          widget.focusNeedsHelp &&
+          _isInsideTashkent(focusLocation))
+        Marker(
+          point: center,
+          width: 52,
+          height: 52,
+          child: IgnorePointer(
+            child: _FocusRingMarker(
+              key: const ValueKey('focus-needs-help-marker'),
+              color: Theme.of(context).colorScheme.tertiary,
+            ),
+          ),
         ),
     ];
     final normalCatSpecs = <MapMarkerSpec>[];
@@ -1278,12 +1320,8 @@ double _shortestRotationDelta(double current, double target) {
   return delta;
 }
 
-bool _isInsideTashkent(GeoPoint point) {
-  return point.latitude >= tashkentMapBounds.south &&
-      point.latitude <= tashkentMapBounds.north &&
-      point.longitude >= tashkentMapBounds.west &&
-      point.longitude <= tashkentMapBounds.east;
-}
+bool _isInsideTashkent(GeoPoint point) =>
+    isInsideTashkentMap(point.latitude, point.longitude);
 
 class _CurrentLocationMarker extends StatelessWidget {
   const _CurrentLocationMarker();
@@ -1308,21 +1346,23 @@ class _CurrentLocationMarker extends StatelessWidget {
   }
 }
 
-class _FocusedLostPetMarker extends StatelessWidget {
-  const _FocusedLostPetMarker();
+/// Soft ring around a deep-linked location (Lost Pet or Cat needs help).
+class _FocusRingMarker extends StatelessWidget {
+  const _FocusRingMarker({super.key, required this.color});
+
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Container(
         width: 47,
         height: 47,
         decoration: BoxDecoration(
-          color: colorScheme.error.withValues(alpha: 0.12),
+          color: color.withValues(alpha: 0.12),
           shape: BoxShape.circle,
           border: Border.all(
-            color: colorScheme.error.withValues(alpha: 0.55),
+            color: color.withValues(alpha: 0.55),
             width: 1.5,
           ),
         ),

@@ -3348,11 +3348,10 @@ class AppStrings {
   String get welcomeBody {
     return switch (this) {
       _UzbekStrings() =>
-        'Xaritada mushuklarni belgilang, yo‘qolgan uy hayvonlari haqida xabar bering va ularga uy topishga yordam bering.',
+        'Mushuklarni belgilang, yo‘qolgan uy hayvonlari haqida xabar bering va ularga uy topishga yordam bering.',
       _RussianStrings() =>
-        'Отмечайте кошек на карте, сообщайте о пропавших питомцах и помогайте им найти дом.',
-      _ =>
-        'Spot cats on the map, report lost pets, and help animals find a home, together with your community.',
+        'Отмечайте кошек, сообщайте о пропавших питомцах и помогайте им найти дом.',
+      _ => 'Spot cats, report lost pets, and help animals find a home.',
     };
   }
 

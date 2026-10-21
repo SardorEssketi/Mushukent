@@ -15,10 +15,20 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../auth/presentation/screens/session_unavailable_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
+import '../../../map/application/map_viewport.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../widgets/feed_card_parts.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
+
+/// A location the Map can actually show; anything else hides the action
+/// rather than opening a clamped, misleading spot.
+GeoPoint? _mappableLocation(GeoPoint? location) => location != null &&
+        location.latitude.isFinite &&
+        location.longitude.isFinite &&
+        isInsideTashkentMap(location.latitude, location.longitude)
+    ? location
+    : null;
 final feedPopularPeriodProvider = StateProvider<String>((ref) => 'day');
 final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
   (ref) => const {},
@@ -553,7 +563,8 @@ class _GuestWelcomeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.md),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -561,30 +572,45 @@ class _GuestWelcomeCard extends StatelessWidget {
               header: true,
               child: Text(
                 strings.welcomeHeadline,
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: theme.textTheme.titleSmall?.copyWith(
                   color: colors.onPrimaryContainer,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.xxs),
             Text(
               strings.welcomeBody,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onPrimaryContainer,
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.sm + AppSpacing.xxs),
+            // Compact 40px buttons; the padded tap target keeps 48px hits.
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
               children: [
                 FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                    textStyle: theme.textTheme.labelLarge,
+                  ),
                   onPressed: () => context.push('/register'),
                   child: Text(strings.createAccount),
                 ),
-                OutlinedButton(
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md + AppSpacing.xxs),
+                    textStyle: theme.textTheme.labelLarge,
+                  ),
                   onPressed: () => context.go('/map'),
-                  child: Text(strings.map),
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: Text(strings.map),
                 ),
               ],
             ),
@@ -1062,6 +1088,8 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     final catName = widget.post.cat.name?.trim();
     final needsHelp = widget.post.kind == 'needs_help';
     final hasName = catName != null && catName.isNotEmpty;
+    final mapLocation =
+        needsHelp ? _mappableLocation(widget.post.location) : null;
     return FeedCardFrame(
       onTap: widget.onTap,
       accent: needsHelp ? colors.tertiary : null,
@@ -1118,6 +1146,29 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               count: widget.post.commentCount,
               onPressed: widget.onTap,
             ),
+            if (mapLocation != null)
+              // Shares the row with likes and comments, so on the narrowest
+              // phones a long translation ellipsizes instead of overflowing.
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Tooltip(
+                    message: strings.viewOnMap,
+                    child: TextButton.icon(
+                      key: const ValueKey('needs-help-view-on-map'),
+                      onPressed: () =>
+                          context.go('/map?lat=${mapLocation.latitude}'
+                              '&lon=${mapLocation.longitude}&focus=needs_help'),
+                      icon: const Icon(Icons.map_outlined, size: 19),
+                      label: Text(
+                        strings.viewOnMap,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ]),
         ),
       ],

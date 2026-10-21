@@ -181,7 +181,8 @@ void main() {
       if (width < 720) expect(cardLeft, gutter);
       final media =
           tester.getSize(find.byKey(const ValueKey('feed-media')).first);
-      expect(media.height, lessThanOrEqualTo(400));
+      // Phones: 0.9 of the card width, at most 380; wider: at most 420.
+      expect(media.height, lessThanOrEqualTo(width < 700 ? 380 : 420));
       expect(media.height, lessThan(media.width + 1));
     }
   });
