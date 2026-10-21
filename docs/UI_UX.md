@@ -273,12 +273,13 @@ Bottom navigation with 5 tabs on main tab roots:
 5.10 Feed Screen
 - Purpose: browse recent Cat posts, Cat needs help requests, Lost Pets, and rehoming posts.
 - Layout:
-  - one lazy scrolling column, nearly full width on mobile and centered at a readable maximum width on tablet/web; the title aligns with that column.
-  - horizontal, scrollable filters: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default.
+  - one lazy scrolling column, nearly full width on mobile (12px gutter, 16px from 560px) and centered at a readable maximum width on tablet/web; the header aligns with that column.
+  - compact header: the Mushukistan paw and wordmark on phones, or the localized Feed title when the navigation rail already shows the brand; notification bell for signed-in users, Login for guests.
+  - horizontal, scrollable filters directly under the header: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default. The guest welcome card follows the filters.
   - tapping the selected filter keeps it selected.
   - Popular alone shows compact Today, Month, All time period chips.
   - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface.
-  - media uses a contained image in a neutral frame; its height is capped on tablet/web. Multiple photos have a count and quiet previous/next controls.
+  - media uses a contained (never cropped) image in a neutral frame: near-square on phones (0.8 of the card width, at most 360px) and at most 400px on tablet/web. Multiple photos have a count and quiet previous/next controls.
 - Post card contents:
   - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.
   - ordinary Cat posts remain neutral, showing a useful cat name and note without a kind badge; Cat needs help uses a calm semantic badge and top accent.

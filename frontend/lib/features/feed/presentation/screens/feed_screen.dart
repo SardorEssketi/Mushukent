@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -352,17 +354,35 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       resolvedAdoptionIds: ref.watch(resolvedAdoptionIdsProvider),
     ));
 
+    final gutter = feedGutter(context);
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,
       appBar: AppBar(
-        actions: [
-          if (authenticated) const NotificationBell(),
-          if (!authenticated && !sessionUnconfirmed)
-            TextButton(
-              onPressed: () => context.push('/login'),
-              child: Text(strings.login),
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        // The header row shares the feed column so the title and actions
+        // line up with the cards on tablet and web.
+        title: AppContentWidth(
+          maxWidth: AppWidths.readable,
+          alignment: Alignment.center,
+          child: Padding(
+            padding: EdgeInsetsDirectional.only(
+              start: gutter,
+              // Icon and text buttons already carry ~12px of inner padding.
+              end: math.max(0, gutter - AppSpacing.md),
             ),
-        ],
+            child: Row(children: [
+              const Expanded(child: _FeedHeaderTitle()),
+              if (authenticated) const NotificationBell(),
+              if (!authenticated && !sessionUnconfirmed)
+                TextButton(
+                  onPressed: () => context.push('/login'),
+                  child: Text(strings.login),
+                ),
+            ]),
+          ),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -372,48 +392,50 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              if (sessionUnconfirmed)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: SessionUnavailableBanner(),
-                  ),
-                )
-              else if (!authenticated)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: _GuestWelcomeCard(strings: strings),
-                  ),
-                ),
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _FeedFilterBar(
                         selectedMode: mode,
                         strings: strings,
+                        gutter: gutter,
                         onSelected: (value) =>
                             ref.read(feedModeProvider.notifier).state = value,
                       ),
-                      if (mode == 'popular') ...[
-                        const SizedBox(height: AppSpacing.sm),
+                      if (mode == 'popular')
                         _PopularPeriodBar(
                           selectedPeriod: period,
                           strings: strings,
+                          gutter: gutter,
                           onSelected: (value) => ref
                               .read(feedPopularPeriodProvider.notifier)
                               .state = value,
                         ),
-                      ],
                     ],
                   ),
                 ),
               ),
+              if (sessionUnconfirmed)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding:
+                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
+                    child: const SessionUnavailableBanner(),
+                  ),
+                )
+              else if (!authenticated)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding:
+                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
+                    child: _GuestWelcomeCard(strings: strings),
+                  ),
+                ),
               if (_firstPage == null && pageAsync.isLoading)
-                const SliverToBoxAdapter(child: _FeedLoading())
+                SliverToBoxAdapter(child: _FeedLoading(gutter: gutter))
               else if (_firstPage == null && pageAsync.hasError)
                 SliverToBoxAdapter(
                   child: AppStatePanel(
@@ -439,7 +461,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                   itemBuilder: (context, index) => Padding(
                     key:
                         ValueKey('${items[index].itemType}:${items[index].id}'),
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    padding:
+                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
                     child: _FeedItemCard(item: items[index], strings: strings),
                   ),
                 ),
@@ -453,7 +476,8 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
               if (_pageError)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    padding:
+                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.xl),
                     child: Row(children: [
                       Expanded(child: Text(strings.couldNotLoadSection)),
                       TextButton(
@@ -463,11 +487,51 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     ]),
                   ),
                 ),
-              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Compact Feed heading. Phones show the Mushukistan wordmark (no other
+/// branding is visible there); tablet and web already show it in the
+/// navigation rail, so the heading names the section instead.
+class _FeedHeaderTitle extends ConsumerWidget {
+  const _FeedHeaderTitle();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final style = theme.textTheme.titleLarge?.copyWith(
+      fontWeight: FontWeight.w800,
+      color: colors.onSurface,
+    );
+    final withRail = AppBreakpoints.isMedium(MediaQuery.sizeOf(context).width);
+    return Semantics(
+      header: true,
+      child: withRail
+          ? Text(
+              ref.watch(appStringsProvider).feed,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            )
+          : Row(children: [
+              Icon(Icons.pets_rounded, size: 22, color: colors.primary),
+              const SizedBox(width: AppSpacing.sm),
+              Flexible(
+                child: Text(
+                  'Mushukistan',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style,
+                ),
+              ),
+            ]),
     );
   }
 }
@@ -486,32 +550,30 @@ class _GuestWelcomeCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.primaryContainer,
-        borderRadius: BorderRadius.circular(AppRadii.card),
+        borderRadius: BorderRadius.circular(AppRadii.md),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.pets_rounded, color: colors.onPrimaryContainer),
-            const SizedBox(height: AppSpacing.md),
             Semantics(
               header: true,
               child: Text(
                 strings.welcomeHeadline,
-                style: theme.textTheme.titleLarge?.copyWith(
+                style: theme.textTheme.titleMedium?.copyWith(
                   color: colors.onPrimaryContainer,
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               strings.welcomeBody,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: colors.onPrimaryContainer,
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            const SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
@@ -534,26 +596,31 @@ class _GuestWelcomeCard extends StatelessWidget {
 }
 
 class _FeedLoading extends StatelessWidget {
-  const _FeedLoading();
+  const _FeedLoading({required this.gutter});
+
+  final double gutter;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      padding: EdgeInsets.symmetric(horizontal: gutter),
       child: Column(children: [
         for (var i = 0; i < 2; i++) ...[
           DecoratedBox(
             decoration: BoxDecoration(
               color: colors.surface,
-              borderRadius: BorderRadius.circular(AppRadii.card),
+              borderRadius: BorderRadius.circular(AppRadii.md),
             ),
             child: Column(children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 child: Row(children: [
-                  CircleAvatar(backgroundColor: colors.surfaceContainerHigh),
-                  const SizedBox(width: 12),
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: colors.surfaceContainerHigh,
+                  ),
+                  const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
                   Expanded(
                     child: Container(
                         height: 12, color: colors.surfaceContainerHigh),
@@ -561,13 +628,13 @@ class _FeedLoading extends StatelessWidget {
                 ]),
               ),
               SizedBox(
-                height: 170,
-                child: ColoredBox(color: colors.surfaceContainerLow),
+                height: 220,
+                child: ColoredBox(color: colors.surfaceContainer),
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 64),
             ]),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
         ],
       ]),
     );
@@ -578,20 +645,25 @@ class _FeedFilterBar extends StatelessWidget {
   const _FeedFilterBar({
     required this.selectedMode,
     required this.strings,
+    required this.gutter,
     required this.onSelected,
   });
 
   final String selectedMode;
   final AppStrings strings;
+  final double gutter;
   final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
+    // The strip scrolls to the column edges while the first pill rests on
+    // the shared gutter, so long translations scroll without a hard clip.
     return SizedBox(
-      height: 56,
+      height: 48,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        padding: EdgeInsets.symmetric(
+            horizontal: gutter, vertical: AppSpacing.xs + AppSpacing.xxs),
         child: Row(children: [
           _FilterTab(
             value: 'recent',
@@ -667,13 +739,16 @@ class _FilterTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadii.pill),
               onTap: () => onSelected(value),
               child: Container(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 40),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 alignment: Alignment.center,
                 child: Text(
                   label,
+                  maxLines: 1,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         color: selected ? colors.onPrimary : colors.onSurface,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w600,
                       ),
                 ),
               ),
@@ -689,17 +764,20 @@ class _PopularPeriodBar extends StatelessWidget {
   const _PopularPeriodBar({
     required this.selectedPeriod,
     required this.strings,
+    required this.gutter,
     required this.onSelected,
   });
 
   final String selectedPeriod;
   final AppStrings strings;
+  final double gutter;
   final ValueChanged<String> onSelected;
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.fromLTRB(gutter, AppSpacing.xxs, gutter, 0),
       child: Row(children: [
         for (final (value, label) in [
           ('day', strings.today),
@@ -773,7 +851,7 @@ class _LostPetCard extends StatelessWidget {
           strings: strings,
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: feedBodyPadding,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             FeedPetTitle(
@@ -782,13 +860,13 @@ class _LostPetCard extends StatelessWidget {
                   FeedKindBadge(kind: FeedKind.lostPet, label: strings.lostPet),
             ),
             if (info != null && info.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.xs),
               FeedBodyText(text: info, strings: strings),
             ],
           ]),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+          padding: feedActionsPadding,
           child: Row(children: [
             FeedCountAction(
               tooltip: strings.comments,
@@ -845,7 +923,7 @@ class _AdoptionPostCard extends StatelessWidget {
           strings: strings,
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: feedBodyPadding,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             FeedPetTitle(
@@ -854,13 +932,13 @@ class _AdoptionPostCard extends StatelessWidget {
                   kind: FeedKind.rehoming, label: strings.adoption),
             ),
             if (info != null && info.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.xs),
               FeedBodyText(text: info, strings: strings),
             ],
           ]),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+          padding: feedActionsPadding,
           child: FeedCountAction(
             tooltip: strings.comments,
             icon: Icons.chat_bubble_outline,
@@ -1002,7 +1080,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
           strings: strings,
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: feedBodyPadding,
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             if (hasName)
@@ -1019,13 +1097,13 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               Text(strings.catObservation,
                   style: Theme.of(context).textTheme.titleMedium),
             if (description != null && description.isNotEmpty) ...[
-              if (hasName || needsHelp) const SizedBox(height: AppSpacing.sm),
+              if (hasName || needsHelp) const SizedBox(height: AppSpacing.xs),
               FeedBodyText(text: description, strings: strings),
             ],
           ]),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 12, 8),
+          padding: feedActionsPadding,
           child: Row(children: [
             FeedCountAction(
               tooltip: liked ? strings.unlike : strings.like,

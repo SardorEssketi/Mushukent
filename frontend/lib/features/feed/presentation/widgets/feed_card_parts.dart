@@ -7,6 +7,22 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_remote_image.dart';
 
+/// Horizontal gutter shared by the Feed header, filters and cards so they all
+/// align on one column edge. Phones use a narrower gutter to give photos room.
+double feedGutter(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < AppWidths.compact
+        ? AppSpacing.md
+        : AppSpacing.lg;
+
+/// Inset of the text block under the media; aligns with the author header.
+const feedBodyPadding =
+    EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0);
+
+/// Inset of the action row; the 48px targets carry their own breathing room,
+/// so the first icon still lines up with the body text.
+const feedActionsPadding =
+    EdgeInsets.fromLTRB(AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.xs);
+
 class FeedCardFrame extends StatelessWidget {
   const FeedCardFrame({
     super.key,
@@ -25,21 +41,21 @@ class FeedCardFrame extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadii.card),
+        borderRadius: BorderRadius.circular(AppRadii.md),
         boxShadow: isDark
             ? null
             : [
                 BoxShadow(
-                  color: colors.shadow.withValues(alpha: 0.06),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
+                  color: colors.shadow.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
                 ),
               ],
       ),
       child: Material(
         color: colors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.card),
+          borderRadius: BorderRadius.circular(AppRadii.md),
           side: BorderSide(color: colors.outlineVariant.withValues(alpha: 0.7)),
         ),
         clipBehavior: Clip.antiAlias,
@@ -49,7 +65,7 @@ class FeedCardFrame extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (accent != null)
-                SizedBox(height: 4, child: ColoredBox(color: accent!)),
+                SizedBox(height: 3, child: ColoredBox(color: accent!)),
               ...children,
             ],
           ),
@@ -82,14 +98,15 @@ class FeedAuthorHeader extends StatelessWidget {
     final date =
         MaterialLocalizations.of(context).formatMediumDate(createdAt.toLocal());
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
       child: Row(children: [
         InkWell(
           onTap: onAuthorTap,
           borderRadius: BorderRadius.circular(24),
           child: FeedAuthorAvatar(name: name, avatarUrl: author?.avatarUrl),
         ),
-        const SizedBox(width: AppSpacing.md),
+        const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
         Expanded(
           child: InkWell(
             onTap: onAuthorTap,
@@ -105,13 +122,17 @@ class FeedAuthorHeader extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
+                          height: 1.2,
                         ),
                   ),
+                  const SizedBox(height: AppSpacing.xxs),
                   Text(
                     date,
                     maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colors.onSurfaceVariant,
+                          height: 1.2,
                         ),
                   ),
                 ],
@@ -135,7 +156,7 @@ class FeedAuthorAvatar extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     final fallback = CircleAvatar(
-      radius: 19,
+      radius: 18,
       backgroundColor: colors.primaryContainer,
       child: Text(
         initial,
@@ -150,8 +171,8 @@ class FeedAuthorAvatar extends StatelessWidget {
     return ClipOval(
       child: AppRemoteImage(
         url,
-        width: 38,
-        height: 38,
+        width: 36,
+        height: 36,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => fallback,
       ),
@@ -221,8 +242,11 @@ class _FeedMediaState extends State<FeedMedia> {
     final photos = _photos;
     final mobile = MediaQuery.sizeOf(context).width < 700;
     return LayoutBuilder(builder: (context, constraints) {
-      final height = math.min(constraints.maxWidth * (mobile ? 0.84 : 0.58),
-          mobile ? 380.0 : 420.0);
+      // A near-square frame on phones keeps photos large while letting the
+      // next card peek in; wider layouts cap the height so tall photos cannot
+      // dominate. Photos stay contained, never cropped.
+      final height = math.min(
+          constraints.maxWidth * (mobile ? 0.8 : 0.6), mobile ? 360.0 : 400.0);
       return SizedBox(
         key: const ValueKey('feed-media'),
         height: height,
@@ -232,7 +256,7 @@ class _FeedMediaState extends State<FeedMedia> {
             itemCount: photos.length,
             onPageChanged: (index) => setState(() => _index = index),
             itemBuilder: (context, index) => ColoredBox(
-              color: colors.surfaceContainerHigh,
+              color: colors.surfaceContainer,
               child: AppRemoteImage(
                 photos[index],
                 fit: BoxFit.contain,
@@ -363,10 +387,10 @@ class FeedKindBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadii.sm),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 15, color: foreground),
-          const SizedBox(width: 5),
+          Icon(icon, size: 14, color: foreground),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -445,6 +469,14 @@ class _FeedBodyTextState extends State<FeedBodyText> {
           ),
           if (truncated || _expanded)
             TextButton(
+              // Flush with the description and no taller than a text line
+              // plus a comfortable target, instead of a full button row.
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(48, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                alignment: AlignmentDirectional.centerStart,
+              ),
               onPressed: () => setState(() => _expanded = !_expanded),
               child: Text(_expanded
                   ? widget.strings.showLess
@@ -486,8 +518,14 @@ class FeedCountAction extends StatelessWidget {
               Icon(icon,
                   size: 21,
                   color: active ? colors.error : colors.onSurfaceVariant),
-              const SizedBox(width: 5),
-              Text('$count', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color:
+                          active ? colors.onSurface : colors.onSurfaceVariant,
+                    ),
+              ),
             ]),
           ),
         ),
