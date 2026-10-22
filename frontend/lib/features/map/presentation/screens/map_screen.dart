@@ -153,8 +153,8 @@ class _MapScreenState extends ConsumerState<MapScreen>
     super.didUpdateWidget(oldWidget);
     // The Map tab keeps its state, so a new deep link to a location must move
     // the existing camera; the initial camera only applies on first build.
-    final focus = widget.focusLocation;
-    final previous = oldWidget.focusLocation;
+    final focus = mapSupportedLocation(widget.focusLocation);
+    final previous = mapSupportedLocation(oldWidget.focusLocation);
     if (focus != null &&
         _mapReady &&
         (focus.latitude != previous?.latitude ||
@@ -621,7 +621,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
     final selectedLocation = ref.watch(_mapSearchLocationProvider);
     final showObservations = selectedLayers.contains(_MapLayer.observations);
     final showNeedsHelp = selectedLayers.contains(_MapLayer.needsHelp);
-    final focusLocation = widget.focusLocation;
+    // An unsupported deep-link location is ignored rather than clamped to the
+    // boundary, so no ring or street-level view ever marks the wrong place.
+    final focusLocation = mapSupportedLocation(widget.focusLocation);
     final mapLocation =
         selectedLocation != null && _isInsideTashkent(selectedLocation)
             ? selectedLocation
@@ -659,12 +661,13 @@ class _MapScreenState extends ConsumerState<MapScreen>
           width: 52,
           height: 52,
           child: IgnorePointer(
-            child: _FocusRingMarker(color: Theme.of(context).colorScheme.error),
+            child: _FocusRingMarker(
+              key: const ValueKey('focus-lost-pet-marker'),
+              color: Theme.of(context).colorScheme.error,
+            ),
           ),
         ),
-      if (focusLocation != null &&
-          widget.focusNeedsHelp &&
-          _isInsideTashkent(focusLocation))
+      if (focusLocation != null && widget.focusNeedsHelp)
         Marker(
           point: center,
           width: 52,

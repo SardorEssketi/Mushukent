@@ -21,14 +21,6 @@ import '../widgets/feed_card_parts.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
 
-/// A location the Map can actually show; anything else hides the action
-/// rather than opening a clamped, misleading spot.
-GeoPoint? _mappableLocation(GeoPoint? location) => location != null &&
-        location.latitude.isFinite &&
-        location.longitude.isFinite &&
-        isInsideTashkentMap(location.latitude, location.longitude)
-    ? location
-    : null;
 final feedPopularPeriodProvider = StateProvider<String>((ref) => 'day');
 final postLikeOverridesProvider = StateProvider<Map<String, LikeData>>(
   (ref) => const {},
@@ -858,6 +850,7 @@ class _LostPetCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final info = lostPet.additionalInfo?.trim();
     final authorId = lostPet.author?.id;
+    final mapLocation = mapSupportedLocation(lostPet.lastSeenLocation);
     void openPost() => context.push('/lost-pets/${lostPet.id}');
     return FeedCardFrame(
       onTap: openPost,
@@ -901,10 +894,11 @@ class _LostPetCard extends StatelessWidget {
               onPressed: openPost,
             ),
             const Spacer(),
-            if (lostPet.lastSeenLocation != null)
+            if (mapLocation != null)
               TextButton.icon(
+                key: const ValueKey('lost-pet-view-on-map'),
                 onPressed: () {
-                  final location = lostPet.lastSeenLocation!;
+                  final location = mapLocation;
                   context.go(
                       '/map?lat=${location.latitude}&lon=${location.longitude}'
                       '&lostPetId=${lostPet.id}');
@@ -1089,7 +1083,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
     final needsHelp = widget.post.kind == 'needs_help';
     final hasName = catName != null && catName.isNotEmpty;
     final mapLocation =
-        needsHelp ? _mappableLocation(widget.post.location) : null;
+        needsHelp ? mapSupportedLocation(widget.post.location) : null;
     return FeedCardFrame(
       onTap: widget.onTap,
       accent: needsHelp ? colors.tertiary : null,

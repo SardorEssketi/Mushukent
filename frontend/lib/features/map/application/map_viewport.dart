@@ -5,20 +5,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/network/mushukistan_api.dart';
+
 /// Includes the eastern Tashkent settlements represented in Places V2.
 final tashkentMapBounds = LatLngBounds(
   const LatLng(41.1800, 69.0500),
   const LatLng(41.4300, 69.4700),
 );
 
-/// Whether a coordinate lies inside the area the Map can show. The Map clamps
-/// anything outside it, so callers hide location actions for such points
-/// instead of opening a misleading spot.
+/// Whether a coordinate lies inside the area the Map can show (bounds are
+/// inclusive). NaN and infinite values never qualify.
 bool isInsideTashkentMap(double latitude, double longitude) =>
+    latitude.isFinite &&
+    longitude.isFinite &&
     latitude >= tashkentMapBounds.south &&
     latitude <= tashkentMapBounds.north &&
     longitude >= tashkentMapBounds.west &&
     longitude <= tashkentMapBounds.east;
+
+/// The single check for "can the Map show this exact place?". Callers hide
+/// View on map for anything else, and the Map ignores such a focus instead
+/// of clamping it to the boundary, which would show a different, misleading
+/// position. Malformed API values parse as 0,0 and are rejected here too.
+GeoPoint? mapSupportedLocation(GeoPoint? location) => location != null &&
+        isInsideTashkentMap(location.latitude, location.longitude)
+    ? location
+    : null;
 
 enum MapDensityTier { low, medium, high }
 

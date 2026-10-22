@@ -82,7 +82,60 @@ Future<GoRouter> _pumpRouted(
   return router;
 }
 
+Map<String, Object?> _lost(String id, Object? location) => {
+      'item_type': 'lost_pet',
+      'id': id,
+      'pet_name': 'Lost $id',
+      'owner_phone_number': '+998901234567',
+      'photo_url': 'invalid:',
+      'photo_urls': ['invalid:'],
+      'last_seen_location': location,
+      'additional_info': 'Last seen near the park',
+      'is_resolved': false,
+      'comment_count': 0,
+      'created_at': '2026-09-01T10:00:00Z',
+    };
+
 void main() {
+  group('Lost Pet View on map', () {
+    testWidgets('opens the Map at the pet coordinates with the pet id',
+        (tester) async {
+      _size(tester, 390, 1400);
+      await _pumpRouted(tester, [_lost('milo', _tashkent)]);
+      final action = find.byKey(const ValueKey('lost-pet-view-on-map'));
+      expect(action, findsOneWidget);
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(find.text('Map lat=41.3111&lon=69.2797&lostPetId=milo'),
+          findsOneWidget);
+    });
+
+    testWidgets('shows for a point exactly on the Map boundary',
+        (tester) async {
+      _size(tester, 390, 1400);
+      await _pumpRouted(tester, [
+        _lost('edge', {'latitude': 41.18, 'longitude': 69.05}),
+      ]);
+      expect(
+          find.byKey(const ValueKey('lost-pet-view-on-map')), findsOneWidget);
+    });
+
+    testWidgets('is hidden for missing, malformed or outside locations',
+        (tester) async {
+      _size(tester, 390, 4000);
+      await _pumpRouted(tester, [
+        _lost('missing', null),
+        _lost('malformed', {'latitude': 'abc', 'longitude': 'x'}),
+        _lost('samarkand', {'latitude': 39.65, 'longitude': 66.96}),
+        _lost('just-outside', {'latitude': 41.1799, 'longitude': 69.2}),
+      ]);
+      expect(find.text('Lost Pet'), findsWidgets);
+      expect(find.byKey(const ValueKey('lost-pet-view-on-map')), findsNothing);
+      expect(find.text('View on map'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   group('Cat needs help View on map', () {
     testWidgets('opens the Map at the post coordinates with needs-help focus',
         (tester) async {
