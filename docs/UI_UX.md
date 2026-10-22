@@ -283,7 +283,8 @@ Bottom navigation with 5 tabs on main tab roots:
 - Post card contents:
   - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.
   - ordinary Cat posts remain neutral, showing a useful cat name and note without a kind badge; Cat needs help uses a calm semantic badge and top accent, and adds View on Map beside likes and comments when its location lies inside the Map area (the action is hidden otherwise); it opens the Map centered on the post coordinates with a tertiary focus ring.
-  - Lost Pet uses a restrained error accent and badge, pet name, additional information, comments, and View on Map.
+  - Lost Pet uses a restrained error accent and badge, pet name, additional information, comments, and View on Map; it opens the Map centered on the last-seen coordinates with the pet's focus ring.
+  - View on Map (Lost Pet and Cat needs help) is shown only for a supported location: finite coordinates inside the Map's Tashkent bounds (`tashkentMapBounds`, edges inclusive), checked by the shared `mapSupportedLocation()`. Missing, malformed (parsed as 0,0), non-finite, or outside locations hide the action. The Map itself ignores an unsupported deep-link focus and keeps its default view instead of clamping it to the boundary, so it never marks a different place. An already open Map moves to a newly requested supported location; repeating the identical request after panning away does not recenter it (known limitation: the Map route keeps one page per path).
   - Adoption/Rehoming uses a tertiary accent and badge, pet name, additional information, and comments.
   - ordinary post actions show like/count and comments/count; other kinds only show supported actions.
   - long descriptions are limited to three lines with localized Read more / Show less controls that expand inline.
