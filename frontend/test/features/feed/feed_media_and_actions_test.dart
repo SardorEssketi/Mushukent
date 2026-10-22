@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -250,6 +252,37 @@ void main() {
   });
 
   group('Feed media frame', () {
+    test('backdrop renders once into a small bitmap at device resolution',
+        () async {
+      // A half-red, half-blue portrait source.
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 30, 80),
+          Paint()..color = const Color(0xFFFF0000));
+      canvas.drawRect(const Rect.fromLTWH(30, 0, 30, 80),
+          Paint()..color = const Color(0xFF0000FF));
+      final source = await recorder.endRecording().toImage(60, 80);
+
+      for (final (frame, ratio) in [
+        (const Size(366, 329), 2.625),
+        (const Size(728, 420), 1.0),
+      ]) {
+        final image = await renderFeedBackdrop(source, frame, ratio);
+        expect(
+            image.width, (frame.width / feedBackdropDownscale * ratio).ceil());
+        expect(image.height,
+            (frame.height / feedBackdropDownscale * ratio).ceil());
+        // The blur blends the two halves at the seam instead of a hard edge.
+        final bytes = (await image.toByteData())!;
+        final mid = image.height ~/ 2;
+        final seam = (mid * image.width + image.width ~/ 2) * 4;
+        expect(bytes.getUint8(seam), inExclusiveRange(10, 245)); // red
+        expect(bytes.getUint8(seam + 2), inExclusiveRange(10, 245)); // blue
+        image.dispose();
+      }
+      source.dispose();
+    });
+
     Future<void> pumpMedia(WidgetTester tester, double width,
         {List<String> photos = const ['invalid:a', 'invalid:b']}) async {
       _size(tester, width, 1200);

@@ -337,8 +337,10 @@ class _FeedMediaState extends State<FeedMedia> {
 ///
 /// It listens to the same [NetworkImage] the foreground [Image.network] uses,
 /// so the bytes and decoded frame come from the shared image cache (no extra
-/// request or decode). The blur runs on a 1/8-size surface that is scaled up,
-/// which keeps scrolling cheap. Failed loads simply leave the neutral frame.
+/// request or decode). The blurred fill is rendered once per photo and frame
+/// size into a tiny bitmap (see [renderFeedBackdrop]) and then drawn as a
+/// plain scaled image: a live blur layer would cost two offscreen passes per
+/// visible photo on every frame. Failed loads simply leave the neutral frame.
 class _PhotoBackdrop extends StatefulWidget {
   const _PhotoBackdrop({required this.url});
 
@@ -349,10 +351,12 @@ class _PhotoBackdrop extends StatefulWidget {
 }
 
 class _PhotoBackdropState extends State<_PhotoBackdrop> {
-  static const _downscale = 8.0;
-
   ImageStream? _stream;
   ImageInfo? _info;
+  ui.Image? _blurred;
+  Size? _blurredSize;
+  double? _blurredRatio;
+  int _renderGeneration = 0;
   late final ImageStreamListener _listener = ImageStreamListener(
     (info, _) {
       if (!mounted) {
@@ -362,10 +366,42 @@ class _PhotoBackdropState extends State<_PhotoBackdrop> {
       setState(() {
         _info?.dispose();
         _info = info;
+        _clearBlurred();
       });
     },
     onError: (_, __) {},
   );
+
+  void _clearBlurred() {
+    _renderGeneration++;
+    _blurred?.dispose();
+    _blurred = null;
+    _blurredSize = null;
+    _blurredRatio = null;
+  }
+
+  /// Renders the fill for [size] once; rebuilds draw the cached bitmap.
+  void _ensureBlurred(Size size, double pixelRatio) {
+    final info = _info;
+    if (info == null ||
+        size.isEmpty ||
+        (_blurredSize == size && _blurredRatio == pixelRatio)) {
+      return;
+    }
+    _blurredSize = size;
+    _blurredRatio = pixelRatio;
+    final generation = ++_renderGeneration;
+    renderFeedBackdrop(info.image, size, pixelRatio).then((image) {
+      if (!mounted || generation != _renderGeneration) {
+        image.dispose();
+        return;
+      }
+      setState(() {
+        _blurred?.dispose();
+        _blurred = image;
+      });
+    }, onError: (Object _) {});
+  }
 
   @override
   void didChangeDependencies() {
@@ -379,6 +415,7 @@ class _PhotoBackdropState extends State<_PhotoBackdrop> {
     if (oldWidget.url != widget.url) {
       _info?.dispose();
       _info = null;
+      _clearBlurred();
       _resolve();
     }
   }
@@ -395,13 +432,14 @@ class _PhotoBackdropState extends State<_PhotoBackdrop> {
   void dispose() {
     _stream?.removeListener(_listener);
     _info?.dispose();
+    _clearBlurred();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final info = _info;
-    if (info == null) return const SizedBox.shrink();
+    if (_info == null) return const SizedBox.shrink();
+    final pixelRatio = MediaQuery.devicePixelRatioOf(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     final scrim = dark
         ? Colors.black.withValues(alpha: 0.4)
@@ -409,33 +447,67 @@ class _PhotoBackdropState extends State<_PhotoBackdrop> {
     return ExcludeSemantics(
       child: RepaintBoundary(
         child: ClipRect(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Stack(
-              fit: StackFit.expand,
-              children: [
-                Center(
-                  child: Transform.scale(
-                    // Overscaled so the blur's soft edge falls outside the clip.
-                    scale: _downscale * 1.3,
-                    filterQuality: FilterQuality.low,
-                    child: SizedBox(
-                      width: constraints.maxWidth / _downscale,
-                      height: constraints.maxHeight / _downscale,
-                      child: ImageFiltered(
-                        imageFilter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-                        child: RawImage(image: info.image, fit: BoxFit.cover),
-                      ),
-                    ),
-                  ),
+          child: LayoutBuilder(builder: (context, constraints) {
+            _ensureBlurred(constraints.biggest, pixelRatio);
+            final blurred = _blurred;
+            if (blurred == null) return const SizedBox.shrink();
+            return Stack(fit: StackFit.expand, children: [
+              // Overscaled so the blur's soft edge falls outside the clip.
+              OverflowBox(
+                maxWidth: constraints.maxWidth * feedBackdropOverscale,
+                maxHeight: constraints.maxHeight * feedBackdropOverscale,
+                child: RawImage(
+                  image: blurred,
+                  fit: BoxFit.fill,
+                  filterQuality: FilterQuality.low,
                 ),
-                ColoredBox(color: scrim),
-              ],
-            ),
-          ),
+              ),
+              ColoredBox(color: scrim),
+            ]);
+          }),
         ),
       ),
     );
   }
+}
+
+/// The backdrop is drawn at 1/8 of the frame, blurred there, and enlarged
+/// with bilinear filtering; [feedBackdropOverscale] pushes its soft edge
+/// outside the clip.
+const feedBackdropDownscale = 8.0;
+const feedBackdropOverscale = 1.3;
+const feedBackdropSigma = 4.0;
+
+/// Renders the blurred fill for a frame of [frameSize] (logical pixels) once:
+/// [source] is cover-fitted into a 1/[feedBackdropDownscale] surface and
+/// blurred with [feedBackdropSigma] logical pixels, at device resolution.
+@visibleForTesting
+Future<ui.Image> renderFeedBackdrop(
+  ui.Image source,
+  Size frameSize,
+  double pixelRatio,
+) {
+  final small = frameSize / feedBackdropDownscale * pixelRatio;
+  final width = math.max(1, small.width.ceil());
+  final height = math.max(1, small.height.ceil());
+  final rect = Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble());
+  final sigma = feedBackdropSigma * pixelRatio;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder, rect);
+  canvas.saveLayer(
+    rect,
+    Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+  );
+  paintImage(
+    canvas: canvas,
+    rect: rect,
+    image: source,
+    fit: BoxFit.cover,
+    filterQuality: FilterQuality.medium,
+  );
+  canvas.restore();
+  final picture = recorder.endRecording();
+  return picture.toImage(width, height).whenComplete(picture.dispose);
 }
 
 class _GalleryArrow extends StatelessWidget {
