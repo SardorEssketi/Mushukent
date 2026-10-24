@@ -3,16 +3,21 @@
 #
 #   backup-db.sh --label NAME            # dry run: checks only, writes nothing
 #   backup-db.sh --label NAME --execute  # asks for a typed confirmation, then dumps
+#   backup-db.sh --label NAME --execute --approval-token FILE   # approval broker only
 #
 # Writes only a NEW file under $BACKUP_DIR (never overwrites) and never touches the
 # database or its volume. Verifies the dump with pg_restore --list and records a SHA-256.
-# Documented in docs/DEPLOYMENT.md ("Database backup and migration gate").
+# Documented in docs/DEPLOYMENT.md ("Database backup and migration gate"); the token path
+# in docs/DEPLOYMENT_AUTOMATION.md and approval-token.sh.
 set -euo pipefail
 
 DOCKER="${DOCKER_BIN:-docker}"
 DB_CONTAINER="${DB_CONTAINER:-mushukistan-db}"
 BACKUP_DIR="${BACKUP_DIR:-/root/mushukistan-backups}"
-label=""; execute=0
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=approval-token.sh
+. "$SELF_DIR/approval-token.sh"
+label=""; execute=0; approval_token=""
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -20,7 +25,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --label) label="${2:?--label needs a value}"; shift 2 ;;
     --execute) execute=1; shift ;;
-    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    --approval-token) approval_token="${2:?--approval-token needs a path}"; shift 2 ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
@@ -47,10 +53,15 @@ if [ "$execute" -ne 1 ]; then
   exit 0
 fi
 
-[ -t 0 ] || die "--execute needs an interactive terminal (ssh -t) so a human can confirm"
-printf 'Type "BACKUP %s" to create this production backup: ' "$label"
-read -r answer
-[ "$answer" = "BACKUP $label" ] || die "confirmation did not match; nothing written"
+if [ -n "$approval_token" ]; then
+  approval_id="$(check_approval_token "$approval_token")" || die "approval token refused; nothing written"
+  echo "backup authorized by server-verified approval $approval_id"
+else
+  [ -t 0 ] || die "--execute needs an interactive terminal (ssh -t) so a human can confirm"
+  printf 'Type "BACKUP %s" to create this production backup: ' "$label"
+  read -r answer
+  [ "$answer" = "BACKUP $label" ] || die "confirmation did not match; nothing written"
+fi
 
 umask 077
 $DOCKER exec "$DB_CONTAINER" sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' > "$out.partial" \

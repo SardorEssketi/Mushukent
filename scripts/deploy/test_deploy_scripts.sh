@@ -19,7 +19,8 @@ check() { # description, expected_exit(0|nonzero), output_must_contain(optional)
   if [ $good -eq 1 ]; then echo "PASS  $desc"; else echo "FAIL  $desc (exit $rc)"; echo "$out" | tail -8 | sed 's/^/        /'; fails=$((fails+1)); fi
 }
 
-for s in remote-inspect backup-db activate-web-release verify-public package-release build-backend-image e2e_disposable; do
+for s in remote-inspect backup-db activate-web-release verify-public package-release build-backend-image e2e_disposable \
+         approval-token automation/install-server automation/e2e_automation automation/e2e_inner automation/run_unit_tests; do
   check "syntax: $s.sh" 0 "" bash -n "$HERE/$s.sh"
 done
 
@@ -144,6 +145,17 @@ check "activate: no --backup-file refused" nonzero "--backup-file is required" b
 echo dump > "$T/b.dump"
 check "activate: execute without a terminal refused" nonzero "interactive terminal" bash "$A" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump"
 check "activate: execute never recreated without confirmation" nonzero "" grep -E 'force-recreate' "$STUB_LOG"
+# Non-interactive path of the approval broker: a token stands in for the typed phrase.
+TOK="$T/tokens"; mkdir -p "$TOK"; chmod 700 "$TOK"
+printf 'a%.0s' $(seq 32) > "$T/outside.token"; chmod 600 "$T/outside.token"
+APPROVAL_TOKEN_DIR="$TOK" check "activate: token outside the token directory refused" nonzero "approval token refused" \
+  bash "$A" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump" --approval-token "$T/outside.token"
+APPROVAL_TOKEN_DIR="$TOK" check "activate: missing token refused" nonzero "approval token refused" \
+  bash "$A" 20260202-bbbbbbb-new --execute --backup-file "$T/b.dump" --approval-token "$TOK/none.token"
+check "activate: refused tokens recreated nothing" nonzero "" grep -E 'force-recreate' "$STUB_LOG"
+APPROVAL_TOKEN_DIR="$TOK" check "backup: bad token refused, nothing written" nonzero "approval token refused" \
+  env BACKUP_DIR="$T/tokbackups" bash "$HERE/backup-db.sh" --label t --execute --approval-token "$TOK/none.token"
+check "backup: no dump after a refused token" nonzero "" bash -c "ls '$T/tokbackups'/*.dump"
 : > "$T/empty.dump"
 check "activate: empty backup refused" nonzero "missing or empty" bash "$A" 20260202-bbbbbbb-new --execute --backup-file "$T/empty.dump"
 check "activate: already-active is idempotent" 0 "VERIFY-CALLED" bash "$A" 20260101-aaaaaaa-active
