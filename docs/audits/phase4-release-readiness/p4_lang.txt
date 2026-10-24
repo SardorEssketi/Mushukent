@@ -1,0 +1,7 @@
+PASS online: UI is Uzbek for the Uzbek account
+stored language key: FlutterSecureStorage.mushukistan_app_language
+url /session-unavailable?redirect=/profile ['Serverga ulanib bo‘lmadi\nServerga ulanib', 'Serverga ulanib bo‘lmadi\nServerga ulanib', 'Serverga ulanib bo‘lmadi\nServerga ulanib', 'Serverga ulanib bo‘lmadi', 'Serverga ulanib bo‘lmadi']
+PASS cold start during outage shows the OUTAGE screen in Uzbek (saved language)
+PASS not shown in English
+PASS recovers after the backend returns
+SUMMARY 4 / 4

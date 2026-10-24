@@ -101,7 +101,7 @@ Mushukistan uses or may use these third-party services:
 - Google Firebase Cloud Messaging for Android push delivery when configured and permitted.
 - OpenStreetMap for map tiles and map/place data.
 - PostHog for server-side product usage analytics, only when configured by the operator.
-- PostHog (EU region) for anonymous page-view counts on the public website: page address, referrer, screen size and browser language, with no cookies, no browser storage, and no persistent identifier. Not sent when the browser sends Do Not Track.
+- PostHog (EU region) for anonymous page-view and daily visitor counts on the public website: page address, referrer, screen size, browser language, browser type (user agent) and time zone. PostHog combines the IP address and browser type with a secret salt that changes every day into a one-way hash, so the same visitor is counted once per day without cookies, browser storage, or a persistent identifier. Not sent when the browser sends Do Not Track.
 
 Email provider: not configured in the verified repository.
 

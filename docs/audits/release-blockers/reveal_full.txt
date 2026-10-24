@@ -1,0 +1,115 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-8.4.2, pluggy-1.6.0
+rootdir: D:\Data science\mushukent\backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1, platformdirs-4.12.3
+collected 516 items
+
+tests\test_analytics.py .................                                [  3%]
+tests\test_audit_places.py ...                                           [  3%]
+tests\test_auth.py ..................................................... [ 14%]
+.............................                                            [ 19%]
+tests\test_blocking.py ..........................                        [ 24%]
+tests\test_cat_editing_policy.py ........                                [ 26%]
+tests\test_cats.py ..........                                            [ 28%]
+tests\test_child_safety_static_page.py ..                                [ 28%]
+tests\test_contact_consent.py .....                                      [ 29%]
+tests\test_contact_privacy.py .......                                    [ 31%]
+tests\test_contact_reveal.py ............                                [ 33%]
+tests\test_db_integration.py .....                                       [ 34%]
+tests\test_db_metadata.py F...                                           [ 35%]
+tests\test_email_delivery.py .....                                       [ 36%]
+tests\test_error_logging.py .                                            [ 36%]
+tests\test_feed_map.py ....................................              [ 43%]
+tests\test_feedback.py ............................                      [ 48%]
+tests\test_interactions.py ................                              [ 51%]
+tests\test_likes_repository.py .                                         [ 51%]
+tests\test_manual_places_import.py ........                              [ 53%]
+tests\test_notifications_db.py ............................              [ 58%]
+tests\test_place_category_runtime.py .                                   [ 59%]
+tests\test_places_v2_apply_guard.py ..                                   [ 59%]
+tests\test_places_v2_production_review_unit.py ...                       [ 60%]
+tests\test_places_v2_release_unit.py ....                                [ 60%]
+tests\test_places_v2_research_unit.py .....                              [ 61%]
+tests\test_places_v2_source_parsers.py ..                                [ 62%]
+tests\test_post_kind_schema.py ..................                        [ 65%]
+tests\test_post_kind_service.py ..........                               [ 67%]
+tests\test_posts.py .......................                              [ 72%]
+tests\test_rate_limit.py ........                                        [ 73%]
+tests\test_reports_moderation_leaderboards.py .........                  [ 75%]
+tests\test_security_hardening.py ....................................... [ 82%]
+................                                                         [ 86%]
+tests\test_storage.py ..........................s                        [ 91%]
+tests\test_test_isolation.py ................                            [ 94%]
+tests\test_uploads.py ....                                               [ 95%]
+tests\test_users.py .........................                            [100%]
+
+================================== FAILURES ===================================
+_________________ test_metadata_discovers_application_tables __________________
+
+    def test_metadata_discovers_application_tables() -> None:
+>       assert set(Base.metadata.tables) == {
+            "users",
+            "cats",
+            "posts",
+            "post_photos",
+            "post_history",
+            "comments",
+            "likes",
+            "lost_pet_photos",
+            "lost_pets",
+            "lost_pet_contact_events",
+            "lost_pet_follow_ups",
+            "adoption_post_photos",
+            "adoption_posts",
+            "adoption_contact_events",
+            "adoption_follow_ups",
+            "reports",
+            "user_blocks",
+            "leaderboard_cache",
+            "places",
+            "place_category_links",
+            "auth_refresh_sessions",
+            "notification_preferences",
+            "notifications",
+            "notification_devices",
+            "notification_push_jobs",
+            "feedback",
+        }
+E       AssertionError: assert {'adoption_co..., 'cats', ...} == {'adoption_co..., 'cats', ...}
+E         
+E         Extra items in the left set:
+E         'contact_reveals'
+E         Use -v to get more diff
+
+tests\test_db_metadata.py:14: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_analytics.py::test_unreachable_posthog_host_does_not_break_requests_or_shutdown
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\opentelemetry\sdk\_logs\_internal\__init__.py:615: DeprecationWarning: `LoggingHandler` in `opentelemetry-sdk` is deprecated. Use the handler from `opentelemetry-instrumentation-logging` instead.
+    warnings.warn(
+
+tests/test_auth.py::test_verified_google_email_auto_links_existing_password_account
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\passlib\handlers\argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================ slowest 10 durations =============================
+15.45s call     tests/test_analytics.py::test_unreachable_posthog_host_does_not_break_requests_or_shutdown
+6.70s teardown tests/test_cat_editing_policy.py::test_other_users_cannot_edit_a_cat_they_did_not_create
+5.11s teardown tests/test_post_kind_schema.py::test_normal_post_allows_optional_location_and_note[whitespace]
+4.79s teardown tests/test_security_hardening.py::test_all_trusted_chain_falls_back_to_the_peer_not_client_supplied_text
+4.70s setup    tests/test_post_kind_schema.py::test_normal_post_allows_optional_location_and_note[whitespace]
+4.07s teardown tests/test_post_kind_schema.py::test_create_api_rejects_needs_help_without_details[missing]
+3.82s setup    tests/test_security_hardening.py::test_forwarded_for_from_an_untrusted_peer_is_ignored
+3.65s teardown tests/test_blocking.py::test_interactions_racing_with_a_block_never_error_and_end_consistent
+3.63s setup    tests/test_post_kind_schema.py::test_create_api_rejects_needs_help_without_details[missing]
+3.51s setup    tests/test_post_kind_schema.py::test_needs_help_kind_requires_location
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_storage.py:494: R2 credentials are not available for live smoke testing.
+FAILED tests/test_db_metadata.py::test_metadata_discovers_application_tables
+====== 1 failed, 514 passed, 1 skipped, 3 warnings in 714.08s (0:11:54) =======

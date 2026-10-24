@@ -53,3 +53,28 @@ assert.equal(menu.getAttribute('aria-label'), 'Open menu');
 assert.equal(mobile.hidden, true);
 assert.equal(menu.focused, true);
 console.log('Theme and mobile menu interactions passed.');
+
+const beacons = [];
+const beaconValues = {};
+const beaconContext = {
+  ...context,
+  localStorage: {
+    getItem(key) { return beaconValues[key] || null; },
+    setItem(key, value) { beaconValues[key] = value; },
+  },
+  location: { hostname: 'mushukistan.uz', href: 'https://mushukistan.uz/uz/', pathname: '/uz/' },
+  navigator: { doNotTrack: null, userAgent: 'TestAgent/1.0', language: 'uz' },
+  screen: { width: 390, height: 844 },
+  Intl,
+  URL,
+  fetch(url, options) { beacons.push({ url, body: JSON.parse(options.body) }); return Promise.resolve(); },
+};
+beaconContext.document = { ...context.document, referrer: '' };
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'src/site.js'), 'utf8'), beaconContext);
+assert.equal(beacons.length, 1);
+assert.equal(beacons[0].body.distinct_id, '$posthog_cookieless');
+assert.equal(beacons[0].body.properties.$cookieless_mode, true);
+assert.equal(beacons[0].body.properties.$raw_user_agent, 'TestAgent/1.0');
+assert.equal(beacons[0].body.properties.$pathname, '/uz/');
+assert.deepEqual(beaconValues, {}, 'beacon must not write browser storage');
+console.log('Cookieless page-view beacon passed.');

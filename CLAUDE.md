@@ -32,3 +32,10 @@ changes without approval, small commits).
 10. The hosting provider is unverified until the user confirms it.
 11. The repository is public: never commit host addresses, backup inventories, row counts, hardening notes or
     secrets. Private production facts live in the gitignored `docs/private/PRODUCTION_STATE.md`.
+
+When creating Git commits:
+- Use the repository owner's configured Git identity.
+- Do not override git user.name or user.email.
+- Do not add Claude as a co-author.
+- Do not append AI-generated attribution or session links.
+- Keep commit messages clean and conventional.

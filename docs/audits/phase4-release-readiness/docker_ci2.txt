@@ -1,0 +1,147 @@
+Python 3.13.15
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+All checks passed!
+All done! ✨ 🍰 ✨
+262 files would be left unchanged.
+============================= test session starts ==============================
+platform linux -- Python 3.13.15, pytest-8.4.2, pluggy-1.6.0
+rootdir: /repo/backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1, platformdirs-4.13.0
+collected 499 items
+
+tests/test_analytics.py .................                                [  3%]
+tests/test_audit_places.py ...                                           [  4%]
+tests/test_auth.py ..................................................... [ 14%]
+.............................                                            [ 20%]
+tests/test_blocking.py ..........................                        [ 25%]
+tests/test_cat_editing_policy.py ........                                [ 27%]
+tests/test_cats.py ..........                                            [ 29%]
+tests/test_child_safety_static_page.py FF                                [ 29%]
+tests/test_contact_privacy.py .......                                    [ 31%]
+tests/test_db_integration.py .....                                       [ 32%]
+tests/test_db_metadata.py ....                                           [ 32%]
+tests/test_email_delivery.py .....                                       [ 33%]
+tests/test_error_logging.py .                                            [ 34%]
+tests/test_feed_map.py ....................................              [ 41%]
+tests/test_feedback.py ............................                      [ 46%]
+tests/test_interactions.py ................                              [ 50%]
+tests/test_likes_repository.py .                                         [ 50%]
+tests/test_manual_places_import.py ........                              [ 51%]
+tests/test_notifications_db.py ............................              [ 57%]
+tests/test_place_category_runtime.py .                                   [ 57%]
+tests/test_places_v2_apply_guard.py ..                                   [ 58%]
+tests/test_places_v2_production_review_unit.py ...                       [ 58%]
+tests/test_places_v2_release_unit.py ....                                [ 59%]
+tests/test_places_v2_research_unit.py .....                              [ 60%]
+tests/test_places_v2_source_parsers.py .s                                [ 60%]
+tests/test_post_kind_schema.py ..................                        [ 64%]
+tests/test_post_kind_service.py ..........                               [ 66%]
+tests/test_posts.py .......................                              [ 71%]
+tests/test_rate_limit.py ........                                        [ 72%]
+tests/test_reports_moderation_leaderboards.py .........                  [ 74%]
+tests/test_security_hardening.py ....................................... [ 82%]
+................                                                         [ 85%]
+tests/test_storage.py ..........................s                        [ 90%]
+tests/test_test_isolation.py ................                            [ 94%]
+tests/test_uploads.py ....                                               [ 94%]
+tests/test_users.py .........................                            [100%]
+
+=================================== FAILURES ===================================
+_________ test_child_safety_page_static_file_is_public_submission_page _________
+
+    def test_child_safety_page_static_file_is_public_submission_page():
+>       html = CHILD_SAFETY_PAGE.read_text(encoding="utf-8")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_child_safety_static_page.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.13/pathlib/_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.13/pathlib/_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/repo/frontend/web/child-safety/index.html'), mode = 'r'
+buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/repo/frontend/web/child-safety/index.html'
+
+/usr/local/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
+___________ test_nginx_serves_child_safety_without_auth_or_api_proxy ___________
+
+    def test_nginx_serves_child_safety_without_auth_or_api_proxy():
+>       config = NGINX_CONF.read_text(encoding="utf-8")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_child_safety_static_page.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/local/lib/python3.13/pathlib/_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.13/pathlib/_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/repo/infrastructure/nginx/default.conf'), mode = 'r'
+buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/repo/infrastructure/nginx/default.conf'
+
+/usr/local/lib/python3.13/pathlib/_local.py:537: FileNotFoundError
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1
+  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_analytics.py::test_unreachable_posthog_host_does_not_break_requests_or_shutdown
+  /usr/local/lib/python3.13/site-packages/opentelemetry/sdk/_logs/_internal/__init__.py:615: DeprecationWarning: `LoggingHandler` in `opentelemetry-sdk` is deprecated. Use the handler from `opentelemetry-instrumentation-logging` instead.
+    warnings.warn(
+
+tests/test_auth.py::test_verified_google_email_auto_links_existing_password_account
+  /usr/local/lib/python3.13/site-packages/passlib/handlers/argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================= slowest 10 durations =============================
+7.09s call     tests/test_analytics.py::test_unreachable_posthog_host_does_not_break_requests_or_shutdown
+5.70s teardown tests/test_feed_map.py::test_adoption_feed_filter_returns_only_adoption_posts
+5.12s setup    tests/test_feed_map.py::test_authenticated_feed_includes_own_private_post
+4.14s teardown tests/test_place_category_runtime.py::test_veterinary_pharmacy_is_supported_by_places_runtime
+3.65s teardown tests/test_cats.py::test_cat_detail_retrieval
+3.56s setup    tests/test_places_v2_apply_guard.py::test_production_write_requires_approved_digest
+3.52s setup    tests/test_cats.py::test_record_latest_post_kind_uses_latest_visible_post
+3.48s teardown tests/test_interactions.py::test_list_comments_with_stable_pagination
+3.44s teardown tests/test_cat_editing_policy.py::test_platform_hosted_cover_photo_urls_are_accepted
+3.39s setup    tests/test_cats.py::test_validation_failures
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_places_v2_source_parsers.py:25: could not import 'bs4': No module named 'bs4'
+SKIPPED [1] tests/test_storage.py:494: R2 credentials are not available for live smoke testing.
+FAILED tests/test_child_safety_static_page.py::test_child_safety_page_static_file_is_public_submission_page
+FAILED tests/test_child_safety_static_page.py::test_nginx_serves_child_safety_without_auth_or_api_proxy
+======= 2 failed, 495 passed, 2 skipped, 3 warnings in 585.27s (0:09:45) =======

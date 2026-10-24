@@ -1,0 +1,135 @@
+SWEEP GET /api/v1/adoption-posts none 200
+SWEEP POST /api/v1/adoption-posts required 401
+SWEEP GET /api/v1/adoption-posts/follow-ups/due required 401
+SWEEP POST /api/v1/adoption-posts/follow-ups/{follow_up_id}/answer required 401
+SWEEP GET /api/v1/adoption-posts/mine required 401
+SWEEP DELETE /api/v1/adoption-posts/{adoption_post_id} required 401
+SWEEP GET /api/v1/adoption-posts/{adoption_post_id} optional 404
+SWEEP PATCH /api/v1/adoption-posts/{adoption_post_id} required 401
+SWEEP GET /api/v1/adoption-posts/{adoption_post_id}/comments optional 404
+SWEEP POST /api/v1/adoption-posts/{adoption_post_id}/comments required 401
+SWEEP POST /api/v1/adoption-posts/{adoption_post_id}/contact required 401
+SWEEP PATCH /api/v1/adoption-posts/{adoption_post_id}/resolution required 401
+SWEEP POST /api/v1/auth/change-password required 401
+SWEEP POST /api/v1/auth/google none 422
+SWEEP POST /api/v1/auth/login none 422
+SWEEP POST /api/v1/auth/logout required 401
+SWEEP GET /api/v1/auth/methods required 401
+SWEEP POST /api/v1/auth/refresh none 422
+SWEEP POST /api/v1/auth/register none 422
+SWEEP POST /api/v1/auth/resend-verification none 422
+SWEEP POST /api/v1/auth/verify-email none 422
+SWEEP GET /api/v1/cats none 200
+SWEEP POST /api/v1/cats required 401
+SWEEP GET /api/v1/cats/{cat_id} none 404
+SWEEP PATCH /api/v1/cats/{cat_id} required 401
+SWEEP GET /api/v1/cats/{cat_id}/posts optional 404
+SWEEP DELETE /api/v1/comments/{comment_id} required 401
+SWEEP PATCH /api/v1/comments/{comment_id} required 401
+SWEEP GET /api/v1/feed optional 200
+SWEEP POST /api/v1/feedback required 401
+SWEEP GET /api/v1/health none 200
+SWEEP GET /api/v1/leaderboards/{type} none 422
+SWEEP GET /api/v1/lost-pets none 200
+SWEEP POST /api/v1/lost-pets required 401
+SWEEP GET /api/v1/lost-pets/follow-ups/due required 401
+SWEEP POST /api/v1/lost-pets/follow-ups/{follow_up_id}/answer required 401
+SWEEP GET /api/v1/lost-pets/map none 422
+SWEEP GET /api/v1/lost-pets/mine required 401
+SWEEP DELETE /api/v1/lost-pets/{lost_pet_id} required 401
+SWEEP GET /api/v1/lost-pets/{lost_pet_id} optional 404
+SWEEP PATCH /api/v1/lost-pets/{lost_pet_id} required 401
+SWEEP GET /api/v1/lost-pets/{lost_pet_id}/comments optional 404
+SWEEP POST /api/v1/lost-pets/{lost_pet_id}/comments required 401
+SWEEP POST /api/v1/lost-pets/{lost_pet_id}/contact required 401
+SWEEP PATCH /api/v1/lost-pets/{lost_pet_id}/resolution required 401
+SWEEP DELETE /api/v1/moderation/posts/{post_id} required 401
+SWEEP GET /api/v1/moderation/posts/{post_id}/history required 401
+SWEEP GET /api/v1/moderation/reports required 401
+SWEEP GET /api/v1/moderation/reports/{report_id} required 401
+SWEEP PATCH /api/v1/moderation/reports/{report_id} required 401
+SWEEP GET /api/v1/notifications required 401
+SWEEP POST /api/v1/notifications/activity required 401
+SWEEP POST /api/v1/notifications/devices required 401
+SWEEP POST /api/v1/notifications/devices/unregister required 401
+SWEEP GET /api/v1/notifications/preferences required 401
+SWEEP PATCH /api/v1/notifications/preferences required 401
+SWEEP POST /api/v1/notifications/read-all required 401
+SWEEP GET /api/v1/notifications/unread-count required 401
+SWEEP POST /api/v1/notifications/{notification_id}/read required 401
+SWEEP GET /api/v1/places none 200
+SWEEP GET /api/v1/places/{place_id} none 404
+SWEEP POST /api/v1/posts required 401
+SWEEP DELETE /api/v1/posts/{post_id} required 401
+SWEEP GET /api/v1/posts/{post_id} optional 404
+SWEEP PATCH /api/v1/posts/{post_id} required 401
+SWEEP GET /api/v1/posts/{post_id}/comments optional 404
+SWEEP POST /api/v1/posts/{post_id}/comments required 401
+SWEEP DELETE /api/v1/posts/{post_id}/likes required 401
+SWEEP POST /api/v1/posts/{post_id}/likes required 401
+SWEEP POST /api/v1/reports required 401
+SWEEP POST /api/v1/users/account-deletion-confirmations none 422
+SWEEP POST /api/v1/users/account-deletion-requests none 422
+SWEEP DELETE /api/v1/users/me required 401
+SWEEP GET /api/v1/users/me required 401
+SWEEP PATCH /api/v1/users/me required 401
+SWEEP POST /api/v1/users/me/avatar required 401
+SWEEP GET /api/v1/users/{user_id} none 404
+SWEEP DELETE /api/v1/users/{user_id}/block required 401
+SWEEP POST /api/v1/users/{user_id}/block required 401
+SWEEP GET /api/v1/users/{user_id}/comments optional 404
+SWEEP GET /api/v1/users/{user_id}/posts optional 404
+.TOKEN inactive 403
+TOKEN garbage 401
+TOKEN tampered 401
+TOKEN garbage-on-public-feed 401
+.PUBLIC_PROFILE_KEYS ['allow_public_activity_view', 'comment_count', 'id', 'name', 'observation_count', 'registered_at', 'total_likes_received']
+PUBLIC_PROFILE_LEAKED []
+LOST_PHONE_VISIBLE_ANON noconsent= True consent= True
+LOST_LIST_ANON_CONTAINS_PHONE True
+ADOPT_ANON_PHONE_VISIBLE noconsent= True
+{"post_id": "76182c64-c29a-4651-96dd-7790598b9ec2", "comment_id": "1ff116f1-6eb5-47cc-85c1-a8160c6ccbc3", "actor_id": "11b12646-3c37-4dd1-8f1d-2a9eca4b304a", "event": "comment_created", "level": "info", "timestamp": "2026-10-14T10:25:38.109302Z"}
+PRIVACY_TOGGLE 200
+ACTIVITY_PRIVATE posts 403 -
+ACTIVITY_PRIVATE comments 403 -
+BLOCKED_PROFILE_FETCH 200
+DELETE_ME 204 
+TOKEN_AFTER_DELETE 403
+LIKE_AFTER_DELETE 403
+AUTHZ patch other post PATCH /api/v1/posts/{post} B 403 (403, 404) OK
+AUTHZ delete other post DELETE /api/v1/posts/{post} B 403 (403, 404) OK
+AUTHZ patch other comment PATCH /api/v1/comments/{comment} B 403 (403, 404) OK
+AUTHZ delete other comment DELETE /api/v1/comments/{comment} B 403 (403, 404) OK
+AUTHZ patch other lost pet PATCH /api/v1/lost-pets/{lost} B 403 (403, 404) OK
+AUTHZ delete other lost pet DELETE /api/v1/lost-pets/{lost} B 403 (403, 404) OK
+AUTHZ resolve other lost pet PATCH /api/v1/lost-pets/{lost}/resolution B 403 (403, 404) OK
+AUTHZ patch other adoption PATCH /api/v1/adoption-posts/{adopt} B 403 (403, 404) OK
+AUTHZ delete other adoption DELETE /api/v1/adoption-posts/{adopt} B 403 (403, 404) OK
+AUTHZ resolve other adoption PATCH /api/v1/adoption-posts/{adopt}/resolution B 403 (403, 404) OK
+AUTHZ user -> moderation list GET /api/v1/moderation/reports B 403 (403,) OK
+AUTHZ user -> moderation delete DELETE /api/v1/moderation/posts/{post} B 403 (403,) OK
+AUTHZ user -> post history GET /api/v1/moderation/posts/{post}/history B 403 (403,) OK
+AUTHZ moderator -> moderation list GET /api/v1/moderation/reports mod 200 (200,) OK
+AUTHZ non-owner renames cat (documented MVP) PATCH /api/v1/cats/{cat} B 200 (200,) OK
+AUTHZ non-mod sets cat status PATCH /api/v1/cats/{cat} B 403 (403,) OK
+AUTHZ cat cover_photo_url external PATCH /api/v1/cats/{cat} B 200 (200, 422) OK
+AUTHZ read other notification POST /api/v1/notifications/848198d2-aa43-47c7-a7ca-cc8b708d38c5/read B 404 (403, 404) OK
+AUTHZ owner reads own notification POST /api/v1/notifications/848198d2-aa43-47c7-a7ca-cc8b708d38c5/read A 204 (200, 204) OK
+AUTHZ blocked user contacts owner (lost) POST /api/v1/lost-pets/{lostc}/contact B 204 (403, 404) MISMATCH
+.
+============================== warnings summary ===============================
+D:\Data science\mushukent\backend\.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+test_authz.py::test_unauthenticated_sweep
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\opentelemetry\sdk\_logs\_internal\__init__.py:615: DeprecationWarning: `LoggingHandler` in `opentelemetry-sdk` is deprecated. Use the handler from `opentelemetry-instrumentation-logging` instead.
+    warnings.warn(
+
+test_authz.py::test_invalid_and_inactive_tokens
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\passlib\handlers\argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3 passed, 3 warnings in 25.65s
+[PostHog] error uploading: HTTPConnectionPool(host='localhost', port=1): Max retries exceeded with url: /batch/ (Caused by NewConnectionError("HTTPConnection(host='localhost', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
