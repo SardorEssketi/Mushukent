@@ -72,19 +72,23 @@ chmod 755 $E2E/*.sh; mkdir -p /etc/mushukistan-e2e
 
 # ---------------------------------------------------------------- sshd + install
 ssh-keygen -A >/dev/null
+if [ "${E2E_DISTRO:-alpine}" = alpine ]; then
 cat > /etc/ssh/sshd_config <<'EOF'
 Include /etc/ssh/sshd_config.d/*.conf
 PermitRootLogin no
 PasswordAuthentication no
 Subsystem sftp internal-sftp
 EOF
-mkdir -p /etc/ssh/sshd_config.d
+fi   # ubuntu: keep the distribution's sshd_config (Include first, UsePAM/AcceptEnv/Subsystem after it)
+echo "E2E INFO  distro=${E2E_DISTRO:-alpine} $(ssh -V 2>&1) $(sudo -V | head -1) $(python3 --version) compose $(docker compose version --short)"
+mkdir -p /etc/ssh/sshd_config.d /run/sshd
 ssh-keygen -q -t ed25519 -N "" -C owner -f /e2e/owner      # test-only: real owners use FIDO2/passphrase
 ssh-keygen -q -t ed25519 -N "" -C deploy -f /e2e/deploy
 ssh-keygen -q -t ed25519 -N "" -C intruder -f /e2e/intruder
 sed -e "s#^VERIFY_SCRIPT=.*#VERIFY_SCRIPT=$E2E/verify-local.sh#" -e "s#^TLS_CHECK_SCRIPT=.*#TLS_CHECK_SCRIPT=$E2E/check-tls.sh#" \
   -e "s#^HEALTH_URL=.*#HEALTH_URL=http://127.0.0.1/health#" -e "s#^DOCKER=.*#DOCKER=$(command -v docker)#" \
   scripts/deploy/automation/broker.conf.example > /e2e/broker.conf
+echo "SOURCE_ARCHIVE_URL=file:///e2e/srcarch/{commit}.tar.gz" >> /e2e/broker.conf
 INSTALL=scripts/deploy/automation/install-server.sh
 out="$(RELOAD_SSH=true bash $INSTALL --owner-key /e2e/owner.pub --deploy-key /e2e/deploy.pub --config /e2e/broker.conf)"
 expect_has "installer dry run changes nothing" "$out" "DRY RUN"
@@ -107,6 +111,15 @@ expect_has "no shell: chained command refused" "$(X 'status; id')" "invalid char
 expect_has "no shell: substitution refused" "$(X 'status $(id)')" "invalid characters"
 expect_has "path traversal argument refused" "$(X upload ../../etc/passwd)" "invalid"
 expect_has "PTY refused" "$(ssh -tt -i /e2e/deploy -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR mushukistan-deploy@127.0.0.1 status 2>&1)" "PTY allocation request failed"
+SSHO="-i /e2e/deploy -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes"
+expect_has "sftp subsystem refused" "$(echo 'ls /' | sftp $SSHO -b - mushukistan-deploy@127.0.0.1 2>&1; echo rc=$?)" "rc=255"
+scp $SSHO /etc/hostname mushukistan-deploy@127.0.0.1:/tmp/scp-escape >/dev/null 2>&1
+expect_eq "scp upload refused" "$(ls /tmp/scp-escape 2>/dev/null | wc -l)" "0"
+ssh $SSHO -N -L 127.0.0.1:18022:127.0.0.1:22 mushukistan-deploy@127.0.0.1 2>/e2e/fwd.err & FWD=$!
+sleep 2; timeout 5 bash -c 'exec 3<>/dev/tcp/127.0.0.1/18022; head -c 20 <&3' >/e2e/fwd.out 2>&1; kill $FWD 2>/dev/null; wait $FWD 2>/dev/null
+expect_has "TCP port forwarding refused by the server" "$(cat /e2e/fwd.err)" "prohibited"
+expect_not "no SSH banner through the forward" "$(cat /e2e/fwd.out)" "SSH-2.0"
+expect_has "client environment cannot reach the gate" "$(ssh $SSHO -o LogLevel=ERROR -o SetEnv=SSH_ORIGINAL_COMMAND=bash mushukistan-deploy@127.0.0.1 2>&1)" "no command given"
 expect_has "intruder key cannot log in" "$(ssh -i /e2e/intruder -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes mushukistan-deploy@127.0.0.1 status 2>&1)" "Permission denied"
 eff="$(sshd -T -C user=mushukistan-deploy,host=x,addr=127.0.0.1)"
 expect_has "sshd: forced command" "$eff" "forcecommand /usr/local/lib/mushukistan-deploy/deploy-gate"
@@ -174,6 +187,10 @@ submit() { envelope "$1" | X submit-approval; }
 
 REL1=20260201-ccccccc-feed
 SHA1="$(newrel $REL1 B)"
+# stand-in for codeload.github.com: the commit's tracked files = the release minus build outputs
+mkdir -p /e2e/srcarch /srcwork && cp -r /build/$REL1 /srcwork/Mushukent-$COMMIT
+rm -rf /srcwork/Mushukent-$COMMIT/frontend/build /srcwork/Mushukent-$COMMIT/website/dist /srcwork/Mushukent-$COMMIT/RELEASE_COMMIT.txt
+tar -C /srcwork -czf /e2e/srcarch/$COMMIT.tar.gz Mushukent-$COMMIT
 expect_has "upload without approval refused" "$(X upload $REL1 < /e2e/$REL1.tar.gz)" "no active owner approval"
 SELF="$(approve $REL1 $SHA1 stage,backup,activate,auto-rollback 30 /e2e/deploy)"
 expect_has "self-approval with the deploy key refused" "$(submit $SELF)" "signature is not valid"
@@ -192,6 +209,7 @@ expect_has "deploy with an unknown approval id refused" "$(X deploy ffffffffffff
 out="$(X deploy $A1)"
 expect_has "deploy: DEPLOYED AND VERIFIED" "$out" "RESULT: DEPLOYED AND VERIFIED"
 expect_has "deploy: non-interactive path used" "$out" "authorized by server-verified approval $A1"
+expect_has "deploy: source verified against the commit" "$out" "source verified"
 expect_eq "new release served" "$(page)" "<html>flutter B</html>"
 expect_eq "backend/worker/db containers untouched" "$(others)" "$OTHERS"
 expect_eq "backup written" "$(ls /root/mushukistan-backups/*auto-ccccccc.dump | wc -l)" "1"
@@ -227,12 +245,25 @@ expect_has "failed backup refused" "$(X deploy $A3)" "backup failed"
 docker exec mushukistan-db rm /fail-dump
 expect_eq "still release B after failed backup" "$(page)" "<html>flutter B</html>"
 
-# failed Nginx preflight: broken config is refused before any change
+# tampered build: owner-approved hash, but the Nginx config differs from the commit
 REL4=20260204-ccccccc-badconf
 newrel $REL4 D >/dev/null; echo 'this is not nginx config;' >> /build/$REL4/infrastructure/nginx/default.conf
 tar -C /build -czf /e2e/$REL4.tar.gz $REL4; SHA4="$(sha256sum /e2e/$REL4.tar.gz | cut -d' ' -f1)"
 A4="$(approve $REL4 $SHA4 stage,backup,activate,auto-rollback)"; submit $A4 >/dev/null; X upload $REL4 < /e2e/$REL4.tar.gz >/dev/null
-expect_has "nginx preflight failure refused" "$(X deploy $A4)" "preflight failed"
+out="$(X deploy $A4)"
+expect_has "tampered Nginx config refused by source verification" "$out" "does not match the source"
+expect_has "the differing file is named" "$out" "infrastructure/nginx/default.conf: differs"
+expect_eq "tampered release directory removed" "$(ls -d $R/$REL4 2>/dev/null | wc -l)" "0"
+expect_eq "still release B after the tampered build" "$(page)" "<html>flutter B</html>"
+
+# failed preflight (bundle check): refused before any backup or change
+REL4b=20260204-ccccccc-nocanvaskit
+newrel $REL4b D >/dev/null; rm -rf /build/$REL4b/frontend/build/web/canvaskit
+tar -C /build -czf /e2e/$REL4b.tar.gz $REL4b; SHA4b="$(sha256sum /e2e/$REL4b.tar.gz | cut -d' ' -f1)"
+A4b="$(approve $REL4b $SHA4b stage,backup,activate,auto-rollback)"; submit $A4b >/dev/null; X upload $REL4b < /e2e/$REL4b.tar.gz >/dev/null
+nb="$(ls /root/mushukistan-backups | wc -l)"
+expect_has "preflight failure refused" "$(X deploy $A4b)" "preflight failed"
+expect_eq "no backup taken after a failed preflight" "$(ls /root/mushukistan-backups | wc -l)" "$nb"
 expect_eq "still release B after failed preflight" "$(page)" "<html>flutter B</html>"
 
 # smoke-test failure with auto-rollback
@@ -334,8 +365,24 @@ expect_eq "no release directory was deleted (A + 8 staged)" "$(ls -d $R/2026* | 
 expect_eq "release A still present for rollback" "$(ls $R/20260101-aaaaaaa-web/frontend/build/web/index.html)" "$R/20260101-aaaaaaa-web/frontend/build/web/index.html"
 
 # uninstall removes access; the manual workflow is unaffected
+NGINX_BEFORE="$(docker inspect -f '{{.Id}}' mushukistan-nginx)"; ALL_BEFORE="$(others)"; RELS_BEFORE="$(ls -d $R/2026* | wc -l)"
 RELOAD_SSH="pkill -HUP -x sshd" bash $INSTALL --uninstall --execute >/dev/null 2>&1; sleep 1
 expect_has "after uninstall the deploy key cannot log in" "$(X status)" "Permission denied"
+expect_eq "uninstall: Nginx container untouched" "$(docker inspect -f '{{.Id}}' mushukistan-nginx)" "$NGINX_BEFORE"
+expect_eq "uninstall: backend/worker/db untouched" "$(others)" "$ALL_BEFORE"
+expect_eq "uninstall: release directories kept" "$(ls -d $R/2026* | wc -l)" "$RELS_BEFORE"
+expect_eq "uninstall: database volume kept" "$(docker volume ls -q | grep -c postgres_data)" "1"
+expect_has "uninstall: ACME webroot still mounted into Nginx" "$(docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' mushukistan-nginx)" "/var/www/certbot"
+expect_has "uninstall: audit log kept" "$(ls /var/lib/mushukistan-deploy)" "audit.log"
+# manual workflow (typed confirmations through a real pty) still works without the automation
+export VERIFY_SCRIPT=$E2E/verify-local.sh
+out="$(printf 'BACKUP manual-after-uninstall\n' | script -qec "bash /src/scripts/deploy/backup-db.sh --label manual-after-uninstall --execute" /dev/null)"
+expect_has "manual typed backup still works" "$out" "pg_restore --list entries: 40"
+DUMP="$(ls -t /root/mushukistan-backups/*manual-after-uninstall.dump | head -1)"
+out="$(printf 'ACTIVATE %s\n' "$REL9" | script -qec "bash /src/scripts/deploy/activate-web-release.sh $REL9 --execute --backup-file $DUMP" /dev/null)"
+expect_has "manual typed activation still works" "$out" "public verification passed"
+expect_eq "manual activation switched Nginx" "$(page)" "<html>flutter I</html>"
+expect_has "manual activation records approval_id=manual" "$(cat $R/$REL9/PREVIOUS_STATE.txt)" "approval_id=manual"
 
 echo; echo "E2E: $pass passed, $fail failed"
 [ "$fail" -eq 0 ] && echo "E2E ALL PASSED" || exit 1

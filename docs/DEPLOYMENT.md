@@ -173,6 +173,9 @@ approvals verified by the server, and the `release-web` CLI that would replace t
 procedures below are the only way to deploy. Both scripts' typed-confirmation paths are unchanged;
 the new `--approval-token` option is usable only with a root-owned single-use token written by
 the approval broker.
+Its pre-installation security review (section 8 there) found one open Critical item: the owner's
+root SSH key must be rotated to a protected key (section 9 there) before the automation can be
+considered secure.
 
 ### A. Web / landing release (Nginx only)
 

@@ -58,6 +58,20 @@ class Base(unittest.TestCase):
             max_ttl_minutes=120)
         self.cfg.extra_env = self.s["env"]
         self.now = NOW
+        self.cfg.source_archive_url = f"file://{self.tmp}/src/{{commit}}.tar.gz"
+        self.make_source(COMMIT)
+
+    def make_source(self, commit: str, mutate=None) -> None:
+        """Stand-in for codeload.github.com: the commit's tracked files (no build outputs)."""
+        d = self.tmp / "srcwork" / f"Mushukent-{commit}"
+        d.mkdir(parents=True, exist_ok=True)
+        for f in ("docker-compose.yml", "docker-compose.prod.yml"):
+            (d / f).write_text("services: {}\n")
+        if mutate:
+            mutate(d)
+        (self.tmp / "src").mkdir(exist_ok=True)
+        with tarfile.open(self.tmp / "src" / f"{commit}.tar.gz", "w:gz") as tf:
+            tf.add(d, arcname=d.name)
 
     def tearDown(self):
         self.tmpdir.cleanup()
@@ -93,9 +107,11 @@ class Base(unittest.TestCase):
     def record(self, approval_id: str) -> dict:
         return json.loads((Path(self.cfg.state_dir) / "approvals" / f"{approval_id}.json").read_text())
 
-    def make_archive(self, release=RELEASE, commit=COMMIT, label="NEW", extra=None) -> bytes:
-        src = self.tmp / "src"
+    def make_archive(self, release=RELEASE, commit=COMMIT, label="NEW", extra=None, mutate=None) -> bytes:
+        src = self.tmp / "archive-src"
         d = stubs.make_release_dir(src, release, label, commit)
+        if mutate:
+            mutate(d)
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w:gz") as tf:
             tf.add(d, arcname=release)
@@ -602,6 +618,131 @@ class CliTests(Base):
     def test_owner_commands_need_a_terminal(self):
         with self.assertRaisesRegex(release_web.CliError, "interactive terminal"):
             release_web.require_owner_terminal()
+
+
+# =============================================================================== review regressions
+class ReviewRegressionTests(Base):
+    """Findings of the pre-installation security review (docs/DEPLOYMENT_AUTOMATION.md, section 8)."""
+
+    def staged(self, archive: bytes):
+        aid = self.approved_upload(archive)
+        b = self.broker()
+        rec, doc = b.valid_approval(aid, "web-release")
+        return aid, b, rec, doc
+
+    def test_source_verified_and_crlf_tolerated(self):
+        def crlf(d):
+            (d / "docker-compose.yml").write_bytes(b"services: {}\r\n")
+        aid, b, rec, doc = self.staged(self.make_archive(mutate=crlf))
+        b.stage(rec, doc)
+        self.assertIn("source verified: 2 files", self.output.getvalue())
+
+    def test_tampered_compose_file_refused_and_removed(self):
+        def evil(d):
+            (d / "docker-compose.prod.yml").write_text("services: {nginx: {privileged: true}}\n")
+        aid, b, rec, doc = self.staged(self.make_archive(mutate=evil))
+        with self.assertRaisesRegex(broker_mod.Refused, "tampered build"):
+            b.stage(rec, doc)
+        self.assertFalse((self.s["rel_root"] / RELEASE).exists(), "unverified release directory must be removed")
+        self.assertEqual(self.record(aid)["status"], "failed")
+        self.assertIn("docker-compose.prod.yml: differs", self.output.getvalue())
+
+    def test_extra_file_outside_build_outputs_refused(self):
+        aid, b, rec, doc = self.staged(self.make_archive(mutate=lambda d: (d / "evil.sh").write_text("id")))
+        with self.assertRaisesRegex(broker_mod.Refused, "tampered build"):
+            b.stage(rec, doc)
+        self.assertIn("evil.sh: not part of commit", self.output.getvalue())
+
+    def test_missing_source_file_refused(self):
+        aid, b, rec, doc = self.staged(self.make_archive(mutate=lambda d: (d / "docker-compose.yml").unlink()))
+        with self.assertRaisesRegex(broker_mod.Refused, "tampered build"):
+            b.stage(rec, doc)
+
+    def test_build_outputs_may_differ_from_source(self):
+        def more_web(d):
+            (d / "frontend/build/web/extra.js").write_text("// built")
+        aid, b, rec, doc = self.staged(self.make_archive(mutate=more_web))
+        b.stage(rec, doc)
+
+    def test_source_unavailable_is_transient(self):
+        aid, b, rec, doc = self.staged(self.make_archive())
+        (self.tmp / "src" / f"{COMMIT}.tar.gz").unlink()
+        with self.assertRaises(broker_mod.SourceUnavailable):
+            b.stage(rec, doc)
+        self.assertEqual(self.record(aid)["status"], "active")
+        self.assertFalse((self.s["rel_root"] / RELEASE).exists())
+
+    def test_server_managed_files_in_archive_refused(self):
+        def member(name):
+            m = tarfile.TarInfo(name)
+            m.size = 1
+            return m, b"x"
+        for name in (".env", "PREVIOUS_STATE.txt", ".deploy-approval", "docker-compose.notification-release.yml",
+                     "backend/.env"):
+            with self.subTest(name):
+                self.tearDown()
+                self.setUp()
+                aid, b, rec, doc = self.staged(self.make_archive(extra=[member(f"{RELEASE}/{name}")]))
+                with self.assertRaisesRegex(broker_mod.Refused, "server-managed"):
+                    b.stage(rec, doc)
+
+    def test_trailing_newline_identifiers_rejected(self):
+        with self.assertRaises(schema.ApprovalError):
+            schema.validate_approval_id("a" * 32 + "\n")
+        with self.assertRaises(schema.ApprovalError):
+            schema.validate_release_name(RELEASE + "\n")
+        doc = self.release_doc()
+        doc["commit"] = COMMIT + "\n"
+        with self.assertRaises(schema.ApprovalError):
+            schema.parse_document(schema.canonical_bytes(doc))
+        with self.assertRaises(deploy_gate.Refused):
+            deploy_gate.parse("history 20\n5")
+
+    def test_silent_hung_command_is_killed(self):
+        self.cfg.command_timeout = 2
+        start = __import__("time").monotonic()
+        rc, lines = self.broker().run(["bash", "-c", "sleep 60"])
+        self.assertLess(__import__("time").monotonic() - start, 20)
+        self.assertEqual(rc, 124)
+        self.assertIn("timed out", lines[-1])
+
+    def test_low_disk_space_refuses_upload(self):
+        self.cfg.min_free_mb = 10 ** 9
+        self.submit(self.release_doc())
+        with self.assertRaisesRegex(broker_mod.Refused, "MB free"):
+            self.broker(b"x").cmd_upload(RELEASE)
+
+    def test_unexpected_error_after_switch_rolls_back(self):
+        aid = self.approved_upload(self.make_archive())
+        b = self.broker()
+        calls = {"n": 0}
+        real = b.other_container_ids
+
+        def flaky():
+            calls["n"] += 1
+            if calls["n"] == 2:  # right after the activation script switched Nginx
+                raise RuntimeError("docker daemon went away")
+            return real()
+        b.other_container_ids = flaky
+        with self.assertRaisesRegex(RuntimeError, "went away"):
+            b.cmd_deploy(aid)
+        self.assertIn("RESULT: ROLLED BACK", self.output.getvalue())
+        self.assertTrue(self.docker_state()["working_dir"].endswith("old"))
+        self.assertEqual(self.record(aid)["status"], "failed")
+
+    def test_dispatch_reports_unexpected_errors(self):
+        aid = self.approved_upload(self.make_archive())
+        b = self.broker()
+        b.backup = lambda rec, doc: (_ for _ in ()).throw(OSError(28, "No space left on device"))
+        self.assertEqual(b.dispatch("deploy", [aid]), 3)
+        self.assertIn("unexpected failure", self.output.getvalue())
+        self.assertIn('"result": "error"', (Path(self.cfg.state_dir) / "audit.log").read_text())
+        self.assertTrue(self.docker_state()["working_dir"].endswith("old"))
+
+    def test_missing_nginx_container_gives_emergency_guidance(self):
+        self.s["env"]["STUB_NO_NGINX"] = "1"
+        with self.assertRaisesRegex(broker_mod.Refused, "emergency procedure"):
+            self.broker().active_deployment()
 
 
 if __name__ == "__main__":

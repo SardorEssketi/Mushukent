@@ -161,9 +161,9 @@ def live_client_id() -> str:
 
 def cmd_prepare(args, settings) -> int:
     sha = args.sha
-    if not re.match(r"^[0-9a-f]{7,40}$", sha):
+    if not re.fullmatch(r"[0-9a-f]{7,40}", sha):
         raise CliError("--sha must be a commit SHA")
-    if not re.match(r"^[A-Za-z0-9._-]{1,40}$", args.label):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,40}", args.label):
         raise CliError("--label: letters, digits, . _ - only")
     git("fetch", "--quiet", "origin", "main")
     sha = git("rev-parse", "--verify", f"{sha}^{{commit}}")

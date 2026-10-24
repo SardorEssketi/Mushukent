@@ -54,7 +54,7 @@ def format_time(value: datetime) -> str:
 
 
 def parse_time(value: object, field: str) -> datetime:
-    if not isinstance(value, str) or not TIME_RE.match(value):
+    if not isinstance(value, str) or not TIME_RE.fullmatch(value):
         raise ApprovalError(f"{field} must be UTC time like 2026-10-24T10:00:00Z")
     return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
@@ -65,13 +65,13 @@ def canonical_bytes(document: dict) -> bytes:
 
 
 def validate_release_name(name: object) -> str:
-    if not isinstance(name, str) or not RELEASE_RE.match(name):
+    if not isinstance(name, str) or not RELEASE_RE.fullmatch(name):
         raise ApprovalError("release must look like YYYYMMDD-<sha7>-<label>")
     return name
 
 
 def validate_approval_id(value: object) -> str:
-    if not isinstance(value, str) or not APPROVAL_ID_RE.match(value):
+    if not isinstance(value, str) or not APPROVAL_ID_RE.fullmatch(value):
         raise ApprovalError("approval_id must be 32 lowercase hex characters")
     return value
 
@@ -96,7 +96,7 @@ def parse_document(raw: bytes) -> dict:
     if doc["version"] != VERSION:
         raise ApprovalError(f"unsupported approval version: {doc['version']!r}")
     validate_approval_id(doc["approval_id"])
-    if not isinstance(doc["environment"], str) or not ENVIRONMENT_RE.match(doc["environment"]):
+    if not isinstance(doc["environment"], str) or not ENVIRONMENT_RE.fullmatch(doc["environment"]):
         raise ApprovalError("environment is invalid")
     issued = parse_time(doc["issued_at"], "issued_at")
     expires = parse_time(doc["expires_at"], "expires_at")
@@ -105,11 +105,11 @@ def parse_document(raw: bytes) -> dict:
 
     if kind == "web-release":
         name = validate_release_name(doc["release"])
-        if not isinstance(doc["commit"], str) or not COMMIT_RE.match(doc["commit"]):
+        if not isinstance(doc["commit"], str) or not COMMIT_RE.fullmatch(doc["commit"]):
             raise ApprovalError("commit must be a full 40-character SHA")
-        if RELEASE_RE.match(name).group("sha7") != doc["commit"][:7]:
+        if RELEASE_RE.fullmatch(name).group("sha7") != doc["commit"][:7]:
             raise ApprovalError("release name does not match the commit")
-        if not isinstance(doc["artifact_sha256"], str) or not SHA256_RE.match(doc["artifact_sha256"]):
+        if not isinstance(doc["artifact_sha256"], str) or not SHA256_RE.fullmatch(doc["artifact_sha256"]):
             raise ApprovalError("artifact_sha256 must be 64 lowercase hex characters")
         ops = doc["operations"]
         if (not isinstance(ops, list) or not ops or len(set(ops)) != len(ops)

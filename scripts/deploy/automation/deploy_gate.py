@@ -50,7 +50,7 @@ def parse(command: str | None) -> list[str]:
     # whitespace splitting only; every part must be a plain token, so quotes, $, ;, |, &,
     # backticks, redirections and globbing characters can never reach the broker
     for part in parts:
-        if not TOKEN_RE.match(part):
+        if not TOKEN_RE.fullmatch(part):
             raise Refused(f"invalid characters in {part[:40]!r}")
     verb, args = parts[0], parts[1:]
     if verb not in VERBS:
@@ -61,7 +61,7 @@ def parse(command: str | None) -> list[str]:
     if len(args) != len(patterns):
         raise Refused(f"{verb} takes {len(patterns)} argument(s)")
     for value, pattern in zip(args, patterns):
-        if not pattern.match(value):
+        if not pattern.fullmatch(value):
             raise Refused(f"invalid argument for {verb}: {value[:40]!r}")
     if verb == "history" and not 1 <= int(args[0]) <= 200:
         raise Refused("history count must be 1-200")
@@ -70,7 +70,7 @@ def parse(command: str | None) -> list[str]:
 
 def origin() -> str:
     client = os.environ.get("SSH_CLIENT", "").split()
-    return client[0] if client and ORIGIN.match(client[0]) else "unknown"
+    return client[0] if client and ORIGIN.fullmatch(client[0]) else "unknown"
 
 
 def main() -> int:

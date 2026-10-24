@@ -25,7 +25,10 @@ ETC=/etc/mushukistan-deploy
 SUDOERS=/etc/sudoers.d/mushukistan-deploy
 SSHD_SNIPPET=/etc/ssh/sshd_config.d/60-mushukistan-deploy.conf
 owner_key=""; deploy_key=""; execute=0; uninstall=0; config="$HERE/broker.conf.example"
+# sshd re-reads its configuration for every new connection (also with Ubuntu socket activation),
+# so a reload is only a courtesy; failure to reload must not abort a half-finished install.
 RELOAD_SSH="${RELOAD_SSH:-systemctl reload ssh}"
+reload_ssh() { $RELOAD_SSH 2>/dev/null || echo "note: '$RELOAD_SSH' failed; new connections use the new configuration anyway"; }
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 while [ $# -gt 0 ]; do
@@ -46,7 +49,7 @@ if [ "$uninstall" -eq 1 ]; then
   [ "$execute" -eq 1 ] || { echo "DRY RUN: nothing changed"; exit 0; }
   rm -f "$SSHD_SNIPPET" "$SUDOERS" "$ETC/authorized_keys"
   if id "$USER_NAME" >/dev/null 2>&1; then usermod -L -s /usr/sbin/nologin "$USER_NAME"; fi
-  sshd -t && $RELOAD_SSH
+  sshd -t && reload_ssh
   echo "removed: the deployment identity can no longer log in; manual workflow unaffected"
   exit 0
 fi
@@ -118,6 +121,10 @@ Match all
 EOF
 chmod 0644 "$SSHD_SNIPPET"
 sshd -t || { rm -f "$SSHD_SNIPPET"; die "sshd -t failed; snippet removed, ssh not reloaded"; }
-$RELOAD_SSH
+eff="$(sshd -T -C user=$USER_NAME,host=localhost,addr=127.0.0.1)"
+for want in "forcecommand $LIB/deploy-gate" "permittty no" "allowtcpforwarding no" "authorizedkeysfile $ETC/authorized_keys"; do
+  grep -qx "$want" <<<"$eff" || { rm -f "$SSHD_SNIPPET"; die "effective sshd config lacks '$want'; snippet removed"; }
+done
+reload_ssh
 install -d -o root -g root -m 0700 /var/lib/mushukistan-deploy
 echo "installed. Verify with: ssh -i <deploy key> $USER_NAME@<server> status"

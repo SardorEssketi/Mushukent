@@ -22,6 +22,8 @@ def save(): json.dump(s, open(state_path, "w"))
 if a[0] == "inspect":
     fmt = a[a.index("-f") + 1] if "-f" in a else ""
     name = a[-1]
+    if name == "mushukistan-nginx" and os.environ.get("STUB_NO_NGINX"):
+        print("Error: No such object: mushukistan-nginx", file=sys.stderr); sys.exit(1)
     if name != "mushukistan-nginx":
         if "State.Status" in fmt:
             print("running healthy restarts=0"); sys.exit(0)

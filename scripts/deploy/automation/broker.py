@@ -32,24 +32,42 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
+import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 
-sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+_HERE = os.path.dirname(os.path.realpath(__file__))
+if os.geteuid() == 0:
+    # Check the helper module BEFORE importing it: importing runs its code as root.
+    for _p in (_HERE, os.path.join(_HERE, "approval_schema.py")):
+        _st = os.stat(_p)
+        if _st.st_uid != 0 or _st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+            sys.exit(f"REFUSED: {_p} must be owned by root and not group/world-writable")
+sys.path.insert(0, _HERE)
 import approval_schema as schema  # noqa: E402  (root-owned file next to the broker)
 
 CONFIG_PATH = "/etc/mushukistan-deploy/broker.conf"
 SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 PRIVATE_FILES = (".env", "docker-compose.notification-release.yml")
 STAGE_MARKER = ".deploy-approval"
+# Files the server creates in a release directory; an uploaded archive must never provide them.
+SERVER_MANAGED = (*PRIVATE_FILES, STAGE_MARKER, "PREVIOUS_STATE.txt")
+# Everything else in a staged release must be byte-identical (modulo CRLF) to the approved commit.
+BUILD_PREFIXES = ("frontend/build/web/", "website/dist/")
+PACKAGER_FILES = ("RELEASE_COMMIT.txt", "RELEASE_MANIFEST.txt")
 SECRET_LINE = re.compile(
     r"(?i)\b([A-Z0-9_]*(PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|DATABASE_URL|DSN)[A-Z0-9_]*)\s*[=:]\s*\S+")
 
 
 class Refused(Exception):
     """A request that must not proceed. Nothing was changed unless the message says so."""
+
+
+class SourceUnavailable(Refused):
+    """The approved commit's source could not be fetched (transient; the approval stays usable)."""
 
 
 # --------------------------------------------------------------------------- config
@@ -79,10 +97,16 @@ class Config:
     backend_container: str = "mushukistan-backend"
     project: str = "mushukistan"
     health_url: str = "https://api.mushukistan.uz/api/v1/health"
+    # Public source of truth for the approved commit; {commit} is replaced by the 40-hex SHA.
+    source_archive_url: str = "https://codeload.github.com/SardorEssketi/Mushukent/tar.gz/{commit}"
+    max_source_mb: int = 100
+    min_free_mb: int = 1024
+    command_timeout: int = 1800
     nginx_wait_tries: int = 30
     extra_env: dict = field(default_factory=dict)  # tests only; never read from the config file
 
-    INT_KEYS = ("max_ttl_minutes", "max_artifact_mb", "max_unpacked_mb", "max_members", "nginx_wait_tries")
+    INT_KEYS = ("max_ttl_minutes", "max_artifact_mb", "max_unpacked_mb", "max_members", "nginx_wait_tries",
+                "max_source_mb", "min_free_mb", "command_timeout")
 
     @classmethod
     def load(cls, path: str) -> "Config":
@@ -101,20 +125,20 @@ class Config:
                 setattr(cfg, key, int(value) if key in cls.INT_KEYS else value)
         if not 5 <= cfg.max_ttl_minutes <= 24 * 60:
             raise Refused("max_ttl_minutes must be 5..1440")
-        if not schema.ENVIRONMENT_RE.match(cfg.environment):
+        if not schema.ENVIRONMENT_RE.fullmatch(cfg.environment):
             raise Refused("environment setting is invalid")
+        if not cfg.source_archive_url.startswith(("https://", "file:///")) or "{commit}" not in cfg.source_archive_url:
+            raise Refused("source_archive_url must be an https:// (or file:/// for tests) URL containing {commit}")
         return cfg
 
 
 def assert_trusted(path: str) -> None:
-    """Root-owned and not writable by group/other, for the file and every parent."""
-    p = Path(path)
-    if not p.exists():
+    """Root-owned and not writable by group/other, for the resolved file and every parent."""
+    if not os.path.exists(path):
         raise Refused(f"trusted path missing: {path}")
+    p = Path(os.path.realpath(path))
     for item in [p, *p.parents]:
-        st = item.lstat()
-        if stat.S_ISLNK(st.st_mode):
-            st = item.stat()
+        st = item.stat()
         if st.st_uid != 0 or st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
             raise Refused(f"{item} must be owned by root and not group/world-writable")
 
@@ -224,29 +248,51 @@ class Broker:
         env.update(self.cfg.extra_env)
         return env
 
-    def run(self, argv: list[str], *, cwd: str | None = None, timeout: int = 1800, quiet=False) -> tuple[int, list[str]]:
+    def run(self, argv: list[str], *, cwd: str | None = None, timeout: int | None = None,
+            quiet=False) -> tuple[int, list[str]]:
+        """Run a trusted program (argument list, no shell). A child that hangs, even silently, is
+        killed with its whole process group after `timeout` seconds and reported as a failure."""
+        timeout = timeout or self.cfg.command_timeout
         lines: list[str] = []
-        deadline = time.monotonic() + timeout
-        with subprocess.Popen(argv, cwd=cwd, env=self.env(), stdin=subprocess.DEVNULL,
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace") as proc:
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                line = line.rstrip("\n")
-                lines.append(line)
-                if not quiet:
-                    self.out("  | " + line)
-                if time.monotonic() > deadline:
-                    proc.kill()
-                    lines.append("ERROR: timed out")
-                    break
-            rc = proc.wait()
+        with subprocess.Popen(argv, cwd=cwd, env=self.env(), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True, errors="replace", start_new_session=True) as proc:
+            def reader():
+                assert proc.stdout is not None
+                for line in proc.stdout:
+                    line = line.rstrip("\n")
+                    lines.append(line)
+                    if not quiet:
+                        self.out("  | " + line)
+            t = threading.Thread(target=reader, daemon=True)
+            t.start()
+            try:
+                rc = proc.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
+                rc = 124
+                lines.append(f"ERROR: {os.path.basename(argv[0])} timed out after {timeout}s and was killed")
+                self.out(lines[-1])
+            t.join(10)
         return rc, lines
 
     def docker_out(self, *args: str) -> str:
         rc, lines = self.run([self.cfg.docker, *args], quiet=True, timeout=120)
         if rc != 0:
+            if args[0] == "inspect" and args[-1] == self.cfg.nginx_container:
+                raise Refused(f"cannot inspect {self.cfg.nginx_container} (missing or Docker unavailable); the "
+                              "broker cannot determine the active release. Use the emergency procedure in "
+                              "docs/DEPLOYMENT_AUTOMATION.md")
             raise Refused(f"docker {args[0]} failed")
         return "\n".join(lines).strip()
+
+    def require_free_space(self, path: str, need_mb: int) -> None:
+        free_mb = shutil.disk_usage(path).free // (1024 * 1024)
+        if free_mb < need_mb:
+            raise Refused(f"only {free_mb} MB free on {path}; need {need_mb} MB. Nothing was changed")
 
     def write_token(self, approval_id: str) -> Path:
         path = Path(self.cfg.token_dir) / f"{secrets.token_hex(16)}.token"
@@ -491,6 +537,7 @@ class Broker:
             while self.stdin.read(1 << 20):   # drain the client's copy without buffering it
                 pass
             return 0
+        self.require_free_space(str(self.artifacts_dir), self.cfg.min_free_mb + self.cfg.max_artifact_mb)
         limit = self.cfg.max_artifact_mb * 1024 * 1024
         partial = self.artifacts_dir / f"{release}.tar.gz.partial"
         h = hashlib.sha256()
@@ -540,6 +587,8 @@ class Broker:
                         raise Refused(f"archive entry is a link or special file: {name[:80]!r}")
                     if m.mode & (stat.S_ISUID | stat.S_ISGID):
                         raise Refused(f"archive entry has setuid/setgid bits: {name[:80]!r}")
+                    if (len(parts) == 2 and parts[1] in SERVER_MANAGED) or ".env" in parts[1:]:
+                        raise Refused(f"archive must not contain server-managed file {name[:80]!r}")
                     total += m.size
                     if total > limit or len(members) >= self.cfg.max_members:
                         raise Refused("archive is too large when unpacked")
@@ -557,10 +606,78 @@ class Broker:
             shutil.rmtree(staging, ignore_errors=True)
         return target
 
+    def fetch_source(self, commit: str) -> Path:
+        """Download the approved commit's source archive (public GitHub) into the root-only tmp dir."""
+        url = self.cfg.source_archive_url.format(commit=schema.COMMIT_RE.fullmatch(commit).group(0))
+        path = Path(tempfile.mkdtemp(dir=self.tmp_dir)) / "source.tar.gz"
+        limit = self.cfg.max_source_mb * 1024 * 1024
+        size = 0
+        try:
+            with urllib.request.urlopen(url, timeout=120) as resp, open(path, "wb") as fh:
+                while chunk := resp.read(1 << 20):
+                    size += len(chunk)
+                    if size > limit:
+                        raise Refused(f"source archive exceeds {self.cfg.max_source_mb} MB")
+                    fh.write(chunk)
+        except OSError as exc:  # includes URLError and timeouts
+            raise SourceUnavailable(f"cannot download the source of {commit[:7]} for verification: {exc}") from None
+        return path
+
+    def verify_source(self, rel: Path, commit: str) -> None:
+        """Every staged file outside the build outputs must equal the approved commit's file (CRLF
+        normalised: package-release.sh may run with core.autocrlf), none may be missing, and no
+        extra file may exist. This binds Compose files, the Nginx config and every script in the
+        release to public `main`, even if the machine that built the artifact was compromised."""
+        src = self.fetch_source(commit)
+        mismatches: list[str] = []
+        expected: set[str] = set()
+        try:
+            with tarfile.open(src, "r:gz") as tf:
+                for m in tf:
+                    parts = PurePosixPath(m.name).parts
+                    if len(parts) < 2 or m.isdir() or m.name.startswith("/") or ".." in parts:
+                        continue
+                    relpath = "/".join(parts[1:])
+                    if m.issym() or m.islnk():
+                        mismatches.append(f"{relpath}: links in the source are not supported")
+                        continue
+                    if not m.isreg():
+                        continue
+                    expected.add(relpath)
+                    staged = rel / relpath
+                    if staged.is_symlink() or not staged.is_file():
+                        mismatches.append(f"{relpath}: missing in the artifact")
+                        continue
+                    want = tf.extractfile(m).read()
+                    got = staged.read_bytes()
+                    if got != want and (b"\r" in want or got.replace(b"\r\n", b"\n") != want):
+                        mismatches.append(f"{relpath}: differs from commit {commit[:7]}")
+        except tarfile.TarError as exc:
+            raise Refused(f"source archive of {commit[:7]} is unreadable: {exc}") from None
+        finally:
+            shutil.rmtree(src.parent, ignore_errors=True)
+        if not expected:
+            raise Refused("source archive is empty")
+        for p in sorted(rel.rglob("*")):
+            relpath = p.relative_to(rel).as_posix()
+            if p.is_dir() or relpath in expected or relpath.startswith(BUILD_PREFIXES):
+                continue
+            if relpath in PACKAGER_FILES or relpath in SERVER_MANAGED:
+                continue
+            mismatches.append(f"{relpath}: not part of commit {commit[:7]} and not a build output")
+        if mismatches:
+            for line in mismatches[:10]:
+                self.out("  source mismatch: " + line)
+            raise Refused(f"artifact does not match the source of commit {commit[:7]} "
+                          f"({len(mismatches)} problem(s)); the owner approved a hash of a tampered build")
+        self.out(f"source verified: {len(expected)} files equal commit {commit[:7]}; "
+                 f"only {', '.join(p.rstrip('/') for p in BUILD_PREFIXES)} are build outputs")
+
     def stage(self, rec: dict, doc: dict) -> Path:
         release = doc["release"]
         rel = Path(self.cfg.rel_root) / release
         marker = rel / STAGE_MARKER
+        fresh = False
         if rel.exists():
             if not (marker.is_file() and marker.read_text().strip() == doc["approval_id"]):
                 raise Refused(f"{rel} exists but was not staged by approval {doc['approval_id']}; refusing to reuse it")
@@ -571,12 +688,23 @@ class Broker:
                 raise Refused("artifact has not been uploaded")
             if self.sha256_file(archive) != doc["artifact_sha256"]:
                 raise Refused("stored artifact no longer matches the approved SHA-256")
+            self.require_free_space(self.cfg.rel_root, self.cfg.min_free_mb)
             self.safe_extract(archive, release)
+            fresh = True
             marker.write_text(doc["approval_id"] + "\n")
             self.out(f"extracted {release} safely into {rel}")
-        commit_file = rel / "RELEASE_COMMIT.txt"
-        if not commit_file.is_file() or commit_file.read_text().strip() != doc["commit"]:
-            raise Refused("RELEASE_COMMIT.txt does not match the approved commit")
+        try:
+            commit_file = rel / "RELEASE_COMMIT.txt"
+            if not commit_file.is_file() or commit_file.read_text().strip() != doc["commit"]:
+                raise Refused("RELEASE_COMMIT.txt does not match the approved commit")
+            self.verify_source(rel, doc["commit"])
+        except Refused as exc:
+            if fresh:  # never leave an unverified directory behind
+                shutil.rmtree(rel, ignore_errors=True)
+            if not isinstance(exc, SourceUnavailable):
+                rec["status"] = "failed"
+            self.step(rec, "stage", "source-unavailable" if isinstance(exc, SourceUnavailable) else "verification-failed")
+            raise
         active_dir = Path(self.active_deployment()["working_dir"])
         if not str(active_dir.resolve()).startswith(str(Path(self.cfg.rel_root).resolve()) + "/"):
             raise Refused("active Compose working directory is outside the release root")
@@ -715,6 +843,34 @@ class Broker:
             self.audit("deploy", "backed-up-only", approval_id=approval_id, release=release)
             self.out("RESULT: STAGED AND BACKED UP (approval did not include activate)")
             return 0
+        try:
+            return self._activate(rec, doc, rel, dump)
+        except Exception as exc:
+            self.out(f"ERROR: activation failed unexpectedly: {type(exc).__name__}: {exc}")
+            if rec.get("status") == "activating" and self._switched(rel, approval_id) and "auto-rollback" in ops:
+                self.out("== attempting the approved automatic Nginx rollback")
+                try:
+                    ok = self.nginx_rollback(rel)
+                except Exception as exc2:  # noqa: BLE001 - report, never mask the first error
+                    ok = False
+                    self.out(f"ERROR: rollback failed: {type(exc2).__name__}: {exc2}")
+                self.out("RESULT: ROLLED BACK" if ok else "RESULT: ROLLBACK FAILED - inspect production immediately")
+            try:
+                rec["status"] = "failed"
+                self.step(rec, "activate", "error")
+            except Exception:  # noqa: BLE001 - e.g. the state disk is full
+                pass
+            raise
+
+    def _switched(self, rel: Path, approval_id: str) -> bool:
+        prev_state = rel / "PREVIOUS_STATE.txt"
+        try:
+            return prev_state.is_file() and f"approval_id={approval_id}" in prev_state.read_text()
+        except OSError:
+            return False
+
+    def _activate(self, rec: dict, doc: dict, rel: Path, dump: str) -> int:
+        approval_id, release, ops = doc["approval_id"], doc["release"], doc["operations"]
         others_before = self.other_container_ids()
         rec["status"], rec["step"] = "activating", "activate"
         self._write_record(rec)
@@ -725,8 +881,7 @@ class Broker:
                                   "--backup-file", dump, "--approval-token", str(token)])
         finally:
             token.unlink(missing_ok=True)
-        prev_state = rel / "PREVIOUS_STATE.txt"
-        switched = prev_state.is_file() and f"approval_id={approval_id}" in prev_state.read_text()
+        switched = self._switched(rel, approval_id)
         others_after = self.other_container_ids()
         if others_after != others_before:
             self.out("WARN  backend/worker/database container ids changed during activation")
@@ -798,6 +953,18 @@ class Broker:
         self.lock()
         try:
             return changing[verb][1](*args)
+        except (Refused, schema.ApprovalError):
+            raise
+        except Exception as exc:  # noqa: BLE001 - last line of defence: report, audit, exit non-zero
+            self.out(f"ERROR: unexpected failure: {type(exc).__name__}: {exc}")
+            self.out("       Production may be in an intermediate state. Run `status`; recover with an owner-signed")
+            self.out("       rollback or the emergency procedure in docs/DEPLOYMENT_AUTOMATION.md.")
+            try:
+                self.audit(verb, "error", approval_id=args[0] if args and schema.APPROVAL_ID_RE.fullmatch(args[0]) else "",
+                           detail=f"{type(exc).__name__}: {exc}")
+            except Exception:  # noqa: BLE001 - the state directory itself may be unavailable
+                pass
+            return 3
         finally:
             self.unlock()
 
@@ -808,7 +975,7 @@ def main(argv: list[str]) -> int:
     out = Out()
     origin = "unknown"
     if len(argv) >= 2 and argv[-2] == "--origin":
-        origin = argv[-1] if re.match(r"^[0-9A-Fa-f:.]{2,45}$", argv[-1]) else "invalid"
+        origin = argv[-1] if re.fullmatch(r"[0-9A-Fa-f:.]{2,45}", argv[-1]) else "invalid"
         argv = argv[:-2]
     if not argv:
         print("usage: broker <verb> [args]", file=sys.stderr)
@@ -824,6 +991,7 @@ def main(argv: list[str]) -> int:
         assert_trusted(CONFIG_PATH)
         cfg = Config.load(CONFIG_PATH)
         for path in (cfg.allowed_signers, cfg.activate_script, cfg.backup_script, cfg.verify_script,
+                     cfg.docker, cfg.ssh_keygen, cfg.bash, cfg.curl,
                      cfg.tls_check_script, os.path.join(os.path.dirname(cfg.activate_script), "approval-token.sh")):
             assert_trusted(path)
         broker = Broker(cfg, out=out, origin=origin)
@@ -833,7 +1001,7 @@ def main(argv: list[str]) -> int:
     try:
         return broker.dispatch(verb, args)
     except (Refused, schema.ApprovalError) as exc:
-        aid = args[0] if args and schema.APPROVAL_ID_RE.match(args[0]) else ""
+        aid = args[0] if args and schema.APPROVAL_ID_RE.fullmatch(args[0]) else ""
         broker.audit(verb, "refused", approval_id=aid, detail=str(exc))
         out(f"REFUSED: {exc}")
         return 2

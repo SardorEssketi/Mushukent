@@ -10,7 +10,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 NAME="mushukistan-e2e-automation-$$"
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
+cleanup() { docker rm -f -v "$NAME" >/dev/null 2>&1 || true; }   # -v: drop the dind volume
 trap cleanup EXIT
 
 docker run -d --privileged --memory 1g --name "$NAME" -e DOCKER_TLS_CERTDIR= docker:27-dind >/dev/null
