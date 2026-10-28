@@ -8,6 +8,8 @@
 #
 # Dry run is the default: every check runs, nothing changes. --execute additionally
 # needs a recent verified backup and a typed confirmation on a terminal (ssh -t).
+# --approval-token FILE replaces the typed confirmation ONLY for the approval broker
+# (docs/DEPLOYMENT_AUTOMATION.md); see approval-token.sh for what a valid token is.
 # Re-running for the already-active release is a no-op that only re-checks.
 # Rollback = run the printed rollback command (or this script for the old release).
 set -euo pipefail
@@ -21,16 +23,19 @@ API_URL="https://api.mushukistan.uz/api/v1/"
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 VERIFY="${VERIFY_SCRIPT:-$SELF_DIR/verify-public.sh}"
 MAX_BACKUP_AGE_MIN="${MAX_BACKUP_AGE_MIN:-720}"
+# shellcheck source=approval-token.sh
+. "$SELF_DIR/approval-token.sh"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 ok()  { echo "ok    $*"; }
 
-target=""; execute=0; backup=""
+target=""; execute=0; backup=""; approval_token=""; approval_id=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --execute) execute=1; shift ;;
     --backup-file) backup="${2:?--backup-file needs a path}"; shift 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    --approval-token) approval_token="${2:?--approval-token needs a path}"; shift 2 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     -*) die "unknown argument: $1" ;;
     *) [ -z "$target" ] || die "only one release may be given"; target="$1"; shift ;;
   esac
@@ -185,14 +190,20 @@ echo "== 7. execution gates"
 entries="$($DOCKER exec -i "$DB_CONTAINER" pg_restore --list < "$backup" | wc -l)"
 [ "$entries" -gt 10 ] || die "pg_restore --list on the backup shows $entries entries"
 ok "backup $backup verified ($entries catalog entries)"
-[ -t 0 ] || die "--execute needs an interactive terminal (ssh -t) so a human can confirm"
-printf 'Type "ACTIVATE %s" to replace ONLY the production Nginx container: ' "$rel_name"
-read -r answer
-[ "$answer" = "ACTIVATE $rel_name" ] || die "confirmation did not match; nothing changed"
+if [ -n "$approval_token" ]; then
+  approval_id="$(check_approval_token "$approval_token")" || die "approval token refused; nothing changed"
+  ok "non-interactive activation authorized by server-verified approval $approval_id"
+else
+  [ -t 0 ] || die "--execute needs an interactive terminal (ssh -t) so a human can confirm"
+  printf 'Type "ACTIVATE %s" to replace ONLY the production Nginx container: ' "$rel_name"
+  read -r answer
+  [ "$answer" = "ACTIVATE $rel_name" ] || die "confirmation did not match; nothing changed"
+fi
 
 echo "== 8. recording previous state in the NEW release directory, then switching Nginx"
 {
   echo "recorded_utc=$(date -u +%FT%TZ)"
+  echo "approval_id=${approval_id:-manual}"
   echo "previous_working_dir=$active_dir"
   echo "previous_config_files=$active_files"
   echo "previous_web=$cur_web"

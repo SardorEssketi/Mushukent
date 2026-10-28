@@ -166,6 +166,17 @@ and the served web directory from Nginx's bind mounts with symlinks resolved.
 | Android app only | C |
 | Migration | B, with the gate in "Database backup and migration gate" below |
 
+**Approval-based automation (web releases only): designed and tested, NOT installed.**
+`docs/DEPLOYMENT_AUTOMATION.md` describes a restricted deployment identity, owner-signed release
+approvals verified by the server, and the `release-web` CLI that would replace the manual G2-G4
+(and G6 rollback) commands for procedure A. Until the owner installs it on the server, the manual
+procedures below are the only way to deploy. Both scripts' typed-confirmation paths are unchanged;
+the new `--approval-token` option is usable only with a root-owned single-use token written by
+the approval broker.
+Its pre-installation security review (section 8 there) found one Critical item: the owner's
+root SSH key had to be rotated to a protected key (section 9 there). Resolved by owner
+(2026-10-28). The automation remains NOT INSTALLED.
+
 ### A. Web / landing release (Nginx only)
 
 No backend, worker, database, or volume is touched. Container IDs of everything

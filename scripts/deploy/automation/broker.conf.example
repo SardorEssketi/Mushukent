@@ -1,0 +1,28 @@
+# /etc/mushukistan-deploy/broker.conf  (root:root 0644). KEY=VALUE only; unknown keys are refused.
+# The broker refuses to run unless this file, the broker, its helper module, allowed_signers
+# and every script below are root-owned and not group/world-writable.
+ENVIRONMENT=production
+REL_ROOT=/opt/mushukistan-releases
+STATE_DIR=/var/lib/mushukistan-deploy
+TOKEN_DIR=/run/mushukistan-deploy
+ALLOWED_SIGNERS=/etc/mushukistan-deploy/allowed_signers
+SIGNER_IDENTITY=mushukistan-owner
+# Hard upper bound on any approval's lifetime (issued_at -> expires_at), in minutes.
+MAX_TTL_MINUTES=120
+MAX_ARTIFACT_MB=200
+MAX_UNPACKED_MB=1024
+# Trusted, root-owned copies installed by install-server.sh (never the uploaded release's copies).
+ACTIVATE_SCRIPT=/usr/local/lib/mushukistan-deploy/activate-web-release.sh
+BACKUP_SCRIPT=/usr/local/lib/mushukistan-deploy/backup-db.sh
+VERIFY_SCRIPT=/usr/local/lib/mushukistan-deploy/verify-public.sh
+TLS_CHECK_SCRIPT=/usr/local/lib/mushukistan-tls/check-tls.sh
+BACKUP_DIR=/root/mushukistan-backups
+DOCKER=/usr/bin/docker
+SSH_KEYGEN=/usr/bin/ssh-keygen
+BASH=/bin/bash
+CURL=/usr/bin/curl
+NGINX_CONTAINER=mushukistan-nginx
+DB_CONTAINER=mushukistan-db
+BACKEND_CONTAINER=mushukistan-backend
+PROJECT=mushukistan
+HEALTH_URL=https://api.mushukistan.uz/api/v1/health

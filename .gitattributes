@@ -1,2 +1,4 @@
 # Shell scripts run on the Linux server; keep LF even with core.autocrlf on Windows.
 *.sh text eol=lf
+scripts/deploy/automation/** text eol=lf
+scripts/deploy/*.py text eol=lf
