@@ -204,13 +204,12 @@ Windows OpenSSH 9.5 client; a real power loss (simulated with `kill -9`).
 
 ## 6. Security limitations (read before installing)
 
-1. **The owner's root SSH key on the operator workstation is currently usable non-interactively by
-   any local process, including the agent** (it worked with `BatchMode=yes` during read-only
-   inspection, so it is either unprotected or unlocked in an agent). While
-   that is true, a compromised agent can bypass this whole system with root SSH. The automation
-   only separates the roles after the owner protects that key (passphrase and not loaded in
-   ssh-agent, or a FIDO2 key) or stops using root SSH from this machine. The same applies to the
-   approval key.
+1. **Resolved by owner (2026-10-28)** (section 9); kept for the record. **The owner's root SSH
+   key on the operator workstation was usable non-interactively by any local process, including
+   the agent** (it worked with `BatchMode=yes` during read-only inspection). While that is true, a
+   compromised agent can bypass this whole system with root SSH. The automation only separates
+   the roles while the owner's keys stay protected (passphrase and not loaded in ssh-agent, or a
+   FIDO2 key). The same applies to the approval key.
 2. The server cannot see how the owner stores the approval key; the CLI refuses an unprotected
    key, but that check runs on the workstation.
 3. Within its lifetime an approval lets the executor choose *when* to deploy (not *what*).
@@ -279,7 +278,7 @@ TCP forwarding, client environment variables, sudo, Docker socket, broker state,
 
 | # | Severity | Finding | Status |
 | --- | --- | --- | --- |
-| 1 | **Critical** (operational) | The owner's root SSH key on the operator machine is usable non-interactively, so any local process, including a compromised agent, has root on production regardless of this system. | **Open: owner action** (section 9). The automation must not be considered secure until it is resolved. |
+| 1 | **Critical** (operational) | The owner's root SSH key on the operator machine was usable non-interactively, so any local process, including a compromised agent, has root on production regardless of this system. | **Resolved by owner (2026-10-28)** (section 9): passphrase-protected root keys, old key revoked. |
 | 2 | **High** | The owner signs a hash of an artifact built on the executor's machine. A compromised builder could hide a malicious Compose file or Nginx config (root on the host) behind an owner-approved hash. | **Fixed**: server-side source verification against the approved commit on GitHub; unit + e2e tests; real artifact verified. Residual: built web bundle (Limitation 9). |
 | 3 | Medium | The approval tool runs from an agent-writable workspace and could misrepresent what is signed. | **Documented** (Limitation 10, section 9.3); impact reduced by #2. |
 | 4 | Medium | A child process that hung *silently* was never killed (the timeout was only checked when output arrived), holding the deployment lock indefinitely. | **Fixed**: hard timeout, process-group kill; unit test. |
@@ -318,6 +317,8 @@ commands work unchanged, and Nginx, backend, worker, database, the database volu
 directories, the ACME mount and the audit log are untouched (e2e, both distributions).
 
 ## 9. Owner-operated root SSH key rotation (do this first)
+
+**Status: Resolved by owner (2026-10-28).**
 
 The owner does every step; the agent must not read, copy or change private keys. Keep the current
 root session open until step 6 succeeds, so a mistake can always be undone.
@@ -388,7 +389,8 @@ ssh-keygen -Y sign -f $env:USERPROFILE\.ssh\mushukistan_owner_approval_sk -n mus
 
 ## 11. Installation prerequisites (checklist)
 
-- [ ] Section 9 done: old root key removed, new root key protected, spare key registered.
+- [x] Section 9 done: old root key removed, new root key protected, spare key registered
+      (Resolved by owner, 2026-10-28).
 - [ ] Approval key created (FIDO2 preferred), never in an agent, public key handed over.
 - [ ] Deploy key created for the executor (agent-usable by design).
 - [ ] This branch reviewed, merged, pushed; CI green; installer copied from that exact commit.
