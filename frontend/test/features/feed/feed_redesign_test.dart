@@ -94,16 +94,14 @@ Future<void> _pumpFeed(WidgetTester tester, FakeApiClient client) async {
 }
 
 void main() {
-  testWidgets('guests see the welcome card with sign-up and map entry points',
+  testWidgets('guests see the feed introduction with a sign-up button',
       (tester) async {
     _size(tester, 390, 844);
     final client = FakeApiClient();
     client.setHandler('GET', 'feed', (_) => _page([_observation('one')]));
     await _pumpFeed(tester, client);
-    expect(
-        find.text('Helping cats and pets across Uzbekistan'), findsOneWidget);
+    expect(find.text('What you can do here'), findsOneWidget);
     expect(find.text('Create account'), findsOneWidget);
-    expect(find.text('Map'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

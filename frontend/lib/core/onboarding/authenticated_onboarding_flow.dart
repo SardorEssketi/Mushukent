@@ -84,13 +84,6 @@ class _AuthenticatedOnboardingFlowState
         }
       }
 
-      if (!mounted) {
-        return;
-      }
-      await _showWelcomeDialog(
-        context,
-        AppStrings.forLanguage(selectedLanguage),
-      );
       await store.markSeen(userId);
       _handledUserId = userId;
     } finally {
@@ -229,98 +222,4 @@ class _LanguageOption extends StatelessWidget {
       ),
     );
   }
-}
-
-Future<void> _showWelcomeDialog(BuildContext context, AppStrings strings) {
-  return showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      final theme = Theme.of(context);
-      final colorScheme = theme.colorScheme;
-
-      return Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: colorScheme.secondaryContainer,
-                  foregroundColor: colorScheme.onSecondaryContainer,
-                  child: const Icon(Icons.favorite_outline, size: 32),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  strings.welcomeToMushukistan,
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 16),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      strings.welcomeSupportMessage,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          strings.supportMyWork,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          strings.supportCardIntro,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SelectableText(
-                          strings.supportCardNumber,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: colorScheme.onPrimaryContainer,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.explore_outlined),
-                  label: Text(strings.startExploring),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
 }

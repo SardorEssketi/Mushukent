@@ -112,11 +112,9 @@ void main() {
       find.ancestor(of: title, matching: find.byType(AppBar)),
       findsOneWidget,
     );
-    // Filters come directly under the header, before the guest welcome card.
+    // Filters come directly under the header, before the feed introduction.
     final recentY = tester.getTopLeft(find.text('Recent')).dy;
-    final welcomeY = tester
-        .getTopLeft(find.text('Helping cats and pets across Uzbekistan'))
-        .dy;
+    final welcomeY = tester.getTopLeft(find.text('What you can do here')).dy;
     expect(recentY, lessThan(welcomeY));
     expect(
         recentY - tester.getBottomLeft(find.byType(AppBar)).dy, lessThan(24));
@@ -130,7 +128,9 @@ void main() {
     expect(find.text('Mushukistan'), findsOneWidget);
     expect(find.byType(NotificationBell), findsOneWidget);
     expect(find.text('Login'), findsNothing);
-    expect(find.text('Helping cats and pets across Uzbekistan'), findsNothing);
+    // Signed-in users get the introduction too, without the sign-up button.
+    expect(find.text('What you can do here'), findsOneWidget);
+    expect(find.text('Create account'), findsNothing);
   });
 
   testWidgets('wide layouts title the section and align it with the cards',

@@ -8,6 +8,7 @@ import 'package:mushukistan_frontend/core/localization/app_strings.dart';
 import 'package:mushukistan_frontend/core/localization/language_controller.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/core/theme/app_theme.dart';
+import 'package:mushukistan_frontend/features/feed/application/feed_intro.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/widgets/feed_card_parts.dart';
 
@@ -41,6 +42,16 @@ Map<String, Object?> _post(
       'is_liked_by_me': false,
     };
 
+class _MemoryFeedIntroStorage implements FeedIntroStorage {
+  bool dismissed = false;
+
+  @override
+  Future<bool> isDismissed() async => dismissed;
+
+  @override
+  Future<void> dismiss() async => dismissed = true;
+}
+
 const _tashkent = {'latitude': 41.3111, 'longitude': 69.2797};
 
 void _size(WidgetTester tester, double width, double height) {
@@ -55,6 +66,7 @@ Future<GoRouter> _pumpRouted(
   List<Object?> items, {
   AppLanguage language = AppLanguage.english,
   ThemeData? theme,
+  FeedIntroStorage? introStorage,
 }) async {
   final client = FakeApiClient()
     ..setHandler('GET', 'feed', (_) => _page(items));
@@ -74,6 +86,8 @@ Future<GoRouter> _pumpRouted(
     overrides: [
       mushukistanApiProvider.overrideWithValue(MushukistanApi(client: client)),
       appLanguageProvider.overrideWith((ref) => language),
+      if (introStorage != null)
+        feedIntroStorageProvider.overrideWithValue(introStorage),
     ],
     child: MaterialApp.router(
       theme: theme ?? AppTheme.light,
@@ -261,44 +275,61 @@ void main() {
     });
   });
 
-  group('compact guest welcome card', () {
-    testWidgets('is short on phones and keeps both actions', (tester) async {
+  group('feed introduction', () {
+    testWidgets('is compact on phones and its sign-up button works',
+        (tester) async {
       _size(tester, 390, 1400);
       await _pumpRouted(tester, [_post('one')]);
 
-      final headline = find.text('Helping cats and pets across Uzbekistan');
-      final card = find
-          .ancestor(of: headline, matching: find.byType(DecoratedBox))
-          .first;
+      final card = find.byKey(const ValueKey('feed-intro'));
+      for (final line in [
+        'What you can do here',
+        'Map – cats and pet places nearby',
+        'Add – post a cat you saw',
+        'Lost pets – help them get home',
+        'Adoption – find or give a home',
+      ]) {
+        expect(find.descendant(of: card, matching: find.text(line)),
+            findsOneWidget);
+      }
       // flutter_test renders text in a wide square-glyph font, so copy wraps
-      // more than with Manrope; the previous card measured ~204px here.
-      expect(tester.getSize(card).height, lessThan(185));
-      // The first post starts well within the first phone screen.
-      expect(tester.getTopLeft(find.byType(FeedCardFrame)).dy, lessThan(300));
+      // more than with Manrope.
+      expect(tester.getSize(card).height, lessThan(300));
+      expect(tester.getTopLeft(find.byType(FeedCardFrame)).dy, lessThan(420));
 
       await tester.tap(find.text('Create account'));
       await tester.pumpAndSettle();
       expect(find.text('Register screen'), findsOneWidget);
     });
 
-    testWidgets('Map action opens the Map', (tester) async {
+    testWidgets('closing it hides it and is remembered', (tester) async {
       _size(tester, 390, 1400);
-      await _pumpRouted(tester, [_post('one')]);
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Map'));
+      final storage = _MemoryFeedIntroStorage();
+      await _pumpRouted(tester, [_post('one')], introStorage: storage);
+      expect(find.byKey(const ValueKey('feed-intro')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('feed-intro-close')));
       await tester.pumpAndSettle();
-      expect(find.text('Map '), findsOneWidget);
+      expect(find.byKey(const ValueKey('feed-intro')), findsNothing);
+      expect(storage.dismissed, isTrue);
+
+      // A later launch on the same device does not show it again.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpRouted(tester, [_post('one')], introStorage: storage);
+      expect(find.byKey(const ValueKey('feed-intro')), findsNothing);
+      expect(find.byType(FeedPostCard), findsOneWidget);
     });
 
-    testWidgets('wraps without overflow at 320px in all languages',
-        (tester) async {
+    testWidgets('fits 320px in all languages and themes', (tester) async {
       for (final language in AppLanguage.values) {
         for (final dark in [false, true]) {
           _size(tester, 320, 1400);
           await _pumpRouted(tester, [_post('one')],
               language: language, theme: dark ? AppTheme.dark : AppTheme.light);
           expect(tester.takeException(), isNull, reason: language.code);
+          expect(
+              find.byKey(const ValueKey('feed-intro-close')), findsOneWidget);
           expect(find.byType(FilledButton), findsOneWidget);
-          expect(find.byType(OutlinedButton), findsOneWidget);
         }
       }
     });

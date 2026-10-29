@@ -877,33 +877,6 @@ class AppStrings {
     };
   }
 
-  String get welcomeToMushukistan {
-    return switch (this) {
-      _UzbekStrings() => 'Mushukistanga xush kelibsiz',
-      _RussianStrings() => 'Добро пожаловать в Mushukistan',
-      _ => 'Welcome to Mushukistan',
-    };
-  }
-
-  String get welcomeSupportMessage {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Salom! Men Sardorman, Data Science yo‘nalishida o‘qiyman. Bu ilovani yon loyiha sifatida o‘zim yaratdim va xarajatlarini o‘zim qopladim. Ilova butunlay bepul va reklamasiz.',
-      _RussianStrings() =>
-        'Привет! Я Сардор, студент Data Science. Я создал это приложение как личный проект и финансирую его сам. Оно полностью бесплатное и без рекламы.',
-      _ =>
-        'Hi there! I’m Sardor, a Data Science student. I built this app as a side project and funded it myself, and it’s completely free and ad-free.',
-    };
-  }
-
-  String get supportMyWork {
-    return switch (this) {
-      _UzbekStrings() => 'Ishimni qo‘llab-quvvatlash',
-      _RussianStrings() => 'Поддержать мою работу',
-      _ => 'Support my work',
-    };
-  }
-
   String get donateToAuthor {
     return switch (this) {
       _UzbekStrings() => 'Muallifga xayriya',
@@ -3339,21 +3312,52 @@ class AppStrings {
     };
   }
 
-  String get welcomeHeadline {
+  String get feedIntroTitle {
     return switch (this) {
-      _UzbekStrings() => 'O‘zbekiston bo‘ylab mushuklarga yordam beramiz',
-      _RussianStrings() => 'Помогаем кошкам и питомцам по всему Узбекистану',
-      _ => 'Helping cats and pets across Uzbekistan',
+      _UzbekStrings() => 'Bu yerda nima qilish mumkin',
+      _RussianStrings() => 'Что здесь можно делать',
+      _ => 'What you can do here',
     };
   }
 
-  String get welcomeBody {
+  String get feedIntroMap {
+    return switch (this) {
+      _UzbekStrings() => 'Xarita – yaqin atrofdagi mushuklar va joylar',
+      _RussianStrings() => 'Карта – кошки и места для питомцев рядом',
+      _ => 'Map – cats and pet places nearby',
+    };
+  }
+
+  String get feedIntroAdd {
+    return switch (this) {
+      _UzbekStrings() => 'Qo‘shish – ko‘rgan mushugingizni joylang',
+      _RussianStrings() => 'Добавить – опубликуйте кошку, которую видели',
+      _ => 'Add – post a cat you saw',
+    };
+  }
+
+  String get feedIntroLostPets {
     return switch (this) {
       _UzbekStrings() =>
-        'Mushuklarni belgilang, yo‘qolgan uy hayvonlari haqida xabar bering va ularga uy topishga yordam bering.',
-      _RussianStrings() =>
-        'Отмечайте кошек, сообщайте о пропавших питомцах и помогайте им найти дом.',
-      _ => 'Spot cats, report lost pets, and help animals find a home.',
+        'Yo‘qolgan uy hayvonlari – uyga qaytishiga yordam bering',
+      _RussianStrings() => 'Потерянные питомцы – помогите им вернуться домой',
+      _ => 'Lost pets – help them get home',
+    };
+  }
+
+  String get feedIntroAdoption {
+    return switch (this) {
+      _UzbekStrings() => 'Asrab olish – uy toping yoki uy bering',
+      _RussianStrings() => 'Пристройство – найдите дом или подарите его',
+      _ => 'Adoption – find or give a home',
+    };
+  }
+
+  String get feedIntroClose {
+    return switch (this) {
+      _UzbekStrings() => 'Yopish',
+      _RussianStrings() => 'Закрыть',
+      _ => 'Close',
     };
   }
 

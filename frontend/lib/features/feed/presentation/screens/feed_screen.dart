@@ -17,6 +17,7 @@ import '../../../auth/presentation/screens/session_unavailable_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../map/application/map_viewport.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
+import '../../application/feed_intro.dart';
 import '../widgets/feed_card_parts.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
@@ -428,12 +429,18 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                     child: const SessionUnavailableBanner(),
                   ),
                 )
-              else if (!authenticated)
+              else if (ref.watch(feedIntroDismissedProvider) == false)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding:
                         EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
-                    child: _GuestWelcomeCard(strings: strings),
+                    child: _FeedIntroCard(
+                      strings: strings,
+                      showSignUp: !authenticated,
+                      onClose: () => ref
+                          .read(feedIntroDismissedProvider.notifier)
+                          .dismiss(),
+                    ),
                   ),
                 ),
               if (_firstPage == null && pageAsync.isLoading)
@@ -540,71 +547,90 @@ class _FeedHeaderTitle extends ConsumerWidget {
 
 /// First-impression card for signed-out visitors: states the product purpose
 /// and offers the two ways in (account or just exploring the map).
-class _GuestWelcomeCard extends StatelessWidget {
-  const _GuestWelcomeCard({required this.strings});
+/// Short introduction of the main functions. Shown to everyone until it is
+/// closed; the choice is remembered on this device (see feed_intro.dart).
+class _FeedIntroCard extends StatelessWidget {
+  const _FeedIntroCard({
+    required this.strings,
+    required this.showSignUp,
+    required this.onClose,
+  });
 
   final AppStrings strings;
+  final bool showSignUp;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final itemStyle =
+        theme.textTheme.bodySmall?.copyWith(color: colors.onPrimaryContainer);
+    Widget item(IconData icon, String text) => Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.xs),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 18, color: colors.onPrimaryContainer),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(child: Text(text, style: itemStyle)),
+          ]),
+        );
     return DecoratedBox(
+      key: const ValueKey('feed-intro'),
       decoration: BoxDecoration(
         color: colors.primaryContainer,
         borderRadius: BorderRadius.circular(AppRadii.md),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+            AppSpacing.lg, AppSpacing.xs, AppSpacing.xs, AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(
-              header: true,
-              child: Text(
-                strings.welcomeHeadline,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: colors.onPrimaryContainer,
-                  fontWeight: FontWeight.w800,
+            Row(children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    strings.feedIntroTitle,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: colors.onPrimaryContainer,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              strings.welcomeBody,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colors.onPrimaryContainer,
+              IconButton(
+                key: const ValueKey('feed-intro-close'),
+                tooltip: strings.feedIntroClose,
+                onPressed: onClose,
+                icon: Icon(Icons.close, color: colors.onPrimaryContainer),
               ),
-            ),
-            const SizedBox(height: AppSpacing.sm + AppSpacing.xxs),
-            // Compact 40px buttons; the padded tap target keeps 48px hits.
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 40),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-                    textStyle: theme.textTheme.labelLarge,
-                  ),
-                  onPressed: () => context.push('/register'),
-                  child: Text(strings.createAccount),
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 40),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md + AppSpacing.xxs),
-                    textStyle: theme.textTheme.labelLarge,
-                  ),
-                  onPressed: () => context.go('/map'),
-                  icon: const Icon(Icons.map_outlined, size: 18),
-                  label: Text(strings.map),
-                ),
-              ],
+            ]),
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: AppSpacing.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  item(Icons.map_outlined, strings.feedIntroMap),
+                  item(Icons.add_circle_outline, strings.feedIntroAdd),
+                  item(Icons.search, strings.feedIntroLostPets),
+                  item(Icons.home_outlined, strings.feedIntroAdoption),
+                  if (showSignUp) ...[
+                    const SizedBox(height: AppSpacing.sm + AppSpacing.xxs),
+                    // Compact 40px button; the padded tap target keeps 48px.
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 40),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.lg),
+                        textStyle: theme.textTheme.labelLarge,
+                      ),
+                      onPressed: () => context.push('/register'),
+                      child: Text(strings.createAccount),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
