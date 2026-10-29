@@ -6,7 +6,8 @@ Installed root-owned as /usr/local/lib/mushukistan-deploy/broker. The restricted
 
   * verifies owner-signed approvals (ssh-keygen -Y verify against a root-owned
     allowed_signers file) and stores them in a root-only state directory;
-  * accepts an uploaded release archive only if its SHA-256 equals the approved one;
+  * accepts an uploaded release archive only if its SHA-256 equals the approved one, and
+    gives up on an upload that stalls or takes too long (partial file deleted, lock released);
   * stages it with a safe extractor (no links, no absolute paths, no "..");
   * runs the TRUSTED, root-owned copies of activate-web-release.sh / backup-db.sh /
     verify-public.sh (never scripts from the uploaded archive);
@@ -25,6 +26,7 @@ import json
 import os
 import re
 import secrets
+import select
 import shutil
 import signal
 import stat
@@ -102,11 +104,16 @@ class Config:
     max_source_mb: int = 100
     min_free_mb: int = 1024
     command_timeout: int = 1800
+    # An upload that sends nothing for this many seconds, or takes longer than the maximum, is
+    # abandoned. Without this a silently dropped client blocks the broker (and the deployment
+    # lock) until TCP keepalive gives up, about two hours on Linux.
+    upload_idle_timeout: int = 120
+    upload_max_seconds: int = 1800
     nginx_wait_tries: int = 30
     extra_env: dict = field(default_factory=dict)  # tests only; never read from the config file
 
     INT_KEYS = ("max_ttl_minutes", "max_artifact_mb", "max_unpacked_mb", "max_members", "nginx_wait_tries",
-                "max_source_mb", "min_free_mb", "command_timeout")
+                "max_source_mb", "min_free_mb", "command_timeout", "upload_idle_timeout", "upload_max_seconds")
 
     @classmethod
     def load(cls, path: str) -> "Config":
@@ -125,6 +132,8 @@ class Config:
                 setattr(cfg, key, int(value) if key in cls.INT_KEYS else value)
         if not 5 <= cfg.max_ttl_minutes <= 24 * 60:
             raise Refused("max_ttl_minutes must be 5..1440")
+        if not 10 <= cfg.upload_idle_timeout <= 900 or not 60 <= cfg.upload_max_seconds <= 4 * 3600:
+            raise Refused("upload_idle_timeout must be 10..900 and upload_max_seconds 60..14400")
         if not schema.ENVIRONMENT_RE.fullmatch(cfg.environment):
             raise Refused("environment setting is invalid")
         if not cfg.source_archive_url.startswith(("https://", "file:///")) or "{commit}" not in cfg.source_archive_url:
@@ -431,8 +440,9 @@ class Broker:
             if only_open and rec["status"] not in ("active", "activating", "rolling-back", "interrupted"):
                 continue
             steps = ",".join(f"{k}:{v['result']}" for k, v in rec.get("steps", {}).items())
+            status = "expired" if self._expired(rec) else rec["status"]
             self.out(f"  {rec['approval_id']} {rec['type']:<12} {rec.get('release', rec.get('revokes', '')):<40} "
-                     f"{rec['status']:<11} expires {rec['expires_at']} {steps}")
+                     f"{status:<11} expires {rec['expires_at']} {steps}")
             shown += 1
         if not shown:
             self.out("  (none)")
@@ -516,17 +526,56 @@ class Broker:
         return 0
 
     # ---- upload ------------------------------------------------------------------
+    def _expired(self, rec: dict) -> bool:
+        """An approval still marked active whose lifetime is over (it can never be used again)."""
+        try:
+            return rec["status"] == "active" and self.now() >= schema.parse_time(rec["expires_at"], "expires_at")
+        except schema.ApprovalError:
+            return False
+
     def approval_for_release(self, release: str) -> tuple[dict, dict]:
         matches = []
         for path in self.approvals_dir.glob("*.json"):
             rec = json.loads(path.read_text())
-            if rec.get("release") == release and rec["type"] == "web-release" and rec["status"] == "active":
-                matches.append(rec["approval_id"])
+            if rec.get("release") != release or rec["type"] != "web-release" or rec["status"] != "active":
+                continue
+            if self._expired(rec):
+                # An expired approval is unusable, so it must not block a fresh one for the same release.
+                rec["status"] = "expired"
+                self._write_record(rec)
+                continue
+            matches.append(rec["approval_id"])
         if not matches:
             raise Refused(f"no active owner approval for {release}; submit the signed approval first")
         if len(matches) > 1:
             raise Refused(f"{len(matches)} active approvals name {release}; cancel all but one")
         return self.valid_approval(matches[0], "web-release")
+
+    def upload_chunks(self):
+        """Yield the client's bytes until EOF. Raises Refused when nothing arrives for
+        upload_idle_timeout seconds or the whole transfer exceeds upload_max_seconds."""
+        idle, limit = self.cfg.upload_idle_timeout, self.cfg.upload_max_seconds
+        start = time.monotonic()
+        try:
+            fd = self.stdin.fileno()
+        except (AttributeError, OSError, ValueError):
+            fd = None   # in-memory stream (tests): never blocks
+        while True:
+            left = limit - (time.monotonic() - start)
+            if left <= 0:
+                raise Refused(f"upload exceeded the maximum of {limit} s")
+            if fd is None:
+                chunk = self.stdin.read(1 << 20)
+            else:
+                ready, _, _ = select.select([fd], [], [], min(idle, left))
+                if not ready:
+                    if idle <= left:
+                        raise Refused(f"upload stalled: no data for {idle} s")
+                    raise Refused(f"upload exceeded the maximum of {limit} s")
+                chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                return
+            yield chunk
 
     def cmd_upload(self, release: str) -> int:
         schema.validate_release_name(release)
@@ -534,7 +583,7 @@ class Broker:
         final = self.artifacts_dir / f"{release}.tar.gz"
         if final.exists() and self.sha256_file(final) == doc["artifact_sha256"]:
             self.out("artifact already uploaded and verified")
-            while self.stdin.read(1 << 20):   # drain the client's copy without buffering it
+            for _ in self.upload_chunks():   # drain the client's copy without buffering it
                 pass
             return 0
         self.require_free_space(str(self.artifacts_dir), self.cfg.min_free_mb + self.cfg.max_artifact_mb)
@@ -545,18 +594,23 @@ class Broker:
         try:
             fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "wb") as fh:
-                while chunk := self.stdin.read(1 << 20):
-                    size += len(chunk)
-                    if size > limit:
-                        raise Refused(f"artifact exceeds {self.cfg.max_artifact_mb} MB")
-                    h.update(chunk)
-                    fh.write(chunk)
+                try:
+                    for chunk in self.upload_chunks():
+                        size += len(chunk)
+                        if size > limit:
+                            raise Refused(f"artifact exceeds {self.cfg.max_artifact_mb} MB")
+                        h.update(chunk)
+                        fh.write(chunk)
+                except Refused as exc:
+                    self.step(rec, "upload", "interrupted")
+                    raise Refused(f"{exc} after {size} bytes; partial upload deleted, nothing staged") from None
             if h.hexdigest() != doc["artifact_sha256"]:
                 rec["upload_failures"] = rec.get("upload_failures", 0) + 1
                 if rec["upload_failures"] >= 3:
                     rec["status"] = "failed"
                 self.step(rec, "upload", "hash-mismatch")
-                raise Refused(f"artifact SHA-256 {h.hexdigest()} does not match the approved {doc['artifact_sha256']}")
+                raise Refused(f"artifact SHA-256 {h.hexdigest()} ({size} bytes) does not match the approved "
+                              f"{doc['artifact_sha256']}; partial upload deleted")
             os.replace(partial, final)
         finally:
             partial.unlink(missing_ok=True)

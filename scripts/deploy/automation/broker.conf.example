@@ -9,6 +9,10 @@ ALLOWED_SIGNERS=/etc/mushukistan-deploy/allowed_signers
 SIGNER_IDENTITY=mushukistan-owner
 # Hard upper bound on any approval's lifetime (issued_at -> expires_at), in minutes.
 MAX_TTL_MINUTES=120
+# An upload that sends no data for UPLOAD_IDLE_TIMEOUT seconds (10..900), or runs longer than
+# UPLOAD_MAX_SECONDS (60..14400), is abandoned: partial file deleted, deployment lock released.
+UPLOAD_IDLE_TIMEOUT=120
+UPLOAD_MAX_SECONDS=1800
 MAX_ARTIFACT_MB=200
 MAX_UNPACKED_MB=1024
 # Trusted, root-owned copies installed by install-server.sh (never the uploaded release's copies).

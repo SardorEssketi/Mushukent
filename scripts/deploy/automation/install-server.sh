@@ -13,7 +13,8 @@
 #                                        approval-token.sh
 #   /etc/mushukistan-deploy/       broker.conf, allowed_signers (owner key), authorized_keys
 #   /etc/sudoers.d/mushukistan-deploy    exactly one command: the broker
-#   /etc/ssh/sshd_config.d/60-mushukistan-deploy.conf   ForceCommand deploy-gate, no TTY/forwarding
+#   /etc/ssh/sshd_config.d/60-mushukistan-deploy.conf   ForceCommand deploy-gate, no TTY/forwarding,
+#                                  keepalive probes so a dropped client is noticed within ~2 minutes
 # It validates sudoers with visudo and sshd with `sshd -t` before reloading ssh.
 set -euo pipefail
 
@@ -69,7 +70,7 @@ echo "  user      : $USER_NAME (system, locked password, shell /bin/sh for the f
 echo "  programs  : $LIB (root:root, 0755/0644)"
 echo "  config    : $ETC/broker.conf, $ETC/allowed_signers (owner: ${okey%% *}), $ETC/authorized_keys"
 echo "  sudoers   : $SUDOERS -> $USER_NAME may run only $LIB/broker"
-echo "  sshd      : $SSHD_SNIPPET -> ForceCommand $LIB/deploy-gate, no TTY, no forwarding"
+echo "  sshd      : $SSHD_SNIPPET -> ForceCommand $LIB/deploy-gate, no TTY, no forwarding, keepalive 30 s x 4"
 [ "$execute" -eq 1 ] || { echo "DRY RUN: nothing changed (add --execute)"; exit 0; }
 
 if ! id "$USER_NAME" >/dev/null 2>&1; then
@@ -117,12 +118,14 @@ Match User $USER_NAME
     X11Forwarding no
     PermitTunnel no
     PermitUserRC no
+    ClientAliveInterval 30
+    ClientAliveCountMax 4
 Match all
 EOF
 chmod 0644 "$SSHD_SNIPPET"
 sshd -t || { rm -f "$SSHD_SNIPPET"; die "sshd -t failed; snippet removed, ssh not reloaded"; }
 eff="$(sshd -T -C user=$USER_NAME,host=localhost,addr=127.0.0.1)"
-for want in "forcecommand $LIB/deploy-gate" "permittty no" "allowtcpforwarding no" "authorizedkeysfile $ETC/authorized_keys"; do
+for want in "forcecommand $LIB/deploy-gate" "permittty no" "allowtcpforwarding no" "authorizedkeysfile $ETC/authorized_keys" "clientaliveinterval 30" "clientalivecountmax 4"; do
   grep -qx "$want" <<<"$eff" || { rm -f "$SSHD_SNIPPET"; die "effective sshd config lacks '$want'; snippet removed"; }
 done
 reload_ssh

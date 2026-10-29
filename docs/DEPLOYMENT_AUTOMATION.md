@@ -121,6 +121,19 @@ broker, as root, talks to Docker.
 7. Audit entries for every submission, upload, stage, backup, activation, rollback, refusal and
    interruption.
 
+### What `upload <release>` does
+
+The artifact arrives on stdin and is written to a root-only `.partial` file while it is hashed;
+only a file whose SHA-256 equals the active approval's is kept. The upload is abandoned when no
+data arrives for `UPLOAD_IDLE_TIMEOUT` seconds (default 120) or the transfer exceeds
+`UPLOAD_MAX_SECONDS` (default 1800). Every failure (stall, overrun, size limit, hash mismatch)
+deletes the partial file, releases the deployment lock and reports how many bytes arrived. A
+stall or overrun does not count against the approval (the same approval can retry); a hash
+mismatch does (three fail it). The SSH server additionally probes the deploy account's
+connections (`ClientAliveInterval 30`, `ClientAliveCountMax 4`), so a client that disappears
+without closing the connection is dropped within about two minutes. Expired approvals are
+ignored when looking for the release's approval, so a leftover one never blocks a fresh one.
+
 ## 2. Threat model
 
 | Threat | Control | Tested |
@@ -173,6 +186,13 @@ unavailable or uninstalled.
 .\scripts\deploy\release-web.ps1 cancel <approval-id>         # anyone holding the deploy key; only reduces rights
 ```
 
+`deploy` streams the artifact to ssh through a pipe in 256 KiB chunks and prints progress
+(MB, %, KB/s) every 10 s. It stops by itself when ssh accepts no data for 120 s or the upload
+takes longer than 1800 s (exit 124; the server deletes the partial file). ssh runs with
+`ConnectTimeout=20`, `ServerAliveInterval=30` and `ServerAliveCountMax=4`. `deploy` exits 0 when
+the server did everything the approval asked for: `RESULT: DEPLOYED...` for a full approval,
+`RESULT: STAGED...` for a stage-only (or stage + backup) approval.
+
 Options: `approve --no-auto-rollback`, `--stage-only` (dry rehearsal: stage + preflight, no
 backup, no activation), `--ttl-minutes`; `prepare --skip-build --worktree <dir>` reuses a clean,
 already built checkout; `--nginx-gate` adds the local disposable Nginx gate. `prepare` checks free
@@ -184,11 +204,12 @@ Settings (`scripts/deploy/local.env`, gitignored): `MUSHUKISTAN_DEPLOY_TARGET`,
 
 ## 5. Tests
 
-| Suite | Command | Result (2026-10-24) |
+| Suite | Command | Result (2026-10-29) |
 | --- | --- | --- |
-| Unit and negative tests (schema, gate, approvals, signatures, replay, revocation, expiry, uploads, 10 malicious archives, server-managed files, source verification, staging, deploy orchestration incl. failures and auto-rollback, unexpected errors, timeouts, disk space, interruption recovery, cleanup, token rules, CLI CI gate and key check) | `bash scripts/deploy/automation/run_unit_tests.sh` (Alpine container, non-root) | **67/67 passed** |
-| Disposable end-to-end on Alpine: real `install-server.sh`, sshd, sudo, restricted account, gate, broker, real `activate-web-release.sh`/`backup-db.sh`, real Docker Compose (Docker-in-Docker), escape attempts (shell, PTY, sftp, scp, TCP forwarding, client environment), operator CLI, uninstall, manual workflow afterwards | `bash scripts/deploy/automation/e2e_automation.sh` | **107/107 passed** |
-| The same end-to-end test on **Ubuntu 24.04** with the distribution's own `sshd_config`, PAM and sudo defaults: OpenSSH 9.6p1 Ubuntu-3ubuntu13.20, sudo 1.9.15p5, Python 3.12.3, Compose 2.40.3 (the production versions) | `bash scripts/deploy/automation/e2e_ubuntu.sh` | **107/107 passed** |
+| Unit and negative tests (schema, gate, approvals, signatures, replay, revocation, expiry, uploads, 10 malicious archives, server-managed files, source verification, staging, deploy orchestration incl. failures and auto-rollback, unexpected errors, timeouts, disk space, interruption recovery, cleanup, token rules, CLI CI gate and key check; upload stall/overrun/truncation with cleanup and lock release, expired approvals, CLI binary-exact streaming, client stall/overrun stop, stage-only exit code) | `bash scripts/deploy/automation/run_unit_tests.sh` (Alpine container, non-root) | **83/83 passed** |
+| Disposable end-to-end on Alpine: real `install-server.sh`, sshd, sudo, restricted account, gate, broker, real `activate-web-release.sh`/`backup-db.sh`, real Docker Compose (Docker-in-Docker), escape attempts (shell, PTY, sftp, scp, TCP forwarding, client environment), operator CLI, uninstall, manual workflow afterwards; sshd keepalive settings, a stalled upload over real SSH, CLI stage-only run | `bash scripts/deploy/automation/e2e_automation.sh` | **118/118 passed** |
+| The same end-to-end test on **Ubuntu 24.04** with the distribution's own `sshd_config`, PAM and sudo defaults: OpenSSH 9.6p1 Ubuntu-3ubuntu13.20, sudo 1.9.15p5, Python 3.12.3, Compose 2.40.3 (the production versions) | `bash scripts/deploy/automation/e2e_ubuntu.sh` | **118/118 passed** |
+| Windows OpenSSH 9.5p2 client (`ssh.exe`) streaming 22 MB of random bytes plus CR/LF, Ctrl-Z, NUL and 0xFF into a disposable local sshd: old file-handle stdin and new pipe both byte-exact; with the container frozen mid-transfer the CLI stopped after its stall limit (exit 124) | ad hoc, Windows host + Alpine container | **byte-exact; stall stopped** |
 | Real artifact `20261024-5b4bd33-feed-redesign` (789 files) extracted by the broker and source-verified against GitHub | ad hoc, Alpine container | 712 source files equal `5b4bd33` (CRLF tolerated); one-line Compose tamper refused |
 | Existing offline script tests (+ syntax of new scripts, token refusals in the real scripts) | `bash scripts/deploy/test_deploy_scripts.sh` | **56/56 passed** |
 | Existing manual-workflow rehearsal (typed confirmation path unchanged) | `bash scripts/deploy/e2e_disposable.sh` | **all passed** |
@@ -199,8 +220,9 @@ Settings (`scripts/deploy/local.env`, gitignored): `MUSHUKISTAN_DEPLOY_TARGET`,
 systemd/socket-activated sshd (the containers run `sshd` directly; the installer's reload is
 best-effort because sshd reads its configuration per connection); FIDO2 signing and whether
 `ssh-keygen -Y verify` enforces user presence; the `prepare` path with a full Flutter build
-through the CLI (the same build commands ran manually for this release); signing with the
-Windows OpenSSH 9.5 client; a real power loss (simulated with `kill -9`).
+through the CLI (the same build commands ran manually for this release); a real power loss
+(simulated with `kill -9`). Signing with the Windows OpenSSH 9.5 client was exercised by the
+first production rehearsal (2026-10-28).
 
 ## 6. Security limitations (read before installing)
 
@@ -238,6 +260,9 @@ Windows OpenSSH 9.5 client; a real power loss (simulated with `kill -9`).
    revocation cannot be submitted while a deployment holds the lock (it applies to later steps).
 12. Uploaded artifacts are kept in `/var/lib/mushukistan-deploy/artifacts` (about 20 MB each); there
    is no pruning yet.
+13. Upload bounds assume a usable link: with `UPLOAD_MAX_SECONDS=1800` a 21 MB artifact needs about
+   12 KB/s on average. A slower link fails cleanly (nothing staged) and needs a better connection
+   or a higher limit in `broker.conf` (owner, root).
 
 ## 7. Installation plan (production; every step needs the owner's approval; NOT done)
 
@@ -247,9 +272,11 @@ Windows OpenSSH 9.5 client; a real power loss (simulated with `kill -9`).
    (or `ssh-keygen -t ed25519 -a 100` with a passphrase). Never `ssh-add` it.
 1. Create the executor key: `ssh-keygen -t ed25519 -C mushukistan-deploy -f $env:USERPROFILE\.ssh\mushukistan_deploy_ed25519`.
 2. Review, merge and push this branch to `main`; CI green.
-3. Copy the reviewed scripts to the server (owner):
-   `git archive <main sha> scripts/deploy | ssh -t <ssh-target> 'mkdir -p /root/mushukistan-automation-<sha7> && tar -x -C /root/mushukistan-automation-<sha7>'`
-   and the two public keys (`*.pub` only).
+3. Copy the reviewed scripts to the server (owner). Write the archive to a file first: Windows
+   PowerShell 5.1 pipes native output as text and corrupts a binary stream piped into `ssh`.
+   `git archive --format=tar -o mushukistan-automation-<sha7>.tar <main sha> scripts/deploy`, check
+   its SHA-256, `scp` it with the two public keys (`*.pub` only) to `/root/`, and on the server
+   `mkdir -p /root/mushukistan-automation-<sha7> && tar -xf mushukistan-automation-<sha7>.tar --no-same-owner -C /root/mushukistan-automation-<sha7>`.
 4. Dry run (owner): `bash /root/mushukistan-automation-<sha7>/scripts/deploy/automation/install-server.sh --owner-key owner_approval.pub --deploy-key deploy.pub`.
 5. Install (owner): same with `--execute`. It validates sudoers with `visudo -c` and sshd with
    `sshd -t` before reloading ssh; existing sessions and root login are unaffected.
@@ -399,3 +426,34 @@ ssh-keygen -Y sign -f $env:USERPROFILE\.ssh\mushukistan_owner_approval_sk -n mus
       that root login still works in a second terminal before closing the first.
 - [ ] Recovery console access confirmed.
 - [ ] Rehearsal with `approve --stage-only` (section 7, step 7).
+
+## 12. Upload reliability fixes (2026-10-29)
+
+**Incident (first stage-only rehearsal, 2026-10-28).** The approval was accepted; the upload of a
+21 MB artifact then lost its connection (`client_loop: send disconnect: Connection reset`, ssh exit
+255). The server never saw the connection close and the broker kept waiting for data, holding
+the deployment lock, until Linux TCP keepalive dropped the connection about two hours later. It
+then hashed the incomplete file, refused it (SHA-256 mismatch), deleted it and released the lock.
+Production was not changed. Root cause: no keepalive on the deploy account's SSH connections, no
+idle or duration limit on the upload, and no client-side stall detection. Binary corruption was
+ruled out (the file is never passed through a PowerShell pipeline; Windows OpenSSH streams it
+byte-exact, section 5).
+
+**Changes** (none affects approval verification, the forced command, sudo or the restrictions):
+
+| Where | Change |
+| --- | --- |
+| `install-server.sh` (sshd snippet) | `ClientAliveInterval 30`, `ClientAliveCountMax 4` inside the `Match User mushukistan-deploy` block; the installer verifies both in the effective configuration. Other accounts unaffected. |
+| `broker.py` | Upload idle timeout (`UPLOAD_IDLE_TIMEOUT`, default 120 s) and maximum duration (`UPLOAD_MAX_SECONDS`, default 1800 s), both validated; failures report the bytes received and keep the approval usable; expired approvals are ignored (and marked `expired`) when finding a release's approval and shown as `expired` in listings. |
+| `broker.conf.example` | Documents the two new settings. Existing `broker.conf` files keep working: the defaults apply. |
+| `release_web.py` | ssh `ConnectTimeout=20`, `ServerAliveCountMax=4`; upload streamed through a pipe with progress, stall stop (120 s) and maximum duration (1800 s); `deploy` exits 0 for `RESULT: STAGED` when the approval has no `activate`. |
+| Tests | 16 unit tests and 11 end-to-end checks (section 5). |
+
+**Server-side installation (owner, after merge; nothing else changes on the server).** Re-run the
+installer from the merged `main` commit as in section 7, steps 3-5, with the same two public keys
+(it rewrites `allowed_signers` and `authorized_keys` from them, replaces the broker and the
+sshd snippet, and keeps `broker.conf`, the state directory and the audit log). Keep one root
+session open until a new root login and `release-web status` both work. Verify (read-only):
+`sshd -T -C user=mushukistan-deploy,host=x,addr=127.0.0.1 | grep -E '^clientalive'` prints
+`clientaliveinterval 30` and `clientalivecountmax 4`. The client-side changes take effect as
+soon as the operator runs `release-web` from the merged commit.

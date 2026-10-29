@@ -745,5 +745,266 @@ class ReviewRegressionTests(Base):
             self.broker().active_deployment()
 
 
+# =============================================================================== upload reliability
+class UploadReliabilityTests(Base):
+    """The first production rehearsal (2026-10-28): a dropped connection left the broker blocked
+    on stdin, holding the deployment lock, until TCP keepalive gave up about two hours later."""
+
+    def pipe_broker(self):
+        """A broker whose stdin is a real pipe (like sshd provides), plus the writing end."""
+        r, w = os.pipe()
+        self.output = io.StringIO()
+        reader = os.fdopen(r, "rb", buffering=0)
+        self.addCleanup(reader.close)
+        b = broker_mod.Broker(self.cfg, stdin=reader, out=broker_mod.Out(self.output), now=lambda: self.now)
+        return b, os.fdopen(w, "wb", buffering=0)
+
+    def unlocked(self) -> None:
+        """Taking the lock succeeds, i.e. the failed operation released it."""
+        b = self.broker()
+        b.lock()
+        b.unlock()
+
+    def artifacts(self) -> list:
+        return list((Path(self.cfg.state_dir) / "artifacts").iterdir())
+
+    def test_stalled_upload_is_abandoned_cleaned_and_unlocked(self):
+        import time
+        self.cfg.upload_idle_timeout = 1
+        archive = self.make_archive()
+        import hashlib
+        doc = self.release_doc(sha256=hashlib.sha256(archive).hexdigest(), ops=["stage"])
+        self.submit(doc)
+        b, writer = self.pipe_broker()
+        writer.write(archive[:300])             # some bytes, then silence; the writer stays open
+        start = time.monotonic()
+        with self.assertRaisesRegex(broker_mod.Refused, r"upload stalled: no data for 1 s after 300 bytes"):
+            b.dispatch("upload", [RELEASE])
+        self.assertLess(time.monotonic() - start, 10)
+        writer.close()
+        self.assertEqual(self.artifacts(), [], "partial upload deleted")
+        self.unlocked()                           # the deployment lock was released
+        rec = self.record(doc["approval_id"])
+        self.assertEqual(rec["status"], "active", "a network failure does not burn the approval")
+        self.assertEqual(rec["steps"]["upload"]["result"], "interrupted")
+        self.assertEqual(rec.get("upload_failures", 0), 0)
+        self.assertEqual(self.broker(archive).cmd_upload(RELEASE), 0, "the same approval can retry")
+
+    def test_upload_longer_than_the_maximum_is_abandoned(self):
+        import threading
+        import time
+        self.cfg.upload_idle_timeout, self.cfg.upload_max_seconds = 5, 2
+        self.submit(self.release_doc(ops=["stage"]))
+        b, writer = self.pipe_broker()
+
+        def trickle():                            # always some progress, never finished
+            try:
+                for _ in range(40):
+                    writer.write(b"x")
+                    time.sleep(0.2)
+            except OSError:
+                pass
+            finally:
+                writer.close()
+        t = threading.Thread(target=trickle, daemon=True)
+        t.start()
+        start = time.monotonic()
+        with self.assertRaisesRegex(broker_mod.Refused, "exceeded the maximum of 2 s"):
+            b.dispatch("upload", [RELEASE])
+        self.assertLess(time.monotonic() - start, 6)
+        self.assertEqual(self.artifacts(), [])
+        self.unlocked()
+
+    def test_truncated_upload_reports_size_and_allows_retry(self):
+        archive = self.make_archive()
+        import hashlib
+        doc = self.release_doc(sha256=hashlib.sha256(archive).hexdigest(), ops=["stage"])
+        self.submit(doc)
+        half = archive[: len(archive) // 2]
+        with self.assertRaisesRegex(broker_mod.Refused, rf"\({len(half)} bytes\) does not match"):
+            self.broker(half).dispatch("upload", [RELEASE])
+        self.assertEqual(self.artifacts(), [])
+        self.assertEqual(self.record(doc["approval_id"])["status"], "active")
+        self.assertEqual(self.broker(archive).cmd_upload(RELEASE), 0)
+
+    def test_dispatch_releases_the_lock_after_any_upload_failure(self):
+        self.cfg.max_artifact_mb = 1
+        self.submit(self.release_doc(ops=["stage"]))
+        for data in (b"x" * (2 * 1024 * 1024), b"wrong"):
+            with self.assertRaises(broker_mod.Refused):
+                self.broker(data).dispatch("upload", [RELEASE])
+            self.unlocked()
+            self.assertEqual(self.artifacts(), [])
+
+    def test_expired_approval_does_not_block_a_new_one(self):
+        archive = self.make_archive()
+        import hashlib
+        sha = hashlib.sha256(archive).hexdigest()
+        old = self.release_doc(sha256=sha, ops=["stage"], ttl=10)
+        self.submit(old)
+        self.now = NOW + timedelta(minutes=20)
+        new = self.release_doc(sha256=sha, ops=["stage"], issued=self.now, ttl=30)
+        self.submit(new)
+        self.assertEqual(self.broker(archive).cmd_upload(RELEASE), 0)
+        self.assertEqual(self.record(old["approval_id"])["status"], "expired")
+        self.assertEqual(self.record(new["approval_id"])["status"], "active")
+        b = self.broker()
+        b.cmd_approvals()
+        self.assertRegex(self.output.getvalue(), rf"{old['approval_id']} .* expired")
+        rc = self.broker().cmd_deploy(new["approval_id"])
+        self.assertEqual(rc, 0)
+        self.assertIn("RESULT: STAGED", self.output.getvalue())
+
+    def test_only_an_expired_approval_means_no_approval(self):
+        self.submit(self.release_doc(ops=["stage"], ttl=10))
+        self.now = NOW + timedelta(minutes=11)
+        with self.assertRaisesRegex(broker_mod.Refused, "no active owner approval"):
+            self.broker(b"x").cmd_upload(RELEASE)
+
+    def test_expired_but_unused_approval_is_listed_as_expired(self):
+        doc = self.release_doc(ops=["stage"], ttl=10)
+        self.submit(doc)
+        self.now = NOW + timedelta(minutes=11)
+        b = self.broker()
+        b.cmd_approvals()
+        self.assertRegex(self.output.getvalue(), rf"{doc['approval_id']} .* expired ")
+        self.assertEqual(self.record(doc["approval_id"])["status"], "active", "listing changes nothing")
+
+    def test_upload_limits_are_validated_in_the_config(self):
+        conf = self.tmp / "broker.conf"
+        conf.write_text("UPLOAD_IDLE_TIMEOUT=120\nUPLOAD_MAX_SECONDS=1800\n")
+        cfg = broker_mod.Config.load(str(conf))
+        self.assertEqual((cfg.upload_idle_timeout, cfg.upload_max_seconds), (120, 1800))
+        for bad in ("UPLOAD_IDLE_TIMEOUT=0\n", "UPLOAD_IDLE_TIMEOUT=5\n", "UPLOAD_MAX_SECONDS=10\n",
+                    "UPLOAD_MAX_SECONDS=999999\n"):
+            conf.write_text(bad)
+            with self.assertRaisesRegex(broker_mod.Refused, "upload_idle_timeout"):
+                broker_mod.Config.load(str(conf))
+
+    def test_installer_configures_ssh_keepalive(self):
+        text = (AUTOMATION / "install-server.sh").read_text()
+        self.assertIn("ClientAliveInterval 30", text)
+        self.assertIn("ClientAliveCountMax 4", text)
+        self.assertIn('"clientaliveinterval 30"', text, "the installer verifies the effective setting")
+
+
+class CliUploadTests(Base):
+    """Client side of the upload: binary-exact streaming, progress, bounded duration."""
+
+    def setUp(self):
+        super().setUp()
+        self.saved = {k: getattr(release_web, k) for k in
+                      ("ssh_argv", "UPLOAD_STALL_SECONDS", "UPLOAD_MAX_SECONDS", "PROGRESS_SECONDS")}
+
+    def tearDown(self):
+        for k, v in self.saved.items():
+            setattr(release_web, k, v)
+        super().tearDown()
+
+    def fake_ssh(self, code: str) -> None:
+        release_web.ssh_argv = lambda settings, *remote: [sys.executable, "-c", code]
+
+    def test_ssh_options_bound_connect_and_keepalive(self):
+        argv = self.saved["ssh_argv"]({"MUSHUKISTAN_DEPLOY_KEY": "k", "MUSHUKISTAN_DEPLOY_TARGET": "u@h"}, "status")
+        joined = " ".join(argv)
+        for opt in ("BatchMode=yes", "IdentitiesOnly=yes", "StrictHostKeyChecking=yes", "ConnectTimeout=20",
+                    "ServerAliveInterval=30", "ServerAliveCountMax=4"):
+            self.assertIn(opt, joined)
+        self.assertEqual(argv[-2:], ["u@h", "status"])
+
+    def test_upload_stream_is_binary_exact(self):
+        import hashlib
+        data = bytes(range(256)) * 4096 + b"\r\n\x1a\x00\n\r" * 1000   # CR/LF, Ctrl-Z, NUL
+        f = self.tmp / "artifact.bin"
+        f.write_bytes(data)
+        self.fake_ssh("import sys, hashlib; d = sys.stdin.buffer.read(); print(hashlib.sha256(d).hexdigest(), len(d))")
+        log: list[str] = []
+        rc = release_web.remote({}, "upload", RELEASE, stdin_path=f, log=log)
+        self.assertEqual(rc, 0)
+        self.assertIn(f"{hashlib.sha256(data).hexdigest()} {len(data)}", log)
+        self.assertIn(f"  upload sent {len(data)} of {len(data)} bytes", "\n".join(log))
+
+    def test_stalled_transfer_is_stopped(self):
+        import time
+        release_web.UPLOAD_STALL_SECONDS = 1
+        f = self.tmp / "big.bin"
+        f.write_bytes(os.urandom(8 * 1024 * 1024))   # far more than a pipe buffer
+        self.fake_ssh("import time; time.sleep(60)")   # never reads: like a dead connection
+        log: list[str] = []
+        start = time.monotonic()
+        rc = release_web.remote({}, "upload", RELEASE, stdin_path=f, log=log)
+        self.assertLess(time.monotonic() - start, 15)
+        self.assertEqual(rc, 124)
+        self.assertIn("STOPPED: upload stalled", "\n".join(log))
+
+    def test_transfer_longer_than_the_maximum_is_stopped(self):
+        import time
+        release_web.UPLOAD_MAX_SECONDS, release_web.PROGRESS_SECONDS = 2, 0.5
+        f = self.tmp / "big.bin"
+        f.write_bytes(os.urandom(8 * 1024 * 1024))
+        self.fake_ssh("import sys, time\nwhile sys.stdin.buffer.read(65536): time.sleep(0.1)")   # slow but moving
+        log: list[str] = []
+        start = time.monotonic()
+        rc = release_web.remote({}, "upload", RELEASE, stdin_path=f, log=log)
+        self.assertLess(time.monotonic() - start, 15)
+        self.assertEqual(rc, 124)
+        text = "\n".join(log)
+        self.assertIn("STOPPED: upload exceeded 2 s", text)
+        self.assertIn("upload progress:", text)
+
+    def test_ssh_failure_exit_code_is_returned(self):
+        f = self.tmp / "a.bin"
+        f.write_bytes(b"x" * 1000)
+        self.fake_ssh("import sys; sys.exit(255)")
+        self.assertEqual(release_web.remote({}, "upload", RELEASE, stdin_path=f, log=[]), 255)
+
+    def test_deploy_success_rules(self):
+        full = ["stage", "backup", "activate", "auto-rollback"]
+        ok = release_web.deploy_succeeded
+        self.assertTrue(ok(0, "DEPLOYED AND VERIFIED", full))
+        self.assertTrue(ok(0, "STAGED (approval did not include backup/activate)", ["stage"]))
+        self.assertTrue(ok(0, "STAGED AND BACKED UP (approval did not include activate)", ["stage", "backup"]))
+        self.assertFalse(ok(0, "STAGED (approval did not include backup/activate)", full))
+        self.assertFalse(ok(1, "STAGED", ["stage"]))
+        self.assertFalse(ok(0, "NOT COMPLETED", ["stage"]))
+        self.assertFalse(ok(1, "ROLLED BACK", full))
+
+    def test_stage_only_deploy_exits_zero(self):
+        import argparse
+        import hashlib
+        archive = self.tmp / f"{RELEASE}.tar.gz"
+        archive.write_bytes(self.make_archive())
+        sha = hashlib.sha256(archive.read_bytes()).hexdigest()
+        rdir = self.tmp / "automation"
+        (rdir / "approvals").mkdir(parents=True)
+        (rdir / f"{RELEASE}.plan.json").write_text(json.dumps(
+            {"release": RELEASE, "commit": COMMIT, "artifact": str(archive), "artifact_sha256": sha,
+             "worktree": str(self.tmp)}))
+        doc = self.release_doc(sha256=sha, ops=["stage"])
+        path = rdir / "approvals" / f"{RELEASE}.{doc['approval_id']}.json"
+        path.write_bytes(schema.canonical_bytes(doc))
+        subprocess.run(["ssh-keygen", "-q", "-Y", "sign", "-f", str(self.owner), "-n", schema.NAMESPACE, str(path)],
+                       check=True, capture_output=True)
+        calls = []
+
+        def fake_remote(settings, *verb, stdin_path=None, stdin_bytes=None, log=None):
+            calls.append(verb[0])
+            if verb[0] == "deploy":
+                log.append("RESULT: STAGED (approval did not include backup/activate)")
+            return 0
+
+        def no_bash(settings):
+            raise AssertionError("local public verification must not run for a stage-only approval")
+        saved = (release_web.release_dir, release_web.remote, release_web.find_bash)
+        release_web.release_dir, release_web.remote, release_web.find_bash = (lambda: rdir), fake_remote, no_bash
+        try:
+            rc = release_web.cmd_deploy(argparse.Namespace(release=RELEASE, skip_local_verify=False), {})
+        finally:
+            release_web.release_dir, release_web.remote, release_web.find_bash = saved
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, ["submit-approval", "upload", "deploy"])
+        self.assertIn("Result: STAGED", (rdir / f"{RELEASE}.report.md").read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

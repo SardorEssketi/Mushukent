@@ -26,6 +26,8 @@ import re
 import secrets
 import subprocess
 import sys
+import threading
+import time
 import urllib.request
 from pathlib import Path
 
@@ -37,6 +39,11 @@ import approval_schema as schema  # noqa: E402
 DEFAULT_REQUIRED_CHECKS = ("Backend lint and format", "Backend tests (PostGIS)", "Flutter analyze and tests")
 DEFAULT_OPERATIONS = ["stage", "backup", "activate", "auto-rollback"]
 MIN_FREE_MB_FOR_BUILD = 2500
+# Upload bounds (the server enforces its own: upload_idle_timeout / upload_max_seconds in broker.conf).
+UPLOAD_STALL_SECONDS = 120     # no bytes accepted by ssh for this long: stop
+UPLOAD_MAX_SECONDS = 1800      # whole transfer, including the server's hash check
+UPLOAD_CHUNK = 256 * 1024
+PROGRESS_SECONDS = 10
 
 
 class CliError(Exception):
@@ -344,29 +351,104 @@ def ssh_argv(settings: dict, *remote: str) -> list[str]:
     key = setting(settings, "MUSHUKISTAN_DEPLOY_KEY")
     target = setting(settings, "MUSHUKISTAN_DEPLOY_TARGET")
     return ["ssh", "-i", key, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
-            "-o", "ServerAliveInterval=30", target, *remote]
+            "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=4", target, *remote]
+
+
+class _Feeder(threading.Thread):
+    """Copies a file into ssh's stdin pipe in binary chunks and records progress. Writing
+    through an explicit pipe (instead of handing ssh the file as stdin) keeps the bytes
+    untouched on every platform and lets the caller see when ssh stops accepting data."""
+
+    def __init__(self, pipe, path: Path):
+        super().__init__(daemon=True)
+        self.pipe, self.path = pipe, path
+        self.total = path.stat().st_size
+        self.sent = 0
+        self.last_progress = time.monotonic()
+        self.done = False
+        self.error = ""
+
+    def run(self) -> None:
+        try:
+            with open(self.path, "rb") as fh:
+                while chunk := fh.read(UPLOAD_CHUNK):
+                    self.pipe.write(chunk)
+                    self.pipe.flush()
+                    self.sent += len(chunk)
+                    self.last_progress = time.monotonic()
+            self.done = True
+        except OSError as exc:   # ssh exited (connection lost) or was stopped
+            self.error = f"{type(exc).__name__}: {exc}"
+        finally:
+            try:
+                self.pipe.close()
+            except OSError:
+                pass
 
 
 def remote(settings: dict, *verb: str, stdin_path: Path | None = None, stdin_bytes: bytes | None = None,
            log: list[str] | None = None) -> int:
-    if stdin_path is not None:
-        stdin = open(stdin_path, "rb")
-    else:
-        stdin = subprocess.PIPE if stdin_bytes is not None else subprocess.DEVNULL
+    def emit(line: str) -> None:
+        print(line, flush=True)
+        if log is not None:
+            log.append(line)
+
+    stdin = subprocess.PIPE if stdin_path is not None or stdin_bytes is not None else subprocess.DEVNULL
     proc = subprocess.Popen(ssh_argv(settings, *verb), stdin=stdin, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT)
+
+    def read_output() -> None:
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            emit(raw.decode("utf-8", "replace").rstrip())
+
+    reader = threading.Thread(target=read_output, daemon=True)
+    reader.start()
+    feeder = None
     if stdin_bytes is not None:
         proc.stdin.write(stdin_bytes)
         proc.stdin.close()
-    assert proc.stdout is not None
-    for raw in proc.stdout:
-        line = raw.decode("utf-8", "replace").rstrip()
-        print(line)
-        if log is not None:
-            log.append(line)
-    rc = proc.wait()
-    if stdin_path is not None:
-        stdin.close()
+    elif stdin_path is not None:
+        feeder = _Feeder(proc.stdin, Path(stdin_path))
+        feeder.start()
+    start = last_report = time.monotonic()
+    stopped = ""
+    try:
+        while proc.poll() is None:
+            time.sleep(0.2)
+            if feeder is None:
+                continue
+            now = time.monotonic()
+            if not feeder.done and now - feeder.last_progress > UPLOAD_STALL_SECONDS:
+                stopped = f"upload stalled: ssh accepted no data for {UPLOAD_STALL_SECONDS} s"
+            elif now - start > UPLOAD_MAX_SECONDS:
+                stopped = f"upload exceeded {UPLOAD_MAX_SECONDS} s"
+            if stopped:
+                proc.kill()
+                break
+            if now - last_report >= PROGRESS_SECONDS:
+                last_report = now
+                rate = feeder.sent / max(now - start, 0.001) / 1024
+                emit(f"  upload progress: {feeder.sent / 1048576:.1f} of {feeder.total / 1048576:.1f} MB "
+                     f"({100 * feeder.sent // max(feeder.total, 1)}%), {rate:.0f} KB/s")
+    except KeyboardInterrupt:
+        proc.kill()
+        raise
+    finally:
+        rc = proc.wait()
+        reader.join(10)
+        if feeder is not None:
+            feeder.join(10)
+        if proc.stdout is not None:
+            proc.stdout.close()
+    if feeder is not None:
+        elapsed = time.monotonic() - start
+        emit(f"  upload sent {feeder.sent} of {feeder.total} bytes in {elapsed:.0f} s")
+        if feeder.error and not stopped:
+            emit(f"  upload interrupted: ssh stopped reading ({feeder.error})")
+    if stopped:
+        emit(f"STOPPED: {stopped}; the server deletes the partial upload (nothing is staged)")
+        return 124
     return rc
 
 
@@ -411,7 +493,8 @@ def cmd_deploy(args, settings) -> int:
             print(f"STOPPED: {title} failed (exit {rc})")
             break
     result = next((l.split("RESULT:", 1)[1].strip() for l in reversed(log) if "RESULT:" in l), "NOT COMPLETED")
-    if rc == 0 and "DEPLOYED" in result and not args.skip_local_verify:
+    succeeded = deploy_succeeded(rc, result, doc["operations"])
+    if succeeded and "DEPLOYED" in result and not args.skip_local_verify:
         bash = find_bash(settings)
         print("\n### local public verification")
         env = {k: v for k, v in os.environ.items() if k != "MSYS_NO_PATHCONV"}   # breaks verify-public on Windows
@@ -422,11 +505,22 @@ def cmd_deploy(args, settings) -> int:
         log.extend(v.stdout.splitlines())
         if v.returncode != 0:
             result += " (local verification FAILED - check from the server: release-web health)"
+            succeeded = False
     report += [f"**Result: {result}**", "", "```", *log, "```"]
     path = release_dir() / f"{plan['release']}.report.md"
     path.write_text("\n".join(report), encoding="utf-8")
     print(f"\nRESULT: {result}\nreport: {path}")
-    return 0 if rc == 0 and "DEPLOYED" in result else 1
+    return 0 if succeeded else 1
+
+
+def deploy_succeeded(rc: int, result: str, operations: list[str]) -> bool:
+    """Success means the server did everything the approval asked for: a full release ends
+    DEPLOYED; an approval without `activate` (stage-only, or stage + backup) ends STAGED."""
+    if rc != 0:
+        return False
+    if "activate" in operations:
+        return result.startswith("DEPLOYED")
+    return result.startswith("STAGED")
 
 
 def cmd_rollback(args, settings) -> int:

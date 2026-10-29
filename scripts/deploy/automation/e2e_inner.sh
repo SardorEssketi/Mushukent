@@ -87,6 +87,7 @@ ssh-keygen -q -t ed25519 -N "" -C deploy -f /e2e/deploy
 ssh-keygen -q -t ed25519 -N "" -C intruder -f /e2e/intruder
 sed -e "s#^VERIFY_SCRIPT=.*#VERIFY_SCRIPT=$E2E/verify-local.sh#" -e "s#^TLS_CHECK_SCRIPT=.*#TLS_CHECK_SCRIPT=$E2E/check-tls.sh#" \
   -e "s#^HEALTH_URL=.*#HEALTH_URL=http://127.0.0.1/health#" -e "s#^DOCKER=.*#DOCKER=$(command -v docker)#" \
+  -e "s#^UPLOAD_IDLE_TIMEOUT=.*#UPLOAD_IDLE_TIMEOUT=10#" \
   scripts/deploy/automation/broker.conf.example > /e2e/broker.conf
 echo "SOURCE_ARCHIVE_URL=file:///e2e/srcarch/{commit}.tar.gz" >> /e2e/broker.conf
 INSTALL=scripts/deploy/automation/install-server.sh
@@ -125,6 +126,8 @@ eff="$(sshd -T -C user=mushukistan-deploy,host=x,addr=127.0.0.1)"
 expect_has "sshd: forced command" "$eff" "forcecommand /usr/local/lib/mushukistan-deploy/deploy-gate"
 expect_has "sshd: no tcp forwarding" "$eff" "allowtcpforwarding no"
 expect_has "sshd: no tty" "$eff" "permittty no"
+expect_has "sshd: keepalive probes for the deploy account" "$eff" "clientaliveinterval 30"
+expect_has "sshd: dropped client detected after 4 probes" "$eff" "clientalivecountmax 4"
 expect_has "sshd: global settings unaffected for other users" "$(sshd -T -C user=root,host=x,addr=127.0.0.1)" "permittty yes"
 expect_has "deploy user: sudo only for the broker" "$(AS_DEPLOY 'sudo -n /bin/sh -c id')" "a password is required"
 expect_has "deploy user: sudo -l lists only the broker" "$(AS_DEPLOY 'sudo -n -l')" "/usr/local/lib/mushukistan-deploy/broker"
@@ -204,6 +207,15 @@ A1="$(approve $REL1 $SHA1 stage,backup,activate,auto-rollback)"
 expect_has "valid approval accepted" "$(submit $A1)" "accepted"
 expect_has "wrong artifact bytes refused" "$(printf 'not the archive' | X upload $REL1)" "does not match the approved"
 expect_eq "no partial upload left" "$(ls /var/lib/mushukistan-deploy/artifacts | wc -l)" "0"
+# a client that stops sending (connection stalls) is abandoned after UPLOAD_IDLE_TIMEOUT (10 s here)
+t0=$(date +%s)
+out="$(X upload $REL1 < <(head -c 1000 /e2e/$REL1.tar.gz; sleep 40))"   # process substitution: not waited for
+t1=$(date +%s)
+expect_has "stalled upload abandoned by the server" "$out" "upload stalled: no data for 10 s after 1000 bytes"
+expect_eq "stalled upload stopped within the idle timeout" "$([ $((t1 - t0)) -lt 30 ] && echo yes || echo "no ($((t1 - t0)) s)")" "yes"
+expect_eq "stalled upload: no partial file left" "$(ls /var/lib/mushukistan-deploy/artifacts | wc -l)" "0"
+expect_eq "stalled upload: no broker left running" "$(pgrep -f 'mushukistan-deploy/broker upload' | wc -l)" "0"
+expect_has "stalled upload: approval still usable" "$(X approvals | grep $A1)" "active"
 expect_has "approved artifact uploaded" "$(X upload $REL1 < /e2e/$REL1.tar.gz)" "SHA-256 matches"
 expect_has "deploy with an unknown approval id refused" "$(X deploy ffffffffffffffffffffffffffffffff)" "no such approval"
 out="$(X deploy $A1)"
@@ -353,6 +365,23 @@ expect_has "CLI deploy: report written" "$(cat /src/release/automation/$REL10.re
 expect_has "CLI status" "$(CLI status)" "active Nginx release : $REL10"
 expect_has "CLI history" "$(CLI history 5)" "activate"
 expect_has "CLI owner commands refuse a non-terminal" "$(CLI approve $REL10 </dev/null)" "interactive terminal"
+REL11=20260211-ccccccc-stageonly
+SHA11="$(newrel $REL11 K)"
+A11="$(approve $REL11 $SHA11 stage)"
+cp /e2e/$A11.json /src/release/automation/approvals/$REL11.$A11.json
+cp /e2e/$A11.json.sig /src/release/automation/approvals/$REL11.$A11.json.sig
+python3 - "$REL11" "$SHA11" <<'PY'
+import json, sys
+name, sha = sys.argv[1], sys.argv[2]
+json.dump({"release": name, "commit": "c" * 40, "artifact": f"/e2e/{name}.tar.gz", "artifact_sha256": sha,
+           "artifact_bytes": 0, "main_dart_js_sha256": "-", "ci": [], "worktree": "/tmp", "scope": "web only",
+           "default_operations": [], "prepared_at": "-"}, open(f"/src/release/automation/{name}.plan.json", "w"))
+PY
+out="$(CLI deploy $REL11; echo "rc=$?")"
+expect_has "CLI stage-only: RESULT: STAGED" "$out" "RESULT: STAGED"
+expect_has "CLI stage-only: exit code 0" "$out" "rc=0"
+expect_has "CLI stage-only: upload byte count reported" "$out" "upload sent $(stat -c %s /e2e/$REL11.tar.gz) of"
+expect_eq "CLI stage-only: Nginx still serves J" "$(page)" "<html>flutter J</html>"
 expect_has "CLI refuses a tampered artifact" "$(echo x >> /e2e/$REL10.tar.gz; CLI deploy $REL10 --skip-local-verify)" "artifact changed after prepare"
 
 # history, secrets, cleanup
@@ -361,7 +390,7 @@ expect_has "history shows activations" "$hist" "activate"
 expect_not "audit history holds no secret values" "$hist$(cat /var/lib/mushukistan-deploy/audit.log)" "e2e-super-secret-value"
 expect_eq "no staging leftovers" "$(ls -d $R/.staging-* 2>/dev/null | wc -l)" "0"
 expect_eq "no partial uploads" "$(ls /var/lib/mushukistan-deploy/artifacts/*.partial 2>/dev/null | wc -l)" "0"
-expect_eq "no release directory was deleted (A + 8 staged)" "$(ls -d $R/2026* | wc -l)" "9"
+expect_eq "no release directory was deleted (A + 9 staged)" "$(ls -d $R/2026* | wc -l)" "10"
 expect_eq "release A still present for rollback" "$(ls $R/20260101-aaaaaaa-web/frontend/build/web/index.html)" "$R/20260101-aaaaaaa-web/frontend/build/web/index.html"
 
 # uninstall removes access; the manual workflow is unaffected
