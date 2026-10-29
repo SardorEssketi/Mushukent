@@ -44,6 +44,8 @@ UPLOAD_STALL_SECONDS = 120     # no bytes accepted by ssh for this long: stop
 UPLOAD_MAX_SECONDS = 1800      # whole transfer, including the server's hash check
 UPLOAD_CHUNK = 256 * 1024
 PROGRESS_SECONDS = 10
+# sshd prints this for the deploy account, which has no home directory by design (harmless).
+SSHD_NOISE = "Could not chdir to home directory /nonexistent: No such file or directory"
 
 
 class CliError(Exception):
@@ -400,7 +402,9 @@ def remote(settings: dict, *verb: str, stdin_path: Path | None = None, stdin_byt
     def read_output() -> None:
         assert proc.stdout is not None
         for raw in proc.stdout:
-            emit(raw.decode("utf-8", "replace").rstrip())
+            line = raw.decode("utf-8", "replace").rstrip()
+            if line != SSHD_NOISE:
+                emit(line)
 
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()

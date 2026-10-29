@@ -924,6 +924,14 @@ class CliUploadTests(Base):
         self.assertIn(f"{hashlib.sha256(data).hexdigest()} {len(data)}", log)
         self.assertIn(f"  upload sent {len(data)} of {len(data)} bytes", "\n".join(log))
 
+    def test_sshd_home_directory_notice_is_hidden(self):
+        self.fake_ssh("import sys; "
+                      f"print({release_web.SSHD_NOISE!r}, file=sys.stderr); print('active Nginx release : x')")
+        log: list[str] = []
+        self.assertEqual(release_web.remote({}, "status", log=log), 0)
+        self.assertIn("active Nginx release : x", log)
+        self.assertNotIn(release_web.SSHD_NOISE, log)
+
     def test_stalled_transfer_is_stopped(self):
         import time
         release_web.UPLOAD_STALL_SECONDS = 1
