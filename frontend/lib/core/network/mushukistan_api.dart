@@ -569,6 +569,23 @@ class MushukistanApi {
     return _client.delete('posts/$postId/likes');
   }
 
+  /// Records that a post page was opened; returns the post's view count.
+  /// [collection] is the API path segment: `posts`, `lost-pets` or `adoption-posts`.
+  Future<int> recordPostView(
+    String collection,
+    String id, {
+    String? guestViewerId,
+  }) {
+    return _client.postJson<int>(
+      '$collection/$id/views',
+      body: const <String, Object?>{},
+      headers: guestViewerId == null
+          ? null
+          : <String, String>{'X-Viewer-Id': guestViewerId},
+      decoder: (json) => _readInt(_readMap(json)['view_count']),
+    );
+  }
+
   Future<ReportData> createReport({
     required String targetType,
     required String targetId,
@@ -1237,6 +1254,7 @@ class PostSummary extends FeedItem {
     required this.likeCount,
     required this.commentCount,
     required this.isLikedByMe,
+    this.viewCount = 0,
     this.kind = 'observation',
     this.author,
     this.thumbUrl,
@@ -1260,6 +1278,7 @@ class PostSummary extends FeedItem {
   final DateTime createdAt;
   final int likeCount;
   final int commentCount;
+  final int viewCount;
   final bool isLikedByMe;
   final String kind;
 
@@ -1285,6 +1304,7 @@ class PostSummary extends FeedItem {
       createdAt: _readDateTime(map['created_at']),
       likeCount: _readInt(map['like_count']),
       commentCount: _readInt(map['comment_count']),
+      viewCount: _readInt(map['view_count']),
       isLikedByMe: _readBool(map['is_liked_by_me']),
     );
   }
@@ -1301,6 +1321,7 @@ class PostDetail extends PostSummary {
     required super.likeCount,
     required super.commentCount,
     required super.isLikedByMe,
+    super.viewCount,
     this.updatedAt,
     this.isPublic = true,
     this.isEdited = false,
@@ -1332,6 +1353,7 @@ class PostDetail extends PostSummary {
       createdAt: summary.createdAt,
       likeCount: summary.likeCount,
       commentCount: summary.commentCount,
+      viewCount: summary.viewCount,
       isLikedByMe: summary.isLikedByMe,
       updatedAt: map['updated_at'] == null
           ? summary.createdAt
@@ -1430,6 +1452,7 @@ class LostPetData extends FeedItem {
     required this.createdAt,
     required this.isResolved,
     required this.commentCount,
+    this.viewCount = 0,
     this.author,
     this.thumbUrl,
     this.additionalInfo,
@@ -1454,6 +1477,7 @@ class LostPetData extends FeedItem {
   final String? additionalInfo;
   final bool isResolved;
   final int commentCount;
+  final int viewCount;
   @override
   final DateTime createdAt;
 
@@ -1482,6 +1506,7 @@ class LostPetData extends FeedItem {
       additionalInfo: _readStringOrNull(map['additional_info']),
       isResolved: _readBool(map['is_resolved']),
       commentCount: _readInt(map['comment_count']),
+      viewCount: _readInt(map['view_count']),
       createdAt: _readDateTime(map['created_at']),
     );
   }
@@ -1553,6 +1578,7 @@ class AdoptionPostData extends FeedItem {
     required this.photoUrls,
     required this.createdAt,
     required this.commentCount,
+    this.viewCount = 0,
     this.author,
     this.thumbUrl,
     this.additionalInfo,
@@ -1576,6 +1602,7 @@ class AdoptionPostData extends FeedItem {
   final String? additionalInfo;
   final bool isResolved;
   final int commentCount;
+  final int viewCount;
   @override
   final DateTime createdAt;
 
@@ -1601,6 +1628,7 @@ class AdoptionPostData extends FeedItem {
       additionalInfo: _readStringOrNull(map['additional_info']),
       isResolved: map['is_resolved'] == true,
       commentCount: _readInt(map['comment_count']),
+      viewCount: _readInt(map['view_count']),
       createdAt: _readDateTime(map['created_at']),
     );
   }

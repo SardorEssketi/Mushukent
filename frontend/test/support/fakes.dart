@@ -15,6 +15,7 @@ class ApiCall {
     this.bearerToken,
     this.body,
     this.queryParameters,
+    this.headers,
   });
 
   final String method;
@@ -23,6 +24,7 @@ class ApiCall {
   final String? bearerToken;
   final Object? body;
   final Map<String, dynamic>? queryParameters;
+  final Map<String, String>? headers;
 }
 
 class FakeApiClient implements MushukistanApiClient {
@@ -48,6 +50,7 @@ class FakeApiClient implements MushukistanApiClient {
     required T Function(Object? json) decoder,
     required bool authenticated,
     String? bearerToken,
+    Map<String, String>? headers,
   }) async {
     final call = ApiCall(
       method: method,
@@ -56,6 +59,7 @@ class FakeApiClient implements MushukistanApiClient {
       bearerToken: bearerToken,
       body: body,
       queryParameters: queryParameters,
+      headers: headers,
     );
     calls.add(call);
     final handler = handlers['$method $path'];
@@ -108,6 +112,7 @@ class FakeApiClient implements MushukistanApiClient {
     required T Function(Object? json) decoder,
     bool authenticated = true,
     String? bearerToken,
+    Map<String, String>? headers,
   }) {
     return _handle<T>(
       'POST',
@@ -117,6 +122,7 @@ class FakeApiClient implements MushukistanApiClient {
       decoder: decoder,
       authenticated: authenticated,
       bearerToken: bearerToken,
+      headers: headers,
     );
   }
 

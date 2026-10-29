@@ -84,6 +84,7 @@ class LostPetListItem(BaseModel):
     additional_info: str | None = None
     is_resolved: bool = False
     comment_count: int = 0
+    view_count: int = 0
     created_at: datetime
 
 

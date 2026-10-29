@@ -53,8 +53,6 @@ html[data-theme=dark]{color-scheme:dark;--bg:#171210;--surface:#211c19;--ink:#f0
 .screen-number{position:absolute;left:0;top:25px;color:var(--accent-dark);font-size:11px;font-weight:700;letter-spacing:.04em}
 .showcase-screen h3{font-family:Inter,"Segoe UI",Arial,sans-serif;font-size:17px;font-weight:700;line-height:1.3;letter-spacing:-.025em;margin-bottom:8px}
 .showcase-screen p{margin-bottom:0;color:var(--muted);font-size:13px;line-height:1.6}
-.map-credit{display:block;margin-top:8px;color:var(--muted);font-size:10px;line-height:1.5}
-.map-credit a{text-underline-offset:2px}
 .showcase-hint{display:none;color:var(--muted);font-size:13px;margin:0 0 10px}
 
 @media(max-width:1100px){
@@ -141,3 +139,28 @@ h1{line-height:1.05}h2{line-height:1.1}
 .footer-top nav a:hover{color:var(--accent)}
 @media(max-width:560px){.hero-actions .button-primary{justify-content:center}.feature{border-radius:18px}.site-footer{border-radius:24px 24px 0 0}}
 @media(prefers-reduced-motion:reduce){.feature{transition:none}.feature:hover{transform:none}}
+
+/* Two ways in: the Android app from Google Play, or the web app in any browser. */
+.app-choices{display:flex;flex-wrap:wrap;gap:12px}
+.app-choices .button{min-width:236px;min-height:60px;justify-content:flex-start;gap:12px;padding:10px 24px 10px 20px;text-align:left}
+.app-choices svg{width:24px;height:24px;flex:none}
+.app-choices .button .choice-text{display:flex;flex-direction:column;gap:2px;font-size:15px;font-weight:800;line-height:1.2}
+.choice-text small{font-size:11px;font-weight:650;letter-spacing:.02em;opacity:.82}
+.button-store{background:var(--ink);color:var(--bg)}
+.button-store:hover{background:var(--accent-dark);color:var(--bg)}
+.final-cta .app-choices{justify-content:center}
+@media(max-width:560px){.app-choices{width:100%;flex-direction:column}.app-choices .button,.hero-actions .app-choices .button-primary{width:100%;min-width:0;justify-content:flex-start}}
+
+/* Header app links mirror the hero: Google Play dark, web app accent. */
+.header-cta{gap:10px;white-space:nowrap}
+@media(max-width:1179px){.header-cta{display:none}}
+.header-play svg{width:16px;height:16px;flex:none}
+.header-open{background:var(--button);color:var(--button-text)}
+.header-open:hover{background:var(--button-hover)}
+.mobile-nav .app-choices{flex-direction:column;padding-top:16px}
+.mobile-nav .app-choices .button{width:100%;padding:10px 24px 10px 20px;border-top:0}
+
+/* The bar slides away while scrolling down and returns on any scroll up (site.js). */
+.site-header{transition:transform .25s ease}
+.site-header.is-hidden{transform:translateY(-100%)}
+@media(prefers-reduced-motion:reduce){.site-header{transition:none}}

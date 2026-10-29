@@ -77,6 +77,7 @@ class AppStrings {
     required this.like,
     required this.unlike,
     required this.comments,
+    required this.views,
     required this.myObservations,
     required this.myComments,
     required this.userObservations,
@@ -185,6 +186,7 @@ class AppStrings {
   final String like;
   final String unlike;
   final String comments;
+  final String views;
   final String myObservations;
   final String myComments;
   final String userObservations;
@@ -3447,6 +3449,7 @@ class _EnglishStrings extends AppStrings {
           like: 'Like',
           unlike: 'Unlike',
           comments: 'Comments',
+          views: 'Views',
           myObservations: 'My posts',
           myComments: 'My comments',
           userObservations: 'Posts',
@@ -3564,6 +3567,7 @@ class _UzbekStrings extends AppStrings {
           like: 'Layk',
           unlike: 'Laykni olish',
           comments: 'Izohlar',
+          views: 'Ko‘rishlar',
           myObservations: 'Postlarim',
           myComments: 'Izohlarim',
           userObservations: 'Postlar',
@@ -3681,6 +3685,7 @@ class _RussianStrings extends AppStrings {
           like: 'Лайк',
           unlike: 'Убрать лайк',
           comments: 'Комментарии',
+          views: 'Просмотры',
           myObservations: 'Мои посты',
           myComments: 'Мои комментарии',
           userObservations: 'Посты',

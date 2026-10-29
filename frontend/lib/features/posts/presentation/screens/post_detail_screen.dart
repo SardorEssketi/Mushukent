@@ -11,6 +11,7 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../feed/presentation/widgets/feed_card_parts.dart';
+import '../../application/post_view_recorder.dart';
 import '../widgets/publication_detail_parts.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -45,6 +46,16 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   bool? _likedOverride;
   int? _likeCountOverride;
   final GlobalKey _commentsKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(postViewRecorderProvider).record(
+          PostViewCollection.observation,
+          widget.postId,
+          signedIn: ref.read(authControllerProvider).isAuthenticated,
+        );
+  }
 
   Future<void> _handlePostAction({
     required _PostAction action,

@@ -62,6 +62,7 @@ class PostListItem(BaseModel):
     created_at: datetime
     like_count: int = 0
     comment_count: int = 0
+    view_count: int = 0
     is_liked_by_me: bool = False
 
 

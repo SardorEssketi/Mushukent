@@ -1,0 +1,6 @@
+PASS signed in: Contact Owner visible
+PASS signed in: no phone before the explicit request
+PASS signed in: detail load did not reveal anything
+FAIL tap calls the reveal endpoint once
+PASS number is shown after the reveal
+SUMMARY 4 / 5

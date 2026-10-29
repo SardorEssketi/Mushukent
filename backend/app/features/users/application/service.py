@@ -320,6 +320,8 @@ class UsersService:
                     schema.NotificationPreference.user_id == user.id
                 )
             )
+            # View totals on posts stay; only the record of who viewed what is removed.
+            session.execute(delete(schema.PostView).where(schema.PostView.user_id == user.id))
             session.execute(
                 schema.Cat.__table__.update()
                 .where(schema.Cat.created_by == user.id)

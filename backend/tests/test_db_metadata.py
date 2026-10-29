@@ -28,6 +28,7 @@ def test_metadata_discovers_application_tables() -> None:
         "adoption_contact_events",
         "adoption_follow_ups",
         "contact_reveals",
+        "post_views",
         "reports",
         "user_blocks",
         "leaderboard_cache",

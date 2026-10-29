@@ -14,6 +14,7 @@ import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../feed/presentation/widgets/feed_card_parts.dart';
+import '../../../posts/application/post_view_recorder.dart';
 import '../../../posts/presentation/widgets/publication_detail_parts.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 
@@ -49,6 +50,16 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
   ContactRevealData? _revealed;
   bool _statusInFlight = false;
   final GlobalKey _commentsKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(postViewRecorderProvider).record(
+          PostViewCollection.lostPet,
+          widget.lostPetId,
+          signedIn: ref.read(authControllerProvider).isAuthenticated,
+        );
+  }
 
   Future<void> _setResolution(LostPetData pet, AppStrings strings) async {
     if (_statusInFlight) return;

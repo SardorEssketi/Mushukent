@@ -295,6 +295,7 @@ Feature: Users
   - set `users.is_active = false`;
   - future requests with the same token are rejected as disabled;
   - delete the user's likes;
+  - delete the user's post view records (view totals stay);
   - hide and anonymize owned posts, comments, and lost-pet posts;
   - remove pending Lost Pet owner follow-ups that can no longer be answered, retain completed follow-ups, and clear deleted-user links in Lost Pet contact history;
   - apply the same pending follow-up cleanup and history anonymization to Rehoming posts;
@@ -989,6 +990,24 @@ Feature: Likes
 - Auth: Bearer
 - Response: 204 No Content or 200 with updated like_count
 - Behavior: idempotent; deleting non-existing like returns 204
+
+Feature: Post views
+-------------------
+1) POST /api/v1/posts/{post_id}/views
+2) POST /api/v1/lost-pets/{lost_pet_id}/views
+3) POST /api/v1/adoption-posts/{adoption_post_id}/views
+- Purpose: record that a person opened the post (ADR-0024). Clients call it once when a post page opens.
+- Auth: optional. Guests send `X-Viewer-Id: <random per-install UUID>`; a missing or non-UUID value is not counted.
+- Request: none
+- Response: PostViewResponse (200)
+  Example:
+  {"success": true, "data": {"view_count": 12, "counted": true}}
+- Behavior: each signed-in account and each guest id counts once per post; the author's own views and
+  guests without an id return `counted: false`. Visibility follows the matching detail endpoint
+  (blocked, hidden, deleted -> 404).
+- Errors: 404 POST_NOT_FOUND / LOST_PET_NOT_FOUND / ADOPTION_POST_NOT_FOUND, 422
+- Side effects: insert into post_views and increment the post's view_count in one transaction
+- Feed, list and detail items of all three kinds include `view_count`.
 
 Feature: Leaderboards
 ---------------------

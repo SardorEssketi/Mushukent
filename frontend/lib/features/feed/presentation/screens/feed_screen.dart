@@ -893,19 +893,38 @@ class _LostPetCard extends StatelessWidget {
               count: lostPet.commentCount,
               onPressed: openPost,
             ),
-            const Spacer(),
             if (mapLocation != null)
-              TextButton.icon(
-                key: const ValueKey('lost-pet-view-on-map'),
-                onPressed: () {
-                  final location = mapLocation;
-                  context.go(
-                      '/map?lat=${location.latitude}&lon=${location.longitude}'
-                      '&lostPetId=${lostPet.id}');
-                },
-                icon: const Icon(Icons.map_outlined, size: 19),
-                label: Text(strings.viewOnMap),
-              ),
+              FeedViewCount(label: strings.views, count: lostPet.viewCount),
+            if (mapLocation != null)
+              // Shares the row with comments and views, so on the narrowest
+              // phones a long translation ellipsizes instead of overflowing.
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: Tooltip(
+                    message: strings.viewOnMap,
+                    child: TextButton.icon(
+                      key: const ValueKey('lost-pet-view-on-map'),
+                      onPressed: () {
+                        final location = mapLocation;
+                        context.go('/map?lat=${location.latitude}'
+                            '&lon=${location.longitude}'
+                            '&lostPetId=${lostPet.id}');
+                      },
+                      icon: const Icon(Icons.map_outlined, size: 19),
+                      label: Text(
+                        strings.viewOnMap,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else ...[
+              const Spacer(),
+              FeedViewCount(label: strings.views, count: lostPet.viewCount),
+            ],
           ]),
         ),
       ],
@@ -959,12 +978,16 @@ class _AdoptionPostCard extends StatelessWidget {
         ),
         Padding(
           padding: feedActionsPadding,
-          child: FeedCountAction(
-            tooltip: strings.comments,
-            icon: Icons.chat_bubble_outline,
-            count: post.commentCount,
-            onPressed: openPost,
-          ),
+          child: Row(children: [
+            FeedCountAction(
+              tooltip: strings.comments,
+              icon: Icons.chat_bubble_outline,
+              count: post.commentCount,
+              onPressed: openPost,
+            ),
+            const Spacer(),
+            FeedViewCount(label: strings.views, count: post.viewCount),
+          ]),
         ),
       ],
     );
@@ -1140,6 +1163,12 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
               count: widget.post.commentCount,
               onPressed: widget.onTap,
             ),
+            if (mapLocation != null)
+              FeedViewCount(label: strings.views, count: widget.post.viewCount)
+            else ...[
+              const Spacer(),
+              FeedViewCount(label: strings.views, count: widget.post.viewCount),
+            ],
             if (mapLocation != null)
               // Shares the row with likes and comments, so on the narrowest
               // phones a long translation ellipsizes instead of overflowing.

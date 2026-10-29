@@ -1,0 +1,73 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-8.4.2, pluggy-1.6.0
+rootdir: D:\Data science\mushukent\backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1, platformdirs-4.12.3
+collected 499 items
+
+tests\test_analytics.py .................                                [  3%]
+tests\test_audit_places.py ...                                           [  4%]
+tests\test_auth.py ..................................................... [ 14%]
+.............................                                            [ 20%]
+tests\test_blocking.py ..........................                        [ 25%]
+tests\test_cat_editing_policy.py ........                                [ 27%]
+tests\test_cats.py ..........                                            [ 29%]
+tests\test_child_safety_static_page.py ..                                [ 29%]
+tests\test_contact_privacy.py .......                                    [ 31%]
+tests\test_db_integration.py .....                                       [ 32%]
+tests\test_db_metadata.py ....                                           [ 32%]
+tests\test_email_delivery.py .....                                       [ 33%]
+tests\test_error_logging.py .                                            [ 34%]
+tests\test_feed_map.py ....................................              [ 41%]
+tests\test_feedback.py ............................                      [ 46%]
+tests\test_interactions.py ................                              [ 50%]
+tests\test_likes_repository.py .                                         [ 50%]
+tests\test_manual_places_import.py ........                              [ 51%]
+tests\test_notifications_db.py ............................              [ 57%]
+tests\test_place_category_runtime.py .                                   [ 57%]
+tests\test_places_v2_apply_guard.py ..                                   [ 58%]
+tests\test_places_v2_production_review_unit.py ...                       [ 58%]
+tests\test_places_v2_release_unit.py ....                                [ 59%]
+tests\test_places_v2_research_unit.py .....                              [ 60%]
+tests\test_places_v2_source_parsers.py ..                                [ 60%]
+tests\test_post_kind_schema.py ..................                        [ 64%]
+tests\test_post_kind_service.py ..........                               [ 66%]
+tests\test_posts.py .......................                              [ 71%]
+tests\test_rate_limit.py ........                                        [ 72%]
+tests\test_reports_moderation_leaderboards.py .........                  [ 74%]
+tests\test_security_hardening.py ....................................... [ 82%]
+................                                                         [ 85%]
+tests\test_storage.py ..........................s                        [ 90%]
+tests\test_test_isolation.py ................                            [ 94%]
+tests\test_uploads.py ....                                               [ 94%]
+tests\test_users.py .........................                            [100%]
+
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_analytics.py::test_unreachable_posthog_host_does_not_break_requests_or_shutdown
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\opentelemetry\sdk\_logs\_internal\__init__.py:615: DeprecationWarning: `LoggingHandler` in `opentelemetry-sdk` is deprecated. Use the handler from `opentelemetry-instrumentation-logging` instead.
+    warnings.warn(
+
+tests/test_auth.py::test_verified_google_email_auto_links_existing_password_account
+  D:\Data science\mushukent\backend\.venv\Lib\site-packages\passlib\handlers\argon2.py:716: DeprecationWarning: Accessing argon2.__version__ is deprecated and will be removed in a future release. Use importlib.metadata directly to query for argon2-cffi's packaging metadata.
+    _argon2_cffi.__version__, max_version)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+============================ slowest 10 durations =============================
+35.06s teardown tests/test_auth.py::test_google_subject_remains_authoritative_when_claim_email_matches_another_user
+15.46s call     tests/test_analytics.py::test_unreachable_posthog_host_does_not_break_requests_or_shutdown
+5.96s setup    tests/test_auth.py::test_google_service_existing_user_with_legal_acceptance_does_not_require_flags
+5.94s teardown tests/test_auth.py::test_google_service_existing_user_with_legal_acceptance_does_not_require_flags
+5.36s setup    tests/test_blocking.py::test_interactions_racing_with_a_block_never_error_and_end_consistent
+5.22s teardown tests/test_blocking.py::test_owner_can_still_edit_and_delete_own_content_while_blocking_others
+5.19s setup    tests/test_auth.py::test_google_service_existing_user_without_current_legal_acceptance_requires_flags
+4.27s teardown tests/test_auth.py::test_google_service_existing_user_without_current_legal_acceptance_requires_flags
+4.02s teardown tests/test_blocking.py::test_concurrent_duplicate_block_requests_create_one_row
+3.93s teardown tests/test_auth.py::test_google_verifier_rejects_invalid_signature
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_storage.py:494: R2 credentials are not available for live smoke testing.
+=========== 498 passed, 1 skipped, 3 warnings in 836.12s (0:13:56) ============

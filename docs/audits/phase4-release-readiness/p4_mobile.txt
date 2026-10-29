@@ -1,0 +1,38 @@
+=== mobile 390x844
+PASS signed in: profile shows Alice's account actions
+backend stopped, old pid 35880
+URL after reload on /profile during outage: /session-unavailable?redirect=/profile
+PASS reload during outage on /profile -> retry screen, not sign-in
+PASS retry screen explains the situation
+PASS no Login / Create account offered during outage
+PASS credentials preserved in browser storage
+PASS direct navigation /notifications -> retry screen (url /session-unavailable?redirect=/notificat)
+PASS direct navigation /add -> retry screen (url /session-unavailable?redirect=/add)
+PASS direct navigation /profile/settings -> retry screen (url /session-unavailable?redirect=/profile/s)
+PASS public feed stays reachable during outage
+PASS feed shows reconnect notice, no signed-out welcome
+PASS credentials still preserved after navigation
+users/me requests in ~65 s outage window: 5 [0.9, 4.0, 10.0, 22.0, 46.1]
+PASS bounded automatic re-checks (<= 1 initial + 5 retries; saw 5)
+other API calls in window: []
+PASS no runaway request pattern (total API calls in window <= 12)
+backend restarted, pid 27872
+  !! not found: Retry
+recovery seconds after backend up: 4.8 | url /profile
+PASS session recovers after the backend returns (profile visible)
+PASS returned to the requested page
+PASS same credentials, never signed out
+PASS second outage: retry screen again
+automatic recovery took 13.4 s; url /profile
+PASS automatic re-check restores the session by itself
+  [menuitem] 'Logout' @(326,40) 112x48 tap
+PASS explicit logout clears stored credentials
+PASS after logout /profile asks to sign in (not the outage screen)
+PASS account switch: Bob's profile visible
+PASS account switch: nothing of Alice remains on screen
+FAIL account switch: UI switched to Bob's language (Russian)
+ru-user outage screen labels: ['Can’t reach the server\nCan’t reach the s', 'Can’t reach the server\nCan’t reach the s', 'Can’t reach the server\nCan’t reach the s', 'Can’t reach the server', 'Can’t reach the server', 'You are still signed in. We will check a']
+PASS outage screen visible for second account too
+PASS second account recovers automatically
+CONSOLE errors (first 5): ['Failed to load resource: the server responded with a status of 404 (Not Found) http://127.', 'Failed to load resource: the server responded with a status of 404 (Not Found) http://127.', 'Failed to load resource: net::ERR_CONNECTION_REFUSED http://127.0.0.1:18440/api/v1/feed?fi', 'Failed to load resource: net::ERR_CONNECTION_REFUSED http://127.0.0.1:18440/api/v1/users/m', 'Failed to load resource: net::ERR_CONNECTION_REFUSED http://127.0.0.1:18440/api/v1/users/m']
+SUMMARY mobile 24 / 25

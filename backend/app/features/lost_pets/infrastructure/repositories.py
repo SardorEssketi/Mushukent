@@ -479,6 +479,7 @@ class SqlAlchemyLostPetRepository:
             is_resolved=item.is_resolved,
             is_public=item.is_public,
             comment_count=int(item.comment_count or 0),
+            view_count=int(item.view_count or 0),
             created_at=item.created_at,
             updated_at=item.updated_at,
             deleted_at=item.deleted_at,

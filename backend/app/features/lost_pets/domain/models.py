@@ -33,6 +33,7 @@ class LostPetRecord:
     is_resolved: bool
     is_public: bool
     comment_count: int
+    view_count: int
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
