@@ -52,6 +52,7 @@ class _NotificationClient extends Fake implements MushukistanApiClient {
     required T Function(Object? json) decoder,
     bool authenticated = true,
     String? bearerToken,
+    Map<String, String>? headers,
   }) async {
     if (path == 'notifications/read-all') markedAll = true;
     if (path.endsWith('/read')) markedOne = true;

@@ -25,6 +25,7 @@ abstract class MushukistanApiClient {
     required T Function(Object? json) decoder,
     bool authenticated = true,
     String? bearerToken,
+    Map<String, String>? headers,
   });
 
   Future<T> patchJson<T>(
@@ -158,6 +159,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     required T Function(Object? json) decoder,
     bool authenticated = true,
     String? bearerToken,
+    Map<String, String>? headers,
   }) {
     return _request<T>(
       'POST',
@@ -167,6 +169,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       decoder: decoder,
       authenticated: authenticated,
       bearerToken: bearerToken,
+      headers: headers,
     );
   }
 
@@ -230,6 +233,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     required T Function(Object? json) decoder,
     required bool authenticated,
     String? bearerToken,
+    Map<String, String>? headers,
     bool retriedAfterRefresh = false,
   }) async {
     final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
@@ -246,9 +250,10 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           responseType: ResponseType.json,
           listFormat: ListFormat.multi,
           extra: {'skipAuth': !authenticated},
-          headers: bearerToken == null
-              ? null
-              : <String, String>{'Authorization': 'Bearer $bearerToken'},
+          headers: <String, String>{
+            ...?headers,
+            if (bearerToken != null) 'Authorization': 'Bearer $bearerToken',
+          },
           sendTimeout: isMultipart ? _uploadRequestTimeout : null,
           receiveTimeout: isMultipart ? _uploadRequestTimeout : null,
         ),
@@ -287,6 +292,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
               decoder: decoder,
               authenticated: authenticated,
               bearerToken: bearerToken,
+              headers: headers,
               retriedAfterRefresh: true,
             );
           }

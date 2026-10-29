@@ -675,6 +675,45 @@ class _FeedBodyTextState extends State<FeedBodyText> {
       });
 }
 
+/// How many people opened the post (ADR-0024). Display only, so it is not a
+/// tap target; it lines up with the like and comment counts.
+class FeedViewCount extends StatelessWidget {
+  const FeedViewCount({super.key, required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        label: '$label: $count',
+        excludeSemantics: true,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.visibility_outlined,
+                  size: 20, color: colors.onSurfaceVariant),
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: Theme.of(context)
+                    .textTheme
+                    .labelLarge
+                    ?.copyWith(color: colors.onSurfaceVariant),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FeedCountAction extends StatelessWidget {
   const FeedCountAction({
     super.key,

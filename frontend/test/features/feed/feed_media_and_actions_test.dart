@@ -98,7 +98,60 @@ Map<String, Object?> _lost(String id, Object? location) => {
       'created_at': '2026-09-01T10:00:00Z',
     };
 
+Map<String, Object?> _adoption(String id) => {
+      'item_type': 'adoption',
+      'id': id,
+      'pet_name': 'Adopt $id',
+      'owner_phone_number': '+998901234567',
+      'photo_url': 'invalid:',
+      'photo_urls': ['invalid:'],
+      'comment_count': 0,
+      'created_at': '2026-09-01T10:00:00Z',
+    };
+
 void main() {
+  group('view counts', () {
+    Finder viewCount(String label) => find.descendant(
+        of: find.byType(FeedViewCount), matching: find.text(label));
+
+    testWidgets('every card kind shows its view count', (tester) async {
+      _size(tester, 390, 3200);
+      await _pumpRouted(tester, [
+        {..._post('plain'), 'view_count': 12},
+        {..._lost('lost', null), 'view_count': 7},
+        {..._adoption('adopt'), 'view_count': 3},
+      ]);
+      expect(find.byType(FeedViewCount), findsNWidgets(3));
+      for (final count in ['12', '7', '3']) {
+        expect(viewCount(count), findsOneWidget);
+      }
+      // Without a map action the count sits at the right edge of the row.
+      final plain = tester.getRect(find.byType(FeedCardFrame).first);
+      expect(
+          tester.getRect(viewCount('12')).right, greaterThan(plain.center.dx));
+    });
+
+    testWidgets('shares the row with View on map at 320px', (tester) async {
+      for (final language in AppLanguage.values) {
+        _size(tester, 320, 2400);
+        await _pumpRouted(
+          tester,
+          [
+            {
+              ..._post('help', kind: 'needs_help', location: _tashkent),
+              'view_count': 1234
+            },
+            {..._lost('lost', _tashkent), 'view_count': 999},
+          ],
+          language: language,
+        );
+        expect(tester.takeException(), isNull, reason: language.code);
+        expect(viewCount('1234'), findsOneWidget);
+        expect(viewCount('999'), findsOneWidget);
+      }
+    });
+  });
+
   group('Lost Pet View on map', () {
     testWidgets('opens the Map at the pet coordinates with the pet id',
         (tester) async {
