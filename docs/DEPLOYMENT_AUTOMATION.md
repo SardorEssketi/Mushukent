@@ -1,9 +1,8 @@
 # Approval-based web deployment (design, implementation, installation plan)
 
-**Status: implemented and tested locally and in a disposable Docker environment. NOT installed on
-production.** Nothing in this document is active until the owner approves and performs the
-installation in "Installation plan". Until then `docs/DEPLOYMENT.md` (manual gates G0-G6) is the
-only deployment procedure.
+**Status: INSTALLED on production (2026-10-29)** by the owner, from `main`; updated with the
+upload reliability fixes (section 12). Day-to-day use: section 13 ("Operating runbook"). The
+manual gates G0-G6 in `docs/DEPLOYMENT.md` remain the fallback.
 
 Goal: **the owner approves a release; the automation executes it.** The server, not the agent's
 instructions or local permission prompts, enforces that only an owner-approved artifact can be
@@ -264,7 +263,7 @@ first production rehearsal (2026-10-28).
    12 KB/s on average. A slower link fails cleanly (nothing staged) and needs a better connection
    or a higher limit in `broker.conf` (owner, root).
 
-## 7. Installation plan (production; every step needs the owner's approval; NOT done)
+## 7. Installation plan (production; owner-run; done 2026-10-29)
 
 0. **Complete the prerequisites in section 11 first**, above all the root key rotation in
    section 9 (Limitation 1). Create the approval key, preferably
@@ -292,9 +291,9 @@ first production rehearsal (2026-10-28).
    (instant), or `install-server.sh --uninstall --execute` (removes sshd snippet, sudoers entry,
    key file; locks the account; keeps the audit log). The manual runbook keeps working.
 
-After installation, update `docs/DEPLOYMENT.md` (fact status, gate table) and `CLAUDE.md` rule 6:
-the agent may use the restricted deploy identity for read-only verbs and for operations covered
-by a valid owner-signed approval; root SSH stays owner-only.
+To update the server-side automation later (for example after a fix like section 12), repeat
+steps 3-6 from the new `main` commit with the same two public keys. `docs/DEPLOYMENT.md` and
+`CLAUDE.md` rule 6 describe the installed state.
 
 ## 8. Security review before installation (2026-10-24)
 
@@ -418,13 +417,13 @@ ssh-keygen -Y sign -f $env:USERPROFILE\.ssh\mushukistan_owner_approval_sk -n mus
 
 - [x] Section 9 done: old root key removed, new root key protected, spare key registered
       (Resolved by owner, 2026-10-28).
-- [ ] Approval key created (FIDO2 preferred), never in an agent, public key handed over.
-- [ ] Deploy key created for the executor (agent-usable by design).
-- [ ] This branch reviewed, merged, pushed; CI green; installer copied from that exact commit.
+- [x] Approval key created (passphrase-protected Ed25519), never in an agent, public key handed over.
+- [x] Deploy key created for the executor (agent-usable by design).
+- [x] This branch reviewed, merged, pushed; CI green; installer copied from that exact commit.
 - [ ] Server can reach `codeload.github.com` over HTTPS (source verification).
 - [ ] `sshd -t` and `sshd -T -C user=mushukistan-deploy,...` checked by the installer; manual check
       that root login still works in a second terminal before closing the first.
-- [ ] Recovery console access confirmed.
+- [x] Recovery console access confirmed.
 - [ ] Rehearsal with `approve --stage-only` (section 7, step 7).
 
 ## 12. Upload reliability fixes (2026-10-29)
@@ -457,3 +456,50 @@ session open until a new root login and `release-web status` both work. Verify (
 `sshd -T -C user=mushukistan-deploy,host=x,addr=127.0.0.1 | grep -E '^clientalive'` prints
 `clientaliveinterval 30` and `clientalivecountmax 4`. The client-side changes take effect as
 soon as the operator runs `release-web` from the merged commit.
+
+## 13. Operating runbook: web updates
+
+Roles: the **agent** (or the owner) runs `release-web` with the deploy key from a checkout of
+`main` that has `scripts/deploy/local.env`; the **owner** signs approvals in their own
+PowerShell window and is the only one who uses root SSH. Commands below are run from the
+repository root as `.\scripts\deploy\release-web.ps1 <verb>`.
+
+Scope check first: only Flutter web, landing and Nginx-config changes go this way. Anything
+touching the backend, the worker, the database or Android uses the manual procedures of
+`docs/DEPLOYMENT.md`.
+
+1. **Main is ready** (owner): the change is merged to `main`, pushed, CI green.
+2. **Baseline** (agent): `status`, `health`, `tls`, `approvals`. Record the active release, the
+   served `main.dart.js` hash and the container IDs. Cancel leftover active approvals
+   (`cancel <id>`), which only removes rights.
+3. **Prepare** (agent): `prepare --sha <main sha> --label <short-label> --client-id-from-live`.
+   It checks CI, builds in a clean worktree (needs about 2.5 GB free RAM), packages and writes
+   `release/automation/<release>.plan.json`. No server contact. Report the release name,
+   commit, artifact SHA-256 and `main.dart.js` hash to the owner.
+4. **Approve** (owner, own terminal, same checkout):
+   `release-web approve <release>` for a full release (stage, backup, activate, auto-rollback),
+   or `approve <release> --stage-only` for a rehearsal. Type `APPROVE <release>`, enter the key
+   passphrase. The approval is valid for 120 minutes (`--ttl-minutes`).
+5. **Deploy** (agent, after the owner's go-ahead for that commit):
+   `deploy <release>`. It submits the approval, uploads the artifact with progress (about
+   21 MB; use a stable connection) and runs the approved operations. Success is
+   `RESULT: DEPLOYED ...` (exit 0) for a full release, `RESULT: STAGED ...` for a stage-only
+   approval. The report is in `release/automation/<release>.report.md`.
+6. **Verify** (agent): `status`, `health`, `tls`, `history 5`; the served `main.dart.js` matches
+   the plan; all container IDs except Nginx are unchanged. Update the private state file
+   (`docs/private/PRODUCTION_STATE.md`) and report each flow as VERIFIED, FAILED or NOT VERIFIED.
+
+If something goes wrong:
+
+| Symptom | Meaning and action |
+| --- | --- |
+| `STOPPED: upload stalled ...` / `upload exceeded ...` (exit 124), or ssh exit 255 during upload | Nothing was staged; the server deleted the partial file and released the lock. Rerun `deploy <release>` on a stable link while the approval is valid (a stall does not use it up). |
+| `does not match the approved SHA-256` | The bytes differ from the plan. Three mismatches fail the approval; check the artifact, then a new owner approval. |
+| `approval is expired` / `no active owner approval` | The owner signs a new approval (step 4). Expired ones are ignored automatically. |
+| `another deployment operation is running` | Another operation holds the lock; wait (uploads are bounded to 30 min) and retry. Never kill processes on the server. |
+| `preflight failed; nothing was changed` | Read the preflight output in the report; fix in the repository, prepare again. |
+| Verification failed after activation | With `auto-rollback` approved the broker switched Nginx back already (`history` shows it). Otherwise: owner `approve-rollback <active release>`, agent `rollback <active release>`. |
+| Automation unavailable | Section 10 (manual root rollback) and the manual procedure A of `docs/DEPLOYMENT.md`. |
+
+Updating the automation itself (owner, root): section 7, steps 3-6, from the new `main` commit.
+Revoking the executor: section 10.

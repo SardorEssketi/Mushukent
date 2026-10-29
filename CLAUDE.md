@@ -18,10 +18,15 @@ changes without approval, small commits).
    down -v`, or `docker compose up --build` on the production host without explicit approval.
 5. Use the scripts in `scripts/deploy/` (dry-run by default; they need a human-typed
    confirmation). Test them with `bash scripts/deploy/test_deploy_scripts.sh`.
-6. Agent SSH to production is permission-gated. Use it only for read-only inspection
-   the user has allowed (`scripts/deploy/remote-inspect.sh`). Every production-changing
-   command (upload, backup, `--execute`) is run by the user (`! ssh -t ...`). If denied,
-   do not work around it; ask the user to run the command and share the output.
+6. Agent SSH to production is permission-gated. Root SSH is owner-only: the agent uses it
+   only for read-only inspection the user has allowed (`scripts/deploy/remote-inspect.sh`),
+   and every production-changing root command is run by the user (`! ssh -t ...`). The
+   approval-based web automation is installed (`docs/DEPLOYMENT_AUTOMATION.md`, section 13):
+   the agent may run `release-web` `status`, `health`, `tls`, `approvals`, `history`,
+   `prepare` and `cancel`, and `deploy`/`rollback` for an approval the owner signed for that
+   release. Only the owner runs `approve`, `approve-rollback` and `revoke`; never read or use
+   the approval key. A full (activating) release still needs the user's explicit go-ahead
+   for that commit. If anything is denied, do not work around it; ask the user.
 7. After a release, update the facts in the runbook that changed (active release path,
    Alembic revision) and report each flow as VERIFIED, FAILED, or NOT VERIFIED.
 8. Release branch is `main` (owner decision). Release only a pushed, CI-green `main` commit;

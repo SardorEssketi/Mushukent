@@ -31,7 +31,9 @@ records. Scripts live in `scripts/deploy/` and are tested offline with
    **not** cover uploads, backups, container changes, or `--execute` of any
    script: the user runs those with `! ssh -t <ssh-target> ...`. If SSH is
    denied, do not work around it; give the user the exact command and ask for the
-   output.
+   output. The restricted deploy account used by `release-web` is a separate
+   identity with its own rules (see "Approval-based automation" below and
+   `CLAUDE.md` rule 6).
 5. **Release branch: `main`** (owner decision, 2026-10-19). Release only from a
    commit that is on `origin/main`, pushed, and CI-green. Never release from a
    feature branch, from `production-deploy` (stale), or from a dirty tree. The
@@ -166,16 +168,17 @@ and the served web directory from Nginx's bind mounts with symlinks resolved.
 | Android app only | C |
 | Migration | B, with the gate in "Database backup and migration gate" below |
 
-**Approval-based automation (web releases only): designed and tested, NOT installed.**
-`docs/DEPLOYMENT_AUTOMATION.md` describes a restricted deployment identity, owner-signed release
-approvals verified by the server, and the `release-web` CLI that would replace the manual G2-G4
-(and G6 rollback) commands for procedure A. Until the owner installs it on the server, the manual
-procedures below are the only way to deploy. Both scripts' typed-confirmation paths are unchanged;
-the new `--approval-token` option is usable only with a root-owned single-use token written by
-the approval broker.
-Its pre-installation security review (section 8 there) found one Critical item: the owner's
-root SSH key had to be rotated to a protected key (section 9 there). Resolved by owner
-(2026-10-28). The automation remains NOT INSTALLED.
+**Approval-based automation (web releases only): INSTALLED (2026-10-29).** Procedure A is
+normally run with the `release-web` CLI: `docs/DEPLOYMENT_AUTOMATION.md`, section 13 ("Operating
+runbook"). The agent prepares and deploys through the restricted `mushukistan-deploy` account;
+the server executes only what an owner-signed approval allows (stage, backup, activate,
+auto-rollback) for that exact artifact and time window. The owner signs every approval in their
+own terminal, and that signature replaces the typed confirmations of G2-G4 (and G6 with an
+owner-signed rollback approval) for web releases. Procedures B and C, migrations (G5) and
+anything that is not a web release stay manual. The manual procedure A below remains the
+fallback whenever the automation is unavailable; both scripts' typed-confirmation paths are
+unchanged, and `--approval-token` accepts only a root-owned single-use token written by the
+approval broker.
 
 ### A. Web / landing release (Nginx only)
 
