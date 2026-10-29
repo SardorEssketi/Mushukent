@@ -59,6 +59,7 @@ class PostRecord:
     cat: PostCatSummary
     is_liked_by_me: bool = False
     is_edited: bool = False
+    view_count: int = 0
 
 
 @dataclass(slots=True)

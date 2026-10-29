@@ -352,6 +352,12 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         default=0,
         server_default=text("0"),
     )
+    view_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
 
     cat: Mapped["Cat"] = relationship(back_populates="posts")
     author: Mapped["User | None"] = relationship(back_populates="posts")
@@ -372,6 +378,7 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     __table_args__ = (
         CheckConstraint("like_count >= 0", name="like_count_non_negative"),
         CheckConstraint("comment_count >= 0", name="comment_count_non_negative"),
+        CheckConstraint("view_count >= 0", name="view_count_non_negative"),
         Index("posts_location_gist", "location", postgresql_using="gist"),
         Index("idx_posts_created_at", "created_at"),
         Index(
@@ -738,6 +745,12 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         default=0,
         server_default=text("0"),
     )
+    view_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
 
     author: Mapped["User | None"] = relationship(back_populates="lost_pets")
     photos: Mapped[list["LostPetPhoto"]] = relationship(
@@ -753,6 +766,7 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     __table_args__ = (
         CheckConstraint("comment_count >= 0", name="lost_pets_comment_count_non_negative"),
+        CheckConstraint("view_count >= 0", name="lost_pets_view_count_non_negative"),
         Index("lost_pets_last_seen_location_gist", "last_seen_location", postgresql_using="gist"),
         Index("idx_lost_pets_created_at", "created_at"),
         Index(
@@ -800,6 +814,29 @@ class ContactReveal(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         CheckConstraint("post_kind IN ('lost_pet', 'adoption')", name="ck_contact_reveals_kind"),
         CheckConstraint("mode IN ('explicit', 'legacy_detail')", name="ck_contact_reveals_mode"),
         Index("idx_contact_reveals_user_created", "user_id", "created_at"),
+    )
+
+
+class PostView(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    """One person opened one post. Signed-in viewers by account, guests by a keyed hash."""
+
+    __tablename__ = "post_views"
+
+    post_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    post_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
+    )
+    guest_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("post_kind", "post_id", "user_id", name="uq_post_views_user"),
+        UniqueConstraint("post_kind", "post_id", "guest_key", name="uq_post_views_guest"),
+        CheckConstraint("post_kind IN ('post', 'lost_pet', 'adoption')", name="ck_post_views_kind"),
+        CheckConstraint(
+            "(user_id IS NULL) <> (guest_key IS NULL)", name="ck_post_views_one_viewer"
+        ),
+        Index("idx_post_views_user", "user_id"),
     )
 
 
@@ -895,6 +932,12 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         default=0,
         server_default=text("0"),
     )
+    view_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
 
     author: Mapped["User | None"] = relationship(back_populates="adoption_posts")
     photos: Mapped[list["AdoptionPostPhoto"]] = relationship(
@@ -910,6 +953,7 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     __table_args__ = (
         CheckConstraint("comment_count >= 0", name="adoption_posts_comment_count_non_negative"),
+        CheckConstraint("view_count >= 0", name="adoption_posts_view_count_non_negative"),
         Index("idx_adoption_posts_created_at", "created_at"),
         Index(
             "idx_adoption_posts_active_created_at",

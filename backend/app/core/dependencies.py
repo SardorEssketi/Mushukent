@@ -47,6 +47,8 @@ from app.features.reports.application.service import ReportsService
 from app.features.reports.infrastructure.repositories import SqlAlchemyReportRepository
 from app.features.users.application.service import UsersService
 from app.features.users.infrastructure.repositories import SqlAlchemyUserProfileRepository
+from app.features.views.application.service import ViewsService
+from app.features.views.infrastructure.repositories import SqlAlchemyPostViewRepository
 from app.infrastructure.storage.service import MediaStorageService
 
 
@@ -152,6 +154,18 @@ def get_likes_service(request: Request) -> LikesService:
     return LikesService(
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyLikeRepository,
+    )
+
+
+def get_views_service(request: Request) -> ViewsService:
+    container = get_container(request)
+    return ViewsService(
+        db_session_manager=container.db_session_manager,
+        repository_factory=SqlAlchemyPostViewRepository,
+        post_repository_factory=SqlAlchemyPostRepository,
+        lost_pet_repository_factory=SqlAlchemyLostPetRepository,
+        adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
+        guest_key_secret=container.settings.jwt_secret_key,
     )
 
 
