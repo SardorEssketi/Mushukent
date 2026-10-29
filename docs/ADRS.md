@@ -242,3 +242,27 @@ resolves the pet, removes it from public Feed and Map queries, and retains it in
 the owner's existing profile area. Answering No leaves it active. Migration
 `20260928_0022` adds contact-event and follow-up tables and a partial unique
 index for pending follow-ups. It does not rewrite existing Lost Pet rows.
+
+## ADR-0024: Count post views once per person when a post is opened
+
+- Status: Accepted
+- Date: 2026-10-29
+
+Observations, Lost Pet posts and adoption/rehoming posts show a public view
+count. A view is recorded when a post page opens: the client calls
+`POST /{kind}/{id}/views`. Reading a post never counts, so refreshes,
+moderation reads and link previews do not inflate it.
+
+Each person counts once per post. Signed-in viewers are keyed by account.
+Guests send a random per-install identifier; the server stores only an
+HMAC-SHA256 of it keyed with the server secret. The author's own views and
+guests without an identifier are not counted. A guest who clears storage or
+reinstalls can be counted again; accounts cannot. Rotating the server secret
+lets existing guests count again once.
+
+`post_views` holds one row per (kind, post, viewer) and the posts'
+denormalized `view_count` increases only when a row is inserted, in the same
+transaction. Account deletion removes the user's rows and keeps the totals.
+Migration `20261029_0028` adds the table and columns without rewriting rows.
+The privacy and cookie policies disclose the guest identifier.
+

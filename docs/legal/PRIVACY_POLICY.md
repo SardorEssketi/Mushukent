@@ -54,6 +54,7 @@ Contact data published by the user:
 Technical and security data:
 - API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.
 - Android push device token stored encrypted, token hash, notification preferences, inbox read state, and bounded delivery status.
+- Post views: when you open a post, Mushukistan records that your account viewed it, so each person is counted once in the post's view count. If you are not signed in, the app sends a random identifier created on your device instead; it is not linked to your name, account, or device hardware, and the server stores only a keyed one-way hash of it. Other users see only the total number of views.
 
 ## 3. Photos and media
 
@@ -119,7 +120,7 @@ Comments, replies, pet follow-ups, and inactivity reminders are enabled automati
 
 The Android app does not use cookies.
 
-The web app does not intentionally set advertising, analytics, or tracking cookies. The web app may use browser storage through the Flutter secure storage integration to keep the user's access token for authentication.
+The web app does not intentionally set advertising, analytics, or tracking cookies. The web app may use browser storage through the Flutter secure storage integration to keep the user's access token for authentication. It also stores a random viewer identifier used only to count each visitor once in post view counts.
 
 ## 8. Account deletion and retention
 
@@ -131,7 +132,7 @@ Users who cannot access the app can start account deletion from https://mushukis
 
 When account deletion is confirmed, Mushukistan deactivates and anonymizes the account. Login is disabled, authentication credentials are removed, and profile personal information is removed, including email address, password hash, name, avatar URL, phone number, Telegram username, bio, legal acceptance records, last-login and last-active data, device push tokens, notification preferences, and private alert point. Inbox rows received by the deleted account are removed; its actor reference on other users' notifications becomes anonymous.
 
-Mushukistan also removes the user's likes, removes account-related blocking records, removes affected leaderboard cache entries, hides and anonymizes user-owned posts, comments, lost-pet posts, and adoption/rehoming posts, clears copied contact details from lost-pet and adoption/rehoming posts, and removes the user as creator/reporter/handler where possible.
+Mushukistan also removes the user's likes and the records of which posts the user viewed (view totals stay), removes account-related blocking records, removes affected leaderboard cache entries, hides and anonymizes user-owned posts, comments, lost-pet posts, and adoption/rehoming posts, clears copied contact details from lost-pet and adoption/rehoming posts, and removes the user as creator/reporter/handler where possible.
 
 Some non-public or anonymized records may remain after account deletion where they are needed for service integrity, moderation, safety, abuse prevention, or legal compliance. For example, Mushukistan may retain anonymized content records, cat records, content locations attached to retained records, timestamps, moderation/report records, and a non-personal internal tombstone identifier for the deleted account. These retained records are not intended to identify the deleted user and the deleted account is not publicly accessible or usable for authentication.
 

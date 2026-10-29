@@ -128,7 +128,8 @@ CREATE TABLE posts (
     deleted_at TIMESTAMPTZ NULL,
     is_public BOOLEAN NOT NULL DEFAULT TRUE,
     like_count INTEGER NOT NULL DEFAULT 0,
-    comment_count INTEGER NOT NULL DEFAULT 0
+    comment_count INTEGER NOT NULL DEFAULT 0,
+    view_count INTEGER NOT NULL DEFAULT 0
 );
 -- GIST index for nearby queries
 CREATE INDEX posts_location_gist ON posts USING GIST (location);
@@ -319,6 +320,7 @@ CREATE TABLE lost_pets (
     is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
     is_public BOOLEAN NOT NULL DEFAULT TRUE,
     comment_count INTEGER NOT NULL DEFAULT 0,
+    view_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ NULL
@@ -381,6 +383,7 @@ CREATE TABLE adoption_posts (
     is_resolved BOOLEAN NOT NULL DEFAULT FALSE,
     is_public BOOLEAN NOT NULL DEFAULT TRUE,
     comment_count INTEGER NOT NULL DEFAULT 0,
+    view_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     deleted_at TIMESTAMPTZ NULL
@@ -428,6 +431,21 @@ CREATE UNIQUE INDEX uq_adoption_follow_ups_pending ON adoption_follow_ups (adopt
     WHERE completed_at IS NULL;
 CREATE INDEX idx_adoption_follow_ups_owner_due ON adoption_follow_ups (owner_id, due_at);
 
+-- One row per person who opened a post (ADR-0024). Exactly one of user_id / guest_key is set.
+-- guest_key is HMAC-SHA256 of the guest's random per-install id; the id itself is never stored.
+CREATE TABLE post_views (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    post_kind TEXT NOT NULL CHECK (post_kind IN ('post', 'lost_pet', 'adoption')),
+    post_id UUID NOT NULL,
+    user_id UUID NULL REFERENCES users(id) ON DELETE CASCADE,
+    guest_key TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK ((user_id IS NULL) <> (guest_key IS NULL)),
+    CONSTRAINT uq_post_views_user UNIQUE (post_kind, post_id, user_id),
+    CONSTRAINT uq_post_views_guest UNIQUE (post_kind, post_id, guest_key)
+);
+CREATE INDEX idx_post_views_user ON post_views (user_id);
+
 
 Important constraints, indexes and rationale
 ------------------------------------------
@@ -445,6 +463,7 @@ CREATE INDEX idx_posts_active_created_at ON posts (created_at DESC) WHERE delete
 Denormalized counters
 ---------------------
 - posts.like_count and posts.comment_count and cats.total_observations/total_likes/total_contributors are denormalized for performance on feeds and cat pages.
+- posts.view_count, lost_pets.view_count and adoption_posts.view_count count distinct viewers; each is incremented only when a new post_views row is inserted (ADR-0024).
 - Update counters transactionally at the time of insert/delete where possible. If race conditions occur under heavy load, reconcile counters periodically with a background job (post-MVP), or use database triggers.
 
 Transaction patterns and idempotency
