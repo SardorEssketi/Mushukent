@@ -20,12 +20,23 @@ function element() {
 const toggle = element();
 const menu = element();
 const mobile = element();
+const header = element();
+const headerClasses = new Set();
+header.offsetHeight = 80;
+header.classList = {
+  add(name) { headerClasses.add(name); },
+  remove(name) { headerClasses.delete(name); },
+  toggle(name, force) { if (force) headerClasses.add(name); else headerClasses.delete(name); },
+};
+header.contains = (node) => node !== undefined && node === header.focusedChild;
+const windowListeners = {};
+const fakeWindow = { scrollY: 0, addEventListener(name, fn) { windowListeners[name] = fn; } };
 const documentListeners = {};
 const values = {};
 const context = {
   document: {
     documentElement: { dataset: { theme: 'auto' } },
-    querySelector(selector) { return selector === '.theme-toggle' ? toggle : menu; },
+    querySelector(selector) { return { '.theme-toggle': toggle, '.site-header': header }[selector] || menu; },
     getElementById() { return mobile; },
     addEventListener(name, fn) { documentListeners[name] = fn; },
   },
@@ -34,6 +45,8 @@ const context = {
     setItem(key, value) { values[key] = value; },
   },
   matchMedia() { return { matches: false }; },
+  window: fakeWindow,
+  requestAnimationFrame(fn) { fn(); },
 };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, 'src/site.js'), 'utf8'), context);
 toggle.listeners.click();
@@ -53,6 +66,28 @@ assert.equal(menu.getAttribute('aria-label'), 'Open menu');
 assert.equal(mobile.hidden, true);
 assert.equal(menu.focused, true);
 console.log('Theme and mobile menu interactions passed.');
+
+function scrollTo(y) { fakeWindow.scrollY = y; windowListeners.scroll(); }
+const hidden = () => headerClasses.has('is-hidden');
+scrollTo(60);
+assert.equal(hidden(), false, 'bar stays while it is still in view');
+scrollTo(400);
+assert.equal(hidden(), true, 'bar hides while scrolling down');
+scrollTo(395);
+assert.equal(hidden(), true, 'a tiny scroll up is ignored');
+scrollTo(380);
+assert.equal(hidden(), false, 'bar returns on a short scroll up');
+scrollTo(700);
+assert.equal(hidden(), true);
+mobile.hidden = false;
+scrollTo(900);
+assert.equal(hidden(), false, 'bar stays while the mobile menu is open');
+mobile.hidden = true;
+scrollTo(1200);
+assert.equal(hidden(), true);
+header.listeners.focusin();
+assert.equal(hidden(), false, 'keyboard focus brings the bar back');
+console.log('Header hide-on-scroll passed.');
 
 const beacons = [];
 const beaconValues = {};

@@ -21,7 +21,7 @@ worktree. They must never be committed or copied into a release archive.
   publication rights were not established.
 - Map: city-level Tashkent map with public pet-service icons/clusters. No
   visible private animal pin, current-position dot, contact, or coordinates.
-  The caption links to https://www.openstreetmap.org/copyright for attribution.
+  The page shows no OpenStreetMap attribution caption (owner decision).
 - No fictional users, translated screenshot UI, changed counters, replacement
   photographs, or invented application controls are added. Opaque neutral
   covers indicate redaction; the section explains that personal details are

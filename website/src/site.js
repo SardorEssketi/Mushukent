@@ -80,4 +80,28 @@
       }
     });
   }
+  // Hide the bar while scrolling down; bring it back on a short scroll up. It stays visible
+  // near the top, while the mobile menu is open, and while a header control has focus.
+  var header = document.querySelector(".site-header");
+  if (header) {
+    var lastY = window.scrollY;
+    var ticking = false;
+    var update = function () {
+      ticking = false;
+      var y = Math.max(0, window.scrollY);
+      var delta = y - lastY;
+      var pinned = y <= header.offsetHeight || (mobile && !mobile.hidden) || header.contains(document.activeElement);
+      if (pinned) header.classList.remove("is-hidden");
+      if (Math.abs(delta) < 8) return;
+      if (!pinned) header.classList.toggle("is-hidden", delta > 0);
+      lastY = y;
+    };
+    window.addEventListener("scroll", function () {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    }, { passive: true });
+    header.addEventListener("focusin", function () { header.classList.remove("is-hidden"); });
+  }
 })();

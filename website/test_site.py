@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
 
-from build import CONTENT, OUT, ROOT, main
+from build import CONTENT, OUT, PLAY_URL, ROOT, main
 
 
 class Tags(HTMLParser):
@@ -91,9 +91,15 @@ class SiteBuildTest(unittest.TestCase):
                         self.assertTrue((OUT / path.removeprefix("/")).is_file(), path)
                 for a in parsed.all("a"):
                     href = a.get("href", "")
-                    self.assertTrue(href.startswith(("/", "#", "mailto:")) or href == "https://www.openstreetmap.org/copyright", href)
+                    self.assertTrue(href.startswith(("/", "#", "mailto:")) or href == PLAY_URL, href)
                     if href.startswith("/"):
                         self.assertFalse(urlparse(href).netloc)
+                # Hero, mobile menu and closing call to action offer Google Play and the web app;
+                # the header offers both as compact buttons.
+                self.assertEqual(document.count(f'<a class="button button-store" href="{PLAY_URL}">'), 3)
+                self.assertEqual(document.count('<a class="button button-primary" href="/feed">'), 3)
+                self.assertIn(f'<a class="button button-small header-cta header-play" href="{PLAY_URL}">', document)
+                self.assertIn('<a class="button button-small header-cta header-open" href="/feed">', document)
                 self.assertIn('href="/privacy"', document)
                 self.assertNotIn('href="/child-safety"', document)
                 self.assertIn('href="/delete-account"', document)
