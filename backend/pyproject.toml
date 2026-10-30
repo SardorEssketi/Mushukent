@@ -64,6 +64,7 @@ ignore = ["B008", "UP037", "UP046"]
 "tests/test_contact_reveal.py" = ["F811"]
 "tests/test_contact_consent.py" = ["F811"]
 "tests/test_legal_acceptance.py" = ["F811"]
+"tests/test_post_views.py" = ["F811"]
 
 [tool.mypy]
 python_version = "3.13"

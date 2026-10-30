@@ -34,7 +34,14 @@ CURRENT = {
 }
 
 
-def _user(auth_runtime, email: str, *, accepted: str | None = None, at: datetime | None = None):
+def _user(
+    auth_runtime,
+    email: str,
+    *,
+    accepted: str | None = None,
+    accepted_privacy: str | None = None,
+    at: datetime | None = None,
+):
     _, auth_service = auth_runtime
     with auth_service.db_session_manager.session_scope() as session:
         user = SqlAlchemyAuthUserRepository(session).create(
@@ -44,7 +51,7 @@ def _user(auth_runtime, email: str, *, accepted: str | None = None, at: datetime
             email_verified=True,
             is_moderator=False,
             accepted_terms_version=accepted,
-            accepted_privacy_version=accepted,
+            accepted_privacy_version=accepted_privacy or accepted,
             accepted_legal_at=at,
         )
         return user.id
@@ -182,7 +189,13 @@ def test_acceptance_requires_authentication_and_cannot_be_recorded_for_someone_e
 
 def test_account_switch_evaluates_each_account_separately(client, auth_runtime) -> None:
     accepted_email, pending_email = "accepted@example.com", "pending@example.com"
-    _user(auth_runtime, accepted_email, accepted=CURRENT_TERMS_VERSION, at=datetime.now(UTC))
+    _user(
+        auth_runtime,
+        accepted_email,
+        accepted=CURRENT_TERMS_VERSION,
+        accepted_privacy=CURRENT_PRIVACY_VERSION,
+        at=datetime.now(UTC),
+    )
     _user(auth_runtime, pending_email)
     first, first_headers = _login(client, accepted_email)
     assert first["user"]["legal_acceptance_required"] is False
