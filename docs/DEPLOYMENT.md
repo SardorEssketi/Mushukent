@@ -535,6 +535,16 @@ cached error URLs must expire unless they can be identified in logs. Then
 verify repeated missing-object requests are not edge hits and successful
 objects retain their immutable header.
 
+**Keep Encrypted ClientHello (ECH) off for the zone** (SSL/TLS -> Edge
+Certificates). Diagnosed 2026-10-30: with ECH on, browsers (Chrome and Firefox)
+reached `media.mushukistan.uz` through ECH, and the visitor's network reset those
+connections (`net::ERR_CONNECTION_RESET`), so the web app showed no photos while
+the Android app (no ECH) and direct links worked. Cloudflare's ECH test site was
+reset the same way, and forcing a plain handshake made the same browser load every
+photo. After the owner turned ECH off, the media HTTPS DNS record no longer carried
+`ech=` and a fresh default Chrome loaded all live photos. To check: the DoH answer
+for `media.mushukistan.uz` type `HTTPS` must not contain `ech=`.
+
 ## Database backup and migration gate
 
 On the production VPS, before any migration or container replacement:
