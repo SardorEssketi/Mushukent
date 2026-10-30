@@ -317,6 +317,7 @@ for kept copies.
 | `config` fails on `FIREBASE_CREDENTIALS_HOST_PATH` | `docker-compose.notifications.yml` needs it set in the release's `.env`. |
 | Safari/old shell mismatch after a release | Files were changed inside a live directory. Always switch to a complete new directory. |
 | `main.dart.js` download times out on the workstation | The bundle is about 4.7 MB; slow links need 20-60 s. `verify-public.sh` allows 180 s for it. |
+| Web app shows "Mushukistan could not start" in the evening, daytime fine | Startup files time out on the congested international route (2026-10-30: 30-35% packet loss to the VPS, 3-7 KB/s, while Cloudflare/Google had 0% loss). Check that responses carry `Content-Encoding: gzip`; the lasting fix is serving the web host through Cloudflare (ECH off). |
 | `flutter build web` output lacks `useLocalCanvasKit` | A plain `flutter build web` was run after the script. Rebuild with `build_production.ps1 -Target Web`. |
 | Backend refuses to start in production | Startup validation rejects placeholder secrets, `APP_DEBUG=true`, missing R2/CORS values. Read `docker logs mushukistan-backend`; names only, never values. |
 | `.env` has both `EMAIL_FROM` and `RESEND_FROM_EMAIL` | Only `RESEND_FROM_EMAIL` is read; `EMAIL_FROM` is a harmless leftover. |
@@ -504,9 +505,13 @@ service workers left by older Flutter builds and reloads once if an old worker
 still controls the page.
 
 The application shell and its non-hashed executable files form one release
-unit. Nginx sends `no-store` for `index.html`, `flutter_bootstrap.js`,
-`main.dart.js`, and `version.json`, and requires revalidation for JavaScript,
-JSON, WebAssembly, and local CanvasKit files. Any Cloudflare cache rule must
+unit. Nginx sends `no-store` for `index.html`, `flutter_bootstrap.js`, and
+`version.json`, and requires revalidation (`no-cache`, answered with `304` when
+unchanged) for `main.dart.js`, JavaScript, JSON, WebAssembly, and local CanvasKit
+files. `main.dart.js` is not `no-store` because re-downloading several MB on every
+visit made the app fail to start on slow evening links (diagnosed 2026-10-30).
+Nginx gzips HTML, JavaScript, WebAssembly, CSS, SVG and fonts on the web host
+(about 10 MB of startup files become 3-4 MB); JSON, and so the API, is not compressed. Any Cloudflare cache rule must
 honor or be at least as strict as these origin headers for those paths. Do not
 add an edge rule that caches HTML or `main.dart.js` across releases.
 

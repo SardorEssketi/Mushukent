@@ -82,8 +82,8 @@ EOF
 cat > "$BIN/curl" <<'EOF'
 #!/usr/bin/env bash
 # args include -o BODY -D HEADERS -w FORMAT URL
-url="${@: -1}"; body=""; hdr=""
-while [ $# -gt 0 ]; do case "$1" in -o) body="$2"; shift 2;; -D) hdr="$2"; shift 2;; *) shift;; esac; done
+url="${@: -1}"; body=""; hdr=""; gz=""
+while [ $# -gt 0 ]; do case "$1" in -o) body="$2"; shift 2;; -D) hdr="$2"; shift 2;; -H) [[ "$2" == Accept-Encoding:*gzip* ]] && gz=1; shift 2;; *) shift;; esac; done
 echo "curl $url" >> "$STUB_LOG"
 code=200
 case "$url" in
@@ -91,8 +91,10 @@ case "$url" in
   */docs) code=404 ;;
 esac
 [ -n "${STUB_FAIL_URL:-}" ] && [[ "$url" == *"$STUB_FAIL_URL" ]] && code=502
-[ -n "$body" ] && printf 'bundle' > "$body"
-[ -n "$hdr" ] && printf 'HTTP/2 %s\r\ncache-control: no-store, max-age=0\r\n' "$code" > "$hdr"
+cc="no-store, max-age=0"; case "$url" in */main.dart.js) cc="no-cache, must-revalidate, max-age=0" ;; esac
+[ -n "$body" ] && [ "$body" != /dev/null ] && printf 'bundle' > "$body"
+[ -n "$hdr" ] && printf 'HTTP/2 %s\r\ncache-control: %s\r\n' "$code" "$cc" > "$hdr"
+[ -n "$hdr" ] && [ -n "$gz" ] && [ -z "${STUB_NO_GZIP:-}" ] && printf 'content-encoding: gzip\r\n' >> "$hdr"
 printf '%s' "$code"
 EOF
 chmod +x "$BIN/docker" "$BIN/curl"
@@ -101,6 +103,7 @@ export PATH="$BIN:$PATH" STUB_LOG="$T/stub.log" STUB_STATE="$T/stub.state"
 # ---------- verify-public.sh ----------
 : > "$STUB_LOG"
 check "verify-public: all pass" 0 "ALL CHECKS PASSED" bash "$HERE/verify-public.sh"
+STUB_NO_GZIP=1 check "verify-public: uncompressed bundle detected" nonzero "not gzipped" bash "$HERE/verify-public.sh"
 STUB_FAIL_URL="/api/v1/health" check "verify-public: failing health detected" nonzero "SOME CHECKS FAILED" bash "$HERE/verify-public.sh"
 mkdir -p "$T/fl"; printf 'other' > "$T/fl/main.dart.js"
 check "verify-public: bundle hash mismatch detected" nonzero "SHA-256 differs" bash "$HERE/verify-public.sh" --flutter-dir "$T/fl"
