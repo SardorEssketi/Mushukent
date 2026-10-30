@@ -233,7 +233,7 @@ const _termsOfService = _LegalDocument(
 
 const _privacyPolicy = _LegalDocument(
   title: 'Privacy Policy',
-  version: '2026-10-15',
+  version: '2026-10-30',
   sections: [
     _LegalSection(
       paragraphs: [

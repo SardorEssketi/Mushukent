@@ -444,6 +444,6 @@ MushukistanUser testUser({
     preferredLanguage: preferredLanguage,
     legalAcceptanceRequired: legalAcceptanceRequired,
     currentTermsVersion: '2026-10-15',
-    currentPrivacyVersion: '2026-10-15',
+    currentPrivacyVersion: '2026-10-30',
   );
 }

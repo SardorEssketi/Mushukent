@@ -1,6 +1,6 @@
 # Mushukistan Privacy Policy
 
-Version: 2026-10-15
+Version: 2026-10-30
 
 This Privacy Policy explains how Mushukistan collects, uses, stores, shares, and deletes personal data. It applies to the Mushukistan Android app and web app.
 

@@ -42,7 +42,7 @@ Both create forms have an unchecked checkbox. Wording (English; Russian and Uzbe
 - Existing posts are not re-consented: the new policy is narrower than the "public" wording they accepted.
 
 ## Legal documents and acceptance versions
-The Privacy Policy and Terms are version `2026-10-15` (documents, in-app screen, `/privacy` page) and the backend constants `CURRENT_TERMS_VERSION` / `CURRENT_PRIVACY_VERSION` (`backend/app/features/auth/application/schemas.py`) now equal them; `tests/test_legal_consistency.py` fails if they drift.
+The Terms are version `2026-10-15` and the Privacy Policy is version `2026-10-30` (bumped for the post-view guest identifier, ADR-0024; documents, in-app screen, `/privacy` page) and the backend constants `CURRENT_TERMS_VERSION` / `CURRENT_PRIVACY_VERSION` (`backend/app/features/auth/application/schemas.py`) now equal them; `tests/test_legal_consistency.py` fails if they drift.
 
 Behaviour (decided on 2026-10-15 because the contact policy, analytics and push disclosures changed):
 - **Registration and Google account creation** record the current versions and time, as before, only with explicit consent.

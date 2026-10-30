@@ -12,7 +12,7 @@ T = TypeVar("T")
 # Must equal the "Version:" of docs/legal/TERMS_OF_SERVICE.md and PRIVACY_POLICY.md (guarded by
 # tests/test_legal_consistency.py). Changing them asks returning users to accept again.
 CURRENT_TERMS_VERSION = "2026-10-15"
-CURRENT_PRIVACY_VERSION = "2026-10-15"
+CURRENT_PRIVACY_VERSION = "2026-10-30"
 
 
 class ApiSuccess(BaseModel, Generic[T]):

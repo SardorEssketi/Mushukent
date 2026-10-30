@@ -1,6 +1,6 @@
 # Mushukistan Cookie Policy
 
-Version: 2026-08-01
+Version: 2026-10-30
 
 The verified Android app does not use cookies.
 

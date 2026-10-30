@@ -1351,7 +1351,7 @@ void main() {
 
       expect(repo.acceptLegalCalls, 1);
       expect(repo.lastAcceptedTermsVersion, '2026-10-15');
-      expect(repo.lastAcceptedPrivacyVersion, '2026-10-15');
+      expect(repo.lastAcceptedPrivacyVersion, '2026-10-30');
       expect(find.text('Accept and continue'), findsNothing);
       expect(find.byType(FeedScreen), findsOneWidget);
     });
@@ -1409,7 +1409,7 @@ void main() {
 
       await tester.tap(find.text('Privacy Policy'));
       await tester.pumpAndSettle();
-      expect(find.text('Effective date: 2026-10-15'), findsOneWidget);
+      expect(find.text('Effective date: 2026-10-30'), findsOneWidget);
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
       await tester.pumpAndSettle();
 
