@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import gzip
 import hashlib
 import http.client
 import json
@@ -69,7 +70,8 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
         value = {"status": "ok"} if self.path == "/api/v1/health" else {
             "path": self.path, "method": self.command, "body": body,
-            "host": self.headers.get("Host"), "proto": self.headers.get("X-Forwarded-Proto")}
+            "host": self.headers.get("Host"), "proto": self.headers.get("X-Forwarded-Proto"),
+            "real_ip": self.headers.get("X-Real-IP"), "forwarded_for": self.headers.get("X-Forwarded-For")}
         data = json.dumps(value).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -107,10 +109,11 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         context = ssl._create_unverified_context()  # disposable fixture certificate only
 
         def request(path: str, method: str = "GET", body: bytes | None = None,
-                    host: str = "mushukistan.uz", tls: bool = True) -> tuple[int, dict, bytes]:
+                    host: str = "mushukistan.uz", tls: bool = True,
+                    extra: dict | None = None) -> tuple[int, dict, bytes]:
             conn = (http.client.HTTPSConnection("127.0.0.1", https_port, context=context, timeout=15)
                     if tls else http.client.HTTPConnection("127.0.0.1", http_port, timeout=15))
-            conn.request(method, path, body=body, headers={"Host": host})
+            conn.request(method, path, body=body, headers={"Host": host, **(extra or {})})
             response = conn.getresponse()
             result = response.status, dict((k.lower(), v) for k, v in response.getheaders()), response.read()
             conn.close()
@@ -156,8 +159,30 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         for path in ["privacy", "child-safety", "delete-account"]:
             check_file("/" + path, flutter / path / "index.html")
         check_file("/delete-account/delete-account.js", flutter / "delete-account/delete-account.js", "no-store")
-        for path in ["flutter_bootstrap.js", "main.dart.js", "version.json"]:
+        for path in ["flutter_bootstrap.js", "version.json"]:
             check_file("/" + path, flutter / path, "no-store")
+        # main.dart.js is revalidated, not re-downloaded: slow links cannot refetch it each visit.
+        check_file("/main.dart.js", flutter / "main.dart.js", "no-cache")
+        status, headers, _ = request("/main.dart.js")
+        assert "no-store" not in headers.get("cache-control", ""), headers
+        validator = ({"If-None-Match": headers["etag"]} if "etag" in headers
+                     else {"If-Modified-Since": headers["last-modified"]})
+        status, headers, data = request("/main.dart.js", extra=validator)
+        assert status == 304 and not data, ("main.dart.js revalidation", status)
+        report["checks"].append({"path": "/main.dart.js (revalidate)", "status": status})
+        # Large startup files must be gzipped for clients that accept it, byte-identical once decoded.
+        for path in ["/main.dart.js", "/flutter_bootstrap.js", "/canvaskit/canvaskit.js",
+                     "/canvaskit/canvaskit.wasm", "/canvaskit/chromium/canvaskit.wasm"]:
+            file = flutter / path.lstrip("/")
+            if not file.exists():
+                continue
+            status, headers, data = request(path, extra={"Accept-Encoding": "gzip"})
+            assert status == 200 and headers.get("content-encoding") == "gzip", (path, headers)
+            assert "accept-encoding" in headers.get("vary", "").lower(), (path, headers)
+            assert gzip.decompress(data) == file.read_bytes(), f"gzip mismatch at {path}"
+            security(headers)
+            report["checks"].append({"path": path + " (gzip)", "status": status,
+                                     "bytes": len(data), "raw_bytes": file.stat().st_size})
         check_file("/canvaskit/canvaskit.js", flutter / "canvaskit/canvaskit.js", "no-cache")
         check_file("/canvaskit/canvaskit.wasm", flutter / "canvaskit/canvaskit.wasm", "no-cache")
         check_file("/manifest.json", flutter / "manifest.json", "no-cache")
@@ -199,6 +224,15 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
             if path.startswith("/media/"):
                 assert "immutable" in headers["cache-control"]
             report["checks"].append({"path": path, "status": status, "method": method})
+        status, headers, data = request("/api/v1/probe?pad=" + "x" * 2048,  # above gzip_min_length
+                                        extra={"Accept-Encoding": "gzip"})
+        assert status == 200 and "content-encoding" not in headers, ("API must stay uncompressed", headers)
+        # CF-Connecting-IP is trusted only from Cloudflare's ranges; a direct peer cannot forge it.
+        forged = "203.0.113.77"
+        value = json.loads(request("/api/v1/probe", extra={"CF-Connecting-IP": forged})[2])
+        assert value["real_ip"] and value["real_ip"] != forged, ("forged CF-Connecting-IP accepted", value)
+        assert forged not in (value["forwarded_for"] or ""), value
+        report["checks"].append({"path": "/api/v1/probe (forged CF-Connecting-IP)", "real_ip": value["real_ip"]})
         assert json.loads(request("/health")[2])["status"] == "ok"
         status, headers, data = request("/api/v1/health", host="api.mushukistan.uz")
         assert status == 200 and json.loads(data)["status"] == "ok"

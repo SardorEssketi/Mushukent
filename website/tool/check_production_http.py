@@ -64,9 +64,9 @@ def main() -> None:
             check_file(path, args.flutter / 'index.html', 'no-store')
         for path in ['privacy', 'child-safety', 'delete-account']:
             check_file('/' + path, args.flutter / path / 'index.html')
-        for path in ['flutter_bootstrap.js', 'main.dart.js', 'version.json', 'delete-account/delete-account.js']:
+        for path in ['flutter_bootstrap.js', 'version.json', 'delete-account/delete-account.js']:
             check_file('/' + path, args.flutter / path, 'no-store')
-        for path in ['canvaskit/canvaskit.js', 'canvaskit/canvaskit.wasm', 'manifest.json']:
+        for path in ['main.dart.js', 'canvaskit/canvaskit.js', 'canvaskit/canvaskit.wasm', 'manifest.json']:
             check_file('/' + path, args.flutter / path, 'no-cache')
         manifest = json.loads(fetch(origin + '/manifest.json')[2])
         assert manifest['start_url'] == '/feed' and manifest['scope'] == '/'

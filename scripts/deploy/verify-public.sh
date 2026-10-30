@@ -38,6 +38,14 @@ expect_status() { # url expected [label] [max-seconds]
 expect_no_store() { # url (call right after expect_status for the same url)
   if [ "$code" = "200" ] && grep -qi '^cache-control:.*no-store' "$tmp/h"; then pass "$1 sends no-store"; else bad "$1 missing Cache-Control: no-store (status $code)"; fi
 }
+expect_revalidated() { # url (call right after expect_status); revalidated each load, but cacheable
+  if [ "$code" = "200" ] && grep -qi '^cache-control:.*no-cache' "$tmp/h" && ! grep -qi '^cache-control:.*no-store' "$tmp/h"; then
+    pass "$1 sends no-cache (revalidated, not re-downloaded)"; else bad "$1 must send Cache-Control: no-cache without no-store (status $code)"; fi
+}
+expect_gzip() { # url label [max-seconds]; slow links cannot load the startup files uncompressed
+  code="$(curl -sS --max-time "${3:-30}" -H 'Accept-Encoding: gzip' -o /dev/null -D "$tmp/hg" -w '%{http_code}' "$1" 2>"$tmp/err")" || code="000"
+  if [ "$code" = "200" ] && grep -qi '^content-encoding: *gzip' "$tmp/hg"; then pass "$2 is gzipped"; else bad "$2 not gzipped (status $code)"; fi
+}
 
 expect_status "$API_BASE/api/v1/health" 200 "API health"
 expect_status "$WEB_BASE/health" 200 "Web /health proxy"
@@ -50,13 +58,15 @@ expect_no_store "/index.html"
 expect_status "$WEB_BASE/flutter_bootstrap.js" 200 "flutter_bootstrap.js"
 expect_no_store "/flutter_bootstrap.js"
 expect_status "$WEB_BASE/main.dart.js" 200 "main.dart.js" 180
-expect_no_store "/main.dart.js"
+expect_revalidated "/main.dart.js"
 if [ -n "$flutter_dir" ]; then
   want="$(sha256sum "$flutter_dir/main.dart.js" | cut -d' ' -f1)"
   got="$(sha256sum "$tmp/b" | cut -d' ' -f1)"
   [ "$want" = "$got" ] && pass "main.dart.js SHA-256 matches local build ($want)" \
     || bad "main.dart.js SHA-256 differs: served $got, local $want"
 fi
+expect_gzip "$WEB_BASE/main.dart.js" "main.dart.js" 180
+expect_gzip "$WEB_BASE/canvaskit/canvaskit.js" "canvaskit.js"
 for p in /privacy /child-safety /delete-account /robots.txt /sitemap.xml; do
   expect_status "$WEB_BASE$p" 200
 done

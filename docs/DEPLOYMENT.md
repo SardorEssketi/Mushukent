@@ -317,6 +317,7 @@ for kept copies.
 | `config` fails on `FIREBASE_CREDENTIALS_HOST_PATH` | `docker-compose.notifications.yml` needs it set in the release's `.env`. |
 | Safari/old shell mismatch after a release | Files were changed inside a live directory. Always switch to a complete new directory. |
 | `main.dart.js` download times out on the workstation | The bundle is about 4.7 MB; slow links need 20-60 s. `verify-public.sh` allows 180 s for it. |
+| Web app shows "Mushukistan could not start" in the evening, daytime fine | Startup files time out on the congested international route (2026-10-30: 30-35% packet loss to the VPS, 3-7 KB/s, while Cloudflare/Google had 0% loss). Check that responses carry `Content-Encoding: gzip`; the lasting fix is serving the web host through Cloudflare (ECH off). |
 | `flutter build web` output lacks `useLocalCanvasKit` | A plain `flutter build web` was run after the script. Rebuild with `build_production.ps1 -Target Web`. |
 | Backend refuses to start in production | Startup validation rejects placeholder secrets, `APP_DEBUG=true`, missing R2/CORS values. Read `docker logs mushukistan-backend`; names only, never values. |
 | `.env` has both `EMAIL_FROM` and `RESEND_FROM_EMAIL` | Only `RESEND_FROM_EMAIL` is read; `EMAIL_FROM` is a harmless leftover. |
@@ -504,9 +505,13 @@ service workers left by older Flutter builds and reloads once if an old worker
 still controls the page.
 
 The application shell and its non-hashed executable files form one release
-unit. Nginx sends `no-store` for `index.html`, `flutter_bootstrap.js`,
-`main.dart.js`, and `version.json`, and requires revalidation for JavaScript,
-JSON, WebAssembly, and local CanvasKit files. Any Cloudflare cache rule must
+unit. Nginx sends `no-store` for `index.html`, `flutter_bootstrap.js`, and
+`version.json`, and requires revalidation (`no-cache`, answered with `304` when
+unchanged) for `main.dart.js`, JavaScript, JSON, WebAssembly, and local CanvasKit
+files. `main.dart.js` is not `no-store` because re-downloading several MB on every
+visit made the app fail to start on slow evening links (diagnosed 2026-10-30).
+Nginx gzips HTML, JavaScript, WebAssembly, CSS, SVG and fonts on the web host
+(about 10 MB of startup files become 3-4 MB); JSON, and so the API, is not compressed. Any Cloudflare cache rule must
 honor or be at least as strict as these origin headers for those paths. Do not
 add an edge rule that caches HTML or `main.dart.js` across releases.
 
@@ -551,6 +556,41 @@ reset the same way, and forcing a plain handshake made the same browser load eve
 photo. After the owner turned ECH off, the media HTTPS DNS record no longer carried
 `ech=` and a fresh default Chrome loaded all live photos. To check: the DoH answer
 for `media.mushukistan.uz` type `HTTPS` must not contain `ech=`.
+
+### Cloudflare proxy for the web and API hosts
+
+Why: on 2026-10-30 evenings the direct route from Uzbek networks to the VPS lost
+30-35% of packets (Cloudflare and Google: 0%), startup files arrived at 3-7 KB/s
+and the web app showed "Mushukistan could not start". Proxying `mushukistan.uz`,
+`www` and `api` through Cloudflare terminates visitors near them.
+
+**Prerequisite:** the Nginx release with `real_ip_header CF-Connecting-IP` (and
+Cloudflare's ranges in `set_real_ip_from`) must be active first. Without it the
+backend's per-IP rate limit sees only Cloudflare edge addresses. Refresh the
+ranges from https://www.cloudflare.com/ips/ when Cloudflare changes them.
+
+Zone settings (owner, Cloudflare dashboard):
+
+| Setting | Value | Reason |
+| --- | --- | --- |
+| SSL/TLS encryption mode | **Full (strict)** | The origin has a valid Let's Encrypt certificate. Never Flexible (redirect loop with the origin's HTTP->HTTPS redirect). |
+| Always Use HTTPS | **Off** | Certbot renews with HTTP-01 over port 80; Full (strict) forwards HTTP as HTTP, and the origin already redirects everything except `/.well-known/acme-challenge/`. |
+| ECH | **Off** | See above. |
+| Email Obfuscation, Rocket Loader, Cloudflare Fonts, Automatic HTTPS Rewrites, Web Analytics auto-injection | **Off** | They rewrite HTML or inject scripts; release checks compare served bytes and the CSP blocks injected scripts. |
+| Bot Fight Mode | **Off** | It challenges the Android app's API calls, which cannot solve challenges. |
+| Cache Rule: `http.host in {"mushukistan.uz" "www.mushukistan.uz"} and (starts_with(http.request.uri.path, "/canvaskit/") or http.request.uri.path eq "/main.dart.js")` | Eligible for cache; Edge TTL **Use cache-control header if present, bypass cache if not**; Browser TTL **Respect origin** | WASM is not cached by default. The origin's `no-cache` makes the edge revalidate (small `304` from the origin) instead of serving across releases. |
+
+Then switch the `A` records of `mushukistan.uz` and `api` and the `www` CNAME to
+**Proxied**. Rollback: switch them back to **DNS only** (takes effect within a
+few minutes; nothing on the server changes).
+
+Verify: the names resolve to Cloudflare addresses; responses carry
+`server: cloudflare` and `cf-ray`; `/main.dart.js` and `/canvaskit/*.wasm` show
+`cf-cache-status` `HIT` or `REVALIDATED` on repeat requests, never for
+`index.html`; `check-tls.sh --acme` still returns `404` (not a redirect);
+`verify-public.sh` passes; Google sign-in and the Android app work. The public
+certificate is now Cloudflare's: check the origin certificate with
+`TLS_CONNECT=<origin address> scripts/tls/check-tls.sh --cert`.
 
 ## Database backup and migration gate
 
