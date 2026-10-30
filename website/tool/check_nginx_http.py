@@ -70,7 +70,8 @@ class Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0))).decode()
         value = {"status": "ok"} if self.path == "/api/v1/health" else {
             "path": self.path, "method": self.command, "body": body,
-            "host": self.headers.get("Host"), "proto": self.headers.get("X-Forwarded-Proto")}
+            "host": self.headers.get("Host"), "proto": self.headers.get("X-Forwarded-Proto"),
+            "real_ip": self.headers.get("X-Real-IP"), "forwarded_for": self.headers.get("X-Forwarded-For")}
         data = json.dumps(value).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -226,6 +227,12 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         status, headers, data = request("/api/v1/probe?pad=" + "x" * 2048,  # above gzip_min_length
                                         extra={"Accept-Encoding": "gzip"})
         assert status == 200 and "content-encoding" not in headers, ("API must stay uncompressed", headers)
+        # CF-Connecting-IP is trusted only from Cloudflare's ranges; a direct peer cannot forge it.
+        forged = "203.0.113.77"
+        value = json.loads(request("/api/v1/probe", extra={"CF-Connecting-IP": forged})[2])
+        assert value["real_ip"] and value["real_ip"] != forged, ("forged CF-Connecting-IP accepted", value)
+        assert forged not in (value["forwarded_for"] or ""), value
+        report["checks"].append({"path": "/api/v1/probe (forged CF-Connecting-IP)", "real_ip": value["real_ip"]})
         assert json.loads(request("/health")[2])["status"] == "ok"
         status, headers, data = request("/api/v1/health", host="api.mushukistan.uz")
         assert status == 200 and json.loads(data)["status"] == "ok"

@@ -557,6 +557,41 @@ photo. After the owner turned ECH off, the media HTTPS DNS record no longer carr
 `ech=` and a fresh default Chrome loaded all live photos. To check: the DoH answer
 for `media.mushukistan.uz` type `HTTPS` must not contain `ech=`.
 
+### Cloudflare proxy for the web and API hosts
+
+Why: on 2026-10-30 evenings the direct route from Uzbek networks to the VPS lost
+30-35% of packets (Cloudflare and Google: 0%), startup files arrived at 3-7 KB/s
+and the web app showed "Mushukistan could not start". Proxying `mushukistan.uz`,
+`www` and `api` through Cloudflare terminates visitors near them.
+
+**Prerequisite:** the Nginx release with `real_ip_header CF-Connecting-IP` (and
+Cloudflare's ranges in `set_real_ip_from`) must be active first. Without it the
+backend's per-IP rate limit sees only Cloudflare edge addresses. Refresh the
+ranges from https://www.cloudflare.com/ips/ when Cloudflare changes them.
+
+Zone settings (owner, Cloudflare dashboard):
+
+| Setting | Value | Reason |
+| --- | --- | --- |
+| SSL/TLS encryption mode | **Full (strict)** | The origin has a valid Let's Encrypt certificate. Never Flexible (redirect loop with the origin's HTTP->HTTPS redirect). |
+| Always Use HTTPS | **Off** | Certbot renews with HTTP-01 over port 80; Full (strict) forwards HTTP as HTTP, and the origin already redirects everything except `/.well-known/acme-challenge/`. |
+| ECH | **Off** | See above. |
+| Email Obfuscation, Rocket Loader, Cloudflare Fonts, Automatic HTTPS Rewrites, Web Analytics auto-injection | **Off** | They rewrite HTML or inject scripts; release checks compare served bytes and the CSP blocks injected scripts. |
+| Bot Fight Mode | **Off** | It challenges the Android app's API calls, which cannot solve challenges. |
+| Cache Rule: `http.host in {"mushukistan.uz" "www.mushukistan.uz"} and (starts_with(http.request.uri.path, "/canvaskit/") or http.request.uri.path eq "/main.dart.js")` | Eligible for cache; Edge TTL **Use cache-control header if present, bypass cache if not**; Browser TTL **Respect origin** | WASM is not cached by default. The origin's `no-cache` makes the edge revalidate (small `304` from the origin) instead of serving across releases. |
+
+Then switch the `A` records of `mushukistan.uz` and `api` and the `www` CNAME to
+**Proxied**. Rollback: switch them back to **DNS only** (takes effect within a
+few minutes; nothing on the server changes).
+
+Verify: the names resolve to Cloudflare addresses; responses carry
+`server: cloudflare` and `cf-ray`; `/main.dart.js` and `/canvaskit/*.wasm` show
+`cf-cache-status` `HIT` or `REVALIDATED` on repeat requests, never for
+`index.html`; `check-tls.sh --acme` still returns `404` (not a redirect);
+`verify-public.sh` passes; Google sign-in and the Android app work. The public
+certificate is now Cloudflare's: check the origin certificate with
+`TLS_CONNECT=<origin address> scripts/tls/check-tls.sh --cert`.
+
 ## Database backup and migration gate
 
 On the production VPS, before any migration or container replacement:
