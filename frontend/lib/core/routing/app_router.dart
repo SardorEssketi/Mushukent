@@ -47,6 +47,7 @@ import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/account_security_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
 import '../network/mushukistan_api.dart';
+import '../navigation/back_to_feed_scope.dart';
 import '../navigation/settings_changes_guard.dart';
 import '../startup/startup_log.dart';
 import '../widgets/app_shell_scaffold.dart';
@@ -248,7 +249,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (context, state) => NoTransitionPage<void>(
           key: state.pageKey,
-          child: const SessionUnavailableScreen(),
+          child: const BackToFeedScope(child: SessionUnavailableScreen()),
         ),
       ),
       GoRoute(
@@ -256,9 +257,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         pageBuilder: (context, state) => NoTransitionPage<void>(
           key: state.pageKey,
-          child: AuthRequiredScreen(
-            redirect: validatedPostAuthRedirect(
-              state.uri.queryParameters['redirect'],
+          child: BackToFeedScope(
+            child: AuthRequiredScreen(
+              redirect: validatedPostAuthRedirect(
+                state.uri.queryParameters['redirect'],
+              ),
             ),
           ),
         ),
@@ -266,12 +269,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) =>
+            const BackToFeedScope(child: LoginScreen()),
       ),
       GoRoute(
         path: '/register',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) =>
+            const BackToFeedScope(child: RegisterScreen()),
       ),
       GoRoute(
         path: '/legal/terms',
