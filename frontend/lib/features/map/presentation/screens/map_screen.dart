@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/lifecycle/app_resume.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -608,6 +609,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
       MapScreen.debugBuildCount++;
       return true;
     }());
+    // Back after a long time away: reload the markers of the area on screen, through the same
+    // forced viewport load a camera move uses. The map itself does not move.
+    listenForStaleResume(ref, () {
+      final camera = _currentCamera;
+      if (camera != null && _mapReady) {
+        _onCameraChanged(camera, false, force: true);
+      }
+    });
     final selectedLayers = ref.watch(_mapLayersProvider);
     final resolvedLostPetIds = ref.watch(resolvedLostPetIdsProvider);
     final deletedLostPetIds = ref.watch(deletedLostPetIdsProvider);

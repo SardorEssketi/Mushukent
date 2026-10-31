@@ -228,6 +228,55 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void>? _revalidateInFlight;
+
+  /// Quiet re-check of a signed-in session, e.g. after a long time in the background. The
+  /// signed-in UI stays as it is while it runs; only a definitive answer from the server (the
+  /// credentials were rejected and could not be refreshed, in which case the repository has
+  /// already cleared them) ends the session. Offline, timeouts and server errors change nothing.
+  /// No-op unless signed in, and never overlaps a restore or another re-check.
+  Future<void> revalidateSession() {
+    if (!state.isAuthenticated ||
+        _restoreInFlight != null ||
+        _logoutInFlight != null) {
+      return Future<void>.value();
+    }
+    final inFlight = _revalidateInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _performRevalidation();
+    _revalidateInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_revalidateInFlight, future)) _revalidateInFlight = null;
+    });
+  }
+
+  Future<void> _performRevalidation() async {
+    final epoch = _authEpoch;
+    final userId = state.user?.id;
+    final SessionRestoreResult result;
+    try {
+      result = await _withRestoreTimeout(_repository.restoreSession());
+    } catch (_) {
+      return; // Unreachable or unexpected: keep the session as it is.
+    }
+    if (!mounted || epoch != _authEpoch || state.user?.id != userId) return;
+    switch (result) {
+      case SessionRestoreSuccess(:final session):
+        if (session.user.id == userId) {
+          state = AuthState.authenticated(session.user);
+        }
+      case SessionRestoreInvalid(:final message):
+        logStartupStage('Session revalidation: credentials rejected');
+        _cancelReconnect();
+        state = AuthState.unauthenticated(message: message);
+      case SessionRestoreMissing():
+      case SessionRestoreFailure():
+        // Missing: credentials changed underneath (another login or a logout elsewhere), which
+        // the token store already reports on its own. Failure: temporary. Neither is a rejection.
+        break;
+    }
+  }
+
   /// User-initiated (Retry button) or lifecycle-initiated (app resumed) re-check of a stored
   /// session that could not be confirmed. Starts a fresh automatic-retry round. No-op in every
   /// other phase, so it is safe to call from a lifecycle observer.

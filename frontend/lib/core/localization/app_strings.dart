@@ -704,6 +704,12 @@ class AppStrings {
     };
   }
 
+  String get newPosts => switch (this) {
+        _UzbekStrings() => 'Yangi postlar',
+        _RussianStrings() => 'Новые публикации',
+        _ => 'New posts',
+      };
+
   String get couldNotLoadSection {
     return switch (this) {
       _UzbekStrings() => 'Bu bo‘limni yuklab bo‘lmadi',

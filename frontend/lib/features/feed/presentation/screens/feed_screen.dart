@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../notifications/presentation/notification_center_screen.dart';
 
+import '../../../../core/lifecycle/app_resume.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/navigation/tab_actions.dart';
 import '../../../../core/network/api_error.dart';
@@ -65,8 +67,9 @@ Future<ApiPage<FeedItem>> _fetchFeedPage(
   );
 }
 
-final feedPostsProvider =
-    FutureProvider.autoDispose<ApiPage<FeedItem>>((ref) async {
+final feedPostsProvider = FutureProvider.autoDispose<ApiPage<FeedItem>>((
+  ref,
+) async {
   ref.watch(postMutationRevisionProvider);
   final api = ref.watch(mushukistanApiProvider);
   final mode = ref.watch(feedModeProvider);
@@ -157,6 +160,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   bool _loadingMore = false;
   bool _pageError = false;
   bool _replaceOnNextPage = false;
+  bool _hasNewPosts = false;
+  bool _resumeCheckInFlight = false;
+
+  /// Within this distance of the top the reader sees the newest posts, so a refresh there
+  /// does not move anything they are reading.
+  static const _nearTopOffset = 48.0;
 
   @override
   void initState() {
@@ -181,6 +190,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     _loadingMore = false;
     _pageError = false;
     _replaceOnNextPage = false;
+    _hasNewPosts = false;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
         _scrollController.jumpTo(0);
@@ -293,12 +303,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     }
   }
 
-  Future<void> _refresh() async {
+  /// Replaces the first page. The current posts stay on screen until the new ones arrive.
+  /// [quiet] (background revalidation) keeps a failure silent: the posts already shown stay.
+  Future<void> _refresh({bool quiet = false}) async {
     setState(() {
       _generation++;
       _replaceOnNextPage = true;
       _loadingMore = false;
       _pageError = false;
+      _hasNewPosts = false;
     });
     try {
       final refreshed = ref.refresh(feedPostsProvider.future);
@@ -306,15 +319,75 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     } catch (_) {
       if (!mounted) return;
       _replaceOnNextPage = false;
+      if (quiet) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(ref.read(appStringsProvider).couldNotLoadSection)),
+          content: Text(ref.read(appStringsProvider).couldNotLoadSection),
+        ),
       );
     }
   }
 
+  bool get _nearTop =>
+      !_scrollController.hasClients ||
+      _scrollController.offset <= _nearTopOffset;
+
+  /// Back after a long time away. At the top the newest posts are what the reader sees, so
+  /// they are replaced quietly. Further down nothing moves: the first page is only checked, and
+  /// a "New posts" button is offered when it starts with something not in the list yet.
+  /// One check at a time; a failure (offline, timeout) keeps what is shown and stays silent.
+  Future<void> _revalidateAfterResume() async {
+    if (_resumeCheckInFlight || _firstPage == null || _replaceOnNextPage) {
+      return;
+    }
+    _resumeCheckInFlight = true;
+    try {
+      if (_nearTop) {
+        await _refresh(quiet: true);
+        return;
+      }
+      final generation = _generation;
+      final viewKey = _activeKey;
+      final mode = ref.read(feedModeProvider);
+      final page = await _fetchFeedPage(
+        ref.read(mushukistanApiProvider),
+        mode: mode,
+        period: mode == 'popular' ? ref.read(feedPopularPeriodProvider) : 'day',
+        includeViewerContext: ref.read(currentUserProvider) != null,
+      );
+      if (!mounted || generation != _generation || viewKey != _activeKey) {
+        return;
+      }
+      final known = {
+        for (final item in [...?_firstPage?.items, ..._laterItems])
+          '${item.itemType}:${item.id}',
+      };
+      final newest = page.items.isEmpty ? null : page.items.first;
+      final hasNew =
+          newest != null && !known.contains('${newest.itemType}:${newest.id}');
+      if (hasNew != _hasNewPosts) setState(() => _hasNewPosts = hasNew);
+    } catch (_) {
+      // Offline or slow network: keep the posts on screen; pull-to-refresh still works.
+    } finally {
+      _resumeCheckInFlight = false;
+    }
+  }
+
+  Future<void> _showNewPosts() async {
+    setState(() => _hasNewPosts = false);
+    if (_scrollController.hasClients) {
+      await _scrollController.animateTo(
+        _scrollController.position.minScrollExtent,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+      );
+    }
+    if (mounted) await _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
+    listenForStaleResume(ref, () => unawaited(_revalidateAfterResume()));
     ref.listen<int>(feedScrollToTopRequestsProvider, (previous, next) {
       if (previous == null || previous == next) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -347,19 +420,22 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     if (received != null && !identical(received, _observedFirstPage)) {
       _acceptFirstPage(received);
     }
-    final items = _deduplicate(_applyPostMutations(
-      [...?_firstPage?.items, ..._laterItems],
-      overrides: pageAsync.isLoading || pageAsync.hasError || _pageError
-          ? ref.watch(lostPetMutationOverridesProvider)
-          : const {},
-      deletedIds: ref.watch(deletedLostPetIdsProvider),
-      resolvedIds: ref.watch(resolvedLostPetIdsProvider),
-      adoptionOverrides: pageAsync.isLoading || pageAsync.hasError || _pageError
-          ? ref.watch(adoptionMutationOverridesProvider)
-          : const {},
-      deletedAdoptionIds: ref.watch(deletedAdoptionIdsProvider),
-      resolvedAdoptionIds: ref.watch(resolvedAdoptionIdsProvider),
-    ));
+    final items = _deduplicate(
+      _applyPostMutations(
+        [...?_firstPage?.items, ..._laterItems],
+        overrides: pageAsync.isLoading || pageAsync.hasError || _pageError
+            ? ref.watch(lostPetMutationOverridesProvider)
+            : const {},
+        deletedIds: ref.watch(deletedLostPetIdsProvider),
+        resolvedIds: ref.watch(resolvedLostPetIdsProvider),
+        adoptionOverrides:
+            pageAsync.isLoading || pageAsync.hasError || _pageError
+                ? ref.watch(adoptionMutationOverridesProvider)
+                : const {},
+        deletedAdoptionIds: ref.watch(deletedAdoptionIdsProvider),
+        resolvedAdoptionIds: ref.watch(resolvedAdoptionIdsProvider),
+      ),
+    );
 
     final gutter = feedGutter(context);
 
@@ -379,133 +455,202 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
               // Icon and text buttons already carry ~12px of inner padding.
               end: math.max(0, gutter - AppSpacing.md),
             ),
-            child: Row(children: [
-              const Expanded(child: _FeedHeaderTitle()),
-              if (authenticated) const NotificationBell(),
-              if (!authenticated && sessionResolving)
-                const _FeedHeaderSessionPending(),
-              if (!authenticated && !sessionResolving && !sessionUnconfirmed)
-                TextButton(
-                  onPressed: () => context.push('/login'),
-                  child: Text(strings.login),
-                ),
-            ]),
+            child: Row(
+              children: [
+                const Expanded(child: _FeedHeaderTitle()),
+                if (authenticated) const NotificationBell(),
+                if (!authenticated && sessionResolving)
+                  const _FeedHeaderSessionPending(),
+                if (!authenticated && !sessionResolving && !sessionUnconfirmed)
+                  TextButton(
+                    onPressed: () => context.push('/login'),
+                    child: Text(strings.login),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: AppContentWidth(
-          maxWidth: AppWidths.readable,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _FeedFilterBar(
-                        selectedMode: mode,
-                        strings: strings,
-                        gutter: gutter,
-                        onSelected: (value) =>
-                            ref.read(feedModeProvider.notifier).state = value,
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _refresh,
+            child: AppContentWidth(
+              maxWidth: AppWidths.readable,
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _FeedFilterBar(
+                            selectedMode: mode,
+                            strings: strings,
+                            gutter: gutter,
+                            onSelected: (value) => ref
+                                .read(feedModeProvider.notifier)
+                                .state = value,
+                          ),
+                          if (mode == 'popular')
+                            _PopularPeriodBar(
+                              selectedPeriod: period,
+                              strings: strings,
+                              gutter: gutter,
+                              onSelected: (value) => ref
+                                  .read(
+                                    feedPopularPeriodProvider.notifier,
+                                  )
+                                  .state = value,
+                            ),
+                        ],
                       ),
-                      if (mode == 'popular')
-                        _PopularPeriodBar(
-                          selectedPeriod: period,
-                          strings: strings,
-                          gutter: gutter,
-                          onSelected: (value) => ref
-                              .read(feedPopularPeriodProvider.notifier)
-                              .state = value,
-                        ),
-                    ],
+                    ),
                   ),
+                  if (sessionUnconfirmed)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          0,
+                          gutter,
+                          AppSpacing.md,
+                        ),
+                        child: const SessionUnavailableBanner(),
+                      ),
+                    )
+                  else if (ref.watch(feedIntroDismissedProvider) == false)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          0,
+                          gutter,
+                          AppSpacing.md,
+                        ),
+                        child: _FeedIntroCard(
+                          strings: strings,
+                          showSignUp: !authenticated && !sessionResolving,
+                          onClose: () => ref
+                              .read(feedIntroDismissedProvider.notifier)
+                              .dismiss(),
+                        ),
+                      ),
+                    ),
+                  if (_firstPage == null && pageAsync.isLoading)
+                    SliverToBoxAdapter(child: _FeedLoading(gutter: gutter))
+                  else if (_firstPage == null && pageAsync.hasError)
+                    SliverToBoxAdapter(
+                      child: AppStatePanel(
+                        icon: Icons.error_outline,
+                        title: strings.couldNotLoadSection,
+                        action: FilledButton(
+                          onPressed: () => ref.invalidate(feedPostsProvider),
+                          child: Text(strings.retry),
+                        ),
+                      ),
+                    )
+                  else if (items.isEmpty)
+                    SliverToBoxAdapter(
+                      child: AppStatePanel(
+                        icon: Icons.dynamic_feed_outlined,
+                        title: strings.feedEmptyMessage(mode),
+                        message:
+                            mode == 'recent' ? strings.emptyFeedMessage : null,
+                      ),
+                    )
+                  else
+                    SliverList.builder(
+                      itemCount: items.length,
+                      itemBuilder: (context, index) => Padding(
+                        key: ValueKey(
+                          '${items[index].itemType}:${items[index].id}',
+                        ),
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          0,
+                          gutter,
+                          AppSpacing.md,
+                        ),
+                        child: _FeedItemCard(
+                          item: items[index],
+                          strings: strings,
+                        ),
+                      ),
+                    ),
+                  if (_loadingMore)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.lg),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                  if (_pageError)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          0,
+                          gutter,
+                          AppSpacing.xl,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(strings.couldNotLoadSection)),
+                            TextButton(
+                              onPressed: _loadMore,
+                              child: Text(strings.retry),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: AppSpacing.md),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_hasNewPosts)
+            Positioned(
+              top: AppSpacing.sm,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _NewPostsButton(
+                  label: strings.newPosts,
+                  onPressed: _showNewPosts,
                 ),
               ),
-              if (sessionUnconfirmed)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
-                    child: const SessionUnavailableBanner(),
-                  ),
-                )
-              else if (ref.watch(feedIntroDismissedProvider) == false)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
-                    child: _FeedIntroCard(
-                      strings: strings,
-                      showSignUp: !authenticated && !sessionResolving,
-                      onClose: () => ref
-                          .read(feedIntroDismissedProvider.notifier)
-                          .dismiss(),
-                    ),
-                  ),
-                ),
-              if (_firstPage == null && pageAsync.isLoading)
-                SliverToBoxAdapter(child: _FeedLoading(gutter: gutter))
-              else if (_firstPage == null && pageAsync.hasError)
-                SliverToBoxAdapter(
-                  child: AppStatePanel(
-                    icon: Icons.error_outline,
-                    title: strings.couldNotLoadSection,
-                    action: FilledButton(
-                      onPressed: () => ref.invalidate(feedPostsProvider),
-                      child: Text(strings.retry),
-                    ),
-                  ),
-                )
-              else if (items.isEmpty)
-                SliverToBoxAdapter(
-                  child: AppStatePanel(
-                    icon: Icons.dynamic_feed_outlined,
-                    title: strings.feedEmptyMessage(mode),
-                    message: mode == 'recent' ? strings.emptyFeedMessage : null,
-                  ),
-                )
-              else
-                SliverList.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, index) => Padding(
-                    key:
-                        ValueKey('${items[index].itemType}:${items[index].id}'),
-                    padding:
-                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
-                    child: _FeedItemCard(item: items[index], strings: strings),
-                  ),
-                ),
-              if (_loadingMore)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(AppSpacing.lg),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                ),
-              if (_pageError)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding:
-                        EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.xl),
-                    child: Row(children: [
-                      Expanded(child: Text(strings.couldNotLoadSection)),
-                      TextButton(
-                        onPressed: _loadMore,
-                        child: Text(strings.retry),
-                      ),
-                    ]),
-                  ),
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
-            ],
-          ),
-        ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Floating "New posts" button over the list; the list itself is left where it is.
+class _NewPostsButton extends StatelessWidget {
+  const _NewPostsButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      key: const ValueKey('feed-new-posts'),
+      onPressed: onPressed,
+      icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        elevation: 3,
+        shape: const StadiumBorder(),
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
@@ -563,18 +708,20 @@ class _FeedHeaderTitle extends ConsumerWidget {
               overflow: TextOverflow.ellipsis,
               style: style,
             )
-          : Row(children: [
-              Icon(Icons.pets_rounded, size: 22, color: colors.primary),
-              const SizedBox(width: AppSpacing.sm),
-              Flexible(
-                child: Text(
-                  'Mushukistan',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: style,
+          : Row(
+              children: [
+                Icon(Icons.pets_rounded, size: 22, color: colors.primary),
+                const SizedBox(width: AppSpacing.sm),
+                Flexible(
+                  child: Text(
+                    'Mushukistan',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style,
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
     );
   }
 }
@@ -598,15 +745,19 @@ class _FeedIntroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final itemStyle =
-        theme.textTheme.bodySmall?.copyWith(color: colors.onPrimaryContainer);
+    final itemStyle = theme.textTheme.bodySmall?.copyWith(
+      color: colors.onPrimaryContainer,
+    );
     Widget item(IconData icon, String text) => Padding(
           padding: const EdgeInsets.only(top: AppSpacing.xs),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(icon, size: 18, color: colors.onPrimaryContainer),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(child: Text(text, style: itemStyle)),
-          ]),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 18, color: colors.onPrimaryContainer),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: Text(text, style: itemStyle)),
+            ],
+          ),
         );
     return DecoratedBox(
       key: const ValueKey('feed-intro'),
@@ -616,30 +767,36 @@ class _FeedIntroCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg, AppSpacing.xs, AppSpacing.xs, AppSpacing.md),
+          AppSpacing.lg,
+          AppSpacing.xs,
+          AppSpacing.xs,
+          AppSpacing.md,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    strings.feedIntroTitle,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: colors.onPrimaryContainer,
-                      fontWeight: FontWeight.w800,
+            Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      strings.feedIntroTitle,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: colors.onPrimaryContainer,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              IconButton(
-                key: const ValueKey('feed-intro-close'),
-                tooltip: strings.feedIntroClose,
-                onPressed: onClose,
-                icon: Icon(Icons.close, color: colors.onPrimaryContainer),
-              ),
-            ]),
+                IconButton(
+                  key: const ValueKey('feed-intro-close'),
+                  tooltip: strings.feedIntroClose,
+                  onPressed: onClose,
+                  icon: Icon(Icons.close, color: colors.onPrimaryContainer),
+                ),
+              ],
+            ),
             Padding(
               padding: const EdgeInsetsDirectional.only(end: AppSpacing.md),
               child: Column(
@@ -656,7 +813,8 @@ class _FeedIntroCard extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         minimumSize: const Size(0, 40),
                         padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.lg),
+                          horizontal: AppSpacing.lg,
+                        ),
                         textStyle: theme.textTheme.labelLarge,
                       ),
                       onPressed: () => context.push('/register'),
@@ -683,38 +841,46 @@ class _FeedLoading extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: gutter),
-      child: Column(children: [
-        for (var i = 0; i < 2; i++) ...[
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: colors.surface,
-              borderRadius: BorderRadius.circular(AppRadii.md),
+      child: Column(
+        children: [
+          for (var i = 0; i < 2; i++) ...[
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: BorderRadius.circular(AppRadii.md),
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: colors.surfaceContainerHigh,
+                        ),
+                        const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
+                        Expanded(
+                          child: Container(
+                            height: 12,
+                            color: colors.surfaceContainerHigh,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: 220,
+                    child: ColoredBox(color: colors.surfaceContainer),
+                  ),
+                  const SizedBox(height: 64),
+                ],
+              ),
             ),
-            child: Column(children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: colors.surfaceContainerHigh,
-                  ),
-                  const SizedBox(width: AppSpacing.sm + AppSpacing.xxs),
-                  Expanded(
-                    child: Container(
-                        height: 12, color: colors.surfaceContainerHigh),
-                  ),
-                ]),
-              ),
-              SizedBox(
-                height: 220,
-                child: ColoredBox(color: colors.surfaceContainer),
-              ),
-              const SizedBox(height: 64),
-            ]),
-          ),
-          const SizedBox(height: AppSpacing.md),
+            const SizedBox(height: AppSpacing.md),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -741,39 +907,43 @@ class _FeedFilterBar extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: EdgeInsets.symmetric(
-            horizontal: gutter, vertical: AppSpacing.xs + AppSpacing.xxs),
-        child: Row(children: [
-          _FilterTab(
-            value: 'recent',
-            selectedValue: selectedMode,
-            label: strings.recent,
-            onSelected: onSelected,
-          ),
-          _FilterTab(
-            value: 'popular',
-            selectedValue: selectedMode,
-            label: strings.popular,
-            onSelected: onSelected,
-          ),
-          _FilterTab(
-            value: 'needs_help',
-            selectedValue: selectedMode,
-            label: strings.needsHelp,
-            onSelected: onSelected,
-          ),
-          _FilterTab(
-            value: 'lost_pets',
-            selectedValue: selectedMode,
-            label: strings.lostPets,
-            onSelected: onSelected,
-          ),
-          _FilterTab(
-            value: 'adoption',
-            selectedValue: selectedMode,
-            label: strings.adoption,
-            onSelected: onSelected,
-          ),
-        ]),
+          horizontal: gutter,
+          vertical: AppSpacing.xs + AppSpacing.xxs,
+        ),
+        child: Row(
+          children: [
+            _FilterTab(
+              value: 'recent',
+              selectedValue: selectedMode,
+              label: strings.recent,
+              onSelected: onSelected,
+            ),
+            _FilterTab(
+              value: 'popular',
+              selectedValue: selectedMode,
+              label: strings.popular,
+              onSelected: onSelected,
+            ),
+            _FilterTab(
+              value: 'needs_help',
+              selectedValue: selectedMode,
+              label: strings.needsHelp,
+              onSelected: onSelected,
+            ),
+            _FilterTab(
+              value: 'lost_pets',
+              selectedValue: selectedMode,
+              label: strings.lostPets,
+              onSelected: onSelected,
+            ),
+            _FilterTab(
+              value: 'adoption',
+              selectedValue: selectedMode,
+              label: strings.adoption,
+              onSelected: onSelected,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -856,22 +1026,24 @@ class _PopularPeriodBar extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: EdgeInsets.fromLTRB(gutter, AppSpacing.xxs, gutter, 0),
-      child: Row(children: [
-        for (final (value, label) in [
-          ('day', strings.today),
-          ('month', strings.month),
-          ('all', strings.allTime),
-        ]) ...[
-          ChoiceChip(
-            label: Text(label),
-            selected: selectedPeriod == value,
-            showCheckmark: false,
-            onSelected: (_) => onSelected(value),
-            visualDensity: VisualDensity.compact,
-          ),
-          const SizedBox(width: AppSpacing.sm),
+      child: Row(
+        children: [
+          for (final (value, label) in [
+            ('day', strings.today),
+            ('month', strings.month),
+            ('all', strings.allTime),
+          ]) ...[
+            ChoiceChip(
+              label: Text(label),
+              selected: selectedPeriod == value,
+              showCheckmark: false,
+              onSelected: (_) => onSelected(value),
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -889,7 +1061,9 @@ class _FeedItemCard extends StatelessWidget {
     }
     if (item is AdoptionPostData) {
       return _AdoptionPostCard(
-          post: item as AdoptionPostData, strings: strings);
+        post: item as AdoptionPostData,
+        strings: strings,
+      );
     }
     final post = item as PostSummary;
     return FeedPostCard(
@@ -931,61 +1105,69 @@ class _LostPetCard extends StatelessWidget {
         ),
         Padding(
           padding: feedBodyPadding,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            FeedPetTitle(
-              name: lostPet.petName,
-              badge:
-                  FeedKindBadge(kind: FeedKind.lostPet, label: strings.lostPet),
-            ),
-            if (info != null && info.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              FeedBodyText(text: info, strings: strings),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FeedPetTitle(
+                name: lostPet.petName,
+                badge: FeedKindBadge(
+                  kind: FeedKind.lostPet,
+                  label: strings.lostPet,
+                ),
+              ),
+              if (info != null && info.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xs),
+                FeedBodyText(text: info, strings: strings),
+              ],
             ],
-          ]),
+          ),
         ),
         Padding(
           padding: feedActionsPadding,
-          child: Row(children: [
-            FeedCountAction(
-              tooltip: strings.comments,
-              icon: Icons.chat_bubble_outline,
-              count: lostPet.commentCount,
-              onPressed: openPost,
-            ),
-            if (mapLocation != null)
-              FeedViewCount(label: strings.views, count: lostPet.viewCount),
-            if (mapLocation != null)
-              // Shares the row with comments and views, so on the narrowest
-              // phones a long translation ellipsizes instead of overflowing.
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Tooltip(
-                    message: strings.viewOnMap,
-                    child: TextButton.icon(
-                      key: const ValueKey('lost-pet-view-on-map'),
-                      onPressed: () {
-                        final location = mapLocation;
-                        context.go('/map?lat=${location.latitude}'
+          child: Row(
+            children: [
+              FeedCountAction(
+                tooltip: strings.comments,
+                icon: Icons.chat_bubble_outline,
+                count: lostPet.commentCount,
+                onPressed: openPost,
+              ),
+              if (mapLocation != null)
+                FeedViewCount(label: strings.views, count: lostPet.viewCount),
+              if (mapLocation != null)
+                // Shares the row with comments and views, so on the narrowest
+                // phones a long translation ellipsizes instead of overflowing.
+                Expanded(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Tooltip(
+                      message: strings.viewOnMap,
+                      child: TextButton.icon(
+                        key: const ValueKey('lost-pet-view-on-map'),
+                        onPressed: () {
+                          final location = mapLocation;
+                          context.go(
+                            '/map?lat=${location.latitude}'
                             '&lon=${location.longitude}'
-                            '&lostPetId=${lostPet.id}');
-                      },
-                      icon: const Icon(Icons.map_outlined, size: 19),
-                      label: Text(
-                        strings.viewOnMap,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                            '&lostPetId=${lostPet.id}',
+                          );
+                        },
+                        icon: const Icon(Icons.map_outlined, size: 19),
+                        label: Text(
+                          strings.viewOnMap,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              )
-            else ...[
-              const Spacer(),
-              FeedViewCount(label: strings.views, count: lostPet.viewCount),
+                )
+              else ...[
+                const Spacer(),
+                FeedViewCount(label: strings.views, count: lostPet.viewCount),
+              ],
             ],
-          ]),
+          ),
         ),
       ],
     );
@@ -1023,31 +1205,37 @@ class _AdoptionPostCard extends StatelessWidget {
         ),
         Padding(
           padding: feedBodyPadding,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            FeedPetTitle(
-              name: post.petName,
-              badge: FeedKindBadge(
-                  kind: FeedKind.rehoming, label: strings.adoption),
-            ),
-            if (info != null && info.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              FeedBodyText(text: info, strings: strings),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              FeedPetTitle(
+                name: post.petName,
+                badge: FeedKindBadge(
+                  kind: FeedKind.rehoming,
+                  label: strings.adoption,
+                ),
+              ),
+              if (info != null && info.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.xs),
+                FeedBodyText(text: info, strings: strings),
+              ],
             ],
-          ]),
+          ),
         ),
         Padding(
           padding: feedActionsPadding,
-          child: Row(children: [
-            FeedCountAction(
-              tooltip: strings.comments,
-              icon: Icons.chat_bubble_outline,
-              count: post.commentCount,
-              onPressed: openPost,
-            ),
-            const Spacer(),
-            FeedViewCount(label: strings.views, count: post.viewCount),
-          ]),
+          child: Row(
+            children: [
+              FeedCountAction(
+                tooltip: strings.comments,
+                icon: Icons.chat_bubble_outline,
+                count: post.commentCount,
+                onPressed: openPost,
+              ),
+              const Spacer(),
+              FeedViewCount(label: strings.views, count: post.viewCount),
+            ],
+          ),
         ),
       ],
     );
@@ -1055,11 +1243,7 @@ class _AdoptionPostCard extends StatelessWidget {
 }
 
 class FeedPostCard extends ConsumerStatefulWidget {
-  const FeedPostCard({
-    super.key,
-    required this.post,
-    required this.onTap,
-  });
+  const FeedPostCard({super.key, required this.post, required this.onTap});
 
   final PostSummary post;
   final VoidCallback onTap;
@@ -1099,8 +1283,12 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
       _liked = !wasLiked;
       _likeCount = newCount;
     });
-    setPostLikeOverride(ref, widget.post.id,
-        liked: !wasLiked, likeCount: newCount);
+    setPostLikeOverride(
+      ref,
+      widget.post.id,
+      liked: !wasLiked,
+      likeCount: newCount,
+    );
     try {
       if (wasLiked) {
         await ref.read(mushukistanApiProvider).unlikePost(widget.post.id);
@@ -1112,8 +1300,12 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
           _liked = result.liked;
           _likeCount = result.likeCount;
         });
-        setPostLikeOverride(ref, widget.post.id,
-            liked: result.liked, likeCount: result.likeCount);
+        setPostLikeOverride(
+          ref,
+          widget.post.id,
+          liked: result.liked,
+          likeCount: result.likeCount,
+        );
       }
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
@@ -1125,20 +1317,25 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
           _liked = true;
           _likeCount = newCount;
         });
-        setPostLikeOverride(ref, widget.post.id,
-            liked: true, likeCount: newCount);
+        setPostLikeOverride(
+          ref,
+          widget.post.id,
+          liked: true,
+          likeCount: newCount,
+        );
       } else {
         _restoreLike(wasLiked, oldCount);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.userMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.userMessage)));
       }
     } catch (_) {
       if (!mounted) return;
       _restoreLike(wasLiked, oldCount);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(ref.read(appStringsProvider).couldNotLoadSection)),
+          content: Text(ref.read(appStringsProvider).couldNotLoadSection),
+        ),
       );
     } finally {
       if (mounted) setState(() => _submittingLike = false);
@@ -1186,73 +1383,91 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
         ),
         Padding(
           padding: feedBodyPadding,
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (hasName)
-              FeedPetTitle(
-                name: catName,
-                badge: needsHelp
-                    ? FeedKindBadge(
-                        kind: FeedKind.needsHelp, label: strings.needsHelp)
-                    : null,
-              )
-            else if (needsHelp)
-              FeedKindBadge(kind: FeedKind.needsHelp, label: strings.needsHelp)
-            else if (description == null || description.isEmpty)
-              Text(strings.catObservation,
-                  style: Theme.of(context).textTheme.titleMedium),
-            if (description != null && description.isNotEmpty) ...[
-              if (hasName || needsHelp) const SizedBox(height: AppSpacing.xs),
-              FeedBodyText(text: description, strings: strings),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (hasName)
+                FeedPetTitle(
+                  name: catName,
+                  badge: needsHelp
+                      ? FeedKindBadge(
+                          kind: FeedKind.needsHelp,
+                          label: strings.needsHelp,
+                        )
+                      : null,
+                )
+              else if (needsHelp)
+                FeedKindBadge(
+                  kind: FeedKind.needsHelp,
+                  label: strings.needsHelp,
+                )
+              else if (description == null || description.isEmpty)
+                Text(
+                  strings.catObservation,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              if (description != null && description.isNotEmpty) ...[
+                if (hasName || needsHelp) const SizedBox(height: AppSpacing.xs),
+                FeedBodyText(text: description, strings: strings),
+              ],
             ],
-          ]),
+          ),
         ),
         Padding(
           padding: feedActionsPadding,
-          child: Row(children: [
-            FeedCountAction(
-              tooltip: liked ? strings.unlike : strings.like,
-              icon: liked ? Icons.favorite : Icons.favorite_outline,
-              count: likeCount,
-              active: liked,
-              onPressed: _toggleLike,
-            ),
-            FeedCountAction(
-              tooltip: strings.comments,
-              icon: Icons.chat_bubble_outline,
-              count: widget.post.commentCount,
-              onPressed: widget.onTap,
-            ),
-            if (mapLocation != null)
-              FeedViewCount(label: strings.views, count: widget.post.viewCount)
-            else ...[
-              const Spacer(),
-              FeedViewCount(label: strings.views, count: widget.post.viewCount),
-            ],
-            if (mapLocation != null)
-              // Shares the row with likes and comments, so on the narrowest
-              // phones a long translation ellipsizes instead of overflowing.
-              Expanded(
-                child: Align(
-                  alignment: AlignmentDirectional.centerEnd,
-                  child: Tooltip(
-                    message: strings.viewOnMap,
-                    child: TextButton.icon(
-                      key: const ValueKey('needs-help-view-on-map'),
-                      onPressed: () =>
-                          context.go('/map?lat=${mapLocation.latitude}'
-                              '&lon=${mapLocation.longitude}&focus=needs_help'),
-                      icon: const Icon(Icons.map_outlined, size: 19),
-                      label: Text(
-                        strings.viewOnMap,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+          child: Row(
+            children: [
+              FeedCountAction(
+                tooltip: liked ? strings.unlike : strings.like,
+                icon: liked ? Icons.favorite : Icons.favorite_outline,
+                count: likeCount,
+                active: liked,
+                onPressed: _toggleLike,
+              ),
+              FeedCountAction(
+                tooltip: strings.comments,
+                icon: Icons.chat_bubble_outline,
+                count: widget.post.commentCount,
+                onPressed: widget.onTap,
+              ),
+              if (mapLocation != null)
+                FeedViewCount(
+                  label: strings.views,
+                  count: widget.post.viewCount,
+                )
+              else ...[
+                const Spacer(),
+                FeedViewCount(
+                  label: strings.views,
+                  count: widget.post.viewCount,
+                ),
+              ],
+              if (mapLocation != null)
+                // Shares the row with likes and comments, so on the narrowest
+                // phones a long translation ellipsizes instead of overflowing.
+                Expanded(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Tooltip(
+                      message: strings.viewOnMap,
+                      child: TextButton.icon(
+                        key: const ValueKey('needs-help-view-on-map'),
+                        onPressed: () => context.go(
+                          '/map?lat=${mapLocation.latitude}'
+                          '&lon=${mapLocation.longitude}&focus=needs_help',
+                        ),
+                        icon: const Icon(Icons.map_outlined, size: 19),
+                        label: Text(
+                          strings.viewOnMap,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ]),
+            ],
+          ),
         ),
       ],
     );
