@@ -72,17 +72,18 @@ Future<void> _pump(
     overrides: [
       mushukistanApiProvider.overrideWithValue(MushukistanApi(client: client)),
       appLanguageProvider.overrideWith((ref) => language),
-      if (authenticated) ...[
-        authRepositoryProvider.overrideWithValue(FakeAuthRepository(
-          restoreResult: SessionRestoreSuccess(AuthSession.restored(
-            accessToken: 'test-token',
-            user: testUser(),
-          )),
-        )),
-        googleIdentityTokenProvider.overrideWithValue(
-          FakeGoogleIdentityTokenProvider(),
-        ),
-      ],
+      // A guest is a confirmed answer (no stored session), not an unfinished session check.
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository(
+        restoreResult: authenticated
+            ? SessionRestoreSuccess(AuthSession.restored(
+                accessToken: 'test-token',
+                user: testUser(),
+              ))
+            : const SessionRestoreMissing(),
+      )),
+      googleIdentityTokenProvider.overrideWithValue(
+        FakeGoogleIdentityTokenProvider(),
+      ),
     ],
     child: MaterialApp(
       theme: theme ?? AppTheme.light,

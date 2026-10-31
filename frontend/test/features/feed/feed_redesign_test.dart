@@ -87,6 +87,10 @@ Future<void> _pumpFeed(WidgetTester tester, FakeApiClient client) async {
   await tester.pumpWidget(ProviderScope(
     overrides: [
       mushukistanApiProvider.overrideWithValue(MushukistanApi(client: client)),
+      // A confirmed guest (no stored session), not an unfinished session check.
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+      googleIdentityTokenProvider
+          .overrideWithValue(FakeGoogleIdentityTokenProvider()),
     ],
     child: const MaterialApp(home: FeedScreen()),
   ));
