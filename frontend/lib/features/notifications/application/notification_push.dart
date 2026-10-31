@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/routing/app_router.dart';
 import '../../auth/application/auth_controller.dart';
 import '../data/notification_api.dart';
 import '../presentation/notification_center_screen.dart';
@@ -271,7 +272,7 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
                 message.data['kind'] == 'reply')
         ? '$path?comments=1'
         : path;
-    widget.router.go(destination ?? '/notifications');
+    openNotificationDestination(widget.router, destination ?? '/notifications');
   }
 
   Future<void> _sync(String userId, {bool forceRegistration = false}) async {
