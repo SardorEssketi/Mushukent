@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../localization/app_strings.dart';
 import '../navigation/tab_actions.dart';
 import '../navigation/settings_changes_guard.dart';
+import '../navigation/shell_back_handler.dart';
 import '../onboarding/authenticated_onboarding_flow.dart';
 import '../theme/app_design_tokens.dart';
 import '../../features/lost_pets/presentation/widgets/lost_pet_follow_up_listener.dart';
@@ -66,56 +67,82 @@ class AppShellScaffold extends ConsumerWidget {
       child: LostPetFollowUpListener(child: navigationShell),
     );
 
-    if (useRail) {
-      return Scaffold(
-        body: Row(
-          children: [
-            SafeArea(
-              child: NavigationRail(
-                extended: extended,
-                minExtendedWidth: 208,
-                selectedIndex: navigationShell.currentIndex,
-                onDestinationSelected: (index) =>
-                    _selectBranch(context, ref, index),
-                labelType: extended
-                    ? NavigationRailLabelType.none
-                    : NavigationRailLabelType.all,
-                leading: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.pets_rounded, color: scheme.primary),
-                      if (extended) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        Text(
-                          'Mushukistan',
-                          style:
-                              Theme.of(context).textTheme.titleLarge?.copyWith(
-                                    color: scheme.primary,
-                                  ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                destinations: [
-                  for (final item in items)
-                    NavigationRailDestination(
-                      icon: item.navIcon(context, selected: false),
-                      selectedIcon: item.navIcon(context, selected: true),
-                      label: Text(item.label),
-                    ),
-                ],
-              ),
-            ),
-            VerticalDivider(width: 1, color: scheme.outlineVariant),
-            Expanded(child: content),
-          ],
-        ),
-      );
-    }
+    // One handler around both layouts, so a pending "Back again to exit" survives a resize.
+    return ShellBackHandler(
+      navigationShell: navigationShell,
+      location: location,
+      onBackToFeed: () =>
+          _selectBranch(context, ref, ShellBackHandler.feedBranchIndex),
+      child: useRail
+          ? _railLayout(context, ref, items, content, extended, scheme)
+          : _bottomLayout(context, ref, items, content, hideNavigation, scheme),
+    );
+  }
 
+  Widget _railLayout(
+    BuildContext context,
+    WidgetRef ref,
+    List<_NavItem> items,
+    Widget content,
+    bool extended,
+    ColorScheme scheme,
+  ) {
+    return Scaffold(
+      body: Row(
+        children: [
+          SafeArea(
+            child: NavigationRail(
+              extended: extended,
+              minExtendedWidth: 208,
+              selectedIndex: navigationShell.currentIndex,
+              onDestinationSelected: (index) =>
+                  _selectBranch(context, ref, index),
+              labelType: extended
+                  ? NavigationRailLabelType.none
+                  : NavigationRailLabelType.all,
+              leading: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.pets_rounded, color: scheme.primary),
+                    if (extended) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        'Mushukistan',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              color: scheme.primary,
+                            ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              destinations: [
+                for (final item in items)
+                  NavigationRailDestination(
+                    icon: item.navIcon(context, selected: false),
+                    selectedIcon: item.navIcon(context, selected: true),
+                    label: Text(item.label),
+                  ),
+              ],
+            ),
+          ),
+          VerticalDivider(width: 1, color: scheme.outlineVariant),
+          Expanded(child: content),
+        ],
+      ),
+    );
+  }
+
+  Widget _bottomLayout(
+    BuildContext context,
+    WidgetRef ref,
+    List<_NavItem> items,
+    Widget content,
+    bool hideNavigation,
+    ColorScheme scheme,
+  ) {
     return Scaffold(
       body: content,
       bottomNavigationBar: hideNavigation

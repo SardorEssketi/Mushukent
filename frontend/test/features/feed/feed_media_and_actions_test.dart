@@ -8,6 +8,7 @@ import 'package:mushukistan_frontend/core/localization/app_strings.dart';
 import 'package:mushukistan_frontend/core/localization/language_controller.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/core/theme/app_theme.dart';
+import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/feed/application/feed_intro.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_screen.dart';
 import 'package:mushukistan_frontend/features/feed/presentation/widgets/feed_card_parts.dart';
@@ -86,6 +87,10 @@ Future<GoRouter> _pumpRouted(
     overrides: [
       mushukistanApiProvider.overrideWithValue(MushukistanApi(client: client)),
       appLanguageProvider.overrideWith((ref) => language),
+      // A confirmed guest (no stored session), not an unfinished session check.
+      authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+      googleIdentityTokenProvider
+          .overrideWithValue(FakeGoogleIdentityTokenProvider()),
       if (introStorage != null)
         feedIntroStorageProvider.overrideWithValue(introStorage),
     ],

@@ -64,6 +64,11 @@ class AuthState {
 
   bool get isAuthenticated => phase == AuthPhase.authenticated;
 
+  /// True until the startup session check has an answer. Neither signed in nor a guest yet:
+  /// UI must not offer sign-in or show account controls in this state.
+  bool get isResolving =>
+      phase == AuthPhase.initial || phase == AuthPhase.restoring;
+
   /// True while a stored session exists but the server could not confirm it.
   bool get hasUnconfirmedSession => phase == AuthPhase.sessionUnavailable;
   bool get isBusy =>
@@ -181,6 +186,7 @@ class AuthController extends StateNotifier<AuthState> {
     List<Duration> reconnectBackoff = defaultReconnectBackoff,
   })  : _restoreTimeout = restoreTimeout,
         _reconnectBackoff = reconnectBackoff,
+        _tokenStore = tokenStore,
         super(AuthState.restoring()) {
     if (tokenStore is GuardedAuthTokenStore) {
       _credentialInvalidations = tokenStore.invalidations.listen((_) {
@@ -198,6 +204,7 @@ class AuthController extends StateNotifier<AuthState> {
   final Duration _restoreTimeout;
   final Set<Timer> _restoreTimeoutTimers = <Timer>{};
   final List<Duration> _reconnectBackoff;
+  final AuthTokenStore? _tokenStore;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   Future<void>? _restoreInFlight;
@@ -218,6 +225,55 @@ class AuthController extends StateNotifier<AuthState> {
       if (identical(_restoreInFlight, future)) {
         _restoreInFlight = null;
       }
+    }
+  }
+
+  Future<void>? _revalidateInFlight;
+
+  /// Quiet re-check of a signed-in session, e.g. after a long time in the background. The
+  /// signed-in UI stays as it is while it runs; only a definitive answer from the server (the
+  /// credentials were rejected and could not be refreshed, in which case the repository has
+  /// already cleared them) ends the session. Offline, timeouts and server errors change nothing.
+  /// No-op unless signed in, and never overlaps a restore or another re-check.
+  Future<void> revalidateSession() {
+    if (!state.isAuthenticated ||
+        _restoreInFlight != null ||
+        _logoutInFlight != null) {
+      return Future<void>.value();
+    }
+    final inFlight = _revalidateInFlight;
+    if (inFlight != null) return inFlight;
+    final future = _performRevalidation();
+    _revalidateInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_revalidateInFlight, future)) _revalidateInFlight = null;
+    });
+  }
+
+  Future<void> _performRevalidation() async {
+    final epoch = _authEpoch;
+    final userId = state.user?.id;
+    final SessionRestoreResult result;
+    try {
+      result = await _withRestoreTimeout(_repository.restoreSession());
+    } catch (_) {
+      return; // Unreachable or unexpected: keep the session as it is.
+    }
+    if (!mounted || epoch != _authEpoch || state.user?.id != userId) return;
+    switch (result) {
+      case SessionRestoreSuccess(:final session):
+        if (session.user.id == userId) {
+          state = AuthState.authenticated(session.user);
+        }
+      case SessionRestoreInvalid(:final message):
+        logStartupStage('Session revalidation: credentials rejected');
+        _cancelReconnect();
+        state = AuthState.unauthenticated(message: message);
+      case SessionRestoreMissing():
+      case SessionRestoreFailure():
+        // Missing: credentials changed underneath (another login or a logout elsewhere), which
+        // the token store already reports on its own. Failure: temporary. Neither is a rejection.
+        break;
     }
   }
 
@@ -278,8 +334,22 @@ class AuthController extends StateNotifier<AuthState> {
       return;
     } catch (_) {
       if (epoch != _authEpoch) return;
-      logStartupStage('Authentication restore failed; retry offered');
+      // An unexpected error says nothing about the credentials themselves. If they are still
+      // stored, the session is unconfirmed (not signed out); without any, this is a guest.
+      final stored = await _hasStoredCredentials();
+      if (epoch != _authEpoch) return;
+      if (stored == true) {
+        logStartupStage('Authentication restore failed; session kept');
+        _enterSessionUnavailable('Session check failed.', true);
+        return;
+      }
       _cancelReconnect();
+      if (stored == false) {
+        logStartupStage('Authentication restore failed: guest');
+        state = AuthState.unauthenticated();
+        return;
+      }
+      logStartupStage('Authentication restore failed; retry offered');
       state = AuthState.failure(
         message: 'Session check failed.',
         retryable: true,
@@ -307,6 +377,21 @@ class AuthController extends StateNotifier<AuthState> {
         _cancelReconnect();
         state = AuthState.authenticated(session.user);
         break;
+    }
+  }
+
+  /// Whether an access or refresh token is stored; null when it cannot be determined (no store
+  /// given, or the store itself failed). Only reads: never clears or changes credentials.
+  Future<bool?> _hasStoredCredentials() async {
+    final store = _tokenStore;
+    if (store == null) return null;
+    try {
+      final access = await store.read();
+      final refresh = await store.readRefreshToken();
+      return (access != null && access.trim().isNotEmpty) ||
+          (refresh != null && refresh.trim().isNotEmpty);
+    } catch (_) {
+      return null;
     }
   }
 

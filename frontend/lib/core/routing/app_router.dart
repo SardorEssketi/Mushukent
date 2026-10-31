@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -45,6 +47,7 @@ import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/account_security_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
 import '../network/mushukistan_api.dart';
+import '../navigation/back_to_feed_scope.dart';
 import '../navigation/settings_changes_guard.dart';
 import '../startup/startup_log.dart';
 import '../widgets/app_shell_scaffold.dart';
@@ -74,12 +77,38 @@ String sessionUnavailableLocation(Uri intendedLocation) {
 /// The route the user is looking at. The router's own URI only knows the declarative location; a
 /// screen opened with `context.push` (the Feed's Login button) is the last match of the delegate's
 /// configuration instead.
-Uri _visibleUri(GoRouter router) {
+Uri visibleRouteUri(GoRouter router) {
   final configuration = router.routerDelegate.currentConfiguration;
   final declared = router.routeInformationProvider.value.uri;
   if (configuration.isEmpty) return declared;
   final visiblePath = configuration.last.matchedLocation;
   return visiblePath == declared.path ? declared : Uri(path: visiblePath);
+}
+
+/// Pages owned by the sign-in, session and legal redirects. A notification never stacks on top of
+/// them: the redirects decide where the user goes next.
+const _gateLocations = <String>{
+  '/auth-gate',
+  '/auth-required',
+  '/session-unavailable',
+  '/legal-update',
+  '/login',
+  '/register',
+  '/verify-email',
+};
+
+/// Opens [destination] (a notification target, optionally with a query) so Back has somewhere
+/// sensible to go: it is pushed on top of the screen the user is on, and a cold start is on the
+/// Feed, so Back leads there. A destination that is already on screen is not opened twice.
+void openNotificationDestination(GoRouter router, String destination) {
+  final target = Uri.parse(destination);
+  final visible = visibleRouteUri(router);
+  if (visible.path == target.path) return;
+  if (_gateLocations.contains(visible.path)) {
+    router.go(destination);
+    return;
+  }
+  unawaited(router.push<void>(destination));
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -202,34 +231,52 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) => const AuthGateScreen(),
       ),
+      // The pages below are where redirects park a route while the session is being decided, so
+      // they replace the app shell and the shell comes back as soon as the answer arrives. They
+      // appear without a transition: an animated one keeps the replaced shell route mounted until
+      // it ends, and a shell re-added within that window would be a second owner of the shell's
+      // GlobalKey (Duplicate GlobalKey).
       GoRoute(
         path: '/legal-update',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const LegalUpdateScreen(),
+        pageBuilder: (context, state) => NoTransitionPage<void>(
+          key: state.pageKey,
+          child: const LegalUpdateScreen(),
+        ),
       ),
       GoRoute(
         path: '/session-unavailable',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const SessionUnavailableScreen(),
+        pageBuilder: (context, state) => NoTransitionPage<void>(
+          key: state.pageKey,
+          child: const BackToFeedScope(child: SessionUnavailableScreen()),
+        ),
       ),
       GoRoute(
         path: '/auth-required',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => AuthRequiredScreen(
-          redirect: validatedPostAuthRedirect(
-            state.uri.queryParameters['redirect'],
+        pageBuilder: (context, state) => NoTransitionPage<void>(
+          key: state.pageKey,
+          child: BackToFeedScope(
+            child: AuthRequiredScreen(
+              redirect: validatedPostAuthRedirect(
+                state.uri.queryParameters['redirect'],
+              ),
+            ),
           ),
         ),
       ),
       GoRoute(
         path: '/login',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) =>
+            const BackToFeedScope(child: LoginScreen()),
       ),
       GoRoute(
         path: '/register',
         parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) =>
+            const BackToFeedScope(child: RegisterScreen()),
       ),
       GoRoute(
         path: '/legal/terms',
@@ -557,7 +604,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     // The router's URI only knows the declarative location. A screen opened with `context.push`
     // (the Feed's Login button) is not part of it, so the visible route is the last match of the
     // delegate's configuration, which includes pushed pages.
-    final currentUri = _visibleUri(router);
+    final currentUri = visibleRouteUri(router);
     final isAuthEntryRoute = _isAuthenticationEntryRoute(currentUri.path) ||
         currentUri.path == '/verify-email';
 

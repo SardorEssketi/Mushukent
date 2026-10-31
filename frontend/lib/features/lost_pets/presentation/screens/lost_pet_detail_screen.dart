@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/lifecycle/app_resume.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -286,6 +287,11 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final lostPetId = widget.lostPetId;
+    // Back after a long time away: reload quietly (see PostDetailScreen).
+    listenForStaleResume(ref, () {
+      ref.invalidate(lostPetDetailProvider(lostPetId));
+      ref.invalidate(lostPetCommentsProvider(lostPetId));
+    });
     final lostPetAsync = ref.watch(lostPetDetailProvider(lostPetId));
     final strings = ref.watch(appStringsProvider);
     final viewerId = ref.watch(currentUserProvider)?.id;
@@ -329,6 +335,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
         ],
       ),
       body: lostPetAsync.when(
+        skipError: true,
         data: (lostPet) {
           final info = lostPet.additionalInfo?.trim();
           final isOwner = viewerId != null && lostPet.author?.id == viewerId;
