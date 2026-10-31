@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -354,8 +356,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   void dispose() {
-    _discardChanges.state = null;
-    _unsavedChanges.state = false;
+    // Providers must not change while the widget tree is being finalized, so the guard is
+    // cleared right after. A Settings screen opened again meanwhile owns it by then: leave it.
+    final discardChanges = _discardChanges;
+    final unsavedChanges = _unsavedChanges;
+    final ownDiscard = _discardPendingChanges;
+    scheduleMicrotask(() {
+      if (!discardChanges.mounted || discardChanges.state != ownDiscard) {
+        return;
+      }
+      discardChanges.state = null;
+      if (unsavedChanges.mounted) unsavedChanges.state = false;
+    });
     super.dispose();
   }
 }
