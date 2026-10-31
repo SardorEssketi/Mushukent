@@ -52,9 +52,19 @@ FakeApiClient _apiClient() {
   return client;
 }
 
-ProviderContainer _container(AuthRepository repository) {
+ProviderContainer _container(AuthRepository repository,
+    {bool autoReconnect = true}) {
   return ProviderContainer(overrides: [
     authRepositoryProvider.overrideWithValue(repository),
+    // Without automatic re-checks no reconnect timer outlives a session-unavailable test.
+    if (!autoReconnect)
+      authControllerProvider.overrideWith(
+        (ref) => AuthController(
+          repository,
+          FakeGoogleIdentityTokenProvider(),
+          reconnectBackoff: const <Duration>[],
+        ),
+      ),
     googleIdentityTokenProvider
         .overrideWithValue(FakeGoogleIdentityTokenProvider()),
     apiClientProvider.overrideWithValue(_apiClient()),
@@ -133,6 +143,31 @@ Future<GoRouter> _signedInApp(WidgetTester tester) async {
 }
 
 const _exitHint = 'Press Back again to exit';
+
+Future<GoRouter> _guestApp(WidgetTester tester) async {
+  final container = _container(
+    FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
+  );
+  addTearDown(container.dispose);
+  final router = await _pumpApp(tester, container);
+  await tester.pumpAndSettle();
+  expect(_path(router), '/feed');
+  return router;
+}
+
+Future<void> _tapTab(WidgetTester tester, String label) async {
+  await tester.tap(find.descendant(
+    of: find.byType(NavigationBar),
+    matching: find.text(label),
+  ));
+  await tester.pumpAndSettle();
+}
+
+/// Pages of the root navigator, from the bottom (the router's own view of the stack).
+List<String> _stack(GoRouter router) => [
+      for (final match in router.routerDelegate.currentConfiguration.matches)
+        match.matchedLocation,
+    ];
 
 void main() {
   group('main tabs', () {
@@ -248,6 +283,132 @@ void main() {
       await tester.tap(find.text('Discard changes'));
       await tester.pumpAndSettle();
       expect(_path(router), '/profile');
+    });
+  });
+
+  group('guest and session pages', () {
+    for (final tab in ['Add', 'Profile']) {
+      testWidgets('guest: $tab, then Back, returns to the Feed',
+          (tester) async {
+        final android = _AndroidBack(tester);
+        final router = await _guestApp(tester);
+
+        await _tapTab(tester, tab);
+        // The redirect replaced everything: the sign-in page is the only page.
+        expect(_path(router), '/auth-required');
+        expect(find.text('Account required'), findsOneWidget);
+        expect(_stack(router), ['/auth-required']);
+
+        await _back(tester);
+        expect(_path(router), '/feed');
+        expect(android.exits, 0);
+        expect(_stack(router), hasLength(1),
+            reason: 'one Feed, nothing stacked');
+        expect(find.text(_exitHint), findsNothing);
+        expect(tester.takeException(), isNull);
+
+        // The Feed's own rule takes over again: hint first, then the system.
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(find.text(_exitHint), findsOneWidget);
+        expect(android.exits, 0);
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        expect(android.exits, 1);
+        await tester.pumpAndSettle();
+      });
+    }
+
+    testWidgets('guest: back on the Feed, protected pages still need sign-in',
+        (tester) async {
+      final router = await _guestApp(tester);
+      for (var round = 0; round < 3; round++) {
+        await _tapTab(tester, 'Add');
+        expect(_path(router), '/auth-required');
+        await _back(tester);
+        expect(_path(router), '/feed');
+      }
+      expect(_stack(router), hasLength(1), reason: 'no pages pile up');
+      for (final path in ['/add/lost-pet', '/profile', '/notifications']) {
+        router.go(path);
+        await tester.pumpAndSettle();
+        expect(_path(router), '/auth-required', reason: path);
+        await _back(tester);
+        expect(_path(router), '/feed', reason: path);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('guest: sign-in opened from "Account required", then Back',
+        (tester) async {
+      final android = _AndroidBack(tester);
+      final router = await _guestApp(tester);
+      await _tapTab(tester, 'Profile');
+      await tester.tap(find.widgetWithText(FilledButton, 'Login'));
+      await tester.pumpAndSettle();
+      expect(_path(router), '/login');
+
+      await _back(tester);
+      expect(_path(router), '/feed');
+      expect(android.exits, 0);
+    });
+
+    testWidgets('a real page underneath: Back goes to it, not to the Feed',
+        (tester) async {
+      final router = await _guestApp(tester);
+      unawaited(router.push('/users/user-1'));
+      await tester.pumpAndSettle();
+      unawaited(router.push('/auth-required?redirect=%2Fusers%2Fuser-1'));
+      await tester.pumpAndSettle();
+      expect(_visible(router), '/auth-required');
+
+      await _back(tester);
+      expect(_visible(router), '/users/user-1');
+      await _back(tester);
+      expect(_visible(router), '/feed');
+
+      // The Feed's Login button pushes the sign-in page: Back pops to the same Feed.
+      await tester.tap(find.widgetWithText(TextButton, 'Login'));
+      await tester.pumpAndSettle();
+      expect(_visible(router), '/login');
+      await _back(tester);
+      expect(_visible(router), '/feed');
+      expect(_stack(router), hasLength(1));
+    });
+
+    testWidgets(
+        'server unreachable: the reconnect page keeps Retry, Back opens the Feed',
+        (tester) async {
+      final android = _AndroidBack(tester);
+      final container = _container(
+        FakeAuthRepository(
+          restoreResult: const SessionRestoreFailure(
+            message: 'Network request failed.',
+            retryable: true,
+          ),
+        ),
+        autoReconnect: false,
+      );
+      addTearDown(container.dispose);
+      final router = await _pumpApp(tester, container);
+      await tester.pumpAndSettle();
+      expect(
+          container.read(authControllerProvider).hasUnconfirmedSession, isTrue);
+
+      await _tapTab(tester, 'Profile');
+      expect(_path(router), '/session-unavailable');
+      expect(find.text('Retry'), findsWidgets);
+      expect(_stack(router), ['/session-unavailable']);
+
+      await _back(tester);
+      expect(_path(router), '/feed');
+      expect(android.exits, 0);
+      // Still not signed in as far as the server knows: the profile stays out of reach.
+      router.go('/profile');
+      await tester.pumpAndSettle();
+      expect(_path(router), '/session-unavailable');
+      expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+      expect(tester.takeException(), isNull);
     });
   });
 
