@@ -9,6 +9,7 @@ import '../storage/token_store.dart';
 import '../storage/token_store_provider.dart';
 import 'api_error.dart';
 import 'publication_retry.dart';
+import 'publication_session.dart';
 
 abstract class MushukistanApiClient {
   Uri? get baseUri;
@@ -70,7 +71,25 @@ class DioMushukistanApiClient implements MushukistanApiClient {
   })  : _dio = dio,
         _tokenStore = tokenStore,
         _uploadRequestTimeout = uploadRequestTimeout,
-        _publicationJournal = publicationJournal ?? MemoryPublicationJournal();
+        _publicationJournal = publicationJournal ?? MemoryPublicationJournal() {
+    // Pin credentials at dispatch, after any earlier asynchronous interceptor.
+    _dio.interceptors
+        .add(InterceptorsWrapper(onRequest: (options, handler) async {
+      final binding = options.extra['publicationSession'];
+      if (binding is PublicationSession) {
+        try {
+          final token = await binding.credentials();
+          if (options.extra['publicationRefresh'] != true) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+        } on MushukistanApiException catch (error) {
+          handler.reject(DioException(requestOptions: options, error: error));
+          return;
+        }
+      }
+      handler.next(options);
+    }));
+  }
 
   final Dio _dio;
   final AuthTokenStore _tokenStore;
@@ -192,30 +211,29 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     if (authenticated &&
         const {'posts', 'lost-pets', 'adoption-posts'}
             .contains(normalizedPath)) {
-      final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
-      final revision = guarded?.revision;
-      final scope = publicationScope(await _tokenStore.read());
-      final fingerprint =
-          await publicationFingerprint(normalizedPath, formData);
-      if (guarded != null && guarded.revision != revision) {
-        throw const MushukistanApiException(
-            kind: ApiFailureKind.unauthorized,
-            code: 'SESSION_CHANGED',
-            message: 'Session changed during publication.');
-      }
-      final inFlightKey = '$scope:$fingerprint';
-      final existing = _publicationInFlight[inFlightKey];
-      if (existing != null) return (await existing) as T;
-      final future = _postPublication<T>(
-          normalizedPath, formData, scope, fingerprint,
-          decoder: decoder, queryParameters: queryParameters);
-      _publicationInFlight[inFlightKey] = future;
+      final session = PublicationSession(_tokenStore);
       try {
-        return await future;
-      } finally {
-        if (identical(_publicationInFlight[inFlightKey], future)) {
-          _publicationInFlight.remove(inFlightKey);
+        await session.credentials();
+        final scope = session.scope;
+        final fingerprint =
+            await publicationFingerprint(normalizedPath, formData);
+        await session.credentials();
+        final inFlightKey = '$scope:$fingerprint';
+        final existing = _publicationInFlight[inFlightKey];
+        if (existing != null) return (await existing) as T;
+        final future = _postPublication<T>(
+            normalizedPath, formData, session, fingerprint,
+            decoder: decoder, queryParameters: queryParameters);
+        _publicationInFlight[inFlightKey] = future;
+        try {
+          return await future;
+        } finally {
+          if (identical(_publicationInFlight[inFlightKey], future)) {
+            _publicationInFlight.remove(inFlightKey);
+          }
         }
+      } finally {
+        await session.dispose();
       }
     }
     return _request<T>(
@@ -228,10 +246,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     );
   }
 
-  Future<T> _postPublication<T>(
-      String path, FormData form, String scope, String fingerprint,
+  Future<T> _postPublication<T>(String path, FormData form,
+      PublicationSession session, String fingerprint,
       {required T Function(Object?) decoder,
       Map<String, dynamic>? queryParameters}) async {
+    final scope = session.scope;
     String? previous;
     late String key;
     try {
@@ -246,12 +265,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           message: 'Could not preserve the publication attempt. Try again.');
     }
     Future<void> checkAccount() async {
-      if (publicationScope(await _tokenStore.read()) != scope) {
-        throw const MushukistanApiException(
-            kind: ApiFailureKind.unauthorized,
-            code: 'SESSION_CHANGED',
-            message: 'Session changed during publication.');
-      }
+      await session.credentials();
     }
 
     Future<T> finish(T value) async {
@@ -267,9 +281,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       await checkAccount();
       Map<String, Object?>? status;
       try {
-        status = await get<Map<String, Object?>>('publication-operations/$key',
+        status = await _publicationGet<Map<String, Object?>>(
+            'publication-operations/$key', session,
             decoder: (json) => Map<String, Object?>.from(json as Map));
       } on MushukistanApiException catch (error) {
+        if (error.code == 'SESSION_CHANGED') rethrow;
         if (error.code != 'PUBLICATION_OPERATION_NOT_FOUND') {
           logPublicationFailure('reconcile_attempt', error, key: key);
           throw const MushukistanApiException(
@@ -291,8 +307,9 @@ class DioMushukistanApiClient implements MushukistanApiClient {
               code: 'MALFORMED_RESPONSE',
               message: 'Unexpected publication status.');
         }
-        final value =
-            await get<T>('$path/${status!['target_id']}', decoder: decoder);
+        final value = await _publicationGet<T>(
+            '$path/${status!['target_id']}', session,
+            decoder: decoder);
         return finish(value);
       }
       if (status?['state'] == 'pending' && status?['can_retry'] != true) {
@@ -318,6 +335,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           queryParameters: queryParameters,
           decoder: decoder,
           authenticated: true,
+          publicationSession: session,
           headers: {'Idempotency-Key': key});
       return finish(value);
     } catch (error) {
@@ -325,6 +343,15 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       rethrow;
     }
   }
+
+  Future<T> _publicationGet<T>(String path, PublicationSession session,
+          {required T Function(Object?) decoder}) =>
+      _request<T>('GET', path,
+          body: null,
+          queryParameters: null,
+          decoder: decoder,
+          authenticated: true,
+          publicationSession: session);
 
   @override
   Future<T> patchMultipart<T>(
@@ -370,6 +397,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     String? bearerToken,
     Map<String, String>? headers,
     bool retriedAfterRefresh = false,
+    PublicationSession? publicationSession,
   }) async {
     final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
     final revision = guarded?.revision;
@@ -379,12 +407,17 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       final response = await _dio.request<Object?>(
         _normalizePath(path),
         data: requestBody,
+        cancelToken: publicationSession?.cancelToken,
         queryParameters: _normalizeQueryParameters(queryParameters),
         options: Options(
           method: method,
           responseType: ResponseType.json,
           listFormat: ListFormat.multi,
-          extra: {'skipAuth': !authenticated},
+          extra: {
+            'skipAuth': !authenticated || publicationSession != null,
+            if (publicationSession != null)
+              'publicationSession': publicationSession
+          },
           headers: <String, String>{
             ...?headers,
             'X-Request-ID': newPublicationKey(),
@@ -395,7 +428,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         ),
       );
 
-      if (authenticated && guarded != null && guarded.revision != revision) {
+      if (publicationSession != null) await publicationSession.credentials();
+      if (publicationSession == null &&
+          authenticated &&
+          guarded != null &&
+          guarded.revision != revision) {
         throw const MushukistanApiException(
           kind: ApiFailureKind.unauthorized,
           code: 'SESSION_CHANGED',
@@ -418,7 +455,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           authenticated: authenticated,
           retriedAfterRefresh: retriedAfterRefresh,
         )) {
-          final refreshed = await _refreshAccessToken();
+          final refreshed =
+              await _refreshAccessToken(publicationSession: publicationSession);
+          if (publicationSession != null) {
+            await publicationSession.credentials();
+          }
           if (refreshed) {
             return _request<T>(
               method,
@@ -430,6 +471,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
               bearerToken: bearerToken,
               headers: headers,
               retriedAfterRefresh: true,
+              publicationSession: publicationSession,
             );
           }
         }
@@ -455,6 +497,10 @@ class DioMushukistanApiClient implements MushukistanApiClient {
 
       return _decodePayload(decoder, normalizedPayload);
     } on DioException catch (error) {
+      if (publicationSession != null) await publicationSession.credentials();
+      if (error.error case final MushukistanApiException cause) {
+        if (cause.code == 'SESSION_CHANGED') throw cause;
+      }
       debugPrint(
           'API transport failure: request=${error.requestOptions.headers['X-Request-ID']} type=${error.type.name} cause=${error.error.runtimeType} status=${error.response?.statusCode}');
       if (body is FormData && _isNetworkFailure(error.type)) {
@@ -517,12 +563,13 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     return error.kind == ApiFailureKind.unauthorized;
   }
 
-  Future<bool> _refreshAccessToken() {
+  Future<bool> _refreshAccessToken({PublicationSession? publicationSession}) {
     final inFlight = _refreshInFlight;
     if (inFlight != null) {
       return inFlight;
     }
-    final future = _performRefreshAccessToken();
+    final future =
+        _performRefreshAccessToken(publicationSession: publicationSession);
     _refreshInFlight = future;
     return future.whenComplete(() {
       if (identical(_refreshInFlight, future)) {
@@ -531,10 +578,12 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     });
   }
 
-  Future<bool> _performRefreshAccessToken() async {
+  Future<bool> _performRefreshAccessToken(
+      {PublicationSession? publicationSession}) async {
     final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
     final revision = guarded?.revision;
     final refreshToken = await _tokenStore.readRefreshToken();
+    if (publicationSession != null) await publicationSession.credentials();
     if (refreshToken == null || refreshToken.trim().isEmpty) {
       return false;
     }
@@ -543,13 +592,20 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       final response = await _dio.request<Object?>(
         'auth/refresh',
         data: <String, Object?>{'refresh_token': refreshToken},
+        cancelToken: publicationSession?.cancelToken,
         options: Options(
           method: 'POST',
           responseType: ResponseType.json,
-          extra: {'skipAuth': true},
+          extra: {
+            'skipAuth': true,
+            if (publicationSession != null)
+              'publicationSession': publicationSession,
+            'publicationRefresh': true
+          },
         ),
       );
       final payload = _normalizePayload(response.data);
+      if (publicationSession != null) await publicationSession.credentials();
       final statusCode = response.statusCode ?? 0;
       if (statusCode >= 400) {
         final error = MushukistanApiException.fromEnvelope(
@@ -596,6 +652,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       );
       return true;
     } on DioException catch (error) {
+      if (publicationSession != null) await publicationSession.credentials();
       throw MushukistanApiException.fromDioException(error);
     }
   }

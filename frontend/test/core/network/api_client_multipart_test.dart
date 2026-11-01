@@ -20,7 +20,7 @@ void main() {
     )..httpClientAdapter = adapter;
     final tokenStore = InMemoryAuthTokenStore();
     await tokenStore.writeTokens(
-      accessToken: 'expired-access-token',
+      accessToken: 'header.eyJzdWIiOiJvd25lciJ9.expired',
       refreshToken: 'valid-refresh-token',
     );
     final client = DioMushukistanApiClient(
@@ -67,7 +67,8 @@ void main() {
     )..httpClientAdapter = _UploadTimeoutAdapter();
     final client = DioMushukistanApiClient(
       dio: dio,
-      tokenStore: InMemoryAuthTokenStore(),
+      tokenStore: InMemoryAuthTokenStore()
+        ..write('header.eyJzdWIiOiJvd25lciJ9.signature'),
     );
 
     await expectLater(
@@ -115,7 +116,7 @@ class _RefreshThenAcceptUploadAdapter implements HttpClientAdapter {
         <String, Object?>{
           'success': true,
           'data': <String, Object?>{
-            'access_token': 'fresh-access-token',
+            'access_token': 'header.eyJzdWIiOiJvd25lciJ9.fresh',
             'refresh_token': 'fresh-refresh-token',
           },
         },

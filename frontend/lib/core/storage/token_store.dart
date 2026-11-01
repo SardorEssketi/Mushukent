@@ -18,13 +18,25 @@ class GuardedAuthTokenStore implements AuthTokenStore {
   final AuthTokenStore _delegate;
   Future<void> _pending = Future<void>.value();
   int _revision = 0;
+  int _sessionEpoch = 0;
+  final _sessionChanges = StreamController<void>.broadcast(sync: true);
   final StreamController<void> _invalidations =
       StreamController<void>.broadcast(sync: true);
 
   int get revision => _revision;
+  int get sessionEpoch => _sessionEpoch;
+  Stream<void> get sessionChanges => _sessionChanges.stream;
   Stream<void> get invalidations => _invalidations.stream;
 
-  void invalidatePendingWrites() => _revision++;
+  void _changeSession() {
+    _sessionEpoch++;
+    _sessionChanges.add(null);
+  }
+
+  void invalidatePendingWrites() {
+    _revision++;
+    _changeSession();
+  }
 
   Future<T> _serial<T>(Future<T> Function() action) {
     final result = _pending.then((_) => action());
@@ -41,6 +53,7 @@ class GuardedAuthTokenStore implements AuthTokenStore {
   @override
   Future<void> write(String token) {
     _revision++;
+    _changeSession();
     return _serial(() => _delegate.write(token));
   }
 
@@ -48,6 +61,7 @@ class GuardedAuthTokenStore implements AuthTokenStore {
   Future<void> writeTokens(
       {required String accessToken, required String? refreshToken}) {
     _revision++;
+    _changeSession();
     return _serial(() => _delegate.writeTokens(
         accessToken: accessToken, refreshToken: refreshToken));
   }
@@ -69,6 +83,7 @@ class GuardedAuthTokenStore implements AuthTokenStore {
   Future<bool> deleteIfRevision(int expected) {
     if (_revision != expected) return Future<bool>.value(false);
     _revision++;
+    _changeSession();
     return _serial(() async {
       await _delegate.delete();
       _invalidations.add(null);
@@ -79,6 +94,7 @@ class GuardedAuthTokenStore implements AuthTokenStore {
   @override
   Future<void> delete() {
     _revision++;
+    _changeSession();
     return _serial(() async {
       await _delegate.delete();
       _invalidations.add(null);
