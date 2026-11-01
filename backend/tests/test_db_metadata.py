@@ -13,6 +13,7 @@ from app.infrastructure.db.models import schema
 def test_metadata_discovers_application_tables() -> None:
     assert set(Base.metadata.tables) == {
         "users",
+        "publication_operations",
         "cats",
         "posts",
         "post_photos",

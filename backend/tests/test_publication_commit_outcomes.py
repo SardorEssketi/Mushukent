@@ -3,12 +3,10 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from test_posts import _create_user_with_token, _jpeg_bytes
+from test_posts import _create_user_with_token, _jpeg_bytes, client, posts_runtime  # noqa: F401
 
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import CommitOutcomeUnknownError, DatabaseSessionManager
-
-pytest_plugins = ["test_posts"]
 
 
 def test_connection_cleanup_cannot_turn_a_committed_operation_into_failure():
@@ -80,3 +78,4 @@ def test_lost_commit_acknowledgement_preserves_committed_media(client, posts_run
         assert connection.scalar(select(func.count()).select_from(model)) == 1
     assert len(posts_runtime.fake_storage.objects) == 2
     assert not posts_runtime.fake_storage.deleted_keys
+# ruff: noqa: F811

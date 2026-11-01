@@ -46,6 +46,7 @@ from app.features.lost_pets.domain.models import (
 from app.features.lost_pets.domain.repositories import LostPetRepository
 from app.features.posts.application.schemas import GenericListResponse
 from app.infrastructure.db.session import CommitOutcomeUnknownError, DatabaseSessionManager
+from app.infrastructure.publication_operations import PublicationContext
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
 
 logger = get_logger(__name__)
@@ -75,6 +76,7 @@ class LostPetsService:
         payload: LostPetCreateRequest,
         *,
         photos: list[tuple[bytes, str | None, str | None]],
+        publication_context: PublicationContext | None = None,
         contact_consent_version: int | None = None,
     ) -> LostPetResponse:
         phone = user.phone_number.strip() if user.phone_number else ""
@@ -103,7 +105,7 @@ class LostPetsService:
                 "Confirm that your phone number may be shown publicly for this lost pet post.",
             )
 
-        lost_pet_id = uuid4()
+        lost_pet_id = publication_context.target_id if publication_context else uuid4()
         uploaded_keys: list[str] = []
         photo_drafts: list[LostPetPhotoDraft] = []
         try:
@@ -114,6 +116,7 @@ class LostPetsService:
                     content=content,
                     content_type=content_type,
                     filename=filename,
+                    journal=publication_context.track_key if publication_context else None,
                 )
                 uploaded_keys.extend(keys)
                 photo_drafts.append(
@@ -126,6 +129,8 @@ class LostPetsService:
                 )
 
             with self.db_session_manager.session_scope() as session:
+                if publication_context:
+                    publication_context.lock_for_commit(session)
                 repository = self.repository_factory(session)
                 created = repository.create(
                     LostPetCreateDraft(
@@ -154,6 +159,8 @@ class LostPetsService:
                     notifications.create_nearby_events(
                         lost_pet_id=created.id, recipient_ids=recipients
                     )
+                if publication_context:
+                    publication_context.complete(session)
                 return to_lost_pet_response(created)
         except CommitOutcomeUnknownError as exc:
             raise api_error(
@@ -542,6 +549,7 @@ class LostPetsService:
         content: bytes,
         content_type: str | None,
         filename: str | None,
+        journal=None,
     ) -> tuple[str, str | None, list[str]]:
         if self.media_storage_service is None:
             raise api_error(500, "STORAGE_NOT_CONFIGURED", "Image storage is not configured.")
@@ -552,6 +560,7 @@ class LostPetsService:
             content=content,
             content_type=content_type,
             original_filename=filename,
+            journal=journal,
         )
         uploaded_keys = [media.canonical.key]
         thumb_url = None

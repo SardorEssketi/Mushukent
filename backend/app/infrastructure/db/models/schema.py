@@ -93,6 +93,32 @@ place_source_enum = ENUM(
 )
 
 
+class PublicationOperation(Base):
+    __tablename__ = "publication_operations"
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    key: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    target_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    target_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    owner_token: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    state: Mapped[str] = mapped_column(Text, nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    media_keys: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('pending', 'completed', 'failed')", name="publication_operation_state"
+        ),
+        CheckConstraint(
+            "target_kind IN ('post', 'lost_pet', 'adoption_post')",
+            name="publication_operation_kind",
+        ),
+    )
+
+
 class User(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "users"
 

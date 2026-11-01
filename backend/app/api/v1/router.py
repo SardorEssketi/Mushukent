@@ -14,6 +14,7 @@ from app.api.v1.routes.moderation import router as moderation_router
 from app.api.v1.routes.notifications import router as notifications_router
 from app.api.v1.routes.places import router as places_router
 from app.api.v1.routes.posts import router as posts_router
+from app.api.v1.routes.publication_operations import router as publication_operations_router
 from app.api.v1.routes.reports import router as reports_router
 from app.api.v1.routes.users import router as users_router
 from app.api.v1.routes.views import router as views_router
@@ -24,6 +25,7 @@ api_v1_router.include_router(auth_router, tags=["auth"])
 api_v1_router.include_router(users_router, tags=["users"])
 api_v1_router.include_router(cats_router, tags=["cats"])
 api_v1_router.include_router(posts_router, tags=["posts"])
+api_v1_router.include_router(publication_operations_router, tags=["publications"])
 api_v1_router.include_router(feed_router, tags=["feed"])
 api_v1_router.include_router(comments_router, tags=["comments"])
 api_v1_router.include_router(likes_router, tags=["likes"])

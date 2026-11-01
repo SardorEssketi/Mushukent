@@ -49,6 +49,7 @@ class MediaStorageService:
         content: bytes,
         content_type: str | None = None,
         original_filename: str | None = None,
+        journal=None,
     ) -> StoredMedia:
         started_at = perf_counter()
         try:
@@ -65,7 +66,9 @@ class MediaStorageService:
                 canonical_kind = (
                     MediaKind.LOST_PET
                     if purpose == UploadPurpose.LOST_PET
-                    else MediaKind.ADOPTION if purpose == UploadPurpose.ADOPTION else MediaKind.POST
+                    else MediaKind.ADOPTION
+                    if purpose == UploadPurpose.ADOPTION
+                    else MediaKind.POST
                 )
                 canonical_variant = MediaVariant.ORIGINAL
                 thumbnail_variant = MediaVariant.THUMBNAIL
@@ -74,6 +77,7 @@ class MediaStorageService:
                     image=canonical_image,
                     kind=canonical_kind,
                     variant=canonical_variant,
+                    journal=journal,
                 )
                 try:
                     thumbnail = self._upload_variant(
@@ -81,6 +85,7 @@ class MediaStorageService:
                         image=thumbnail_image,
                         kind=canonical_kind,
                         variant=thumbnail_variant,
+                        journal=journal,
                     )
                 except Exception as exc:
                     self._best_effort_cleanup(canonical.key)
@@ -224,6 +229,7 @@ class MediaStorageService:
         image: ProcessedImage,
         kind: MediaKind,
         variant: MediaVariant,
+        journal=None,
     ) -> StoredObject:
         key = self.key_factory.build(
             kind=kind,
@@ -231,16 +237,21 @@ class MediaStorageService:
             extension=image.extension,
             variant=variant,
         )
-        return self.storage.upload(
-            key=key,
-            content=image.content,
-            content_type=image.content_type,
-            metadata={
-                "purpose": kind.value,
-                "variant": variant.value,
-            },
-            cache_control="public, max-age=31536000, immutable",
-        )
+        if journal is not None:
+            journal(key)
+        try:
+            return self.storage.upload(
+                key=key,
+                content=image.content,
+                content_type=image.content_type,
+                metadata={"purpose": kind.value, "variant": variant.value},
+                cache_control="public, max-age=31536000, immutable",
+            )
+        except StorageOperationError:
+            # The PUT may have succeeded despite a lost acknowledgement. This
+            # attempt's unique key has not been referenced by a publication yet.
+            self._best_effort_cleanup(key)
+            raise
 
     def _best_effort_cleanup(self, key: str) -> None:
         try:

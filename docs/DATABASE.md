@@ -470,6 +470,11 @@ Denormalized counters
 
 Transaction patterns and idempotency
 -----------------------------------
+- Migration `20261102_0030` adds `publication_operations` with account/key composite
+  primary key, normalized payload fingerprint, fixed target UUID, attempt-owner token,
+  state, lease and intended-object manifest. Reservation transactions release their
+  connection before media work; publication writes and operation completion are atomic.
+  Account deletion cascades operation records. See `PUBLICATION_RELIABILITY.md`.
 - Creating a post (observation): transaction should
   1) insert post row
   2) update cats.total_observations, cats.total_contributors if this user is a new contributor (a simple upsert or check)

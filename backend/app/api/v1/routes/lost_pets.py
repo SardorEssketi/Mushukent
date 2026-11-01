@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.publications import publish
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
 from app.core.dependencies import (
     get_current_active_user,
@@ -133,15 +134,20 @@ async def create_lost_pet(
         owner_phone_publication_consent,
     )
     photo_payloads = await read_image_uploads(photos, purpose="lost_pet_create")
-    created_report = await run_upload_processing(
-        lost_pets_service.create_lost_pet,
+    created_report = await publish(
+        request,
         current_user,
         payload,
-        photos=photo_payloads,
+        photo_payloads,
+        kind="lost_pet",
+        create=lost_pets_service.create_lost_pet,
+        read=lambda post_id: lost_pets_service.get_lost_pet(
+            post_id, current_user, reveal_mode=True
+        ),
         contact_consent_version=1 if is_reveal_mode(request) else None,
     )
     posthog_client = getattr(request.app.state, "posthog_client", None)
-    if posthog_client is not None:
+    if posthog_client is not None and not getattr(request.state, "publication_replayed", False):
         posthog_client.capture(
             "lost_pet_report_created",
             properties={"photo_count": len(photo_payloads)},

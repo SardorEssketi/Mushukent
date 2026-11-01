@@ -1165,7 +1165,10 @@ Implementation notes for backend engineers
 - Use SQLAlchemy + Alembic for schema from docs/DATABASE.md. Use GeoAlchemy2 for geometry columns.
 - Keep controllers thin; business logic sits in application/use-case layer.
 - Transactions: use DB transactions where multi-table consistency is needed (create post + update cat counters, likes insert + increment like_count).
-- Idempotency: POST endpoints that may be retried (image upload) should support idempotency keys if client desires; otherwise guard duplicates conservatively.
+- Publication creation supports optional UUID `Idempotency-Key` and owner-scoped
+  `GET /api/v1/publication-operations/{key}`. Replays return the existing publication;
+  conflicting payloads and active attempts return distinct 409 codes. Unknown commit
+  outcomes preserve media. See `PUBLICATION_RELIABILITY.md` for recovery and legacy-client guarantees.
 - Tests: implement unit tests for validation rules and integration tests for DB transactions.
 
 Change log

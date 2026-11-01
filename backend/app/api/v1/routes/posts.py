@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Request, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.publications import publish
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
 from app.core.dependencies import (
     get_current_active_user,
@@ -185,14 +186,17 @@ async def create_post(
     data, uploads, is_json = await _parse_post_request(request)
     payload = _parse_json_payload(data) if is_json else _parse_multipart_payload(data)
     photo_payloads = await read_image_uploads(uploads, purpose="post_create")
-    created_post = await run_upload_processing(
-        posts_service.create_post,
+    created_post = await publish(
+        request,
         current_user,
         payload,
-        photos=photo_payloads,
+        photo_payloads,
+        kind="post",
+        create=posts_service.create_post,
+        read=lambda post_id: posts_service.get_post(post_id, current_user=current_user),
     )
     posthog_client = getattr(request.app.state, "posthog_client", None)
-    if posthog_client is not None:
+    if posthog_client is not None and not getattr(request.state, "publication_replayed", False):
         posthog_client.capture("post_created", properties={"photo_count": len(photo_payloads)})
     return ApiSuccess(data=created_post)
 

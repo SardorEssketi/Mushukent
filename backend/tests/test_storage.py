@@ -236,7 +236,8 @@ def test_cleanup_after_partial_failure() -> None:
         )
 
     assert storage.objects == {}
-    assert len(storage.deleted_keys) == 1
+    # Delete the attempted thumbnail key too: PUT acknowledgements can be lost.
+    assert len(storage.deleted_keys) == 2
 
 
 def test_deletion_is_idempotent() -> None:

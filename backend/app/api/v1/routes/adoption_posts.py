@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
 
+from app.api.v1.publications import publish
 from app.api.v1.uploads import read_image_uploads, run_upload_processing
 from app.core.dependencies import (
     get_adoption_posts_service,
@@ -71,15 +72,20 @@ async def create_adoption_post(
         owner_contact_consent,
     )
     photo_payloads = await read_image_uploads(photos, purpose="adoption_create")
-    created_post = await run_upload_processing(
-        adoption_posts_service.create_adoption_post,
+    created_post = await publish(
+        request,
         current_user,
         payload,
-        photos=photo_payloads,
+        photo_payloads,
+        kind="adoption_post",
+        create=adoption_posts_service.create_adoption_post,
+        read=lambda post_id: adoption_posts_service.get_adoption_post(
+            post_id, current_user, reveal_mode=True
+        ),
         reveal_mode=is_reveal_mode(request),
     )
     posthog_client = getattr(request.app.state, "posthog_client", None)
-    if posthog_client is not None:
+    if posthog_client is not None and not getattr(request.state, "publication_replayed", False):
         posthog_client.capture(
             "adoption_post_created",
             properties={"photo_count": len(photo_payloads)},
