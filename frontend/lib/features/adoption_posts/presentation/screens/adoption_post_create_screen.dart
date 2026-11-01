@@ -8,6 +8,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/media/image_picker_options.dart';
 import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/api_error.dart';
+import '../../../../core/network/publication_retry.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
@@ -28,6 +29,7 @@ class _AdoptionPostCreateScreenState
   final _formKey = GlobalKey<FormState>();
   final List<LostPetPhotoUpload> _photos = [];
   bool _isSubmitting = false;
+  bool _outcomeUnknown = false;
   bool _contactConsent = false;
   bool _isPickingPhotos = false;
   String? _error;
@@ -40,7 +42,7 @@ class _AdoptionPostCreateScreenState
   }
 
   Future<void> _pickPhotos() async {
-    if (_isPickingPhotos) {
+    if (_isPickingPhotos || _isSubmitting || _outcomeUnknown) {
       return;
     }
     final strings = ref.read(appStringsProvider);
@@ -90,7 +92,7 @@ class _AdoptionPostCreateScreenState
 
   Future<void> _submit() async {
     final strings = ref.read(appStringsProvider);
-    if (_isSubmitting) {
+    if (_isSubmitting || _isPickingPhotos) {
       return;
     }
     if (_photos.isEmpty) {
@@ -131,7 +133,8 @@ class _AdoptionPostCreateScreenState
     } on MushukistanApiException catch (error) {
       if (mounted) {
         setState(() {
-          _error = photoUploadErrorMessage(strings, error);
+          _outcomeUnknown = publicationOutcomeUncertain(error);
+          _error = publicationErrorMessage(strings, error);
         });
       }
     } catch (_) {
@@ -202,21 +205,25 @@ class _AdoptionPostCreateScreenState
                           right: 0,
                           top: 0,
                           child: IconButton.filledTonal(
-                            onPressed: () {
-                              setState(() {
-                                _photos.removeAt(index);
-                              });
-                            },
+                            onPressed: _isSubmitting || _outcomeUnknown
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _photos.removeAt(index);
+                                    });
+                                  },
                             icon: const Icon(Icons.close, size: 16),
                           ),
                         ),
                       ],
                     ),
                   OutlinedButton.icon(
-                    onPressed:
-                        _isSubmitting || _isPickingPhotos || _photos.length >= 5
-                            ? null
-                            : _pickPhotos,
+                    onPressed: _isSubmitting ||
+                            _outcomeUnknown ||
+                            _isPickingPhotos ||
+                            _photos.length >= 5
+                        ? null
+                        : _pickPhotos,
                     icon: const Icon(Icons.add_photo_alternate_outlined),
                     label: Text(strings.addPhotosCount(_photos.length)),
                   ),
@@ -224,6 +231,7 @@ class _AdoptionPostCreateScreenState
               ),
               const SizedBox(height: 24),
               TextFormField(
+                enabled: !_isSubmitting && !_outcomeUnknown,
                 controller: _petNameController,
                 maxLength: 100,
                 decoration: InputDecoration(
@@ -240,6 +248,7 @@ class _AdoptionPostCreateScreenState
               ),
               const SizedBox(height: 12),
               TextFormField(
+                enabled: !_isSubmitting && !_outcomeUnknown,
                 controller: _infoController,
                 maxLines: 5,
                 maxLength: 2000,
@@ -252,7 +261,7 @@ class _AdoptionPostCreateScreenState
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _contactConsent,
-                onChanged: _isSubmitting
+                onChanged: _isSubmitting || _outcomeUnknown
                     ? null
                     : (value) {
                         setState(() {
@@ -273,7 +282,9 @@ class _AdoptionPostCreateScreenState
               ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _isSubmitting ? null : () => unawaited(_submit()),
+                onPressed: _isSubmitting || _isPickingPhotos
+                    ? null
+                    : () => unawaited(_submit()),
                 icon: _isSubmitting
                     ? const SizedBox(
                         width: 18,
@@ -281,7 +292,9 @@ class _AdoptionPostCreateScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.publish_outlined),
-                label: Text(strings.publishAdoptionPost),
+                label: Text(_outcomeUnknown
+                    ? strings.checkPublicationStatus
+                    : strings.publishAdoptionPost),
               ),
             ],
           ),

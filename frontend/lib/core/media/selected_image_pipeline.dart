@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../localization/app_strings.dart';
 import '../network/api_error.dart';
+import '../network/publication_retry.dart';
 import 'blob_url_lifecycle.dart';
 import 'heif_normalizer.dart';
 import 'image_upload_preprocessor.dart';
@@ -225,6 +226,11 @@ String selectedImageErrorMessage(AppStrings strings, Object error) {
     SelectedImageFailure.readFailed => strings.couldNotReadPhoto,
   };
 }
+
+String publicationErrorMessage(AppStrings strings, Object error) =>
+    publicationOutcomeUncertain(error)
+        ? strings.publicationOutcomeUnknown
+        : photoUploadErrorMessage(strings, error);
 
 String photoUploadErrorMessage(AppStrings strings, Object error) {
   if (error is! MushukistanApiException) {

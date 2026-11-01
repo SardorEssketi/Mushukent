@@ -13,6 +13,7 @@ import '../../../../core/location/location_service.dart';
 import '../../../../core/media/image_picker_options.dart';
 import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/api_error.dart';
+import '../../../../core/network/publication_retry.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
@@ -38,6 +39,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   final List<LostPetPhotoUpload> _photos = [];
   GeoPoint? _selectedLocation;
   bool _isSubmitting = false;
+  bool _outcomeUnknown = false;
   bool _isPickingPhotos = false;
   bool _phonePublicationConsent = false;
   String? _error;
@@ -50,7 +52,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   }
 
   Future<void> _pickPhotos() async {
-    if (_isPickingPhotos) {
+    if (_isPickingPhotos || _isSubmitting || _outcomeUnknown) {
       return;
     }
     final strings = ref.read(appStringsProvider);
@@ -100,7 +102,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
 
   Future<void> _submit() async {
     final strings = ref.read(appStringsProvider);
-    if (_isSubmitting) {
+    if (_isSubmitting || _isPickingPhotos) {
       return;
     }
     if (_photos.isEmpty) {
@@ -150,7 +152,8 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
     } on MushukistanApiException catch (error) {
       if (mounted) {
         setState(() {
-          _error = photoUploadErrorMessage(strings, error);
+          _outcomeUnknown = publicationOutcomeUncertain(error);
+          _error = publicationErrorMessage(strings, error);
         });
       }
     } catch (_) {
@@ -222,21 +225,25 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                           right: 0,
                           top: 0,
                           child: IconButton.filledTonal(
-                            onPressed: () {
-                              setState(() {
-                                _photos.removeAt(index);
-                              });
-                            },
+                            onPressed: _isSubmitting || _outcomeUnknown
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _photos.removeAt(index);
+                                    });
+                                  },
                             icon: const Icon(Icons.close, size: 16),
                           ),
                         ),
                       ],
                     ),
                   OutlinedButton.icon(
-                    onPressed:
-                        _isSubmitting || _isPickingPhotos || _photos.length >= 5
-                            ? null
-                            : _pickPhotos,
+                    onPressed: _isSubmitting ||
+                            _outcomeUnknown ||
+                            _isPickingPhotos ||
+                            _photos.length >= 5
+                        ? null
+                        : _pickPhotos,
                     icon: const Icon(Icons.add_photo_alternate_outlined),
                     label: Text('${strings.addPhotos} (${_photos.length}/5)'),
                   ),
@@ -244,6 +251,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               ),
               const SizedBox(height: 24),
               TextFormField(
+                enabled: !_isSubmitting && !_outcomeUnknown,
                 controller: _petNameController,
                 maxLength: 100,
                 decoration: InputDecoration(
@@ -262,18 +270,23 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               Text(strings.lastSeen,
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
-              LostPetLocationPicker(
-                strings: strings,
-                selectedLocation: _selectedLocation,
-                onSelected: (location) {
-                  setState(() {
-                    _selectedLocation = location;
-                    _error = null;
-                  });
-                },
+              IgnorePointer(
+                ignoring: _isSubmitting || _outcomeUnknown,
+                child: LostPetLocationPicker(
+                  strings: strings,
+                  selectedLocation: _selectedLocation,
+                  onSelected: (location) {
+                    if (_isSubmitting || _outcomeUnknown) return;
+                    setState(() {
+                      _selectedLocation = location;
+                      _error = null;
+                    });
+                  },
+                ),
               ),
               const SizedBox(height: 24),
               TextFormField(
+                enabled: !_isSubmitting && !_outcomeUnknown,
                 controller: _infoController,
                 maxLines: 5,
                 maxLength: 2000,
@@ -285,7 +298,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _phonePublicationConsent,
-                onChanged: _isSubmitting
+                onChanged: _isSubmitting || _outcomeUnknown
                     ? null
                     : (value) {
                         setState(() {
@@ -306,7 +319,9 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _isSubmitting ? null : () => unawaited(_submit()),
+                onPressed: _isSubmitting || _isPickingPhotos
+                    ? null
+                    : () => unawaited(_submit()),
                 icon: _isSubmitting
                     ? const SizedBox(
                         width: 18,
@@ -314,7 +329,9 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.publish_outlined),
-                label: Text(strings.publishLostPet),
+                label: Text(_outcomeUnknown
+                    ? strings.checkPublicationStatus
+                    : strings.publishLostPet),
               ),
             ],
           ),

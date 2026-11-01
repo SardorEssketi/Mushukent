@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../config/app_environment.dart';
 import '../storage/token_store.dart';
 import '../storage/token_store_provider.dart';
 import 'api_error.dart';
+import 'publication_retry.dart';
 
 abstract class MushukistanApiClient {
   Uri? get baseUri;
@@ -64,14 +66,18 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     required Dio dio,
     required AuthTokenStore tokenStore,
     Duration uploadRequestTimeout = const Duration(minutes: 3),
+    PublicationJournal? publicationJournal,
   })  : _dio = dio,
         _tokenStore = tokenStore,
-        _uploadRequestTimeout = uploadRequestTimeout;
+        _uploadRequestTimeout = uploadRequestTimeout,
+        _publicationJournal = publicationJournal ?? MemoryPublicationJournal();
 
   final Dio _dio;
   final AuthTokenStore _tokenStore;
   final Duration _uploadRequestTimeout;
   Future<bool>? _refreshInFlight;
+  final PublicationJournal _publicationJournal;
+  final _publicationInFlight = <String, Future<Object?>>{};
 
   @override
   Uri? get baseUri => Uri.tryParse(_dio.options.baseUrl);
@@ -113,6 +119,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       dio: dio,
       tokenStore: tokenStore,
       uploadRequestTimeout: environment.uploadRequestTimeout,
+      publicationJournal: PreferencesPublicationJournal(),
     );
   }
 
@@ -180,7 +187,37 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     bool authenticated = true,
-  }) {
+  }) async {
+    final normalizedPath = _normalizePath(path);
+    if (authenticated &&
+        const {'posts', 'lost-pets', 'adoption-posts'}
+            .contains(normalizedPath)) {
+      final guarded = _tokenStore is GuardedAuthTokenStore ? _tokenStore : null;
+      final revision = guarded?.revision;
+      final scope = publicationScope(await _tokenStore.read());
+      final fingerprint =
+          await publicationFingerprint(normalizedPath, formData);
+      if (guarded != null && guarded.revision != revision) {
+        throw const MushukistanApiException(
+            kind: ApiFailureKind.unauthorized,
+            code: 'SESSION_CHANGED',
+            message: 'Session changed during publication.');
+      }
+      final inFlightKey = '$scope:$fingerprint';
+      final existing = _publicationInFlight[inFlightKey];
+      if (existing != null) return (await existing) as T;
+      final future = _postPublication<T>(
+          normalizedPath, formData, scope, fingerprint,
+          decoder: decoder, queryParameters: queryParameters);
+      _publicationInFlight[inFlightKey] = future;
+      try {
+        return await future;
+      } finally {
+        if (identical(_publicationInFlight[inFlightKey], future)) {
+          _publicationInFlight.remove(inFlightKey);
+        }
+      }
+    }
     return _request<T>(
       'POST',
       path,
@@ -189,6 +226,104 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       decoder: decoder,
       authenticated: authenticated,
     );
+  }
+
+  Future<T> _postPublication<T>(
+      String path, FormData form, String scope, String fingerprint,
+      {required T Function(Object?) decoder,
+      Map<String, dynamic>? queryParameters}) async {
+    String? previous;
+    late String key;
+    try {
+      previous = await _publicationJournal.read(scope, fingerprint);
+      key = previous ?? newPublicationKey();
+      await _publicationJournal.write(scope, fingerprint, key);
+    } catch (error) {
+      logPublicationFailure('preserve_attempt', error);
+      throw const MushukistanApiException(
+          kind: ApiFailureKind.unknown,
+          code: 'PUBLICATION_JOURNAL_UNAVAILABLE',
+          message: 'Could not preserve the publication attempt. Try again.');
+    }
+    Future<void> checkAccount() async {
+      if (publicationScope(await _tokenStore.read()) != scope) {
+        throw const MushukistanApiException(
+            kind: ApiFailureKind.unauthorized,
+            code: 'SESSION_CHANGED',
+            message: 'Session changed during publication.');
+      }
+    }
+
+    Future<T> finish(T value) async {
+      try {
+        await _publicationJournal.remove(scope, fingerprint);
+      } catch (error) {
+        logPublicationFailure('clear_completed_attempt', error, key: key);
+      }
+      return value;
+    }
+
+    if (previous != null) {
+      await checkAccount();
+      Map<String, Object?>? status;
+      try {
+        status = await get<Map<String, Object?>>('publication-operations/$key',
+            decoder: (json) => Map<String, Object?>.from(json as Map));
+      } on MushukistanApiException catch (error) {
+        if (error.code != 'PUBLICATION_OPERATION_NOT_FOUND') {
+          logPublicationFailure('reconcile_attempt', error, key: key);
+          throw const MushukistanApiException(
+              kind: ApiFailureKind.network,
+              code: 'PUBLICATION_OUTCOME_UNKNOWN',
+              message:
+                  'Could not verify publication status. Check again before retrying.');
+        }
+      }
+      if (status?['state'] == 'completed') {
+        final expectedKind = switch (path) {
+          'posts' => 'post',
+          'lost-pets' => 'lost_pet',
+          _ => 'adoption_post'
+        };
+        if (status?['target_kind'] != expectedKind) {
+          throw const MushukistanApiException(
+              kind: ApiFailureKind.parse,
+              code: 'MALFORMED_RESPONSE',
+              message: 'Unexpected publication status.');
+        }
+        final value =
+            await get<T>('$path/${status!['target_id']}', decoder: decoder);
+        return finish(value);
+      }
+      if (status?['state'] == 'pending' && status?['can_retry'] != true) {
+        throw const MushukistanApiException(
+            kind: ApiFailureKind.conflict,
+            code: 'PUBLICATION_IN_PROGRESS',
+            message:
+                'Publication is still processing. Check its status again.');
+      }
+      if (status != null &&
+          status['state'] != 'failed' &&
+          status['can_retry'] != true) {
+        throw const MushukistanApiException(
+            kind: ApiFailureKind.parse,
+            code: 'MALFORMED_RESPONSE',
+            message: 'Unexpected publication status.');
+      }
+    }
+    await checkAccount();
+    try {
+      final value = await _request<T>('POST', path,
+          body: form,
+          queryParameters: queryParameters,
+          decoder: decoder,
+          authenticated: true,
+          headers: {'Idempotency-Key': key});
+      return finish(value);
+    } catch (error) {
+      logPublicationFailure('submit', error, key: key);
+      rethrow;
+    }
   }
 
   @override
@@ -252,6 +387,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           extra: {'skipAuth': !authenticated},
           headers: <String, String>{
             ...?headers,
+            'X-Request-ID': newPublicationKey(),
             if (bearerToken != null) 'Authorization': 'Bearer $bearerToken',
           },
           sendTimeout: isMultipart ? _uploadRequestTimeout : null,
@@ -319,6 +455,8 @@ class DioMushukistanApiClient implements MushukistanApiClient {
 
       return _decodePayload(decoder, normalizedPayload);
     } on DioException catch (error) {
+      debugPrint(
+          'API transport failure: request=${error.requestOptions.headers['X-Request-ID']} type=${error.type.name} cause=${error.error.runtimeType} status=${error.response?.statusCode}');
       if (body is FormData && _isNetworkFailure(error.type)) {
         throw MushukistanApiException(
           kind: ApiFailureKind.network,
@@ -326,6 +464,11 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           code: _isTimeout(error.type)
               ? 'PHOTO_UPLOAD_TIMEOUT'
               : 'PHOTO_UPLOAD_NETWORK_ERROR',
+          details: {
+            'transport_type': error.type.name,
+            'cause_type': error.error.runtimeType.toString(),
+            'request_id': error.requestOptions.headers['X-Request-ID']
+          },
           message: _isTimeout(error.type)
               ? 'Photo upload took too long. Check your connection and try again.'
               : 'Photo upload failed. Check your connection and try again.',

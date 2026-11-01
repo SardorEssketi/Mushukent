@@ -115,6 +115,10 @@ class _AddObservationDetailsScreenState
       final location =
           await ref.read(locationServiceProvider).resolveCurrentLocation();
       if (!mounted) return;
+      if (ref.read(addObservationControllerProvider).submitting ||
+          ref.read(addObservationControllerProvider).outcomeUnknown) {
+        return;
+      }
       if (location == null) {
         setState(() => _error = strings.couldNotResolveYourLocation);
       } else {
@@ -184,7 +188,9 @@ class _AddObservationDetailsScreenState
                           top: 0,
                           child: IconButton.filledTonal(
                             tooltip: strings.removePhoto,
-                            onPressed: _picking || state.submitting
+                            onPressed: _picking ||
+                                    state.submitting ||
+                                    state.outcomeUnknown
                                 ? null
                                 : () {
                                     final photos = [...state.photos]
@@ -200,18 +206,22 @@ class _AddObservationDetailsScreenState
                 ],
                 AppActionGroup(children: [
                   FilledButton.tonalIcon(
-                    onPressed:
-                        _picking || state.submitting || state.photos.length >= 5
-                            ? null
-                            : () => unawaited(_pick(ImageSource.gallery)),
+                    onPressed: _picking ||
+                            state.submitting ||
+                            state.outcomeUnknown ||
+                            state.photos.length >= 5
+                        ? null
+                        : () => unawaited(_pick(ImageSource.gallery)),
                     icon: const Icon(Icons.photo_library_outlined),
                     label: Text(strings.chooseFromGallery),
                   ),
                   FilledButton.tonalIcon(
-                    onPressed:
-                        _picking || state.submitting || state.photos.length >= 5
-                            ? null
-                            : () => unawaited(_pick(ImageSource.camera)),
+                    onPressed: _picking ||
+                            state.submitting ||
+                            state.outcomeUnknown ||
+                            state.photos.length >= 5
+                        ? null
+                        : () => unawaited(_pick(ImageSource.camera)),
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: Text(strings.takeAPhoto),
                   ),
@@ -225,6 +235,7 @@ class _AddObservationDetailsScreenState
             ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
+              enabled: !state.submitting && !state.outcomeUnknown,
               initialValue: state.catName,
               decoration: InputDecoration(
                 labelText: strings.catNameOptionalLabel,
@@ -254,7 +265,7 @@ class _AddObservationDetailsScreenState
                         ? null
                         : IconButton(
                             tooltip: strings.removeLocation,
-                            onPressed: state.submitting
+                            onPressed: state.submitting || state.outcomeUnknown
                                 ? null
                                 : controller.clearLocation,
                             icon: const Icon(Icons.close),
@@ -262,9 +273,10 @@ class _AddObservationDetailsScreenState
                   ),
                 AppActionGroup(children: [
                   OutlinedButton.icon(
-                    onPressed: _locating || state.submitting
-                        ? null
-                        : _useCurrentLocation,
+                    onPressed:
+                        _locating || state.submitting || state.outcomeUnknown
+                            ? null
+                            : _useCurrentLocation,
                     icon: _locating
                         ? const SizedBox(
                             width: 18,
@@ -274,7 +286,7 @@ class _AddObservationDetailsScreenState
                     label: Text(strings.updateLocationFromDevice),
                   ),
                   OutlinedButton.icon(
-                    onPressed: state.submitting
+                    onPressed: state.submitting || state.outcomeUnknown
                         ? null
                         : () => context.push('/add/location'),
                     icon: const Icon(Icons.map_outlined),
@@ -285,6 +297,7 @@ class _AddObservationDetailsScreenState
             ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
+              enabled: !state.submitting && !state.outcomeUnknown,
               initialValue: state.description,
               decoration: InputDecoration(
                 labelText: needsHelp
@@ -304,7 +317,7 @@ class _AddObservationDetailsScreenState
             ],
             const SizedBox(height: AppSpacing.xl),
             FilledButton(
-              onPressed: state.submitting || _picking
+              onPressed: state.submitting || _picking || _locating
                   ? null
                   : () async {
                       if (!state.hasPhoto) {
@@ -352,9 +365,11 @@ class _AddObservationDetailsScreenState
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      needsHelp
-                          ? strings.publishNeedsHelp
-                          : strings.publishObservation,
+                      state.outcomeUnknown
+                          ? strings.checkPublicationStatus
+                          : needsHelp
+                              ? strings.publishNeedsHelp
+                              : strings.publishObservation,
                     ),
             ),
           ],

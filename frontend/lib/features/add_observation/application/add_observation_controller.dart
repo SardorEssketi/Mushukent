@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../core/media/selected_image_pipeline.dart';
 import '../../../core/network/mushukistan_api.dart';
+import '../../../core/network/publication_retry.dart';
 
 final addObservationControllerProvider =
     StateNotifierProvider<AddObservationController, AddObservationState>((ref) {
@@ -20,6 +21,7 @@ class AddObservationState {
     this.description = '',
     this.isPublic = true,
     this.submitting = false,
+    this.outcomeUnknown = false,
     this.errorMessage,
   });
 
@@ -30,6 +32,7 @@ class AddObservationState {
   final String description;
   final bool isPublic;
   final bool submitting;
+  final bool outcomeUnknown;
   final String? errorMessage;
 
   bool get hasPhoto => photos.isNotEmpty;
@@ -51,6 +54,7 @@ class AddObservationState {
     String? description,
     bool? isPublic,
     bool? submitting,
+    bool? outcomeUnknown,
     String? errorMessage,
   }) {
     return AddObservationState(
@@ -61,6 +65,7 @@ class AddObservationState {
       description: description ?? this.description,
       isPublic: isPublic ?? this.isPublic,
       submitting: submitting ?? this.submitting,
+      outcomeUnknown: outcomeUnknown ?? this.outcomeUnknown,
       errorMessage: errorMessage,
     );
   }
@@ -139,12 +144,13 @@ class AddObservationController extends StateNotifier<AddObservationState> {
             state.description.trim().isEmpty ? null : state.description.trim(),
         isPublic: state.isPublic,
       );
-      state = state.copyWith(submitting: false);
+      state = state.copyWith(submitting: false, outcomeUnknown: false);
       return post;
     } catch (error) {
       state = state.copyWith(
         submitting: false,
-        errorMessage: photoUploadErrorMessage(strings, error),
+        outcomeUnknown: publicationOutcomeUncertain(error),
+        errorMessage: publicationErrorMessage(strings, error),
       );
       rethrow;
     }

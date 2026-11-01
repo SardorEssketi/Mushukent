@@ -49,6 +49,9 @@ void main() {
     expect(adapter.uploadBodyLengths[0], greaterThan(0));
     expect(adapter.uploadBodyLengths[1], adapter.uploadBodyLengths[0]);
     expect(adapter.refreshCalls, 1);
+    expect(adapter.publicationKeys, hasLength(2));
+    expect(adapter.publicationKeys.first, isNotEmpty);
+    expect(adapter.publicationKeys.last, adapter.publicationKeys.first);
     expect(
       adapter.uploadTimeouts,
       everyElement(const Duration(minutes: 2)),
@@ -95,6 +98,7 @@ void main() {
 class _RefreshThenAcceptUploadAdapter implements HttpClientAdapter {
   final List<int> uploadBodyLengths = <int>[];
   final List<Duration?> uploadTimeouts = <Duration?>[];
+  final List<String> publicationKeys = <String>[];
   int refreshCalls = 0;
 
   @override
@@ -119,6 +123,7 @@ class _RefreshThenAcceptUploadAdapter implements HttpClientAdapter {
     }
 
     uploadBodyLengths.add(bodyLength);
+    publicationKeys.add(options.headers['Idempotency-Key'] as String);
     uploadTimeouts.add(options.receiveTimeout);
     expect(options.sendTimeout, const Duration(minutes: 2));
     if (uploadBodyLengths.length == 1) {

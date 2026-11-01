@@ -1209,6 +1209,21 @@ class AppStrings {
     };
   }
 
+  String get publicationOutcomeUnknown => switch (this) {
+        _RussianStrings() =>
+          'Публикация могла сохраниться. Проверьте статус перед повторной отправкой. Черновик сохранён на этом экране.',
+        _UzbekStrings() =>
+          'Post saqlangan bo‘lishi mumkin. Qayta yuborishdan oldin holatini tekshiring. Qoralama shu ekranda saqlanadi.',
+        _ =>
+          'Your post may already be saved. Check its status before resending. Your draft is kept on this screen.',
+      };
+
+  String get checkPublicationStatus => switch (this) {
+        _RussianStrings() => 'Проверить статус публикации',
+        _UzbekStrings() => 'Post holatini tekshirish',
+        _ => 'Check publication status',
+      };
+
   String get photoUploadRequiresSignIn {
     return switch (this) {
       _UzbekStrings() => 'Rasm yuklash uchun qayta kiring.',
