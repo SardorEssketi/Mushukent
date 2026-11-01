@@ -5,6 +5,13 @@ from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from structlog import get_logger
+
+logger = get_logger(__name__)
+
+
+class CommitOutcomeUnknownError(RuntimeError):
+    """The connection did not establish whether COMMIT succeeded."""
 
 
 class DatabaseSessionManager:
@@ -26,12 +33,23 @@ class DatabaseSessionManager:
         session = self.create_session()
         try:
             yield session
-            session.commit()
+            try:
+                session.commit()
+            except Exception as exc:
+                # ROLLBACK cannot undo a COMMIT the server already acknowledged internally.
+                raise CommitOutcomeUnknownError("Database commit outcome is unknown.") from exc
         except Exception:
-            session.rollback()
+            try:
+                session.rollback()
+            except Exception as exc:
+                logger.warning("database_rollback_failed", error_type=type(exc).__name__)
             raise
         finally:
-            session.close()
+            try:
+                session.close()
+            except Exception as exc:
+                # A connection cleanup failure must not turn a committed operation into a retry.
+                logger.warning("database_session_close_failed", error_type=type(exc).__name__)
 
     def dispose(self) -> None:
         self.engine.dispose()

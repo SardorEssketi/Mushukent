@@ -43,7 +43,7 @@ from app.features.posts.domain.repositories import (
 )
 from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.enums import PostKind
-from app.infrastructure.db.session import DatabaseSessionManager
+from app.infrastructure.db.session import CommitOutcomeUnknownError, DatabaseSessionManager
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
 
 logger = get_logger(__name__)
@@ -199,6 +199,12 @@ class PostsService:
                 if detail is None:
                     raise RuntimeError("Created post could not be loaded.")
                 return to_post_response(detail)
+        except CommitOutcomeUnknownError as exc:
+            raise api_error(
+                503,
+                "PUBLICATION_OUTCOME_UNKNOWN",
+                "The publication outcome is unknown. Check its status before retrying.",
+            ) from exc
         except StorageValidationError as exc:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
@@ -426,6 +432,12 @@ class PostsService:
                 if audited is None:
                     raise RuntimeError("Updated post could not be loaded after audit write.")
                 return to_post_response(audited)
+        except CommitOutcomeUnknownError as exc:
+            raise api_error(
+                503,
+                "PUBLICATION_OUTCOME_UNKNOWN",
+                "The publication outcome is unknown. Check its status before retrying.",
+            ) from exc
         except StorageValidationError as exc:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc

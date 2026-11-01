@@ -186,7 +186,11 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
   timeout is 30 seconds; verify the actual zone configuration and upload duration before release.
   A slow request can fail at the edge even when Nginx and Flutter would continue waiting.
 - If upload to R2 fails: return 502/503 with `IMAGE_UPLOAD_FAILED` and do not commit DB post row.
-- If DB write fails after upload: attempt best-effort object cleanup and return 500.
+- If a DB write definitely fails before commit: attempt best-effort object cleanup and return 500.
+- A commit exception does not prove rollback: the server may already have committed. Publication
+  create/update paths preserve uploaded media and return 503 `PUBLICATION_OUTCOME_UNKNOWN` in this
+  case. Do not delete these objects until the database outcome has been reconciled. Failure to
+  close a session after commit is logged without converting committed work into a failed request.
 - Media diagnostics record purpose, byte counts, duration, and error type/reason without image
   bytes, filenames, tokens, credentials, or private request contents.
 

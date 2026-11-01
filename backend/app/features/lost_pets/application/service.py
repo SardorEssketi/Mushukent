@@ -45,7 +45,7 @@ from app.features.lost_pets.domain.models import (
 )
 from app.features.lost_pets.domain.repositories import LostPetRepository
 from app.features.posts.application.schemas import GenericListResponse
-from app.infrastructure.db.session import DatabaseSessionManager
+from app.infrastructure.db.session import CommitOutcomeUnknownError, DatabaseSessionManager
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
 
 logger = get_logger(__name__)
@@ -155,6 +155,12 @@ class LostPetsService:
                         lost_pet_id=created.id, recipient_ids=recipients
                     )
                 return to_lost_pet_response(created)
+        except CommitOutcomeUnknownError as exc:
+            raise api_error(
+                503,
+                "PUBLICATION_OUTCOME_UNKNOWN",
+                "The publication outcome is unknown. Check its status before retrying.",
+            ) from exc
         except StorageValidationError as exc:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
@@ -327,6 +333,12 @@ class LostPetsService:
                     ),
                 )
                 return to_lost_pet_response(updated)
+        except CommitOutcomeUnknownError as exc:
+            raise api_error(
+                503,
+                "PUBLICATION_OUTCOME_UNKNOWN",
+                "The publication outcome is unknown. Check its status before retrying.",
+            ) from exc
         except StorageValidationError as exc:
             self._cleanup_uploaded_objects(uploaded_keys)
             raise api_error(422, "INVALID_IMAGE", "Invalid image file.") from exc
