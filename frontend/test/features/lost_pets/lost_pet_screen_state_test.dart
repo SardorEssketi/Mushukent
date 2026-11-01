@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/auth/application/auth_controller.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
@@ -19,6 +20,7 @@ import '../../support/fakes.dart';
 ProviderContainer _container(
   FakeApiClient apiClient, {
   String? userId = '11111111-1111-4111-8111-111111111111',
+  bool isModerator = false,
 }) =>
     ProviderContainer(overrides: [
       mushukistanApiProvider
@@ -29,7 +31,7 @@ ProviderContainer _container(
             : SessionRestoreSuccess(
                 AuthSession.restored(
                   accessToken: 'token',
-                  user: testUser(id: userId),
+                  user: testUser(id: userId, isModerator: isModerator),
                 ),
               ),
       )),
@@ -646,5 +648,121 @@ void main() {
     reloadGate.complete();
     await tester.pumpAndSettle();
     expect(countText('0'), findsOneWidget);
+  });
+  testWidgets("moderator removes another user's Lost Pet after confirmation",
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler(
+        'GET', 'lost-pets/pet-1', (_) => _pet(resolved: false));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    apiClient.setHandler('DELETE', 'lost-pets/pet-1', (_) => null);
+    final container =
+        _container(apiClient, userId: 'moderator-1', isModerator: true);
+    addTearDown(container.dispose);
+    final router = GoRouter(initialLocation: '/destination', routes: [
+      GoRoute(
+        path: '/destination',
+        builder: (context, _) => Scaffold(
+          body: TextButton(
+            onPressed: () => context.push('/lost-pets/pet-1'),
+            child: const Text('Destination'),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/lost-pets/:lostPetId',
+        builder: (_, state) => LostPetDetailScreen(
+          lostPetId: state.pathParameters['lostPetId']!,
+        ),
+      ),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Destination'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    // Moderators get Report and a moderator removal, never the owner's Edit.
+    expect(find.text('Edit lost pet'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
+    await tester.tap(find.text('Remove as moderator'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+
+    // Cancelling sends nothing.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(apiClient.calls.where((call) => call.method == 'DELETE'), isEmpty);
+
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove as moderator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete', skipOffstage: false).last);
+    await tester.pumpAndSettle();
+    expect(
+        apiClient.calls.where((call) => call.method == 'DELETE'), hasLength(1));
+    expect(container.read(deletedLostPetIdsProvider), contains('pet-1'));
+    expect(find.text('Destination'), findsOneWidget);
+    expect(find.text('Post deleted'), findsOneWidget);
+  });
+
+  testWidgets('a failed moderator removal keeps the Lost Pet and shows why',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler(
+        'GET', 'lost-pets/pet-1', (_) => _pet(resolved: false));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    apiClient.setHandler(
+        'DELETE',
+        'lost-pets/pet-1',
+        (_) => throw const MushukistanApiException(
+            kind: ApiFailureKind.forbidden,
+            code: 'FORBIDDEN',
+            message: 'Not allowed',
+            statusCode: 403));
+    final container =
+        _container(apiClient, userId: 'moderator-1', isModerator: true);
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove as moderator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete', skipOffstage: false).last);
+    await tester.pumpAndSettle();
+    expect(container.read(deletedLostPetIdsProvider), isNot(contains('pet-1')));
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.byType(LostPetDetailScreen), findsOneWidget);
+  });
+
+  testWidgets('another non-moderator user never sees a removal action',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler(
+        'GET', 'lost-pets/pet-1', (_) => _pet(resolved: false));
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'other-1');
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove as moderator'), findsNothing);
+    expect(find.text('Delete lost pet'), findsNothing);
   });
 }

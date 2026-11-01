@@ -141,6 +141,8 @@ class _NotificationCenterScreenState
     } catch (_) {
       // Navigation can still work if marking read is temporarily unavailable.
     }
+    // The removed publication is gone: reading the notice is all there is to do.
+    if (entry.kind == 'publication_removed') return;
     final path = notificationTargetPath(entry.targetKind, entry.targetId);
     if (path == null) return;
     final destination = entry.kind == 'comment' || entry.kind == 'reply'
@@ -202,9 +204,11 @@ class _NotificationCenterScreenState
             for (final entry in _items)
               ListTile(
                 leading: Icon(
-                  entry.kind == 'nearby_lost_pet'
-                      ? Icons.pets_outlined
-                      : Icons.chat_bubble_outline,
+                  switch (entry.kind) {
+                    'nearby_lost_pet' => Icons.pets_outlined,
+                    'publication_removed' => Icons.remove_circle_outline,
+                    _ => Icons.chat_bubble_outline,
+                  },
                 ),
                 title: Text(
                   copy.forEntry(entry),

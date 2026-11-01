@@ -263,6 +263,11 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
       widget.router.go('/feed');
       return;
     }
+    if (message.data['kind'] == 'publication_removed') {
+      // The publication was removed; show the notice instead of a dead link.
+      openNotificationDestination(widget.router, '/notifications');
+      return;
+    }
     final kind = message.data['target_kind'];
     final id = message.data['target_id'];
     final path =

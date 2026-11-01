@@ -10,6 +10,11 @@ import 'package:mushukistan_frontend/features/notifications/presentation/notific
 import 'package:mushukistan_frontend/features/notifications/presentation/notification_strings.dart';
 
 class _NotificationClient extends Fake implements MushukistanApiClient {
+  _NotificationClient({this.item});
+
+  /// Replaces the default comment notification when set.
+  final Map<String, Object?>? item;
+  final requestedPaths = <String>[];
   bool markedAll = false;
   bool markedOne = false;
 
@@ -20,19 +25,26 @@ class _NotificationClient extends Fake implements MushukistanApiClient {
     required T Function(Object? json) decoder,
     bool authenticated = true,
   }) async {
+    requestedPaths.add(path);
     if (path == 'notifications') {
       return decoder({
         'items': [
-          {
-            'id': '11111111-1111-1111-1111-111111111111',
-            'kind': 'comment',
-            'actor_name': 'Aziz',
-            'target_kind': 'lost_pet',
-            'target_id': '22222222-2222-2222-2222-222222222222',
-            'comment_id': '33333333-3333-3333-3333-333333333333',
-            'created_at': '2026-10-07T12:00:00Z',
-            'read_at': markedAll || markedOne ? '2026-10-07T13:00:00Z' : null,
-          },
+          if (item != null)
+            {
+              ...item!,
+              'read_at': markedAll || markedOne ? '2026-10-07T13:00:00Z' : null,
+            }
+          else
+            {
+              'id': '11111111-1111-1111-1111-111111111111',
+              'kind': 'comment',
+              'actor_name': 'Aziz',
+              'target_kind': 'lost_pet',
+              'target_id': '22222222-2222-2222-2222-222222222222',
+              'comment_id': '33333333-3333-3333-3333-333333333333',
+              'created_at': '2026-10-07T12:00:00Z',
+              'read_at': markedAll || markedOne ? '2026-10-07T13:00:00Z' : null,
+            },
         ],
         'next_cursor': null,
         'limit': 20,
@@ -103,6 +115,64 @@ void main() {
         expect(copy.get(key), isNot(key));
       }
     }
+  });
+
+  test('publication removal notices name the type, never the moderator', () {
+    NotificationEntry entry(String targetKind) => NotificationEntry(
+          id: '1',
+          kind: 'publication_removed',
+          targetKind: targetKind,
+          targetId: '22222222-2222-2222-2222-222222222222',
+          createdAt: DateTime.utc(2026, 11, 1),
+          actorName: 'Moderator Name',
+        );
+    for (final language in AppLanguage.values) {
+      final copy = NotificationStrings(language.code);
+      final texts = {
+        for (final kind in ['post', 'lost_pet', 'adoption_post'])
+          kind: copy.forEntry(entry(kind)),
+      };
+      for (final text in texts.values) {
+        expect(text, isNotEmpty);
+        expect(text, isNot(contains('publication_removed')));
+        expect(text, isNot(contains('Moderator Name')));
+      }
+      expect(texts.values.toSet(), hasLength(3));
+      expect(copy.forEntry(entry('unknown')), texts['post']);
+    }
+    expect(const NotificationStrings('en').forEntry(entry('lost_pet')),
+        'A moderator removed your lost pet post');
+  });
+
+  testWidgets('opening a removal notice only marks it read', (tester) async {
+    final client = _NotificationClient(item: {
+      'id': '11111111-1111-1111-1111-111111111111',
+      'kind': 'publication_removed',
+      'actor_name': null,
+      'target_kind': 'adoption_post',
+      'target_id': '22222222-2222-2222-2222-222222222222',
+      'comment_id': null,
+      'created_at': '2026-11-01T12:00:00Z',
+    });
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        notificationApiProvider.overrideWithValue(NotificationApi(client)),
+        mushukistanApiProvider
+            .overrideWithValue(MushukistanApi(client: client)),
+      ],
+      child: const MaterialApp(home: NotificationCenterScreen()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('A moderator removed your rehoming post'), findsOneWidget);
+    expect(find.byIcon(Icons.remove_circle_outline), findsOneWidget);
+    await tester.tap(find.text('A moderator removed your rehoming post'));
+    await tester.pumpAndSettle();
+    expect(client.markedOne, isTrue);
+    // The removed post is not fetched or opened, so no "no longer available" error.
+    expect(client.requestedPaths.where((path) => path.startsWith('adoption')),
+        isEmpty);
+    expect(find.text('This content is no longer available.'), findsNothing);
+    expect(find.byType(NotificationCenterScreen), findsOneWidget);
   });
 
   testWidgets('bell hides zero and bounds large unread counts', (tester) async {

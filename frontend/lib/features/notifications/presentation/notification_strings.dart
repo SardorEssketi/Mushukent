@@ -31,6 +31,10 @@ class NotificationStrings {
       'settings_failed': 'Could not open Android settings',
       'nearby_lost_pet':
           "A lost pet was reported near your last authorized location",
+      'publication_removed_post': 'A moderator removed your post',
+      'publication_removed_lost_pet': 'A moderator removed your lost pet post',
+      'publication_removed_adoption_post':
+          'A moderator removed your rehoming post',
       'automatic_hint':
           "Comments, replies, pet follow-ups and inactivity reminders are enabled automatically.",
       'permission_status': "Android notification permission",
@@ -80,6 +84,11 @@ class NotificationStrings {
       'settings_failed': 'Не удалось открыть настройки Android',
       'nearby_lost_pet':
           "Рядом с вашим последним разрешённым местоположением ищут питомца",
+      'publication_removed_post': 'Модератор удалил вашу публикацию',
+      'publication_removed_lost_pet':
+          'Модератор удалил ваше объявление о пропавшем питомце',
+      'publication_removed_adoption_post':
+          'Модератор удалил ваше объявление о пристройстве',
       'automatic_hint':
           "Комментарии, ответы, напоминания о питомцах и возвращении включены автоматически.",
       'permission_status': "Разрешение на уведомления Android",
@@ -129,6 +138,11 @@ class NotificationStrings {
       'settings_failed': 'Android sozlamalarini ochib bo‘lmadi',
       'nearby_lost_pet':
           "Oxirgi ruxsat berilgan joylashuvingiz yaqinida jonivor yo‘qolgani e’lon qilindi",
+      'publication_removed_post': 'Moderator postingizni olib tashladi',
+      'publication_removed_lost_pet':
+          'Moderator yo‘qolgan jonivor haqidagi postingizni olib tashladi',
+      'publication_removed_adoption_post':
+          'Moderator asrab olish postingizni olib tashladi',
       'automatic_hint':
           "Izohlar, javoblar, jonivorlar va qaytish haqidagi eslatmalar avtomatik yoqilgan.",
       'permission_status': "Android bildirishnoma ruxsati",
@@ -165,6 +179,13 @@ class NotificationStrings {
 
   String forEntry(NotificationEntry entry) {
     if (entry.kind == 'nearby_lost_pet') return get('nearby_lost_pet');
+    if (entry.kind == 'publication_removed') {
+      // No moderator name: the notice never reveals who removed the post.
+      final key = 'publication_removed_${entry.targetKind}';
+      return _copy['en']!.containsKey(key)
+          ? get(key)
+          : get('publication_removed_post');
+    }
     final actor = entry.actorName?.trim().isNotEmpty == true
         ? entry.actorName!
         : get('deleted_actor');

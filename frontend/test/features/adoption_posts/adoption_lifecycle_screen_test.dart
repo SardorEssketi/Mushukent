@@ -17,7 +17,7 @@ import 'package:mushukistan_frontend/features/feed/presentation/screens/feed_scr
 import '../../support/fakes.dart';
 
 ProviderContainer _container(FakeApiClient apiClient,
-        {String? userId = 'owner-1'}) =>
+        {String? userId = 'owner-1', bool isModerator = false}) =>
     ProviderContainer(overrides: [
       mushukistanApiProvider
           .overrideWithValue(MushukistanApi(client: apiClient)),
@@ -25,7 +25,8 @@ ProviderContainer _container(FakeApiClient apiClient,
         restoreResult: userId == null
             ? const SessionRestoreMissing()
             : SessionRestoreSuccess(AuthSession.restored(
-                accessToken: 'token', user: testUser(id: userId))),
+                accessToken: 'token',
+                user: testUser(id: userId, isModerator: isModerator))),
       )),
       googleIdentityTokenProvider.overrideWithValue(
         FakeGoogleIdentityTokenProvider(),
@@ -561,5 +562,67 @@ void main() {
     await tester.pump();
     expect(find.textContaining('Updated Mittens', findRichText: true),
         findsNothing);
+  });
+  testWidgets("moderator removes another user's rehoming post", (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'adoption-posts/adoption-1', (_) => _post());
+    apiClient.setHandler('GET', 'adoption-posts/adoption-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    apiClient.setHandler('DELETE', 'adoption-posts/adoption-1', (_) => null);
+    final container =
+        _container(apiClient, userId: 'moderator-1', isModerator: true);
+    addTearDown(container.dispose);
+    final router = GoRouter(initialLocation: '/archive', routes: [
+      GoRoute(
+          path: '/archive',
+          builder: (context, state) => Scaffold(
+                body: TextButton(
+                    onPressed: () => context.push('/adoption-posts/adoption-1'),
+                    child: const Text('Open')),
+              )),
+      GoRoute(
+          path: '/adoption-posts/:id',
+          builder: (context, state) =>
+              const AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
+    ]);
+    addTearDown(router.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit rehoming post'), findsNothing);
+    expect(find.text('Delete rehoming post'), findsNothing);
+    expect(find.text('Report'), findsOneWidget);
+    await tester.tap(find.text('Remove as moderator'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(container.read(deletedAdoptionIdsProvider), contains('adoption-1'));
+    expect(apiClient.calls.where((call) => call.method == 'DELETE').length, 1);
+    expect(find.text('Open'), findsOneWidget);
+  });
+
+  testWidgets('non-moderator users never see a rehoming removal action',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    apiClient.setHandler('GET', 'adoption-posts/adoption-1', (_) => _post());
+    apiClient.setHandler('GET', 'adoption-posts/adoption-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'other-1');
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(
+          home: AdoptionPostDetailScreen(adoptionPostId: 'adoption-1')),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Post actions'));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove as moderator'), findsNothing);
   });
 }

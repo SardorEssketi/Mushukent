@@ -143,10 +143,13 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
     AppStrings strings,
     LostPetData lostPet,
   ) async {
+    final asModerator = lostPet.author?.id != ref.read(currentUserProvider)?.id;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(strings.deleteLostPet),
+        title: Text(asModerator
+            ? strings.removePostAsModerator
+            : strings.deleteLostPet),
         content: Text(strings.deleteLostPetMessage),
         actions: [
           TextButton(
@@ -300,6 +303,8 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
     final viewerId = ref.watch(currentUserProvider)?.id;
     final loaded = lostPetAsync.valueOrNull;
     final loadedIsOwner = viewerId != null && loaded?.author?.id == viewerId;
+    final viewerIsModerator =
+        ref.watch(currentUserProvider)?.isModerator == true;
 
     return Scaffold(
       appBar: AppBar(
@@ -321,12 +326,21 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
                     icon: Icons.delete_outline,
                     destructive: true,
                   ),
-                ] else
+                ] else ...[
                   PublicationMenuEntry(
                     value: _LostPetDetailAction.report,
                     label: strings.report,
                     icon: Icons.flag_outlined,
                   ),
+                  // The server allows moderators to remove other users' posts.
+                  if (viewerIsModerator)
+                    PublicationMenuEntry(
+                      value: _LostPetDetailAction.delete,
+                      label: strings.removePostAsModerator,
+                      icon: Icons.delete_outline,
+                      destructive: true,
+                    ),
+                ],
               ],
               onSelected: (action) => switch (action) {
                 _LostPetDetailAction.report => _report(loaded),
