@@ -23,7 +23,7 @@ Directionality: *who* blocked is stored (`blocker_id` -> `blocked_id`) so only t
 - **Own content**: editing and deleting your own posts is unchanged. Retracting a like (`DELETE /posts/{id}/likes`) stays allowed so old likes can be removed.
 - **Moderation** is unaffected: moderator routes do not apply block filters.
 - **Reports** against a user's content use their own read path and are not filtered.
-- **Existing data is kept.** Blocking never deletes likes, comments or notifications, so unblocking restores everything. Counters (`like_count`, `comment_count`) are global and still include a blocked user's contributions.
+- **Existing data is kept.** Blocking never deletes likes, comments or notifications, so unblocking restores everything. `like_count` is global and still includes a blocked user's likes. `comment_count` in API responses is viewer-specific and matches the comment list (see "Comment counts" below).
 - **Aggregates not tied to a viewer** (leaderboards, `GET /places`, cat records in non-map list views) are not filtered. Map pins and cat observation histories are filtered because they expose individual observations.
 - **Replies to a hidden comment** from third parties stay visible (they are the third party's content); the client already renders a reply with a missing parent as a top-level comment.
 - Account deletion still removes block rows in both directions (unchanged).
@@ -56,8 +56,30 @@ On a disposable PostGIS database with 200,000 posts, 600,000 comments and a view
 - After any change the client bumps `postMutationRevisionProvider` (feed, map, post, profile and activity providers reload) and refreshes the unread-notification badge.
 - Public reads that the server filters are sent with the viewer's token (previously several were explicitly anonymous).
 
+## Comment counts
+
+The `comment_count` returned with a post (any kind, including Needs Help), lost-pet post or adoption
+post is the number of comments **the same viewer** gets from that publication's comment list, all
+pages together (top-level comments and replies, the list is flat). Both use one predicate,
+`backend/app/infrastructure/repositories/comment_visibility.py`:
+
+- the comment is not soft-deleted (user deletion, moderator deletion, report action, and account
+  deletion all soft-delete);
+- no block exists between the viewer and the comment's author, in either direction;
+- anonymous viewers are not affected by blocks.
+
+The count is computed in the same SQL as the publication (a correlated count on the comment target
+index that PostgreSQL evaluates only for the rows of the returned page) or, for lost-pet and adoption
+pages, in one grouped query per page. Blocking and unblocking change counts immediately, with no
+counter writes.
+
+The stored `comment_count` columns (`posts`, `lost_pets`, `adoption_posts`) are still maintained on
+every write (create, delete, moderator/report delete, account deletion) and stay global, but no API
+response reads them. Historic drift in them is therefore not visible to users; see
+`docs/COMMENT_COUNTS.md` for the optional, operator-run reconciliation.
+
 ## Known limits
 
-- Counters include hidden interactions (see above).
+- `like_count` includes likes from blocked users (see above).
 - Android behaviour was not exercised; the code is shared with Flutter Web.
 - A comment or like written in the instant before a block commits is stored but hidden; it is not deleted.
