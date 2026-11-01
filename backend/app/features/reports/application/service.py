@@ -78,6 +78,7 @@ class ReportsService:
         lost_pet_repository_factory: LostPetRepositoryFactory,
         adoption_post_repository_factory: AdoptionPostRepositoryFactory,
         user_repository_factory: UserProfileRepositoryFactory,
+        notification_repository_factory=None,
     ) -> None:
         self.db_session_manager = db_session_manager
         self.report_repository_factory = report_repository_factory
@@ -87,6 +88,7 @@ class ReportsService:
         self.lost_pet_repository_factory = lost_pet_repository_factory
         self.adoption_post_repository_factory = adoption_post_repository_factory
         self.user_repository_factory = user_repository_factory
+        self.notification_repository_factory = notification_repository_factory
 
     def create_report(self, user: AuthUser, payload: ReportCreate) -> ReportResponse:
         with self.db_session_manager.session_scope() as session:
@@ -235,6 +237,14 @@ class ReportsService:
         if payload.action is None:
             return
 
+        if payload.action == ReportAction.SOFT_DELETE_POST and target_type in (
+            ReportTargetType.LOST_PET,
+            ReportTargetType.ADOPTION_POST,
+        ):
+            # "Soft delete post" removes the reported publication of any kind.
+            self._remove_special_publication(session, user, target_type, target_id)
+            return
+
         if payload.action == ReportAction.SOFT_DELETE_POST:
             if target_type != ReportTargetType.POST:
                 raise api_error(400, "INVALID_PAYLOAD", "Action does not match report target.")
@@ -266,6 +276,13 @@ class ReportsService:
                         cat.total_contributors = stats.total_contributors
                         cat.total_likes = stats.total_likes
                         cat_repository.save(cat)
+                    self._notify_publication_removed(
+                        session,
+                        user,
+                        owner_id=post.user_id,
+                        target_kind="post",
+                        target_id=target_id,
+                    )
             return
 
         if payload.action == ReportAction.SOFT_DELETE_COMMENT:
@@ -315,6 +332,35 @@ class ReportsService:
             return
 
         raise api_error(400, "INVALID_PAYLOAD", "Unsupported moderation action.")
+
+    def _remove_special_publication(
+        self, session, user: AuthUser, target_type: ReportTargetType, target_id: UUID
+    ) -> None:
+        """Soft-delete a reported lost-pet or adoption post once; later reports are no-ops."""
+        if target_type == ReportTargetType.LOST_PET:
+            repository = self.lost_pet_repository_factory(session)
+            target_kind = "lost_pet"
+        else:
+            repository = self.adoption_post_repository_factory(session)
+            target_kind = "adoption_post"
+        current = repository.get_by_id(target_id, for_update=True, include_deleted=True)
+        if current is None or current.deleted_at is not None:
+            return
+        repository.soft_delete(target_id, datetime.now(UTC), deleted_by_id=user.id)
+        self._notify_publication_removed(
+            session, user, owner_id=current.user_id, target_kind=target_kind, target_id=target_id
+        )
+
+    def _notify_publication_removed(
+        self, session, user: AuthUser, *, owner_id: UUID | None, target_kind: str, target_id: UUID
+    ) -> None:
+        if self.notification_repository_factory is not None:
+            self.notification_repository_factory(session).create_publication_removed(
+                owner_id=owner_id,
+                moderator_id=user.id,
+                target_kind=target_kind,
+                target_id=target_id,
+            )
 
     def _load_target_previews(
         self,
@@ -474,8 +520,8 @@ class ReportsService:
             )
 
         if target_type == ReportTargetType.LOST_PET:
-            lost_pet = lost_pet_repository.get_by_id(target_id)
-            if lost_pet is None:
+            lost_pet = lost_pet_repository.get_by_id(target_id, include_deleted=True)
+            if lost_pet is None or (lost_pet.deleted_at is not None and not allow_missing):
                 if allow_missing:
                     return None
                 raise api_error(404, "LOST_PET_NOT_FOUND", "Lost pet post not found.")
@@ -491,8 +537,10 @@ class ReportsService:
             )
 
         if target_type == ReportTargetType.ADOPTION_POST:
-            adoption_post = adoption_post_repository.get_by_id(target_id)
-            if adoption_post is None:
+            adoption_post = adoption_post_repository.get_by_id(target_id, include_deleted=True)
+            if adoption_post is None or (
+                adoption_post.deleted_at is not None and not allow_missing
+            ):
                 if allow_missing:
                     return None
                 raise api_error(404, "ADOPTION_POST_NOT_FOUND", "Adoption post not found.")

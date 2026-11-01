@@ -29,7 +29,9 @@ class LostPetRepository(Protocol):
 
     def update(self, lost_pet_id: UUID, draft: LostPetUpdateDraft) -> LostPetRecord: ...
 
-    def soft_delete(self, lost_pet_id: UUID, deleted_at: datetime) -> None: ...
+    def soft_delete(
+        self, lost_pet_id: UUID, deleted_at: datetime, *, deleted_by_id: UUID | None = None
+    ) -> None: ...
 
     def set_resolution(
         self, lost_pet_id: UUID, *, is_resolved: bool, changed_at: datetime

@@ -38,6 +38,10 @@ PUSH_COPY = {
         "lost_pet_followup": ("Lost pet follow-up", "Please check your lost pet follow-up."),
         "adoption_followup": ("New home follow-up", "Please check your new home follow-up."),
         "inactivity": ("We miss you", "See what is new in Mushukistan."),
+        "publication_removed": (
+            "Publication removed",
+            "A moderator removed one of your publications.",
+        ),
     },
     "ru": {
         "comment": ("Новый комментарий", "Кто-то прокомментировал вашу публикацию."),
@@ -52,6 +56,10 @@ PUSH_COPY = {
             "Проверьте вопрос о новом доме для питомца.",
         ),
         "inactivity": ("Мы скучаем", "Посмотрите, что нового в Mushukistan."),
+        "publication_removed": (
+            "Публикация удалена",
+            "Модератор удалил одну из ваших публикаций.",
+        ),
     },
     "uz": {
         "comment": ("Yangi izoh", "Kimdir postingizga izoh qoldirdi."),
@@ -69,6 +77,10 @@ PUSH_COPY = {
             "Jonivorning yangi uyi haqidagi savolni tekshiring.",
         ),
         "inactivity": ("Sizni sog‘indik", "Mushukistandagi yangiliklarni ko‘ring."),
+        "publication_removed": (
+            "Post olib tashlandi",
+            "Moderator postlaringizdan birini olib tashladi.",
+        ),
     },
 }
 
@@ -275,6 +287,20 @@ class NotificationWorker:
             }.get(job.target_kind)
             target = session.get(target_model, job.target_id) if target_model else None
             return bool(target and not target.deleted_at)
+        if job.kind == "publication_removed":
+            notification = (
+                session.get(schema.Notification, job.notification_id)
+                if job.notification_id is not None
+                else None
+            )
+            target_model = {
+                "post": schema.Post,
+                "lost_pet": schema.LostPet,
+                "adoption_post": schema.AdoptionPost,
+            }.get(job.target_kind)
+            target = session.get(target_model, job.target_id) if target_model else None
+            # Only while the publication is still removed (no restore exists today).
+            return bool(notification and target and target.deleted_at)
         if job.kind == "nearby_lost_pet":
             pet = session.get(schema.LostPet, job.target_id)
             return bool(

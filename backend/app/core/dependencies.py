@@ -136,6 +136,7 @@ def get_posts_service(request: Request) -> PostsService:
         cat_repository_factory=SqlAlchemyCatRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,
         media_storage_service=media_storage_service,
+        notification_repository_factory=NotificationRepository,
     )
 
 
@@ -191,6 +192,7 @@ def get_reports_service(request: Request) -> ReportsService:
         lost_pet_repository_factory=SqlAlchemyLostPetRepository,
         adoption_post_repository_factory=SqlAlchemyAdoptionPostRepository,
         user_repository_factory=SqlAlchemyUserProfileRepository,
+        notification_repository_factory=NotificationRepository,
     )
 
 
@@ -257,6 +259,7 @@ def get_adoption_posts_service(request: Request) -> AdoptionPostsService:
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyAdoptionPostRepository,
         media_storage_service=media_storage_service,
+        notification_repository_factory=NotificationRepository,
     )
 
 

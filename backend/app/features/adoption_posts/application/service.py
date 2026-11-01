@@ -60,10 +60,12 @@ class AdoptionPostsService:
         db_session_manager: DatabaseSessionManager,
         repository_factory: AdoptionPostRepositoryFactory,
         media_storage_service: MediaStorageService | None = None,
+        notification_repository_factory=None,
     ) -> None:
         self.db_session_manager = db_session_manager
         self.repository_factory = repository_factory
         self.media_storage_service = media_storage_service
+        self.notification_repository_factory = notification_repository_factory
 
     def create_adoption_post(
         self,
@@ -317,13 +319,29 @@ class AdoptionPostsService:
             raise
 
     def delete_adoption_post(self, adoption_post_id: UUID, user: AuthUser) -> None:
+        """Owner or moderator soft-deletes an adoption post; repeating it is a no-op."""
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             current = repository.get_by_id(adoption_post_id, for_update=True, include_deleted=True)
-            self._require_owner(current, user)
+            if current is None or not user.is_moderator:
+                self._require_owner(current, user)
             assert current is not None
-            if current.deleted_at is None:
-                repository.soft_delete(adoption_post_id, datetime.now(UTC))
+            if current.deleted_at is not None:
+                return
+            repository.soft_delete(adoption_post_id, datetime.now(UTC), deleted_by_id=user.id)
+            if current.user_id != user.id:
+                if self.notification_repository_factory is not None:
+                    self.notification_repository_factory(session).create_publication_removed(
+                        owner_id=current.user_id,
+                        moderator_id=user.id,
+                        target_kind="adoption_post",
+                        target_id=adoption_post_id,
+                    )
+                logger.info(
+                    "adoption_post_removed_by_moderator",
+                    adoption_post_id=str(adoption_post_id),
+                    actor_id=str(user.id),
+                )
 
     def set_resolution(
         self, adoption_post_id: UUID, user: AuthUser, payload: AdoptionResolutionRequest

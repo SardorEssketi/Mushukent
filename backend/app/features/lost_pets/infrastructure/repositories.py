@@ -123,11 +123,14 @@ class SqlAlchemyLostPetRepository:
         # Only the owner can update, so the owner is the viewer of the response.
         return self._models_to_records([item], item.user_id)[0]
 
-    def soft_delete(self, lost_pet_id: UUID, deleted_at: datetime) -> None:
+    def soft_delete(
+        self, lost_pet_id: UUID, deleted_at: datetime, *, deleted_by_id: UUID | None = None
+    ) -> None:
         item = self.session.get(schema.LostPet, lost_pet_id)
         if item is None:
             raise RuntimeError("Locked lost pet could not be loaded for deletion.")
         item.deleted_at = deleted_at
+        item.deleted_by_id = deleted_by_id
         item.updated_at = deleted_at
         pending = self.session.scalar(
             select(schema.LostPetFollowUp)

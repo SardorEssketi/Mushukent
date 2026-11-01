@@ -38,7 +38,9 @@ class AdoptionPostRepository(Protocol):
         self, adoption_post_id: UUID, draft: AdoptionPostUpdateDraft
     ) -> AdoptionPostRecord: ...
 
-    def soft_delete(self, adoption_post_id: UUID, deleted_at: datetime) -> None: ...
+    def soft_delete(
+        self, adoption_post_id: UUID, deleted_at: datetime, *, deleted_by_id: UUID | None = None
+    ) -> None: ...
 
     def set_resolution(
         self, adoption_post_id: UUID, *, is_resolved: bool, changed_at: datetime

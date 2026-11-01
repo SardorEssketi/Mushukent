@@ -70,12 +70,14 @@ class PostsService:
         cat_repository_factory: CatRepositoryFactory,
         user_repository_factory: UserProfileRepositoryFactory,
         media_storage_service: MediaStorageService | None = None,
+        notification_repository_factory=None,
     ) -> None:
         self.db_session_manager = db_session_manager
         self.post_repository_factory = post_repository_factory
         self.cat_repository_factory = cat_repository_factory
         self.user_repository_factory = user_repository_factory
         self.media_storage_service = media_storage_service
+        self.notification_repository_factory = notification_repository_factory
 
     def create_post(
         self,
@@ -278,6 +280,13 @@ class PostsService:
             if cat is None:
                 raise api_error(404, "CAT_NOT_FOUND", "Cat not found.")
             self._apply_cat_stats(cat_repository, cat, stats)
+            if current.user_id != user.id and self.notification_repository_factory is not None:
+                self.notification_repository_factory(session).create_publication_removed(
+                    owner_id=current.user_id,
+                    moderator_id=user.id,
+                    target_kind="post",
+                    target_id=post_id,
+                )
             logger.info(
                 "post_deleted",
                 post_id=str(post_id),

@@ -345,13 +345,29 @@ class LostPetsService:
             raise
 
     def delete_lost_pet(self, lost_pet_id: UUID, user: AuthUser) -> None:
+        """Owner or moderator soft-deletes a lost-pet post; repeating it is a no-op."""
         with self.db_session_manager.session_scope() as session:
             repository = self.repository_factory(session)
             current = repository.get_by_id(lost_pet_id, for_update=True, include_deleted=True)
-            self._require_owner(current, user)
+            if current is None or not user.is_moderator:
+                self._require_owner(current, user)
+            assert current is not None
             if current.deleted_at is not None:
                 return
-            repository.soft_delete(lost_pet_id, datetime.now(UTC))
+            repository.soft_delete(lost_pet_id, datetime.now(UTC), deleted_by_id=user.id)
+            if current.user_id != user.id:
+                if self.notification_repository_factory is not None:
+                    self.notification_repository_factory(session).create_publication_removed(
+                        owner_id=current.user_id,
+                        moderator_id=user.id,
+                        target_kind="lost_pet",
+                        target_id=lost_pet_id,
+                    )
+                logger.info(
+                    "lost_pet_removed_by_moderator",
+                    lost_pet_id=str(lost_pet_id),
+                    actor_id=str(user.id),
+                )
 
     def set_resolution(
         self, lost_pet_id: UUID, user: AuthUser, payload: LostPetResolutionRequest

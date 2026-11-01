@@ -196,6 +196,13 @@ class UsersService:
                 .where(schema.Comment.deleted_by_id == user.id)
                 .values(deleted_by_id=None)
             )
+            for removed_model in (schema.LostPet, schema.AdoptionPost):
+                session.execute(
+                    update(removed_model)
+                    .where(removed_model.deleted_by_id == user.id)
+                    .values(deleted_by_id=None)
+                    .execution_options(synchronize_session=False)
+                )
 
             lost_pet_rows = session.scalars(
                 select(schema.LostPet).options().where(schema.LostPet.user_id == user.id)

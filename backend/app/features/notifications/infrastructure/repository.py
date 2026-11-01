@@ -118,6 +118,33 @@ class NotificationRepository:
             )
         return notification_id
 
+    def create_publication_removed(
+        self,
+        *,
+        owner_id: UUID | None,
+        moderator_id: UUID,
+        target_kind: str,
+        target_id: UUID,
+    ) -> UUID | None:
+        """Tell an owner that a moderator removed their publication (once per publication).
+
+        The moderator is not stored as the actor, so the owner never learns who acted and a
+        block between them does not suppress the notice. Nothing is sent when the owner removed
+        it themselves or the publication has no owner (deleted account). The event key makes
+        repeated deletion attempts and several resolved reports produce a single notification.
+        """
+        if owner_id is None or owner_id == moderator_id:
+            return None
+        return self.create_event(
+            recipient_id=owner_id,
+            actor_id=None,
+            kind="publication_removed",
+            target_kind=target_kind,
+            target_id=target_id,
+            event_key=f"publication_removed:{target_kind}:{target_id}",
+            push_enabled=True,
+        )
+
     def enqueue_for_devices(
         self,
         *,

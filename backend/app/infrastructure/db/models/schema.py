@@ -174,10 +174,12 @@ class User(UUIDPrimaryKeyMixin, Base):
     )
     lost_pets: Mapped[list["LostPet"]] = relationship(
         back_populates="author",
+        foreign_keys="LostPet.user_id",
         passive_deletes=True,
     )
     adoption_posts: Mapped[list["AdoptionPost"]] = relationship(
         back_populates="author",
+        foreign_keys="AdoptionPost.user_id",
         passive_deletes=True,
     )
     refresh_sessions: Mapped[list["AuthRefreshSession"]] = relationship(
@@ -752,7 +754,13 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         server_default=text("0"),
     )
 
-    author: Mapped["User | None"] = relationship(back_populates="lost_pets")
+    deleted_by_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    author: Mapped["User | None"] = relationship(back_populates="lost_pets", foreign_keys=[user_id])
     photos: Mapped[list["LostPetPhoto"]] = relationship(
         back_populates="lost_pet",
         cascade="all, delete-orphan",
@@ -775,6 +783,7 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("idx_lost_pets_user_id", "user_id"),
+        Index("idx_lost_pets_deleted_by_id", "deleted_by_id"),
     )
 
 
@@ -939,7 +948,15 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         server_default=text("0"),
     )
 
-    author: Mapped["User | None"] = relationship(back_populates="adoption_posts")
+    deleted_by_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    author: Mapped["User | None"] = relationship(
+        back_populates="adoption_posts", foreign_keys=[user_id]
+    )
     photos: Mapped[list["AdoptionPostPhoto"]] = relationship(
         back_populates="adoption_post",
         cascade="all, delete-orphan",
@@ -961,6 +978,7 @@ class AdoptionPost(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
             postgresql_where=text("deleted_at IS NULL"),
         ),
         Index("idx_adoption_posts_user_id", "user_id"),
+        Index("idx_adoption_posts_deleted_by_id", "deleted_by_id"),
     )
 
 
@@ -1096,7 +1114,8 @@ class Notification(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('comment', 'reply', 'nearby_lost_pet')", name="notifications_kind_valid"
+            "kind IN ('comment', 'reply', 'nearby_lost_pet', 'publication_removed')",
+            name="notifications_kind_valid",
         ),
         CheckConstraint(
             "target_kind IN ('post', 'lost_pet', 'adoption_post')",
