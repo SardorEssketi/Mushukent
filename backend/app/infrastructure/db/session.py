@@ -37,6 +37,7 @@ class DatabaseSessionManager:
                 session.commit()
             except Exception as exc:
                 # ROLLBACK cannot undo a COMMIT the server already acknowledged internally.
+                logger.warning("database_commit_outcome_unknown", error_type=type(exc).__name__)
                 raise CommitOutcomeUnknownError("Database commit outcome is unknown.") from exc
         except Exception:
             try:

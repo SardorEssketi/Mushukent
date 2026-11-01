@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import partial
+from time import perf_counter
 
 from anyio import CapacityLimiter, to_thread
 from fastapi import UploadFile
@@ -14,11 +15,21 @@ logger = get_logger(__name__)
 _upload_processing_limiter = CapacityLimiter(2)
 
 
-async def run_upload_processing[
-    ResultT
-](function: Callable[..., ResultT], *args: object, **kwargs: object,) -> ResultT:
+async def run_upload_processing[ResultT](
+    function: Callable[..., ResultT],
+    *args: object,
+    **kwargs: object,
+) -> ResultT:
     call = partial(function, *args, **kwargs)
-    return await to_thread.run_sync(call, limiter=_upload_processing_limiter)
+    queued_at = perf_counter()
+
+    def measured():
+        logger.info(
+            "upload_processing_started", queue_ms=round((perf_counter() - queued_at) * 1000)
+        )
+        return call()
+
+    return await to_thread.run_sync(measured, limiter=_upload_processing_limiter)
 
 
 async def read_image_upload(
@@ -28,6 +39,7 @@ async def read_image_upload(
     index: int = 0,
 ) -> tuple[bytes, str | None, str | None]:
     content = await upload.read(MAX_UPLOAD_SIZE_BYTES + 1)
+    logger.info("upload_file_read", purpose=purpose, index=index, byte_count=len(content))
     if len(content) > MAX_UPLOAD_SIZE_BYTES:
         logger.info(
             "image_upload_rejected",

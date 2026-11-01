@@ -11,6 +11,7 @@ from app.core.analytics import Analytics
 from app.core.container import build_container
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
+from app.core.publication_diagnostics import PublicationDiagnosticsMiddleware
 from app.core.rate_limit import add_rate_limit_middleware
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
@@ -118,6 +119,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.add_middleware(PostHogContextMiddleware)
+    app.add_middleware(PublicationDiagnosticsMiddleware)
     app.include_router(api_v1_router, prefix="/api/v1")
 
     return app

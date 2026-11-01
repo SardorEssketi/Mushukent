@@ -71,14 +71,30 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.error(
-            "unhandled_exception",
-            method=request.method,
-            path=request.url.path,
-            exc_info=(type(exc), exc, exc.__traceback__),
-        )
-        return _build_error_response(
+        publication = request.url.path in {
+            "/api/v1/posts",
+            "/api/v1/lost-pets",
+            "/api/v1/adoption-posts",
+        } or request.url.path.startswith("/api/v1/publication-operations/")
+        if publication:
+            # SQL exceptions may embed post text/contact parameters in their repr.
+            logger.error(
+                "publication_unhandled_exception",
+                error_type=type(exc).__name__,
+                request_id=getattr(request.state, "request_id", None),
+            )
+        else:
+            logger.error(
+                "unhandled_exception",
+                method=request.method,
+                path=request.url.path,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+        response = _build_error_response(
             500,
             "INTERNAL_SERVER_ERROR",
             "An unexpected error occurred.",
         )
+        if publication and getattr(request.state, "request_id", None):
+            response.headers["X-Request-ID"] = request.state.request_id
+        return response

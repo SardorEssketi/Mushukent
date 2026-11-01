@@ -11,6 +11,7 @@ def configure_logging() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
     structlog.configure(
         processors=[
+            structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.format_exc_info,
