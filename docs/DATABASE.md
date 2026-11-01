@@ -323,7 +323,8 @@ CREATE TABLE lost_pets (
     view_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at TIMESTAMPTZ NULL
+    deleted_at TIMESTAMPTZ NULL,
+    deleted_by_id UUID NULL REFERENCES users(id) ON DELETE SET NULL -- who soft-deleted it (owner or moderator)
 );
 CREATE INDEX lost_pets_last_seen_location_gist ON lost_pets USING GIST (last_seen_location);
 CREATE INDEX idx_lost_pets_created_at ON lost_pets (created_at DESC);
@@ -386,7 +387,8 @@ CREATE TABLE adoption_posts (
     view_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at TIMESTAMPTZ NULL
+    deleted_at TIMESTAMPTZ NULL,
+    deleted_by_id UUID NULL REFERENCES users(id) ON DELETE SET NULL -- who soft-deleted it (owner or moderator)
 );
 CREATE INDEX idx_adoption_posts_created_at ON adoption_posts (created_at DESC);
 CREATE INDEX idx_adoption_posts_active_created_at ON adoption_posts (created_at DESC) WHERE deleted_at IS NULL;

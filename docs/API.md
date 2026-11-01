@@ -748,9 +748,9 @@ Active public Lost Pet detail and list responses retain their existing fields.
 - Response: Updated LostPetResponse.
 
 10) DELETE /api/v1/lost-pets/{lost_pet_id}
-- Purpose: Soft-delete the owner's Lost Pet.
-- Auth: Bearer required; owner only (403 otherwise). Guests receive 401.
-- Behavior: Set `deleted_at`, remove any pending unanswerable follow-up, and retain contact events and completed follow-ups. The deleted record is omitted from public Feed, Map, and My Lost Pets queries.
+- Purpose: Soft-delete a Lost Pet (owner) or remove another user's Lost Pet (moderator).
+- Auth: Bearer required; owner or moderator (403 `FORBIDDEN` otherwise, 404 `LOST_PET_NOT_FOUND` for unknown ids). Guests receive 401. Repeating the request on an already deleted post returns 204 for the owner or a moderator.
+- Behavior: Set `deleted_at` and `deleted_by_id` (the acting user), remove any pending unanswerable follow-up, and retain contact events and completed follow-ups. The deleted record is omitted from public Feed, Map, and My Lost Pets queries.
 - Response: 204.
 
 The public Lost Pet list and mixed Feed contain only unresolved posts. Resolved posts remain accessible by detail ID and in the owner's profile history; Map already excludes them.
@@ -829,8 +829,10 @@ owner-only. Active public responses retain their existing fields.
 - Resolution, ownership, timestamps, contact events, and follow-ups are immutable here.
 
 9) DELETE /api/v1/adoption-posts/{adoption_post_id}
-- Auth: Bearer required; owner only. Soft-deletes the post and removes an
-  unanswerable pending follow-up; completed history remains.
+- Auth: Bearer required; owner or moderator (403 `ADOPTION_POST_FORBIDDEN`
+  otherwise). Soft-deletes the post, records `deleted_by_id` and removes an
+  unanswerable pending follow-up; completed history remains. Repeating the request
+  on an already deleted post returns 204 for the owner or a moderator.
 
 Feature: Places
 ---------------
@@ -1099,7 +1101,11 @@ Feature: Moderation
   {"status":"resolved","action":"soft_delete_post","note":"Removed spam"}
 - Response: updated ReportResponse
 - Errors: 401, 403, 404
-- Side effects: any action (delete post, suspend user) must be recorded in an audit trail
+- Side effects: any action (delete post, suspend user) must be recorded in an audit trail.
+  `soft_delete_post` removes the reported publication of any kind: a post (Needs Help included),
+  a lost-pet post or an adoption post. A target that is already deleted is left unchanged, so
+  several reports about one publication cause one deletion. The report keeps `handled_by`,
+  `handled_at` and a target preview with `deleted_at`; deleted targets cannot be reported again.
 - Pydantic: ReportHandleRequest
 
 5) DELETE /api/v1/moderation/posts/{post_id}
@@ -1107,6 +1113,10 @@ Feature: Moderation
 - Auth: Bearer + moderator
 - Response: 204 No Content
 - Side effects: set deleted_at and append a moderator-attributed `deleted` post-history event.
+
+Moderator removals (any route above, posts included) notify the publication owner once with a
+`publication_removed` notification (no actor, so the moderator is not revealed) and a push.
+Owners deleting their own publication are not notified.
 
 6) GET /api/v1/moderation/posts/{post_id}/history
 - Purpose: inspect immutable edit/deletion history for one post.
@@ -1133,7 +1143,7 @@ Common error response examples
 
 Notification API (authenticated)
 --------------------------------
-- `GET /api/v1/notifications?limit=20&cursor=...`: newest-first keyset page. Items contain `id`, structured `kind` (`comment`, `reply`, `nearby_lost_pet`), nullable actor name, `target_kind`, `target_id`, nullable `comment_id`, `created_at`, and nullable `read_at`. The cursor is opaque. Deleted actors display generically; unavailable targets remain in history.
+- `GET /api/v1/notifications?limit=20&cursor=...`: newest-first keyset page. Items contain `id`, structured `kind` (`comment`, `reply`, `nearby_lost_pet`, `publication_removed`), nullable actor name, `target_kind`, `target_id`, nullable `comment_id`, `created_at`, and nullable `read_at`. The cursor is opaque. Deleted actors display generically; unavailable targets remain in history.
 - `GET /api/v1/notifications/unread-count`: `{count}` for the current user.
 - `POST /api/v1/notifications/{id}/read`: mark one of the caller's items read; 404 for another user's or missing item.
 - `POST /api/v1/notifications/read-all`: mark unread items read, returning `{marked}`. Opening the inbox itself does not change read state.
