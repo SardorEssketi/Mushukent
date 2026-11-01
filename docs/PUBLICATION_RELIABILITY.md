@@ -55,19 +55,55 @@ every key in a completed operation's manifest.
 
 ## Client recovery
 
-The client durably retains account-scoped operation keys and request fingerprints
-in SharedPreferences before sending; no tokens, text or images are persisted there.
-Concurrent identical calls in one client share one request. A retry first checks
+The caller creates a UUID for each explicit new draft and passes it as
+`publicationId` through the three creation APIs. It is the server operation key;
+content fingerprints validate its binding and never allocate or select identities.
+Two unrelated drafts with identical content have different UUIDs. Missing IDs are
+rejected before transport. The journal binds each ID to a hashed account owner and
+request fingerprint before sending; no tokens, text or images are persisted there.
+Completed bindings remain saved so a delayed caller cannot allocate a replacement.
+A retry first checks
 status: completed operations load the existing publication, active ones wait, and
 only absent, failed or expired operations may resend with the original key. A failed
 status lookup never causes a blind POST. Token-refresh replay preserves the key.
-Failure to clear an acknowledged journal entry cannot convert success into failure.
+Client recreation can recover by supplying the same ID, account and exact payload.
+Automatic fingerprint matching after process death has been removed: it could
+conflate unrelated drafts. Full draft restoration and a saved-draft selection UI
+are not implemented; a new draft is a new intent, not recovery of an unidentified
+old operation. Do not reconstruct a retry with a new ID.
+
+Android's single-engine application serializes journal work across all client and
+journal instances using a shared process-isolate coordinator. The UUID remains the
+operation key across engine/process boundaries; server uniqueness remains the last
+line of defense. Multiple independent native engines do not share the in-process
+lock and must carry the original ID rather than allocate a replacement.
+
+Web uses exclusive same-origin Web Locks across tabs and fresh SharedPreferences
+reloads while holding that lock. It never substitutes a localStorage lease or
+instance-local mutex. Browsers without Web Locks fail closed before any journal
+binding or network request. Storage failures also block transport. Browser storage
+clearing, reinstalling the app, or losing a draft ID removes local recovery context;
+the server ledger remains authoritative for retained IDs.
+
+Each call binds to the authenticated account and a session epoch. Dispatch pins a
+freshly validated token and prevents the ordinary interceptor from replacing it.
+Login/logout changes the epoch and cancels outstanding requests; same-account token
+refresh preserves it. Status reads, detail reads and refresh replay use the same
+binding. Web account-change storage events invalidate other tabs' sessions. Creation
+screens clear prior-account drafts and ignore late picker, location and API results.
+Cancellation cannot undo a request already received or committed by the server;
+retain its ID for recovery under its original account.
+
+Local credential/journal failures and unexpected client exceptions remain uncertain;
+they must not cause a new operation key to be generated. Only a definite rejection
+allows the UI to start a replacement attempt when the user corrects its content.
 
 Creation screens distinguish uncertain outcomes and offer **Check publication
 status**, retaining form contents and locking edits while uncertain. Draft text and
 image bytes remain in memory on that screen; full draft restoration after process
 death is not implemented. Reselecting identical content can recover using the
-durable key. Different content is a new logical publication. Avatar/edit transports
+original retained ID. Different content requires an explicit new draft/attempt.
+Avatar/edit transports
 are not automatically replayed by the creation protocol.
 
 ## Diagnostics and validation
@@ -78,6 +114,13 @@ wait, bounded file byte counts, media timing, operation outcomes and commit erro
 Client transport diagnostics retain exception type/cause type without printing
 tokens, URLs, filenames, content or account IDs. Nginx correlation is a separate
 owner-coordinated infrastructure task; no Nginx configuration is changed here.
+
+The publication ASGI boundary catches unexpected create/update/status exceptions
+before Starlette can rethrow their private messages to Uvicorn. It returns a
+sanitized error envelope with request ID. If response bytes have already started,
+it raises only a sanitized replacement exception, suppressing the private chain.
+Unrelated endpoints retain their original exception diagnostics. Unexpected media
+errors and client-provided MIME values are also sanitized before application logging.
 
 Use only dedicated disposable databases: integration fixtures truncate all tables.
 Use mock storage, strip service credentials, and disable external network access.
@@ -143,6 +186,9 @@ new Flutter client, and repeat real-device recovery checks. Legacy requests
 without a key remain susceptible to duplicate creation. Updates preserve media
 on an uncertain commit but do not gain creation-style idempotency or a separate
 update operation-status endpoint.
+
+See `PUBLICATION_ROLLOUT.md` for the mandatory fleet capability gate, migration
+prerequisites, outstanding-operation handling, rollback and abort checklist.
 
 Full draft restoration after process death, automatic orphan reconciliation and
 Nginx correlation are deliberately separate work. Reconciliation must establish
