@@ -6,6 +6,7 @@ import hashlib
 import html
 import json
 import shutil
+import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -155,6 +156,25 @@ def asset(name: str, content: bytes) -> str:
     return "/landing-assets/" + filename
 
 
+def favicon_ico(png: bytes) -> bytes:
+    """Wrap the existing square logo PNG in a one-image ICO container (no re-encoding).
+
+    `/favicon.ico` is requested by crawlers and browsers regardless of the page's
+    `<link rel="icon">`; serving the real icon there keeps it from falling through to
+    the Flutter HTML shell. PNG-compressed ICO entries are the standard format since
+    Windows Vista and are supported by browsers and Google.
+    """
+    if png[:8] != b"\x89PNG\r\n\x1a\n" or png[12:16] != b"IHDR":
+        raise ValueError("favicon source must be a PNG")
+    width, height = struct.unpack(">II", png[16:24])
+    if width != height or not 16 <= width <= 256:
+        raise ValueError(f"favicon source must be square and 16-256 px, got {width}x{height}")
+    size = width % 256  # 0 means 256 in an ICO directory entry
+    header = struct.pack("<HHH", 0, 1, 1)
+    entry = struct.pack("<BBBBHHII", size, size, 0, 0, 1, 32, len(png), 6 + 16)
+    return header + entry + png
+
+
 def screenshot_assets() -> dict:
     source = ROOT / "src/screenshots"
     reviewed = json.loads((source / "publication.json").read_text(encoding="utf-8"))
@@ -251,6 +271,8 @@ def main() -> None:
         target = OUT if lang == DEFAULT_LANG else OUT / lang
         target.mkdir(parents=True, exist_ok=True)
         (target / "index.html").write_text(page(lang, content, assets), encoding="utf-8")
+    # Stable, unhashed URL: Nginx serves it at /favicon.ico (see infrastructure/nginx).
+    (OUT / "favicon.ico").write_bytes(favicon_ico((ROOT / "src/logo.png").read_bytes()))
     (OUT / "robots.txt").write_text("User-agent: *\nAllow: /\nSitemap: https://mushukistan.uz/sitemap.xml\n", encoding="utf-8")
     urls = "".join(f"<url><loc>{BASE}{path}</loc></url>" for path in ["/", "/en/", "/uz/"])
     (OUT / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>', encoding="utf-8")

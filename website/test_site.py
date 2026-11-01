@@ -11,7 +11,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
 
-from build import CONTENT, OUT, PLAY_URL, ROOT, main
+from build import CONTENT, OUT, PLAY_URL, ROOT, favicon_ico, main
 
 
 class Tags(HTMLParser):
@@ -127,6 +127,62 @@ class SiteBuildTest(unittest.TestCase):
         manifest = json.loads((ROOT.parent / "frontend/web/manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["start_url"], "/feed")
         self.assertEqual(manifest["scope"], "/")
+
+    def test_each_page_declares_one_current_icon(self) -> None:
+        logo = (ROOT / "src/logo.png").read_bytes()
+        for lang in CONTENT:
+            with self.subTest(lang=lang):
+                page = OUT / ("index.html" if lang == "ru" else f"{lang}/index.html")
+                parsed = Tags()
+                parsed.feed(page.read_text(encoding="utf-8"))
+                icons = [a for a in parsed.all("link") if "icon" in a.get("rel", "").split()]
+                self.assertEqual(len(icons), 1, icons)  # no competing declarations
+                self.assertEqual(icons[0].get("type"), "image/png")
+                href = icons[0]["href"]
+                self.assertRegex(href, r"^/landing-assets/logo\.[0-9a-f]{12}\.png$")
+                self.assertEqual((OUT / href.lstrip("/")).read_bytes(), logo)
+                self.assertFalse(
+                    [a for a in parsed.all("link") if "shortcut" in a.get("rel", "")]
+                )
+
+    def test_favicon_ico_is_the_current_icon_in_ico_format(self) -> None:
+        data = (OUT / "favicon.ico").read_bytes()
+        logo = (ROOT / "src/logo.png").read_bytes()
+        self.assertEqual(struct.unpack("<HHH", data[:6]), (0, 1, 1))  # ICO with one image
+        width, height, _, _, planes, bits, length, offset = struct.unpack("<BBBBHHII", data[6:22])
+        self.assertEqual((planes, bits, offset, length), (1, 32, 22, len(logo)))
+        self.assertEqual(data[22:], logo)  # the official logo, not re-encoded
+        png_width, png_height = struct.unpack(">II", logo[16:24])
+        self.assertEqual((width, height), (png_width % 256, png_height % 256))
+        # Google: square, at least 8x8, ideally a multiple of 48 px.
+        self.assertEqual(png_width, png_height)
+        self.assertEqual(png_width % 48, 0)
+        self.assertNotIn(b"<html", data.lower())
+        with self.assertRaises(ValueError):
+            favicon_ico(b"<!DOCTYPE html><html></html>")
+        with self.assertRaises(ValueError):
+            favicon_ico(logo[:16] + struct.pack(">II", 192, 96) + logo[24:])
+
+    def test_favicon_routing_never_falls_back_to_the_flutter_shell(self) -> None:
+        production = (ROOT.parent / "infrastructure/nginx/default.conf").read_text(encoding="utf-8")
+        local = (ROOT.parent / "infrastructure/nginx/local.conf").read_text(encoding="utf-8")
+        for config in (production, local):
+            # An exact-match location wins over the `location /` SPA fallback.
+            self.assertRegex(
+                config,
+                r"location = /favicon\.ico \{\s*root /var/www/landing;\s*"
+                r"try_files /favicon\.ico =404;\s*\}",
+            )
+        self.assertIn('/favicon.ico "public, max-age=86400";', production)
+        flutter_web = ROOT.parent / "frontend/web"
+        # The two web roots do not overlap: Flutter keeps favicon.png and its manifest icons.
+        self.assertFalse((flutter_web / "favicon.ico").exists())
+        self.assertTrue((flutter_web / "favicon.png").exists())
+        manifest = json.loads((flutter_web / "manifest.json").read_text(encoding="utf-8"))
+        for icon in manifest["icons"]:
+            self.assertTrue((flutter_web / icon["src"]).exists(), icon["src"])
+        robots = (OUT / "robots.txt").read_text(encoding="utf-8")
+        self.assertNotIn("Disallow", robots)
 
     def test_images_are_bounded_and_local(self) -> None:
         logo = ROOT / "src/logo.png"

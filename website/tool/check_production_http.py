@@ -72,6 +72,9 @@ def main() -> None:
         assert manifest['start_url'] == '/feed' and manifest['scope'] == '/'
         for path in ['robots.txt', 'sitemap.xml']:
             check_file('/' + path, args.website / path, 'no-store')
+        # Crawlers fetch /favicon.ico directly: it must be the icon, never the Flutter shell.
+        check_file('/favicon.ico', args.website / 'favicon.ico', 'max-age=86400')
+        assert fetch(origin + '/favicon.ico')[1].get('content-type') == 'image/x-icon'
         for file in sorted((args.website / 'landing-assets').iterdir()):
             check_file('/landing-assets/' + file.name, file, 'immutable')
         for path in ['/landing-assets/missing-release-probe.js', '/missing-release-probe.js']:

@@ -190,6 +190,11 @@ HTTPServer(("0.0.0.0", 8000), Handler).serve_forever()
         assert manifest["start_url"] == "/feed" and manifest["scope"] == "/"
         for name in ["robots.txt", "sitemap.xml"]:
             check_file("/" + name, website / name, "no-store")
+        # Crawlers fetch /favicon.ico directly: it must be the icon, never the Flutter shell.
+        check_file("/favicon.ico", website / "favicon.ico", "max-age=86400")
+        status, headers, data = request("/favicon.ico")
+        assert headers.get("content-type") == "image/x-icon", headers
+        assert b"<html" not in data.lower()
         for asset in sorted((website / "landing-assets").iterdir()):
             check_file("/landing-assets/" + asset.name, asset, "immutable")
         for path in ["/landing-assets/missing.js", "/missing.js", "/canvaskit/missing.wasm"]:

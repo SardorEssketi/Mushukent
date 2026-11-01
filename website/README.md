@@ -19,8 +19,8 @@ python -m http.server 8765 --directory website/dist
 Open `http://localhost:8765/`, `/en/`, or `/uz/` for a site-only preview. This
 Python server does not provide Flutter routes, API proxying, or production
 headers. The generated output is `website/dist/` (ignored by Git): `index.html`,
-`en/index.html`, `uz/index.html`, `robots.txt`, `sitemap.xml`, and hashed files
-under `landing-assets/`. A build recreates only that ignored directory. Do not
+`en/index.html`, `uz/index.html`, `robots.txt`, `sitemap.xml`, `favicon.ico`, and
+hashed files under `landing-assets/`. A build recreates only that ignored directory. Do not
 copy its contents into `frontend/build/web`.
 
 The HTML includes all content and metadata before JavaScript. The small script
@@ -31,7 +31,7 @@ register a service worker and does not use the Flutter manifest. The existing
 manifest launches the installed web app at `/feed`.
 
 Nginx mounts `website/dist` at `/var/www/landing` and serves exact homepage
-routes from it. `/landing-assets/` is the only landing asset prefix. Flutter
+routes from it, plus `/favicon.ico`. `/landing-assets/` is the only landing asset prefix. Flutter
 stays under `/usr/share/nginx/html`, with its existing route fallback, API and
 media proxies, legal files, and CanvasKit assets. Homepage HTML is `no-store`;
 successful hashed assets are immutable; missing landing assets are `no-store`.
@@ -51,6 +51,27 @@ For integrated local testing, build a Flutter web bundle in this worktree and
 use an isolated Nginx container with `infrastructure/nginx/local.conf`, mounting
 both generated outputs read-only. Use a private port and a disposable container
 name. Do not recreate the shared Compose project or mount its live release.
+
+## Favicon
+
+Each homepage declares exactly one icon: `<link rel="icon" type="image/png">` pointing to the
+hashed `landing-assets/logo.<hash>.png`, a copy of `src/logo.png` (192x192, the current app icon;
+192 is a multiple of 48 as Google recommends). The URL changes only when the logo itself changes.
+The build also writes `dist/favicon.ico`: the same PNG wrapped, unchanged, in a one-image ICO
+container. Nginx serves it at `/favicon.ico` (`public, max-age=86400`) from the landing root, so
+that path never falls through to the Flutter shell, which used to answer it with HTML. The Flutter
+app keeps its own `favicon.png` and manifest icons; the two web roots share no favicon file.
+
+The new Nginx location ships with the next web release (the release package includes
+`infrastructure/nginx/default.conf`); nothing changes until then. After that release:
+
+- `curl -sI https://mushukistan.uz/favicon.ico` must show `200` and `content-type: image/x-icon`
+  (`website/tool/check_production_http.py` checks it with the other artifacts).
+- Cloudflare may serve a cached copy of the old HTML answer at `/favicon.ico` for up to its edge TTL;
+  the old response was sent with `no-store`, so it should not be cached. Purging that one URL is an
+  optional operator step.
+- In Search Console, use URL Inspection on `https://mushukistan.uz/` and request indexing. Google
+  refreshes search-result favicons on its own schedule (often days to weeks); it cannot be forced.
 
 ## Real application showcase
 
