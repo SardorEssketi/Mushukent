@@ -1,3 +1,6 @@
+# ruff: noqa: F811
+# Pytest fixture imports intentionally share names with fixture parameters.
+
 from unittest.mock import Mock, patch
 
 import pytest
@@ -78,4 +81,3 @@ def test_lost_commit_acknowledgement_preserves_committed_media(client, posts_run
         assert connection.scalar(select(func.count()).select_from(model)) == 1
     assert len(posts_runtime.fake_storage.objects) == 2
     assert not posts_runtime.fake_storage.deleted_keys
-# ruff: noqa: F811

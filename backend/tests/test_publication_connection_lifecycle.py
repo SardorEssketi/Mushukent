@@ -1,3 +1,6 @@
+# ruff: noqa: F811
+# Pytest fixture imports intentionally share names with fixture parameters.
+
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, Lock
 from time import monotonic, sleep
@@ -50,4 +53,3 @@ def test_queued_uploads_release_authentication_connections(client, posts_runtime
             assert all(task.result().status_code == 201 for task in tasks)
     finally:
         event.remove(engine, "after_cursor_execute", observe)
-# ruff: noqa: F811

@@ -1,3 +1,6 @@
+# ruff: noqa: F811
+# Pytest fixture imports intentionally share names with fixture parameters.
+
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Event
@@ -174,6 +177,51 @@ def test_ambiguous_put_is_journaled_and_retry_is_safe(client, posts_runtime, mon
 
 
 @pytest.mark.parametrize("kind", ["observation", "needs_help", "lost_pet", "adoption"])
+def test_replay_cannot_recreate_a_deleted_publication(client, posts_runtime, kind):
+    case = publication_case(posts_runtime, kind)
+    post_id = send(client, case).json()["data"]["id"]
+    assert client.delete(f"/api/v1/{case[1]}/{post_id}", headers=case[4]).status_code == 204
+    assert send(client, case).status_code == 404
+    with posts_runtime.db_session_manager.engine.connect() as connection:
+        assert connection.scalar(select(func.count()).select_from(case[2])) == 1
+    assert len(posts_runtime.fake_storage.objects) == 2
+
+
+@pytest.mark.parametrize("kind", ["observation", "needs_help", "lost_pet", "adoption"])
+def test_lost_update_commit_ack_preserves_replacement_media(client, posts_runtime, kind):
+    case = publication_case(posts_runtime, kind)
+    post_id = send(client, case).json()["data"]["id"]
+    before = set(posts_runtime.fake_storage.objects)
+    original = Session.commit
+    commits = 0
+
+    def commit(session):
+        nonlocal commits
+        commits += 1
+        original(session)
+        if commits == 2:  # Ownership read, then replacement transaction.
+            raise RuntimeError("lost update acknowledgement")
+
+    with patch.object(Session, "commit", commit):
+        response = client.patch(
+            f"/api/v1/{case[1]}/{post_id}",
+            headers=case[4],
+            data={"description": "Updated"} if case[1] == "posts" else {"pet_name": "Updated"},
+            files={"photos": ("replacement.jpg", _jpeg_bytes(color=(0, 255, 0)), "image/jpeg")},
+        )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "PUBLICATION_OUTCOME_UNKNOWN"
+    detail = client.get(f"/api/v1/{case[1]}/{post_id}", headers=case[4])
+    assert detail.status_code == 200
+    replacement = set(posts_runtime.fake_storage.objects) - before
+    assert len(replacement) == 2
+    assert any(
+        posts_runtime.fake_storage.public_url(key) in str(detail.json()) for key in replacement
+    )
+    assert not posts_runtime.fake_storage.deleted_keys
+
+
+@pytest.mark.parametrize("kind", ["observation", "needs_help", "lost_pet", "adoption"])
 def test_socket_timeout_then_replay_creates_one_publication(
     client, posts_runtime, monkeypatch, kind
 ):
@@ -240,4 +288,4 @@ def test_socket_timeout_then_replay_creates_one_publication(
         thread.join(timeout=5)
         listener.close()
         assert not thread.is_alive()
-# ruff: noqa: F811
+

@@ -1,3 +1,6 @@
+# ruff: noqa: F811
+# Pytest fixture imports intentionally share names with fixture parameters.
+
 from uuid import UUID, uuid4
 
 from test_posts import _create_user_with_token, _jpeg_bytes, client, posts_runtime  # noqa: F401
@@ -38,4 +41,3 @@ def test_publication_error_has_correlation_without_private_exception_data(
 def test_invalid_request_id_is_replaced(client):
     response = client.post("/api/v1/posts", headers={"X-Request-ID": "arbitrary-client-text"})
     assert str(UUID(response.headers["X-Request-ID"])) == response.headers["X-Request-ID"]
-# ruff: noqa: F811
