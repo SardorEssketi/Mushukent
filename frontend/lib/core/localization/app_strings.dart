@@ -39,6 +39,7 @@ class AppStrings {
     required this.retry,
     required this.continueToLogin,
     required this.restoringSession,
+    required this.pressBackAgainToExit,
     required this.feed,
     required this.map,
     required this.add,
@@ -148,6 +149,7 @@ class AppStrings {
   final String retry;
   final String continueToLogin;
   final String restoringSession;
+  final String pressBackAgainToExit;
   final String feed;
   final String map;
   final String add;
@@ -3415,6 +3417,7 @@ class _EnglishStrings extends AppStrings {
           retry: 'Retry',
           continueToLogin: 'Continue to login',
           restoringSession: 'Restoring session...',
+          pressBackAgainToExit: 'Press Back again to exit',
           feed: 'Feed',
           map: 'Map',
           add: 'Add',
@@ -3533,6 +3536,7 @@ class _UzbekStrings extends AppStrings {
           retry: 'Qayta urinish',
           continueToLogin: 'Kirishga o‘tish',
           restoringSession: 'Sessiya tiklanmoqda...',
+          pressBackAgainToExit: 'Chiqish uchun yana bir marta Orqaga bosing',
           feed: 'Lenta',
           map: 'Xarita',
           add: 'Qo‘shish',
@@ -3651,6 +3655,7 @@ class _RussianStrings extends AppStrings {
           retry: 'Повторить',
           continueToLogin: 'Перейти ко входу',
           restoringSession: 'Восстановление сессии...',
+          pressBackAgainToExit: 'Нажмите «Назад» ещё раз, чтобы выйти',
           feed: 'Лента',
           map: 'Карта',
           add: 'Добавить',
