@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/lifecycle/app_resume.dart';
 import '../../../core/network/mushukistan_api.dart';
 import '../../../core/widgets/app_surface.dart';
 import '../data/notification_api.dart';
@@ -51,6 +54,11 @@ class _NotificationCenterScreenState
   bool _loaded = false;
   bool _error = false;
 
+  /// Changes whenever the list is loaded or changed by the user, so a background reload that
+  /// started earlier can tell that its answer is out of date.
+  int _listVersion = 0;
+  bool _revalidating = false;
+
   @override
   void initState() {
     super.initState();
@@ -59,6 +67,7 @@ class _NotificationCenterScreenState
 
   Future<void> _load({bool reset = false}) async {
     if (_loading) return;
+    _listVersion++;
     if (reset) {
       _items.clear();
       _cursor = null;
@@ -84,6 +93,32 @@ class _NotificationCenterScreenState
     }
   }
 
+  /// Back after a long time away: replace the list with the newest page only once it has
+  /// arrived. Unlike a reset, a failure (offline) keeps the list on screen and stays silent.
+  ///
+  /// It never blocks the user's own loads and actions; if any of them happens meanwhile, its
+  /// result is newer and this one is dropped.
+  Future<void> _revalidate() async {
+    if (_revalidating || _loading || !_loaded) return;
+    _revalidating = true;
+    final version = _listVersion;
+    try {
+      final page = await ref.read(notificationApiProvider).list();
+      if (!mounted || version != _listVersion || _loading) return;
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(page.items);
+        _cursor = page.nextCursor;
+        _error = false;
+      });
+    } catch (_) {
+      // Keep what is shown; pull-to-refresh is still available.
+    } finally {
+      _revalidating = false;
+    }
+  }
+
   Future<void> _open(NotificationEntry entry) async {
     final api = ref.read(notificationApiProvider);
     try {
@@ -91,6 +126,7 @@ class _NotificationCenterScreenState
       ref.invalidate(unreadNotificationCountProvider);
       final index = _items.indexOf(entry);
       if (index >= 0 && mounted) {
+        _listVersion++;
         setState(() => _items[index] = NotificationEntry(
               id: entry.id,
               kind: entry.kind,
@@ -135,6 +171,7 @@ class _NotificationCenterScreenState
   Future<void> _markAll() async {
     try {
       await ref.read(notificationApiProvider).markAllRead();
+      _listVersion++;
       ref.invalidate(unreadNotificationCountProvider);
       await _load(reset: true);
     } catch (_) {
@@ -144,6 +181,7 @@ class _NotificationCenterScreenState
 
   @override
   Widget build(BuildContext context) {
+    listenForStaleResume(ref, () => unawaited(_revalidate()));
     final copy = ref.watch(notificationStringsProvider);
     return Scaffold(
       appBar: AppBar(

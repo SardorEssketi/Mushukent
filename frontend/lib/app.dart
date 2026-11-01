@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/lifecycle/app_resume.dart';
 import 'core/localization/l10n.dart';
 import 'core/localization/language_controller.dart';
 import 'core/routing/app_router.dart';
@@ -44,6 +45,13 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp>
         }
       }),
     );
+    ref.listenManual<AppResume?>(appResumeProvider, (previous, next) {
+      // Back after a long time away: quietly confirm a signed-in session is still valid.
+      if (next != null && next.sessionIsStale) {
+        unawaited(
+            ref.read(authControllerProvider.notifier).revalidateSession());
+      }
+    });
     ref.listenManual<AppLanguage>(
       appLanguageProvider,
       (previous, next) {
@@ -72,6 +80,8 @@ class _MushukistanAppState extends ConsumerState<MushukistanApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Back in the foreground (tab visible again, app resumed): the network may be back, so
     // re-check a stored session that could not be confirmed. No-op in every other state.
+    // One place turns lifecycle changes into "back after N minutes" events for the screens.
+    ref.read(appResumeProvider.notifier).handleLifecycle(state);
     if (state == AppLifecycleState.resumed) {
       unawaited(ref.read(authControllerProvider.notifier).retrySession());
     }

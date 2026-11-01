@@ -456,7 +456,10 @@ class _CommentsContentState extends State<_CommentsContent> {
 
   @override
   Widget build(BuildContext context) {
+    // A failed reload keeps the comments already shown (an initial failure still shows the
+    // error with its retry).
     return widget.commentsAsync.when(
+      skipError: true,
       data: (page) {
         final visibleComments = page.items
             .where((comment) => !_removedCommentIds.contains(comment.id))

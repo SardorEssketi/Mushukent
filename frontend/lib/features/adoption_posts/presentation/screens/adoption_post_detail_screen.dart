@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/lifecycle/app_resume.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -274,6 +275,11 @@ class _AdoptionPostDetailScreenState
   @override
   Widget build(BuildContext context) {
     final adoptionPostId = widget.adoptionPostId;
+    // Back after a long time away: reload quietly (see PostDetailScreen).
+    listenForStaleResume(ref, () {
+      ref.invalidate(adoptionPostDetailProvider(adoptionPostId));
+      ref.invalidate(adoptionPostCommentsProvider(adoptionPostId));
+    });
     final adoptionAsync = ref.watch(adoptionPostDetailProvider(adoptionPostId));
     final strings = ref.watch(appStringsProvider);
     final viewerId = ref.watch(currentUserProvider)?.id;
@@ -317,6 +323,7 @@ class _AdoptionPostDetailScreenState
         ],
       ),
       body: adoptionAsync.when(
+        skipError: true,
         data: (post) {
           final info = post.additionalInfo?.trim();
           final isOwner = viewerId != null && post.author?.id == viewerId;

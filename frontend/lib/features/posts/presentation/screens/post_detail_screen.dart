@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/lifecycle/app_resume.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
@@ -270,6 +271,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final ref = this.ref;
+    // Back after a long time away: reload quietly. The post stays on screen meanwhile and a
+    // comment being written lives in its own widget state, which a reload does not touch.
+    listenForStaleResume(ref, () {
+      ref.invalidate(postDetailProvider(widget.postId));
+      ref.invalidate(commentsProvider(widget.postId));
+    });
     final postAsync = ref.watch(postDetailProvider(widget.postId));
     final strings = ref.watch(appStringsProvider);
     final currentUser = ref.watch(currentUserProvider);
@@ -308,7 +315,9 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             ),
         ],
       ),
+      // A failed reload keeps the post that is already shown instead of an error page.
       body: postAsync.when(
+        skipError: true,
         data: (post) {
           final likeOverride = ref.watch(postLikeOverridesProvider)[post.id];
           final isLiked =
