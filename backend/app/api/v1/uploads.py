@@ -47,7 +47,11 @@ async def read_image_upload(
             index=index,
             reason="file_too_large",
             bytes_read=len(content),
-            content_type=upload.content_type,
+            content_type=(
+                upload.content_type
+                if upload.content_type in {"image/jpeg", "image/png"}
+                else "other"
+            ),
         )
         raise api_error(
             413,

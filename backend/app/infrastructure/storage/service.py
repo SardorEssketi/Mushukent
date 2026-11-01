@@ -122,13 +122,15 @@ class MediaStorageService:
                 started_at=started_at,
             )
             return result
-        except StorageValidationError as exc:
+        except StorageValidationError:
             logger.info(
                 "media_upload_rejected",
                 purpose=purpose.value,
                 input_size=len(content),
-                content_type=content_type,
-                reason=str(exc),
+                content_type=content_type
+                if content_type in {"image/jpeg", "image/png"}
+                else "other",
+                reason="invalid_image",
             )
             raise
         except StorageOperationError as exc:
@@ -140,7 +142,11 @@ class MediaStorageService:
             )
             raise
         except Exception as exc:  # pragma: no cover - defensive safety net
-            logger.exception("Unexpected media upload failure", purpose=purpose.value)
+            logger.warning(
+                "media_upload_unexpected_failure",
+                purpose=purpose.value,
+                error_type=type(exc).__name__,
+            )
             raise StorageOperationError("Image upload failed.") from exc
 
     @staticmethod
