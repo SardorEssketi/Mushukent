@@ -330,6 +330,10 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final period = ref.watch(feedPopularPeriodProvider);
     final userId = ref.watch(currentUserProvider)?.id;
     final authenticated = userId != null;
+    // Until the startup session check answers, the viewer is neither signed in nor a guest.
+    final sessionResolving = ref.watch(
+      authControllerProvider.select((state) => state.isResolving),
+    );
     // A stored session the server could not confirm is not a signed-out guest.
     final sessionUnconfirmed = ref.watch(
       authControllerProvider.select((state) => state.hasUnconfirmedSession),
@@ -378,7 +382,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
             child: Row(children: [
               const Expanded(child: _FeedHeaderTitle()),
               if (authenticated) const NotificationBell(),
-              if (!authenticated && !sessionUnconfirmed)
+              if (!authenticated && sessionResolving)
+                const _FeedHeaderSessionPending(),
+              if (!authenticated && !sessionResolving && !sessionUnconfirmed)
                 TextButton(
                   onPressed: () => context.push('/login'),
                   child: Text(strings.login),
@@ -436,7 +442,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         EdgeInsets.fromLTRB(gutter, 0, gutter, AppSpacing.md),
                     child: _FeedIntroCard(
                       strings: strings,
-                      showSignUp: !authenticated,
+                      showSignUp: !authenticated && !sessionResolving,
                       onClose: () => ref
                           .read(feedIntroDismissedProvider.notifier)
                           .dismiss(),
@@ -498,6 +504,34 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                 ),
               const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.md)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Holds the header action slot while the startup session check runs: no sign-in button and no
+/// account controls until the answer is known. Same footprint as the notification bell, so the
+/// header does not shift when the bell replaces it.
+class _FeedHeaderSessionPending extends ConsumerWidget {
+  const _FeedHeaderSessionPending();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    return Semantics(
+      key: const ValueKey('feed-header-session-pending'),
+      label: strings.restoringSession,
+      child: SizedBox.square(
+        dimension: kMinInteractiveDimension,
+        child: Center(
+          child: SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),

@@ -321,6 +321,38 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets(
+      'unresolved session: feed stays put, protected routes wait without access',
+      (tester) async {
+    final restore = Completer<SessionRestoreResult>();
+    final repo = FakeAuthRepository()..restoreCompleter = restore;
+    final container = _containerWithRepo(repo);
+    addTearDown(container.dispose);
+    await _pumpApp(tester, container);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final router = container.read(appRouterProvider);
+    expect(container.read(authControllerProvider).isResolving, isTrue);
+    expect(router.routeInformationProvider.value.uri.path, '/feed');
+    expect(find.text('Login'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('feed-header-session-pending')),
+      findsOneWidget,
+    );
+
+    router.go('/notifications');
+    await tester.pump(const Duration(milliseconds: 50));
+    // Parked on the "checking session" page: no protected screen, no sign-in form.
+    expect(router.routeInformationProvider.value.uri.path, '/auth-required');
+    expect(find.byType(LoginScreen), findsNothing);
+
+    restore.complete(SessionRestoreSuccess(
+      AuthSession.restored(accessToken: 'access-a', user: testUser()),
+    ));
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, '/notifications');
+  });
+
   testWidgets('guest like action requests authentication', (tester) async {
     final container = _containerWithRepo(
       FakeAuthRepository(restoreResult: const SessionRestoreMissing()),
