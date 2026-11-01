@@ -30,6 +30,21 @@ MARKERS = (
 PRIVATE = " | ".join(MARKERS)
 
 
+@pytest.fixture(autouse=True)
+def capture_uvicorn(caplog):
+    # Other Uvicorn tests configure propagation=False. Capture the actual logger
+    # directly so privacy checks cannot silently miss its error records.
+    logger = logging.getLogger("uvicorn.error")
+    added = caplog.handler not in logger.handlers
+    if added:
+        logger.addHandler(caplog.handler)
+    try:
+        yield
+    finally:
+        if added:
+            logger.removeHandler(caplog.handler)
+
+
 @contextmanager
 def local_server(app):
     listener = socket.socket()

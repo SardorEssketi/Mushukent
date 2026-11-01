@@ -43,10 +43,13 @@ def test_queued_uploads_release_authentication_connections(client, posts_runtime
             tasks = [pool.submit(publish) for _ in range(15)]
             try:
                 deadline = monotonic() + 8
-                while auth_queries < 15 and monotonic() < deadline:
+                # after_cursor_execute runs before the auth session closes. Wait
+                # for both facts rather than sampling pool state after a sleep.
+                while (
+                    auth_queries < 15 or engine.pool.checkedout() != 0
+                ) and monotonic() < deadline:
                     sleep(0.01)
                 assert auth_queries == 15
-                sleep(0.05)
                 assert engine.pool.checkedout() == 0
             finally:
                 release.set()
