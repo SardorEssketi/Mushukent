@@ -288,4 +288,3 @@ def test_socket_timeout_then_replay_creates_one_publication(
         thread.join(timeout=5)
         listener.close()
         assert not thread.is_alive()
-
