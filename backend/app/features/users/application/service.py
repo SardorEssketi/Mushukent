@@ -5,7 +5,19 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import Integer, Text, cast, column, delete, func, or_, select, update, values
+from sqlalchemy import (
+    Integer,
+    Text,
+    cast,
+    column,
+    delete,
+    func,
+    or_,
+    select,
+    union,
+    update,
+    values,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from structlog import get_logger
@@ -143,6 +155,7 @@ class UsersService:
             if user_model is None:
                 raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
 
+            self._lock_affected_publications(session, user.id)
             post_rows = session.scalars(
                 select(schema.Post).where(schema.Post.user_id == user.id)
             ).all()
@@ -543,6 +556,54 @@ class UsersService:
                     schema.UserBlock.blocked_id == blocked_user_id,
                 )
             )
+
+    @staticmethod
+    def _lock_affected_publications(session, user_id: UUID) -> None:
+        """Lock every publication row this account deletion will update, in one fixed order.
+
+        Deleting an account updates its own posts, lost-pet and adoption posts and the counters
+        of publications it commented on or liked. Two accounts deleted at the same time can share
+        such rows (each commented on the other's post); taking all of these row locks up front,
+        table by table and sorted by id, makes concurrent deletions wait for each other instead
+        of deadlocking.
+        """
+        comment, like = schema.Comment, schema.Like
+        active_comment = (comment.user_id == user_id, comment.deleted_at.is_(None))
+        targets = (
+            (
+                schema.Post,
+                (
+                    select(schema.Post.id).where(schema.Post.user_id == user_id),
+                    select(comment.post_id).where(comment.post_id.is_not(None), *active_comment),
+                    select(like.post_id).where(like.user_id == user_id),
+                ),
+            ),
+            (
+                schema.LostPet,
+                (
+                    select(schema.LostPet.id).where(schema.LostPet.user_id == user_id),
+                    select(comment.lost_pet_id).where(
+                        comment.lost_pet_id.is_not(None), *active_comment
+                    ),
+                ),
+            ),
+            (
+                schema.AdoptionPost,
+                (
+                    select(schema.AdoptionPost.id).where(schema.AdoptionPost.user_id == user_id),
+                    select(comment.adoption_post_id).where(
+                        comment.adoption_post_id.is_not(None), *active_comment
+                    ),
+                ),
+            ),
+        )
+        for model, id_sources in targets:
+            session.execute(
+                select(model.id)
+                .where(model.id.in_(union(*id_sources)))
+                .order_by(model.id)
+                .with_for_update()
+            ).all()
 
     @staticmethod
     def _delete_account_comments(session, user_id: UUID, now: datetime) -> None:

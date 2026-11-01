@@ -272,11 +272,15 @@ class ReportsService:
             if target_type != ReportTargetType.COMMENT:
                 raise api_error(400, "INVALID_PAYLOAD", "Action does not match report target.")
             comment_repository = self.comment_repository_factory(session)
-            current = comment_repository.get_by_id(
-                target_id,
-                include_deleted=True,
-                for_update=True,
-            )
+            current = comment_repository.get_by_id(target_id, include_deleted=True)
+            if current is not None:
+                # Publication row before comment row (see lock_comment_target).
+                comment_repository.lock_comment_target(current)
+                current = comment_repository.get_by_id(
+                    target_id,
+                    include_deleted=True,
+                    for_update=True,
+                )
             if current is not None and current.deleted_at is None:
                 if comment_repository.mark_deleted(
                     target_id,

@@ -532,3 +532,76 @@ def test_stale_stored_counter_does_not_leak_into_responses(client, runtime):
         session.get(schema.Post, post).comment_count = 1  # counter says 1, no comment exists
     assert_consistent(client, "post", post, None, 0)
     assert feed_counts(client, owner)[str(post)] == 0
+
+
+def test_drifted_stored_counters_in_both_directions_affect_no_read_or_write(client, runtime):
+    """Stored counter too high (no comments) or zero (comments exist) on every publication type.
+
+    Responses, feed membership and order, and the write paths that lock the publication row
+    through the stored-counter-reading queries (comment and like creation) all behave as if the
+    counter were correct.
+    """
+    owner, writer = make_user(runtime, "Owner"), make_user(runtime, "Writer")
+    targets = {
+        kind: (make_target(runtime, owner, kind), api_kind(kind))
+        for kind in ("post", "needs_help", "lost_pet", "adoption")
+    }
+    feed_before = list(feed_counts(client, writer))
+    commented = {kind: target for kind, (target, _) in targets.items() if kind != "post"}
+    for kind, target in commented.items():
+        add_comment(client, writer, api_kind(kind), target)
+    with runtime.manager.session_scope() as session:
+        for kind, (target, path_kind) in targets.items():
+            # "post" claims 7 comments but has none; the others claim 0 but have one.
+            session.get(MODEL[path_kind], target).comment_count = 7 if kind == "post" else 0
+
+    for kind, (target, path_kind) in targets.items():
+        expected = 0 if kind == "post" else 1
+        for viewer in (None, owner, writer):
+            assert_consistent(client, path_kind, target, viewer, expected)
+    counts = feed_counts(client, writer)
+    assert list(counts) == feed_before  # same items, same order, same pagination
+    for kind, (target, _) in targets.items():
+        assert counts[str(target)] == (0 if kind == "post" else 1)
+
+    # Writes that read the stored row (lock_visible_post) still work and stay consistent.
+    post = targets["post"][0]
+    liked = client.post(f"{API}/posts/{post}/likes", headers=writer.h)
+    assert liked.status_code in (200, 201), liked.text
+    add_comment(client, writer, "post", post)
+    assert_consistent(client, "post", post, writer, 1)
+
+
+def test_concurrent_deletion_of_accounts_with_overlapping_publications(client, runtime):
+    """Two accounts that commented on each other's publications are deleted at the same time.
+
+    Without the up-front, ordered publication locks in ``delete_me`` this deadlocked in every
+    round locally; now both deletions succeed and every stored counter stays exact.
+    """
+    witness = make_user(runtime, "Witness")
+    for round_index in range(4):
+        first, second = make_user(runtime, f"A{round_index}"), make_user(runtime, f"B{round_index}")
+        targets: list[tuple[str, UUID, Person]] = []
+        for owner, other in ((first, second), (second, first)):
+            for _ in range(12):
+                targets.append(("post", make_post(runtime, owner), other))
+            targets.append(("lost_pet", make_lost_pet(runtime, owner), other))
+            targets.append(("adoption", make_adoption(runtime, owner), other))
+        for kind, target, other in targets:
+            add_comment(client, other, kind, target)
+            add_comment(client, witness, kind, target)
+            if kind == "post":
+                liked = client.post(f"{API}/posts/{target}/likes", headers=other.h)
+                assert liked.status_code in (200, 201), liked.text
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(
+                pool.map(
+                    lambda person: client.delete(f"{API}/users/me", headers=person.h).status_code,
+                    (first, second),
+                )
+            )
+        assert results == [204, 204]
+        for kind, target, _ in targets:
+            assert stored_count(runtime, kind, target) == active_comment_rows(runtime, kind, target)
+            assert active_comment_rows(runtime, kind, target) == 1  # the witness's comment

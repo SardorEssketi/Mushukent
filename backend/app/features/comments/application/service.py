@@ -455,6 +455,8 @@ class CommentsService:
 
             self._ensure_target_access(repository, current, user)
 
+            # Publication row before comment row (see lock_comment_target).
+            repository.lock_comment_target(current)
             locked = repository.get_by_id(comment_id, include_deleted=True, for_update=True)
             if locked is None:
                 raise api_error(404, "COMMENT_NOT_FOUND", "Comment not found.")

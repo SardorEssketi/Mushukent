@@ -40,6 +40,15 @@ that publication's full comment list (all pages, top-level comments and replies)
   decremented again and a concurrent delete of the same comment cannot double count), anonymizes
   the already-deleted ones, and lowers each table's stored counters in one `UPDATE ... FROM
   (VALUES ...)` per table, all in the existing account-deletion transaction.
+- **Lock order.** Every path that changes a stored `comment_count` locks the publication row
+  before the comment row: comment deletion by author or moderator and the report action
+  `soft_delete_comment` (`lock_comment_target`), and account deletion, which first locks every
+  publication it will update (its own, the ones it commented on and the posts it liked) table by
+  table in id order (`_lock_affected_publications`). Two accounts with comments on each other's
+  publications deleted at the same time deadlocked in every local test round without this; with it
+  they wait for each other. If anything still fails, the whole deletion rolls back (one
+  transaction; media files are only removed after commit), so a failure never leaves a partial
+  deletion or a wrong counter (verified locally on deliberately deadlocked deletions).
 - No schema change and no migration. The existing indexes `idx_comments_post_id`,
   `idx_comments_lost_pet_id`, `idx_comments_adoption_post_id` and the `user_blocks` indexes serve
   the counts.
@@ -56,6 +65,12 @@ On a disposable local PostGIS 15 container (`postgis/postgis:15-3.4`) seeded wit
 | recent feed, anonymous | 0.23-0.27 ms | 0.37-0.49 ms |
 | popular feed, all time | 106-108 ms | 107 ms |
 | grouped count, 20 publications | - | 0.14-0.18 ms |
+
+With one post of 20,000 comments added on the first page, the anonymous recent feed took 3.6 ms
+and the grouped count for 20 publications 7.6 ms: the cost grows with the number of comments on
+the publications of the page, not with the table size. A covering partial index on
+`comments (post_id, user_id) WHERE deleted_at IS NULL` would make this index-only if publications
+with very many comments become common; it needs a migration and is not part of this change.
 
 The count subplan ran 21 times (page + 1 look-ahead row), never per scanned row. The popular feed
 cost is the existing sequential scan and existing per-row subplans, unchanged by this fix. These are

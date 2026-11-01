@@ -282,6 +282,24 @@ class SqlAlchemyCommentRepository(CommentRepository):
         )
         return self.get_by_id(comment_id, include_deleted=False)
 
+    def lock_comment_target(self, comment: CommentRecord) -> None:
+        """Lock the publication row a comment belongs to (``FOR UPDATE``).
+
+        Paths that change a stored ``comment_count`` lock the publication row before the comment
+        row (account deletion locks all of its publications first), so they wait for each other
+        instead of deadlocking.
+        """
+        for model, target_id in (
+            (schema.Post, comment.post_id),
+            (schema.LostPet, comment.lost_pet_id),
+            (schema.AdoptionPost, comment.adoption_post_id),
+        ):
+            if target_id is not None:
+                self.session.execute(
+                    select(model.id).where(model.id == target_id).with_for_update()
+                ).first()
+                return
+
     def increment_post_comment_count(self, post_id: UUID) -> None:
         self.session.execute(
             update(schema.Post)
