@@ -368,3 +368,79 @@ def test_removal_keeps_related_records_and_account_deletion_clears_attribution(c
     item = row(runtime, schema.LostPet, lost_pet)
     assert item.deleted_at is not None and item.deleted_by_id is None
     assert len(removal_notices(runtime, owner)) == 1
+
+
+# --------------------------------------------------------------------------- consistency
+
+
+def test_failed_removal_rolls_back_the_notice_and_its_push(client, runtime, monkeypatch):
+    """The deletion, the notification and the push job commit together or not at all."""
+    from app.features.lost_pets.application import service as lost_pet_service
+
+    key = Fernet.generate_key().decode()
+    moderator = make_user(runtime, "Mod", moderator=True)
+    owner = make_user(runtime, "Owner")
+    with runtime.manager.session_scope() as session:
+        NotificationRepository(session).upsert_device(
+            owner.id, "owner-device-token-long-enough", key
+        )
+    lost_pet = make_lost_pet(runtime, owner)
+
+    class FailingLogger:
+        def info(self, event, **_):
+            # Runs after soft_delete and the notification insert, inside the same transaction.
+            raise RuntimeError(f"simulated failure after {event}")
+
+    monkeypatch.setattr(lost_pet_service, "logger", FailingLogger())
+    assert client.delete(f"{API}/lost-pets/{lost_pet}", headers=moderator.h).status_code == 500
+
+    item = row(runtime, schema.LostPet, lost_pet)
+    assert item.deleted_at is None and item.deleted_by_id is None
+    with runtime.manager.session_scope() as session:
+        assert session.scalar(select(func.count(schema.Notification.id))) == 0
+        assert session.scalar(select(func.count(schema.NotificationPushJob.id))) == 0
+    sender = _Sender()
+    worker = NotificationWorker(runtime.manager, Settings(PUSH_TOKEN_ENCRYPTION_KEY=key), sender)
+    assert worker.deliver(datetime.now(UTC)) == 0 and sender.calls == 0
+
+
+def test_queued_removal_push_is_dropped_when_the_owner_deletes_the_account(client, runtime):
+    key = Fernet.generate_key().decode()
+    moderator = make_user(runtime, "Mod", moderator=True)
+    owner = make_user(runtime, "Owner")
+    with runtime.manager.session_scope() as session:
+        NotificationRepository(session).upsert_device(
+            owner.id, "owner-device-token-long-enough", key
+        )
+    adoption = make_adoption(runtime, owner)
+    assert client.delete(f"{API}/adoption-posts/{adoption}", headers=moderator.h).status_code == 204
+    with runtime.manager.session_scope() as session:
+        assert session.scalar(select(func.count(schema.NotificationPushJob.id))) == 1
+
+    # The owner deletes the account before the worker runs.
+    assert client.delete(f"{API}/users/me", headers=owner.h).status_code == 204
+    sender = _Sender()
+    worker = NotificationWorker(runtime.manager, Settings(PUSH_TOKEN_ENCRYPTION_KEY=key), sender)
+    assert worker.deliver(datetime.now(UTC)) == 0 and sender.calls == 0
+    assert removal_notices(runtime, owner) == []
+
+
+def test_concurrent_removals_by_two_moderators_create_one_notice(client, runtime):
+    from concurrent.futures import ThreadPoolExecutor
+
+    moderators = [make_user(runtime, f"Mod{i}", moderator=True) for i in range(3)]
+    owner = make_user(runtime, "Owner")
+    for path, model, factory, _ in SPECIAL.values():
+        target = factory(runtime, owner)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            codes = list(
+                pool.map(
+                    lambda mod, url=f"{API}{path}/{target}": client.delete(
+                        url, headers=mod.h
+                    ).status_code,
+                    moderators,
+                )
+            )
+        assert codes == [204, 204, 204]
+        assert row(runtime, model, target).deleted_by_id in {m.id for m in moderators}
+    assert len(removal_notices(runtime, owner)) == 2  # one per publication

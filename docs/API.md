@@ -1118,6 +1118,12 @@ Moderator removals (any route above, posts included) notify the publication owne
 `publication_removed` notification (no actor, so the moderator is not revealed) and a push.
 Owners deleting their own publication are not notified.
 
+Attribution (`deleted_by_id` on lost-pet and adoption posts, the `deleted` post-history actor and
+`reports.handled_by`) lasts while the moderator's account exists. Deleting that account clears
+these references, as the Privacy Policy describes ("removes the user as creator/reporter/handler
+where possible"); the removal itself and its timestamps remain. Keeping a pseudonymous tombstone
+reference instead would be a policy change and needs the owner's decision.
+
 6) GET /api/v1/moderation/posts/{post_id}/history
 - Purpose: inspect immutable edit/deletion history for one post.
 - Auth: Bearer + moderator required.
