@@ -26,6 +26,7 @@ from app.features.cats.domain.repositories import CatListPage, CatRepository, Po
 from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 from app.infrastructure.repositories.blocking import exclude_blocked
+from app.infrastructure.repositories.comment_visibility import visible_comment_count
 
 
 def _point_to_wkt(point: GeoPoint | None) -> WKTElement | None:
@@ -329,7 +330,9 @@ class SqlAlchemyCatRepository(CatRepository):
                 schema.Post.kind,
                 schema.Post.created_at,
                 schema.Post.like_count,
-                schema.Post.comment_count,
+                visible_comment_count(schema.Comment.post_id, schema.Post.id, viewer_user_id).label(
+                    "comment_count"
+                ),
                 func.ST_X(schema.Post.location).label("longitude"),
                 func.ST_Y(schema.Post.location).label("latitude"),
                 schema.Cat.id.label("cat_id_summary"),

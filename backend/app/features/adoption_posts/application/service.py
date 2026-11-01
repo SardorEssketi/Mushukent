@@ -383,7 +383,7 @@ class AdoptionPostsService:
                 raise api_error(
                     409, "ADOPTION_POST_NOT_ACTIVE", "Adoption post is no longer active."
                 )
-            item = repository.get_by_id(post_id)
+            item = repository.get_by_id(post_id, viewer_user_id=user.id)
             if item is None:
                 raise RuntimeError("Answered adoption post could not be loaded.")
             return to_adoption_post_response(item)

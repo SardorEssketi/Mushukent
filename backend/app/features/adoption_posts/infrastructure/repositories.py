@@ -20,6 +20,7 @@ from app.features.adoption_posts.domain.models import (
 from app.features.posts.domain.models import PostAuthorSummary
 from app.infrastructure.db.models import schema
 from app.infrastructure.repositories.blocking import exclude_blocked, users_are_blocked
+from app.infrastructure.repositories.comment_visibility import visible_comment_counts
 
 
 class SqlAlchemyAdoptionPostRepository:
@@ -53,7 +54,7 @@ class SqlAlchemyAdoptionPostRepository:
         ]
         self.session.add(adoption_post)
         self.session.flush()
-        created = self.get_by_id(adoption_post.id)
+        created = self.get_by_id(adoption_post.id, viewer_user_id=draft.user_id)
         if created is None:
             raise RuntimeError("Created adoption post could not be loaded.")
         return created
@@ -86,7 +87,9 @@ class SqlAlchemyAdoptionPostRepository:
         if for_update:
             statement = statement.with_for_update()
         item = self.session.scalar(statement)
-        return self._model_to_record(item) if item is not None else None
+        if item is None:
+            return None
+        return self._models_to_records([item], viewer_user_id)[0]
 
     def get_by_ids(
         self,
@@ -113,7 +116,7 @@ class SqlAlchemyAdoptionPostRepository:
             statement = statement.where(schema.AdoptionPost.is_resolved.is_(False))
         statement = exclude_blocked(statement, viewer_user_id, schema.AdoptionPost.user_id)
         items = self.session.scalars(statement).all()
-        return [self._model_to_record(item) for item in items]
+        return self._models_to_records(items, viewer_user_id)
 
     def update(self, adoption_post_id: UUID, draft: AdoptionPostUpdateDraft) -> AdoptionPostRecord:
         item = self.session.get(schema.AdoptionPost, adoption_post_id)
@@ -135,7 +138,8 @@ class SqlAlchemyAdoptionPostRepository:
                 for photo in draft.photos
             ]
         self.session.flush()
-        return self._model_to_record(item)
+        # Only the owner can update, so the owner is the viewer of the response.
+        return self._models_to_records([item], item.user_id)[0]
 
     def soft_delete(self, adoption_post_id: UUID, deleted_at: datetime) -> None:
         item = self.session.get(schema.AdoptionPost, adoption_post_id)
@@ -176,7 +180,8 @@ class SqlAlchemyAdoptionPostRepository:
             if pending is not None:
                 self.session.delete(pending)
         self.session.flush()
-        result = self.get_by_id(adoption_post_id)
+        # Only the owner can change the resolution, so the owner is the viewer.
+        result = self.get_by_id(adoption_post_id, viewer_user_id=item.user_id)
         if result is None:
             raise RuntimeError("Resolved adoption post could not be loaded.")
         return result
@@ -328,7 +333,7 @@ class SqlAlchemyAdoptionPostRepository:
                 schema.AdoptionPost.id.desc(),
             ).limit(limit + 1)
         ).all()
-        items = [self._model_to_record(row) for row in rows[:limit]]
+        items = self._models_to_records(rows[:limit], viewer_user_id)
         next_cursor = self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None
         return AdoptionPostPage(items=items, next_cursor=next_cursor, limit=limit)
 
@@ -363,12 +368,23 @@ class SqlAlchemyAdoptionPostRepository:
             ).limit(limit + 1)
         ).all()
         return AdoptionPostPage(
-            items=[self._model_to_record(row) for row in rows[:limit]],
+            items=self._models_to_records(rows[:limit], owner_id),
             next_cursor=self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None,
             limit=limit,
         )
 
-    def _model_to_record(self, item: schema.AdoptionPost) -> AdoptionPostRecord:
+    def _models_to_records(self, items, viewer_user_id: UUID | None) -> list[AdoptionPostRecord]:
+        counts = visible_comment_counts(
+            self.session,
+            schema.Comment.adoption_post_id,
+            (item.id for item in items),
+            viewer_user_id,
+        )
+        return [self._model_to_record(item, comment_count=counts.get(item.id, 0)) for item in items]
+
+    def _model_to_record(
+        self, item: schema.AdoptionPost, *, comment_count: int
+    ) -> AdoptionPostRecord:
         photos = sorted(item.photos, key=lambda photo: photo.position)
         photo_records = [
             AdoptionPostPhotoRecord(
@@ -395,7 +411,7 @@ class SqlAlchemyAdoptionPostRepository:
             additional_info=item.additional_info,
             is_public=item.is_public,
             is_resolved=item.is_resolved,
-            comment_count=int(item.comment_count or 0),
+            comment_count=comment_count,
             view_count=int(item.view_count or 0),
             created_at=item.created_at,
             updated_at=item.updated_at,

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import Text, cast, delete, func, or_, select, update
+from sqlalchemy import Integer, Text, cast, column, delete, func, or_, select, update, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from structlog import get_logger
 
@@ -175,13 +177,7 @@ class UsersService:
                 if history.actor_id == user.id:
                     history.actor_id = None
 
-            comment_rows = session.scalars(
-                select(schema.Comment).where(schema.Comment.user_id == user.id)
-            ).all()
-            for comment in comment_rows:
-                comment.user_id = None
-                comment.content = "[deleted]"
-                comment.deleted_at = comment.deleted_at or now
+            self._delete_account_comments(session, user.id, now)
             session.execute(
                 schema.Comment.__table__.update()
                 .where(schema.Comment.deleted_by_id == user.id)
@@ -546,6 +542,56 @@ class UsersService:
                     schema.UserBlock.blocker_id == user.id,
                     schema.UserBlock.blocked_id == blocked_user_id,
                 )
+            )
+
+    @staticmethod
+    def _delete_account_comments(session, user_id: UUID, now: datetime) -> None:
+        """Soft-delete and anonymize the account's comments and keep stored counters exact.
+
+        Only comments that were still active are soft-deleted and counted: the ``UPDATE`` locks
+        and changes exactly those rows (a concurrent delete of the same comment then finds it
+        already deleted and does not decrement again). The stored ``comment_count`` of each
+        affected post, lost-pet post and adoption post is then lowered by that number in one
+        statement per table. Comments that were already deleted are only anonymized.
+        """
+        comment = schema.Comment
+        transitioned = session.execute(
+            update(comment)
+            .where(comment.user_id == user_id, comment.deleted_at.is_(None))
+            .values(user_id=None, content="[deleted]", deleted_at=now)
+            .returning(comment.post_id, comment.lost_pet_id, comment.adoption_post_id)
+            .execution_options(synchronize_session=False)
+        ).all()
+        session.execute(
+            update(comment)
+            .where(comment.user_id == user_id)
+            .values(user_id=None, content="[deleted]")
+            .execution_options(synchronize_session=False)
+        )
+
+        targets = (
+            (schema.Post, Counter(row.post_id for row in transitioned if row.post_id)),
+            (schema.LostPet, Counter(row.lost_pet_id for row in transitioned if row.lost_pet_id)),
+            (
+                schema.AdoptionPost,
+                Counter(row.adoption_post_id for row in transitioned if row.adoption_post_id),
+            ),
+        )
+        for model, removed in targets:
+            if not removed:
+                continue
+            removed_counts = values(
+                column("id", PGUUID(as_uuid=True)),
+                column("removed", Integer),
+                name="removed_comments",
+            ).data(sorted(removed.items()))
+            session.execute(
+                update(model)
+                .where(model.id == removed_counts.c.id)
+                .values(
+                    comment_count=func.greatest(model.comment_count - removed_counts.c.removed, 0)
+                )
+                .execution_options(synchronize_session=False)
             )
 
     def _build_self_profile(

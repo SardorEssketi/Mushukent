@@ -31,6 +31,7 @@ from app.features.posts.domain.repositories import (
 from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 from app.infrastructure.repositories.blocking import exclude_blocked
+from app.infrastructure.repositories.comment_visibility import visible_comment_count
 
 
 class SqlAlchemyPostRepository(PostRepository):
@@ -391,7 +392,9 @@ class SqlAlchemyPostRepository(PostRepository):
                 schema.Post.status.label("post_status"),
                 schema.Post.is_public.label("is_public"),
                 schema.Post.like_count.label("like_count"),
-                schema.Post.comment_count.label("comment_count"),
+                visible_comment_count(schema.Comment.post_id, schema.Post.id, viewer_user_id).label(
+                    "comment_count"
+                ),
                 schema.Post.view_count.label("view_count"),
                 schema.Post.created_at.label("created_at"),
                 schema.Post.updated_at.label("updated_at"),

@@ -25,6 +25,7 @@ from app.features.lost_pets.domain.models import (
 from app.features.posts.domain.models import PostAuthorSummary
 from app.infrastructure.db.models import schema
 from app.infrastructure.repositories.blocking import exclude_blocked, users_are_blocked
+from app.infrastructure.repositories.comment_visibility import visible_comment_counts
 
 
 class SqlAlchemyLostPetRepository:
@@ -62,7 +63,7 @@ class SqlAlchemyLostPetRepository:
         ]
         self.session.add(lost_pet)
         self.session.flush()
-        created = self.get_by_id(lost_pet.id)
+        created = self.get_by_id(lost_pet.id, viewer_user_id=draft.user_id)
         if created is None:
             raise RuntimeError("Created lost pet could not be loaded.")
         return created
@@ -92,7 +93,9 @@ class SqlAlchemyLostPetRepository:
         if for_update:
             statement = statement.with_for_update()
         item = self.session.scalar(statement)
-        return self._model_to_record(item) if item is not None else None
+        if item is None:
+            return None
+        return self._models_to_records([item], viewer_user_id)[0]
 
     def update(self, lost_pet_id: UUID, draft: LostPetUpdateDraft) -> LostPetRecord:
         item = self.session.get(schema.LostPet, lost_pet_id)
@@ -117,7 +120,8 @@ class SqlAlchemyLostPetRepository:
                 for photo in draft.photos
             ]
         self.session.flush()
-        return self._model_to_record(item)
+        # Only the owner can update, so the owner is the viewer of the response.
+        return self._models_to_records([item], item.user_id)[0]
 
     def soft_delete(self, lost_pet_id: UUID, deleted_at: datetime) -> None:
         item = self.session.get(schema.LostPet, lost_pet_id)
@@ -158,7 +162,8 @@ class SqlAlchemyLostPetRepository:
             if pending is not None:
                 self.session.delete(pending)
         self.session.flush()
-        result = self.get_by_id(lost_pet_id)
+        # Only the owner can change the resolution, so the owner is the viewer.
+        result = self.get_by_id(lost_pet_id, viewer_user_id=item.user_id)
         if result is None:
             raise RuntimeError("Resolved lost pet could not be loaded.")
         return result
@@ -185,7 +190,7 @@ class SqlAlchemyLostPetRepository:
             statement = statement.where(schema.LostPet.is_resolved.is_(False))
         statement = exclude_blocked(statement, viewer_user_id, schema.LostPet.user_id)
         items = self.session.scalars(statement).all()
-        return [self._model_to_record(item) for item in items]
+        return self._models_to_records(items, viewer_user_id)
 
     def record_contact(self, lost_pet_id: UUID, contacting_user_id: UUID) -> bool:
         pet = self.session.scalar(
@@ -317,7 +322,7 @@ class SqlAlchemyLostPetRepository:
             )
         ).all()
         return LostPetPage(
-            items=[self._model_to_record(row) for row in rows[:limit]],
+            items=self._models_to_records(rows[:limit], owner_id),
             next_cursor=self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None,
             limit=limit,
         )
@@ -396,7 +401,7 @@ class SqlAlchemyLostPetRepository:
             )
 
         rows = self.session.scalars(statement.limit(limit + 1)).all()
-        items = [self._model_to_record(row) for row in rows[:limit]]
+        items = self._models_to_records(rows[:limit], viewer_user_id)
         next_cursor = self._encode_cursor(rows[limit - 1]) if len(rows) > limit else None
         return LostPetPage(items=items, next_cursor=next_cursor, limit=limit)
 
@@ -447,7 +452,16 @@ class SqlAlchemyLostPetRepository:
             limit=limit,
         )
 
-    def _model_to_record(self, item: schema.LostPet) -> LostPetRecord:
+    def _models_to_records(self, items, viewer_user_id: UUID | None) -> list[LostPetRecord]:
+        counts = visible_comment_counts(
+            self.session,
+            schema.Comment.lost_pet_id,
+            (item.id for item in items),
+            viewer_user_id,
+        )
+        return [self._model_to_record(item, comment_count=counts.get(item.id, 0)) for item in items]
+
+    def _model_to_record(self, item: schema.LostPet, *, comment_count: int) -> LostPetRecord:
         photos = sorted(item.photos, key=lambda photo: photo.position)
         photo_records = [
             LostPetPhotoRecord(
@@ -478,7 +492,7 @@ class SqlAlchemyLostPetRepository:
             additional_info=item.additional_info,
             is_resolved=item.is_resolved,
             is_public=item.is_public,
-            comment_count=int(item.comment_count or 0),
+            comment_count=comment_count,
             view_count=int(item.view_count or 0),
             created_at=item.created_at,
             updated_at=item.updated_at,

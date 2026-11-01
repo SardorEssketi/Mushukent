@@ -407,7 +407,7 @@ class LostPetsService:
                 raise api_error(409, "FOLLOW_UP_NOT_DUE", "This follow-up is not due yet.")
             if result != "answered" or lost_pet_id is None:
                 raise api_error(409, "LOST_PET_NOT_ACTIVE", "Lost pet post is no longer active.")
-            item = repository.get_by_id(lost_pet_id)
+            item = repository.get_by_id(lost_pet_id, viewer_user_id=user.id)
             if item is None:
                 raise RuntimeError("Answered lost pet could not be loaded.")
             return to_lost_pet_response(item)

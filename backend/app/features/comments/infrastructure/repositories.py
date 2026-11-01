@@ -28,6 +28,7 @@ from app.features.posts.domain.models import (
 from app.infrastructure.db.enums import PostKind
 from app.infrastructure.db.models import schema
 from app.infrastructure.repositories.blocking import exclude_blocked
+from app.infrastructure.repositories.comment_visibility import apply_comment_visibility
 
 
 class SqlAlchemyCommentRepository(CommentRepository):
@@ -138,7 +139,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.post_id == post_id
         )
-        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
+        statement = apply_comment_visibility(statement, viewer_user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]
@@ -161,7 +162,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.lost_pet_id == lost_pet_id
         )
-        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
+        statement = apply_comment_visibility(statement, viewer_user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]
@@ -184,7 +185,7 @@ class SqlAlchemyCommentRepository(CommentRepository):
         statement = self._comment_statement(include_deleted=False).where(
             schema.Comment.adoption_post_id == adoption_post_id
         )
-        statement = exclude_blocked(statement, viewer_user_id, schema.Comment.user_id)
+        statement = apply_comment_visibility(statement, viewer_user_id)
         statement = self._apply_cursor(statement, cursor, order, limit)
         rows = self.session.execute(statement).mappings().all()
         items = [self._row_to_comment(row) for row in rows[:limit]]
