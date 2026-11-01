@@ -40,6 +40,7 @@ void main() {
 
     final result = await client.postMultipart<bool>(
       'posts',
+      publicationId: '11111111-1111-4111-8111-111111111111',
       formData: formData,
       decoder: (json) => (json as Map<String, Object?>)['accepted'] as bool,
     );
@@ -74,6 +75,7 @@ void main() {
     await expectLater(
       client.postMultipart<Object?>(
         'posts',
+        publicationId: '11111111-1111-4111-8111-111111111111',
         formData: FormData.fromMap(<String, Object>{
           'photo': MultipartFile.fromBytes(<int>[1, 2, 3]),
         }),

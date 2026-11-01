@@ -130,6 +130,7 @@ class FakeApiClient implements MushukistanApiClient {
   Future<T> postMultipart<T>(
     String path, {
     required FormData formData,
+    String? publicationId,
     Map<String, dynamic>? queryParameters,
     required T Function(Object? json) decoder,
     bool authenticated = true,

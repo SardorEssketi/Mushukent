@@ -15,6 +15,8 @@ import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/network/publication_retry.dart';
 import '../../../../core/network/mushukistan_api.dart';
+import '../../../../core/storage/token_store.dart';
+import '../../../../core/storage/token_store_provider.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
@@ -40,18 +42,47 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   GeoPoint? _selectedLocation;
   bool _isSubmitting = false;
   bool _outcomeUnknown = false;
+  String _publicationId = newPublicationKey();
   bool _isPickingPhotos = false;
   bool _phonePublicationConsent = false;
   String? _error;
+  StreamSubscription<void>? _sessionChanges;
+  int _draftGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final store = ref.read(tokenStoreProvider);
+    if (store is GuardedAuthTokenStore) {
+      _sessionChanges = store.sessionChanges.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          _draftGeneration++;
+          _photos.clear();
+          _petNameController.clear();
+          _infoController.clear();
+          _selectedLocation = null;
+          _publicationId = newPublicationKey();
+          _isSubmitting = false;
+          _isPickingPhotos = false;
+          _outcomeUnknown = false;
+          _phonePublicationConsent = false;
+          _error = null;
+        });
+      });
+    }
+  }
 
   @override
   void dispose() {
+    _sessionChanges?.cancel();
     _petNameController.dispose();
     _infoController.dispose();
     super.dispose();
   }
 
   Future<void> _pickPhotos() async {
+    final generation = _draftGeneration;
     if (_isPickingPhotos || _isSubmitting || _outcomeUnknown) {
       return;
     }
@@ -83,7 +114,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
             ),
           )
           .toList(growable: false);
-      if (mounted) {
+      if (mounted && _draftGeneration == generation) {
         setState(() {
           _photos.addAll(uploads);
         });
@@ -94,13 +125,14 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
         setState(() => _error = selectedImageErrorMessage(strings, error));
       }
     } finally {
-      if (mounted) {
+      if (mounted && _draftGeneration == generation) {
         setState(() => _isPickingPhotos = false);
       }
     }
   }
 
   Future<void> _submit() async {
+    final generation = _draftGeneration;
     final strings = ref.read(appStringsProvider);
     if (_isSubmitting || _isPickingPhotos) {
       return;
@@ -135,12 +167,14 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
 
     try {
       await ref.read(mushukistanApiProvider).createLostPet(
+            publicationId: _publicationId,
             photos: _photos,
             petName: _petNameController.text,
             lastSeenLocation: location,
             ownerPhonePublicationConsent: _phonePublicationConsent,
             additionalInfo: _infoController.text,
           );
+      if (_draftGeneration != generation) return;
       ref.invalidate(feedPostsProvider);
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
@@ -150,20 +184,23 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
           ..showSnackBar(SnackBar(content: Text(strings.postPublished)));
       }
     } on MushukistanApiException catch (error) {
+      if (_draftGeneration != generation) return;
       if (mounted) {
         setState(() {
           _outcomeUnknown = publicationOutcomeUncertain(error);
+          if (!_outcomeUnknown) _publicationId = newPublicationKey();
           _error = publicationErrorMessage(strings, error);
         });
       }
     } catch (_) {
+      if (_draftGeneration != generation) return;
       if (mounted) {
         setState(() {
           _error = strings.couldNotSaveChanges;
         });
       }
     } finally {
-      if (mounted) {
+      if (mounted && _draftGeneration == generation) {
         setState(() {
           _isSubmitting = false;
         });
@@ -273,6 +310,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
               IgnorePointer(
                 ignoring: _isSubmitting || _outcomeUnknown,
                 child: LostPetLocationPicker(
+                  key: ValueKey(_publicationId),
                   strings: strings,
                   selectedLocation: _selectedLocation,
                   onSelected: (location) {

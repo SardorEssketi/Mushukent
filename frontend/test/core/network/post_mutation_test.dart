@@ -29,6 +29,7 @@ void main() {
       });
 
       final post = await api.createObservation(
+        publicationId: '11111111-1111-4111-8111-111111111111',
         photos: <ObservationPhotoUpload>[
           ObservationPhotoUpload(
             bytes: Uint8List.fromList(<int>[1, 2, 3]),

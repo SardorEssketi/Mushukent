@@ -1,12 +1,44 @@
+import 'dart:convert';
+
 import 'package:web/web.dart' as web;
 
 import 'token_store.dart';
 
-class WebLocalTokenStore implements AuthTokenStore {
+class WebLocalTokenStore implements AuthTokenStore, ExternalAuthSessionChanges {
   static const _tokenKey = 'mushukistan_access_token';
   static const _refreshTokenKey = 'mushukistan_refresh_token';
   String? _memoryAccessToken;
   String? _memoryRefreshToken;
+
+  String? _account(String? token) {
+    if (token == null) return null;
+    try {
+      return (jsonDecode(utf8.decode(
+              base64Url.decode(base64Url.normalize(token.split('.')[1]))))
+          as Map)['sub'] as String;
+    } catch (_) {
+      return token;
+    }
+  }
+
+  @override
+  Stream<void> get externalSessionChanges =>
+      web.EventStreamProviders.storageEvent
+          .forTarget(web.window)
+          .where((event) =>
+              event.key == null ||
+              event.key == _tokenKey ||
+              event.key == _refreshTokenKey)
+          .map((event) {
+            _memoryAccessToken = null;
+            _memoryRefreshToken = null;
+            return event;
+          })
+          .where((event) =>
+              event.key == null ||
+              (event.key == _tokenKey &&
+                  _account(event.oldValue) != _account(event.newValue)))
+          .map((_) {});
 
   @override
   Future<void> delete() async {

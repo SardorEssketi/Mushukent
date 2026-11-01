@@ -755,6 +755,7 @@ class MushukistanApi {
   }
 
   Future<PostDetail> createObservation({
+    required String publicationId,
     required List<ObservationPhotoUpload> photos,
     GeoPoint? location,
     String kind = 'observation',
@@ -786,6 +787,7 @@ class MushukistanApi {
     return _client.postMultipart<PostDetail>(
       'posts',
       formData: formData,
+      publicationId: publicationId,
       decoder: (json) => PostDetail.fromJson(json),
     );
   }
@@ -844,6 +846,7 @@ class MushukistanApi {
   }
 
   Future<LostPetData> createLostPet({
+    required String publicationId,
     required List<LostPetPhotoUpload> photos,
     required GeoPoint lastSeenLocation,
     required String petName,
@@ -872,6 +875,7 @@ class MushukistanApi {
     return _client.postMultipart<LostPetData>(
       'lost-pets',
       formData: formData,
+      publicationId: publicationId,
       decoder: (json) => LostPetData.fromJson(json),
     );
   }
@@ -934,6 +938,7 @@ class MushukistanApi {
   }
 
   Future<AdoptionPostData> createAdoptionPost({
+    required String publicationId,
     required List<LostPetPhotoUpload> photos,
     required String petName,
     String? additionalInfo,
@@ -960,6 +965,7 @@ class MushukistanApi {
     return _client.postMultipart<AdoptionPostData>(
       'adoption-posts',
       formData: formData,
+      publicationId: publicationId,
       decoder: (json) => AdoptionPostData.fromJson(json),
     );
   }

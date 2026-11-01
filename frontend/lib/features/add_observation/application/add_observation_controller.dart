@@ -6,14 +6,25 @@ import '../../../core/localization/app_strings.dart';
 import '../../../core/media/selected_image_pipeline.dart';
 import '../../../core/network/mushukistan_api.dart';
 import '../../../core/network/publication_retry.dart';
+import '../../../core/network/publication_session.dart';
+import '../../../core/storage/token_store.dart';
+import '../../../core/storage/token_store_provider.dart';
 
 final addObservationControllerProvider =
     StateNotifierProvider<AddObservationController, AddObservationState>((ref) {
-  return AddObservationController(ref.watch(mushukistanApiProvider));
+  final controller =
+      AddObservationController(ref.watch(mushukistanApiProvider));
+  final store = ref.watch(tokenStoreProvider);
+  if (store is GuardedAuthTokenStore) {
+    final changes = store.sessionChanges.listen((_) => controller.reset());
+    ref.onDispose(changes.cancel);
+  }
+  return controller;
 });
 
 class AddObservationState {
-  const AddObservationState({
+  AddObservationState({
+    String? publicationId,
     this.photos = const [],
     this.location,
     this.kind = 'observation',
@@ -23,7 +34,9 @@ class AddObservationState {
     this.submitting = false,
     this.outcomeUnknown = false,
     this.errorMessage,
-  });
+  }) : publicationId = publicationId ?? newPublicationKey();
+
+  final String publicationId;
 
   final List<ObservationPhotoUpload> photos;
   final GeoPoint? location;
@@ -46,6 +59,7 @@ class AddObservationState {
       !isPublic;
 
   AddObservationState copyWith({
+    String? publicationId,
     List<ObservationPhotoUpload>? photos,
     GeoPoint? location,
     String? kind,
@@ -58,6 +72,7 @@ class AddObservationState {
     String? errorMessage,
   }) {
     return AddObservationState(
+      publicationId: publicationId ?? this.publicationId,
       photos: photos ?? this.photos,
       location: clearLocation ? null : location ?? this.location,
       kind: kind ?? this.kind,
@@ -72,7 +87,7 @@ class AddObservationState {
 }
 
 class AddObservationController extends StateNotifier<AddObservationState> {
-  AddObservationController(this._api) : super(const AddObservationState());
+  AddObservationController(this._api) : super(AddObservationState());
 
   final MushukistanApi _api;
 
@@ -119,6 +134,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
   }
 
   Future<PostDetail> submit({required AppStrings strings}) async {
+    final attemptId = state.publicationId;
     if (state.submitting) {
       throw StateError('Post submission is already in progress.');
     }
@@ -136,6 +152,7 @@ class AddObservationController extends StateNotifier<AddObservationState> {
     state = state.copyWith(submitting: true, errorMessage: null);
     try {
       final post = await _api.createObservation(
+        publicationId: state.publicationId,
         photos: state.photos,
         location: location,
         kind: state.kind,
@@ -144,11 +161,16 @@ class AddObservationController extends StateNotifier<AddObservationState> {
             state.description.trim().isEmpty ? null : state.description.trim(),
         isPublic: state.isPublic,
       );
+      if (state.publicationId != attemptId) throw publicationSessionChanged;
       state = state.copyWith(submitting: false, outcomeUnknown: false);
       return post;
     } catch (error) {
+      if (state.publicationId != attemptId) rethrow;
       state = state.copyWith(
         submitting: false,
+        publicationId: publicationOutcomeUncertain(error)
+            ? state.publicationId
+            : newPublicationKey(),
         outcomeUnknown: publicationOutcomeUncertain(error),
         errorMessage: publicationErrorMessage(strings, error),
       );

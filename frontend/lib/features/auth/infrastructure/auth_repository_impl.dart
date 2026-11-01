@@ -122,7 +122,7 @@ class MushukistanAuthRepository implements AuthRepository {
       body: <String, Object?>{'refresh_token': refreshToken},
       decoder: AuthSession.fromJson,
     );
-    await _persistSession(session, revision);
+    await _persistSession(session, revision, newSession: false);
     return session;
   }
 
@@ -264,10 +264,13 @@ class MushukistanAuthRepository implements AuthRepository {
     }
   }
 
-  Future<void> _persistSession(AuthSession session, int? revision) async {
+  Future<void> _persistSession(AuthSession session, int? revision,
+      {bool newSession = true}) async {
     if (_tokenStore is GuardedAuthTokenStore) {
       final written = await _tokenStore.writeTokensIfRevision(revision!,
-          accessToken: session.accessToken, refreshToken: session.refreshToken);
+          accessToken: session.accessToken,
+          refreshToken: session.refreshToken,
+          newSession: newSession);
       if (!written) {
         throw const MushukistanApiException(
           kind: ApiFailureKind.unauthorized,

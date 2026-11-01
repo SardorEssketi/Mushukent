@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
+import 'package:mushukistan_frontend/core/network/publication_retry.dart';
 import 'package:mushukistan_frontend/core/storage/token_store.dart';
 
 String token(String owner, [String signature = 'signature']) =>
@@ -36,14 +37,94 @@ class Adapter implements HttpClientAdapter {
 
 Future<String> submit(DioMushukistanApiClient client) =>
     client.postMultipart('posts',
+        publicationId: '11111111-1111-4111-8111-111111111111',
         formData: FormData.fromMap({
           'photos': MultipartFile.fromBytes([1, 2, 3])
         }),
         decoder: (json) => (json as Map)['id'] as String);
 
+class ChangingJournal extends MemoryPublicationJournal {
+  ChangingJournal(this.change);
+  final Future<void> Function() change;
+  @override
+  Future<void> write(String id, PublicationRecord record) async {
+    await super.write(id, record);
+    await change();
+  }
+}
+
+class ReadFailureStore extends InMemoryAuthTokenStore {
+  bool failReads = false;
+  @override
+  Future<String?> read() async {
+    if (failReads) throw StateError('Synthetic credential store failure');
+    return super.read();
+  }
+}
+
 void main() {
+  test(
+      'credential read failure after server success retains the operation for recovery',
+      () async {
+    final delegate = ReadFailureStore();
+    final store = GuardedAuthTokenStore(delegate);
+    await store.write(token('A'));
+    final adapter = Adapter();
+    int uploads = 0;
+    adapter.answer = (o) async {
+      if (o.path == 'posts') {
+        uploads++;
+        delegate.failReads = true;
+        return response({'id': 'post-1'});
+      }
+      if (o.path.startsWith('publication-operations/')) {
+        return response({
+          'state': 'completed',
+          'target_kind': 'post',
+          'target_id': 'post-1',
+          'can_retry': false
+        });
+      }
+      return response({'id': 'post-1'});
+    };
+    final dio = Dio(BaseOptions(
+        baseUrl: 'https://local.test/api/v1/', validateStatus: (_) => true))
+      ..httpClientAdapter = adapter;
+    final api = DioMushukistanApiClient(dio: dio, tokenStore: store);
+    await expectLater(
+        submit(api),
+        throwsA(isA<MushukistanApiException>()
+            .having((e) => e.code, 'code', 'PUBLICATION_SESSION_UNAVAILABLE')));
+    delegate.failReads = false;
+    expect(await submit(api), 'post-1');
+    expect(uploads, 1);
+  });
+  test(
+      'account switch while journaling prevents dispatch and cross-account recovery',
+      () async {
+    final store = GuardedAuthTokenStore(InMemoryAuthTokenStore());
+    await store.write(token('A'));
+    final adapter = Adapter()
+      ..answer = (_) => Future.value(response({'id': 'post-1'}));
+    final dio = Dio(BaseOptions(
+        baseUrl: 'https://local.test/api/v1/', validateStatus: (_) => true))
+      ..httpClientAdapter = adapter;
+    final journal = ChangingJournal(() => store.write(token('B')));
+    final api = DioMushukistanApiClient(
+        dio: dio, tokenStore: store, publicationJournal: journal);
+    await expectLater(
+        submit(api),
+        throwsA(isA<MushukistanApiException>()
+            .having((e) => e.code, 'code', 'SESSION_CHANGED')));
+    await expectLater(
+        submit(api),
+        throwsA(isA<MushukistanApiException>()
+            .having((e) => e.code, 'code', 'SESSION_CHANGED')));
+    expect(adapter.requests, isEmpty);
+  });
   for (final stage in [
     'post_dispatch',
+    'guarded_login',
     'post_reply',
     'status_dispatch',
     'status_reply',
@@ -66,6 +147,11 @@ void main() {
       int dispatchPosts = 0;
       Future<void> change() async {
         if (stage == 'logout_then_same_account') await store.delete();
+        if (stage == 'guarded_login') {
+          await store.writeTokensIfRevision(store.revision,
+              accessToken: token('B'), refreshToken: 'synthetic-B');
+          return;
+        }
         await store.writeTokens(
             accessToken: token(stage == 'logout_then_same_account' ? 'A' : 'B'),
             refreshToken: 'synthetic-new-session');
@@ -77,7 +163,8 @@ void main() {
           dispatchPosts++;
         }
         if (armed &&
-            ((stage == 'post_dispatch' && options.path == 'posts') ||
+            (((stage == 'post_dispatch' || stage == 'guarded_login') &&
+                    options.path == 'posts') ||
                 (stage == 'logout_then_same_account' &&
                     options.path == 'posts') ||
                 (stage == 'status_dispatch' &&

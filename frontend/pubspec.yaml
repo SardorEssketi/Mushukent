@@ -38,6 +38,7 @@ dependencies:
   firebase_messaging: ^16.7.0
 
 dev_dependencies:
+  shared_preferences_web: ^2.4.3
   flutter_test:
     sdk: flutter
   image_picker_platform_interface: ^2.11.1

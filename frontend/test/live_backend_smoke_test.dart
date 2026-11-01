@@ -5,6 +5,7 @@ import 'package:mushukistan_frontend/core/config/app_environment.dart';
 import 'package:mushukistan_frontend/core/network/api_client.dart';
 import 'package:mushukistan_frontend/core/network/api_error.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
+import 'package:mushukistan_frontend/core/network/publication_retry.dart';
 import 'package:mushukistan_frontend/features/auth/domain/auth_models.dart';
 import 'package:mushukistan_frontend/features/auth/infrastructure/auth_repository_impl.dart';
 
@@ -124,6 +125,7 @@ void main() {
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jPZ0AAAAASUVORK5CYII=',
       );
       final post = await api.createObservation(
+        publicationId: newPublicationKey(),
         photos: [
           ObservationPhotoUpload(
             bytes: photoBytes,

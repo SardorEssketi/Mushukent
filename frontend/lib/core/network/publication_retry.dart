@@ -7,6 +7,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_error.dart';
+import 'publication_lock_stub.dart'
+    if (dart.library.js_interop) 'publication_lock_web.dart' as coordination;
 
 String newPublicationKey() {
   final random = Random.secure();
@@ -18,46 +20,55 @@ String newPublicationKey() {
 }
 
 abstract class PublicationJournal {
-  Future<String?> read(String scope, String fingerprint);
-  Future<void> write(String scope, String fingerprint, String key);
-  Future<void> remove(String scope, String fingerprint);
+  Future<T> coordinate<T>(String id, Future<T> Function() action) =>
+      coordination.withPublicationLock(id, action);
+  Future<PublicationRecord?> read(String id);
+  Future<void> write(String id, PublicationRecord record);
 }
 
-class MemoryPublicationJournal implements PublicationJournal {
-  final _keys = <String, String>{};
-  @override
-  Future<String?> read(String scope, String fingerprint) async =>
-      _keys['$scope:$fingerprint'];
-  @override
-  Future<void> write(String scope, String fingerprint, String key) async {
-    _keys['$scope:$fingerprint'] = key;
-  }
-
-  @override
-  Future<void> remove(String scope, String fingerprint) async {
-    _keys.remove('$scope:$fingerprint');
+class PublicationRecord {
+  const PublicationRecord(this.owner, this.fingerprint);
+  final String owner;
+  final String fingerprint;
+  String encode() => jsonEncode({'owner': owner, 'fingerprint': fingerprint});
+  factory PublicationRecord.decode(String value) {
+    final data = jsonDecode(value) as Map;
+    return PublicationRecord(
+        data['owner'] as String, data['fingerprint'] as String);
   }
 }
 
-class PreferencesPublicationJournal implements PublicationJournal {
-  String _storageKey(String scope, String fingerprint) =>
-      'publication_attempt_v1.${sha256.convert(utf8.encode(scope))}.$fingerprint';
+String publicationOwner(String scope) =>
+    sha256.convert(utf8.encode(scope)).toString();
+
+class MemoryPublicationJournal extends PublicationJournal {
+  final _records = <String, PublicationRecord>{};
   @override
-  Future<String?> read(String scope, String fingerprint) async =>
-      (await SharedPreferences.getInstance())
-          .getString(_storageKey(scope, fingerprint));
+  Future<PublicationRecord?> read(String id) async => _records[id];
   @override
-  Future<void> write(String scope, String fingerprint, String key) async {
+  Future<void> write(String id, PublicationRecord record) async {
+    _records[id] = record;
+  }
+}
+
+class PreferencesPublicationJournal extends PublicationJournal {
+  String _storageKey(String id) => 'publication_attempt_v2.$id';
+  @override
+  Future<PublicationRecord?> read(String id) async {
+    final preferences = await SharedPreferences.getInstance();
+    // Another engine/tab may have written since this instance loaded its cache.
+    // coordinate() holds the process/browser lock across this read and binding.
+    await preferences.reload();
+    final value = preferences.getString(_storageKey(id));
+    return value == null ? null : PublicationRecord.decode(value);
+  }
+
+  @override
+  Future<void> write(String id, PublicationRecord record) async {
     if (!await (await SharedPreferences.getInstance())
-        .setString(_storageKey(scope, fingerprint), key)) {
+        .setString(_storageKey(id), record.encode())) {
       throw StateError('Could not preserve publication operation');
     }
-  }
-
-  @override
-  Future<void> remove(String scope, String fingerprint) async {
-    await (await SharedPreferences.getInstance())
-        .remove(_storageKey(scope, fingerprint));
   }
 }
 
@@ -95,7 +106,7 @@ Future<String> publicationFingerprint(String path, FormData form) async {
 }
 
 bool publicationOutcomeUncertain(Object error) =>
-    error is MushukistanApiException &&
+    error is! MushukistanApiException ||
     (error.kind == ApiFailureKind.network ||
         error.kind == ApiFailureKind.server ||
         error.kind == ApiFailureKind.parse ||
@@ -103,6 +114,9 @@ bool publicationOutcomeUncertain(Object error) =>
           'PUBLICATION_IN_PROGRESS',
           'PUBLICATION_OUTCOME_UNKNOWN',
           'PUBLICATION_KEY_CONFLICT',
+          'PUBLICATION_ID_REQUIRED',
+          'PUBLICATION_COORDINATION_UNAVAILABLE',
+          'PUBLICATION_JOURNAL_UNAVAILABLE',
           'SESSION_CHANGED'
         }.contains(error.code));
 

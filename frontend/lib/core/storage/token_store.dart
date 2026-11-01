@@ -11,11 +11,25 @@ abstract class AuthTokenStore {
   Future<void> delete();
 }
 
+abstract interface class ExternalAuthSessionChanges {
+  Stream<void> get externalSessionChanges;
+}
+
 /// Serializes credential mutations and rejects responses from an older session.
 class GuardedAuthTokenStore implements AuthTokenStore {
-  GuardedAuthTokenStore(this._delegate);
+  GuardedAuthTokenStore(this._delegate) {
+    if (_delegate case final ExternalAuthSessionChanges external) {
+      _externalChanges = external.externalSessionChanges
+          .listen((_) => invalidatePendingWrites());
+    }
+  }
 
   final AuthTokenStore _delegate;
+  StreamSubscription<void>? _externalChanges;
+  Future<void> dispose() async {
+    await _externalChanges?.cancel();
+  }
+
   Future<void> _pending = Future<void>.value();
   int _revision = 0;
   int _sessionEpoch = 0;
@@ -70,9 +84,11 @@ class GuardedAuthTokenStore implements AuthTokenStore {
     int expected, {
     required String accessToken,
     required String? refreshToken,
+    bool newSession = true,
   }) {
     if (_revision != expected) return Future<bool>.value(false);
     _revision++;
+    if (newSession) _changeSession();
     return _serial(() async {
       await _delegate.writeTokens(
           accessToken: accessToken, refreshToken: refreshToken);

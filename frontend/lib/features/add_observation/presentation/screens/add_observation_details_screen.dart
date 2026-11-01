@@ -32,6 +32,7 @@ class _AddObservationDetailsScreenState
   String? _error;
 
   Future<void> _pick(ImageSource source) async {
+    final attemptId = ref.read(addObservationControllerProvider).publicationId;
     if (_picking || ref.read(addObservationControllerProvider).submitting) {
       return;
     }
@@ -66,6 +67,10 @@ class _AddObservationDetailsScreenState
         limit: 5 - current.length,
       );
       if (!mounted) return;
+      if (ref.read(addObservationControllerProvider).publicationId !=
+          attemptId) {
+        return;
+      }
       ref.read(addObservationControllerProvider.notifier).setPhotos([
         ...current,
         for (final photo in prepared)
@@ -87,6 +92,7 @@ class _AddObservationDetailsScreenState
   }
 
   Future<void> _useCurrentLocation() async {
+    final attemptId = ref.read(addObservationControllerProvider).publicationId;
     if (_locating) return;
     final strings = ref.read(appStringsProvider);
     final confirmed = await showDialog<bool>(
@@ -115,6 +121,10 @@ class _AddObservationDetailsScreenState
       final location =
           await ref.read(locationServiceProvider).resolveCurrentLocation();
       if (!mounted) return;
+      if (ref.read(addObservationControllerProvider).publicationId !=
+          attemptId) {
+        return;
+      }
       if (ref.read(addObservationControllerProvider).submitting ||
           ref.read(addObservationControllerProvider).outcomeUnknown) {
         return;
@@ -235,6 +245,7 @@ class _AddObservationDetailsScreenState
             ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
+              key: ValueKey('${state.publicationId}:name'),
               enabled: !state.submitting && !state.outcomeUnknown,
               initialValue: state.catName,
               decoration: InputDecoration(
@@ -297,6 +308,7 @@ class _AddObservationDetailsScreenState
             ),
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
+              key: ValueKey('${state.publicationId}:description'),
               enabled: !state.submitting && !state.outcomeUnknown,
               initialValue: state.description,
               decoration: InputDecoration(

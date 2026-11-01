@@ -13,6 +13,13 @@ const publicationSessionChanged = MushukistanApiException(
       'Session changed during publication. Sign in to the original account to recover it.',
 );
 
+const publicationSessionUnavailable = MushukistanApiException(
+  kind: ApiFailureKind.network,
+  code: 'PUBLICATION_SESSION_UNAVAILABLE',
+  message:
+      'Could not verify the publication session. Check again before retrying.',
+);
+
 /// Lives for one call, including reconciliation and token-refresh replay.
 /// Refresh changes credentials; login/logout changes the session epoch.
 class PublicationSession {
@@ -33,7 +40,12 @@ class PublicationSession {
   String get scope => _scope!;
 
   Future<String> credentials() async {
-    final token = await store.read();
+    String? token;
+    try {
+      token = await store.read();
+    } catch (_) {
+      throw publicationSessionUnavailable;
+    }
     final current = publicationScope(token);
     if (cancelToken.isCancelled ||
         (store is GuardedAuthTokenStore &&
