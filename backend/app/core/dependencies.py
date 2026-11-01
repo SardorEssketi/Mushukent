@@ -304,11 +304,12 @@ def get_optional_current_principal(
 
 def get_current_user(
     request: Request,
-    db: Session = Depends(get_db_session),
     principal: AuthenticatedPrincipal = Depends(get_current_principal),
 ):
-    repository = SqlAlchemyAuthUserRepository(db)
-    user = repository.get_by_id(principal.user_id)
+    # The repository returns a detached AuthUser value. Release the connection
+    # before parsing bodies, waiting for the upload limiter, or calling storage.
+    with get_container(request).db_session_manager.create_session() as db:
+        user = SqlAlchemyAuthUserRepository(db).get_by_id(principal.user_id)
     if user is None:
         raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
     if not user.is_active:
@@ -318,14 +319,13 @@ def get_current_user(
 
 def get_optional_current_user(
     request: Request,
-    db: Session = Depends(get_db_session),
     authorization: str | None = Header(default=None),
 ):
     principal = get_optional_current_principal(request, authorization)
     if principal is None:
         return None
-    repository = SqlAlchemyAuthUserRepository(db)
-    user = repository.get_by_id(principal.user_id)
+    with get_container(request).db_session_manager.create_session() as db:
+        user = SqlAlchemyAuthUserRepository(db).get_by_id(principal.user_id)
     if user is None:
         raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
     if not user.is_active:
