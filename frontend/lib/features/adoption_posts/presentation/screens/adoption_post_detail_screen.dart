@@ -20,6 +20,9 @@ import '../../../posts/presentation/widgets/publication_detail_parts.dart';
 
 final adoptionPostDetailProvider = FutureProvider.autoDispose
     .family<AdoptionPostData, String>((ref, adoptionPostId) async {
+  // Comment, block and edit changes bump the revision: reload so the comment
+  // count matches the comment list below (same as postDetailProvider).
+  ref.watch(postMutationRevisionProvider);
   // Contact details are only sent to signed-in viewers: reload when the session changes.
   ref.watch(authControllerProvider.select((state) => state.isAuthenticated));
   try {
@@ -324,6 +327,8 @@ class _AdoptionPostDetailScreenState
       ),
       body: adoptionAsync.when(
         skipError: true,
+        // Keep the page (and scroll position) while a mutation reloads it.
+        skipLoadingOnReload: true,
         data: (post) {
           final info = post.additionalInfo?.trim();
           final isOwner = viewerId != null && post.author?.id == viewerId;

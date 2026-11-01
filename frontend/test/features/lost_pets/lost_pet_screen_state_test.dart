@@ -613,4 +613,38 @@ void main() {
     contact.complete(null);
     await tester.pumpAndSettle();
   });
+  testWidgets(
+      'comment count reloads after a comment mutation without hiding the page',
+      (tester) async {
+    final apiClient = FakeApiClient();
+    var commentCount = 1;
+    Completer<void>? reloadGate;
+    apiClient.setHandler('GET', 'lost-pets/pet-1', (_) async {
+      await reloadGate?.future;
+      return {..._pet(resolved: false), 'comment_count': commentCount};
+    });
+    apiClient.setHandler('GET', 'lost-pets/pet-1/comments',
+        (_) => {'items': <Object>[], 'next_cursor': null, 'limit': 20});
+    final container = _container(apiClient, userId: 'viewer-1');
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
+    ));
+    await tester.pumpAndSettle();
+    Finder countText(String value) => find.descendant(
+        of: find.byType(PublicationEngagementBar), matching: find.text(value));
+    expect(countText('1'), findsOneWidget);
+
+    // A comment was deleted (or its author blocked) somewhere: the revision bumps.
+    commentCount = 0;
+    reloadGate = Completer<void>();
+    container.read(postMutationRevisionProvider.notifier).state++;
+    await tester.pump();
+    // While reloading, the loaded page stays instead of a full-page spinner.
+    expect(countText('1'), findsOneWidget);
+    reloadGate.complete();
+    await tester.pumpAndSettle();
+    expect(countText('0'), findsOneWidget);
+  });
 }

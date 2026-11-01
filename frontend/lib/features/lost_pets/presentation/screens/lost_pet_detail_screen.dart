@@ -21,6 +21,9 @@ import '../../../profile/presentation/screens/profile_screen.dart';
 
 final lostPetDetailProvider = FutureProvider.autoDispose
     .family<LostPetData, String>((ref, lostPetId) async {
+  // Comment, block and edit changes bump the revision: reload so the comment
+  // count matches the comment list below (same as postDetailProvider).
+  ref.watch(postMutationRevisionProvider);
   // Contact details are only sent to signed-in viewers: reload when the session changes.
   ref.watch(authControllerProvider.select((state) => state.isAuthenticated));
   try {
@@ -336,6 +339,8 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
       ),
       body: lostPetAsync.when(
         skipError: true,
+        // Keep the page (and scroll position) while a mutation reloads it.
+        skipLoadingOnReload: true,
         data: (lostPet) {
           final info = lostPet.additionalInfo?.trim();
           final isOwner = viewerId != null && lostPet.author?.id == viewerId;
