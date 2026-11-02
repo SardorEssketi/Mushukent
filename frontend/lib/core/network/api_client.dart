@@ -302,6 +302,9 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       await session.credentials();
     }
 
+    if (previous?.completedTargetId case final String targetId) {
+      return _readCompletedPublication(path, targetId, session, decoder);
+    }
     if (previous != null) {
       await checkAccount();
       Map<String, Object?>? status;
@@ -332,10 +335,31 @@ class DioMushukistanApiClient implements MushukistanApiClient {
               code: 'MALFORMED_RESPONSE',
               message: 'Unexpected publication status.');
         }
-        final value = await _publicationGet<T>(
-            '$path/${status!['target_id']}', session,
-            decoder: decoder);
-        return value;
+        final targetId = status!['target_id'];
+        if (targetId is! String || targetId.isEmpty) {
+          throw const MushukistanApiException(
+              kind: ApiFailureKind.parse,
+              code: 'MALFORMED_RESPONSE',
+              message: 'Unexpected publication status.');
+        }
+        // Persist authoritative completion before attempting a fallible detail
+        // read. Recreated clients must not reinterpret a later absent ledger as
+        // permission to create again. Old journal records remain readable.
+        try {
+          await _publicationJournal.write(
+              key,
+              PublicationRecord(publicationOwner(scope), fingerprint,
+                  completedTargetId: targetId));
+        } catch (_) {
+          await checkAccount();
+          throw const MushukistanApiException(
+              kind: ApiFailureKind.unknown,
+              code: 'PUBLICATION_JOURNAL_UNAVAILABLE',
+              message:
+                  'Could not preserve the publication result. Check again.');
+        }
+        await checkAccount();
+        return _readCompletedPublication(path, targetId, session, decoder);
       }
       if (status?['state'] == 'pending' && status?['can_retry'] != true) {
         throw const MushukistanApiException(
@@ -365,6 +389,23 @@ class DioMushukistanApiClient implements MushukistanApiClient {
       return value;
     } catch (error) {
       logPublicationFailure('submit', error, key: key);
+      rethrow;
+    }
+  }
+
+  Future<T> _readCompletedPublication<T>(String path, String targetId,
+      PublicationSession session, T Function(Object?) decoder) async {
+    try {
+      return await _publicationGet<T>('$path/$targetId', session,
+          decoder: decoder);
+    } on MushukistanApiException catch (error) {
+      await session.credentials();
+      if (publicationAllowsReplacement(error)) {
+        // A definite detail rejection after known completion is never a
+        // creation rejection (including 401/422 after refresh/validation).
+        // Do not reveal whether content was removed, hidden, or restricted.
+        throw const PublicationCompletedUnavailable();
+      }
       rethrow;
     }
   }

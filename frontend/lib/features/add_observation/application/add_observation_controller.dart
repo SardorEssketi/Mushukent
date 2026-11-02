@@ -33,6 +33,7 @@ class AddObservationState {
     this.isPublic = true,
     this.submitting = false,
     this.outcomeUnknown = false,
+    this.completedUnavailable = false,
     this.errorMessage,
   }) : publicationId = publicationId ?? newPublicationKey();
 
@@ -46,6 +47,8 @@ class AddObservationState {
   final bool isPublic;
   final bool submitting;
   final bool outcomeUnknown;
+  final bool completedUnavailable;
+  bool get locked => submitting || outcomeUnknown || completedUnavailable;
   final String? errorMessage;
 
   bool get hasPhoto => photos.isNotEmpty;
@@ -69,6 +72,7 @@ class AddObservationState {
     bool? isPublic,
     bool? submitting,
     bool? outcomeUnknown,
+    bool? completedUnavailable,
     String? errorMessage,
   }) {
     return AddObservationState(
@@ -81,6 +85,7 @@ class AddObservationState {
       isPublic: isPublic ?? this.isPublic,
       submitting: submitting ?? this.submitting,
       outcomeUnknown: outcomeUnknown ?? this.outcomeUnknown,
+      completedUnavailable: completedUnavailable ?? this.completedUnavailable,
       errorMessage: errorMessage,
     );
   }
@@ -134,6 +139,9 @@ class AddObservationController extends StateNotifier<AddObservationState> {
   }
 
   Future<PostDetail> submit({required AppStrings strings}) async {
+    if (state.completedUnavailable) {
+      throw const PublicationCompletedUnavailable();
+    }
     final attemptId = state.publicationId;
     if (state.submitting) {
       throw StateError('Post submission is already in progress.');
@@ -168,9 +176,10 @@ class AddObservationController extends StateNotifier<AddObservationState> {
       if (state.publicationId != attemptId) rethrow;
       state = state.copyWith(
         submitting: false,
-        publicationId: publicationOutcomeUncertain(error)
-            ? state.publicationId
-            : newPublicationKey(),
+        publicationId: publicationAllowsReplacement(error)
+            ? newPublicationKey()
+            : state.publicationId,
+        completedUnavailable: publicationCompletedUnavailable(error),
         outcomeUnknown: publicationOutcomeUncertain(error),
         errorMessage: publicationErrorMessage(strings, error),
       );

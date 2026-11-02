@@ -32,6 +32,9 @@ class _AdoptionPostCreateScreenState
   final List<LostPetPhotoUpload> _photos = [];
   bool _isSubmitting = false;
   bool _outcomeUnknown = false;
+  bool _completedUnavailable = false;
+  bool get _draftLocked =>
+      _isSubmitting || _outcomeUnknown || _completedUnavailable;
   String _publicationId = newPublicationKey();
   bool _contactConsent = false;
   bool _isPickingPhotos = false;
@@ -56,6 +59,7 @@ class _AdoptionPostCreateScreenState
           _isSubmitting = false;
           _isPickingPhotos = false;
           _outcomeUnknown = false;
+          _completedUnavailable = false;
           _contactConsent = false;
           _error = null;
         });
@@ -73,7 +77,7 @@ class _AdoptionPostCreateScreenState
 
   Future<void> _pickPhotos() async {
     final generation = _draftGeneration;
-    if (_isPickingPhotos || _isSubmitting || _outcomeUnknown) {
+    if (_isPickingPhotos || _draftLocked) {
       return;
     }
     final strings = ref.read(appStringsProvider);
@@ -124,7 +128,7 @@ class _AdoptionPostCreateScreenState
   Future<void> _submit() async {
     final generation = _draftGeneration;
     final strings = ref.read(appStringsProvider);
-    if (_isSubmitting || _isPickingPhotos) {
+    if (_isSubmitting || _isPickingPhotos || _completedUnavailable) {
       return;
     }
     if (_photos.isEmpty) {
@@ -169,7 +173,10 @@ class _AdoptionPostCreateScreenState
       if (mounted) {
         setState(() {
           _outcomeUnknown = publicationOutcomeUncertain(error);
-          if (!_outcomeUnknown) _publicationId = newPublicationKey();
+          _completedUnavailable = publicationCompletedUnavailable(error);
+          if (publicationAllowsReplacement(error)) {
+            _publicationId = newPublicationKey();
+          }
           _error = publicationErrorMessage(strings, error);
         });
       }
@@ -242,7 +249,7 @@ class _AdoptionPostCreateScreenState
                           right: 0,
                           top: 0,
                           child: IconButton.filledTonal(
-                            onPressed: _isSubmitting || _outcomeUnknown
+                            onPressed: _draftLocked
                                 ? null
                                 : () {
                                     setState(() {
@@ -257,6 +264,7 @@ class _AdoptionPostCreateScreenState
                   OutlinedButton.icon(
                     onPressed: _isSubmitting ||
                             _outcomeUnknown ||
+                            _completedUnavailable ||
                             _isPickingPhotos ||
                             _photos.length >= 5
                         ? null
@@ -268,7 +276,7 @@ class _AdoptionPostCreateScreenState
               ),
               const SizedBox(height: 24),
               TextFormField(
-                enabled: !_isSubmitting && !_outcomeUnknown,
+                enabled: !_draftLocked,
                 controller: _petNameController,
                 maxLength: 100,
                 decoration: InputDecoration(
@@ -285,7 +293,7 @@ class _AdoptionPostCreateScreenState
               ),
               const SizedBox(height: 12),
               TextFormField(
-                enabled: !_isSubmitting && !_outcomeUnknown,
+                enabled: !_draftLocked,
                 controller: _infoController,
                 maxLines: 5,
                 maxLength: 2000,
@@ -298,7 +306,7 @@ class _AdoptionPostCreateScreenState
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
                 value: _contactConsent,
-                onChanged: _isSubmitting || _outcomeUnknown
+                onChanged: _draftLocked
                     ? null
                     : (value) {
                         setState(() {
@@ -319,9 +327,10 @@ class _AdoptionPostCreateScreenState
               ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed: _isSubmitting || _isPickingPhotos
-                    ? null
-                    : () => unawaited(_submit()),
+                onPressed:
+                    _isSubmitting || _isPickingPhotos || _completedUnavailable
+                        ? null
+                        : () => unawaited(_submit()),
                 icon: _isSubmitting
                     ? const SizedBox(
                         width: 18,
@@ -329,9 +338,11 @@ class _AdoptionPostCreateScreenState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.publish_outlined),
-                label: Text(_outcomeUnknown
-                    ? strings.checkPublicationStatus
-                    : strings.publishAdoptionPost),
+                label: Text(_completedUnavailable
+                    ? strings.publicationAlreadyPublished
+                    : _outcomeUnknown
+                        ? strings.checkPublicationStatus
+                        : strings.publishAdoptionPost),
               ),
             ],
           ),

@@ -33,7 +33,7 @@ class _AddObservationDetailsScreenState
 
   Future<void> _pick(ImageSource source) async {
     final attemptId = ref.read(addObservationControllerProvider).publicationId;
-    if (_picking || ref.read(addObservationControllerProvider).submitting) {
+    if (_picking || ref.read(addObservationControllerProvider).locked) {
       return;
     }
     final current = ref.read(addObservationControllerProvider).photos;
@@ -125,8 +125,7 @@ class _AddObservationDetailsScreenState
           attemptId) {
         return;
       }
-      if (ref.read(addObservationControllerProvider).submitting ||
-          ref.read(addObservationControllerProvider).outcomeUnknown) {
+      if (ref.read(addObservationControllerProvider).locked) {
         return;
       }
       if (location == null) {
@@ -198,9 +197,7 @@ class _AddObservationDetailsScreenState
                           top: 0,
                           child: IconButton.filledTonal(
                             tooltip: strings.removePhoto,
-                            onPressed: _picking ||
-                                    state.submitting ||
-                                    state.outcomeUnknown
+                            onPressed: _picking || state.locked
                                 ? null
                                 : () {
                                     final photos = [...state.photos]
@@ -216,22 +213,18 @@ class _AddObservationDetailsScreenState
                 ],
                 AppActionGroup(children: [
                   FilledButton.tonalIcon(
-                    onPressed: _picking ||
-                            state.submitting ||
-                            state.outcomeUnknown ||
-                            state.photos.length >= 5
-                        ? null
-                        : () => unawaited(_pick(ImageSource.gallery)),
+                    onPressed:
+                        _picking || state.locked || state.photos.length >= 5
+                            ? null
+                            : () => unawaited(_pick(ImageSource.gallery)),
                     icon: const Icon(Icons.photo_library_outlined),
                     label: Text(strings.chooseFromGallery),
                   ),
                   FilledButton.tonalIcon(
-                    onPressed: _picking ||
-                            state.submitting ||
-                            state.outcomeUnknown ||
-                            state.photos.length >= 5
-                        ? null
-                        : () => unawaited(_pick(ImageSource.camera)),
+                    onPressed:
+                        _picking || state.locked || state.photos.length >= 5
+                            ? null
+                            : () => unawaited(_pick(ImageSource.camera)),
                     icon: const Icon(Icons.photo_camera_outlined),
                     label: Text(strings.takeAPhoto),
                   ),
@@ -246,7 +239,7 @@ class _AddObservationDetailsScreenState
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
               key: ValueKey('${state.publicationId}:name'),
-              enabled: !state.submitting && !state.outcomeUnknown,
+              enabled: !state.locked,
               initialValue: state.catName,
               decoration: InputDecoration(
                 labelText: strings.catNameOptionalLabel,
@@ -276,18 +269,15 @@ class _AddObservationDetailsScreenState
                         ? null
                         : IconButton(
                             tooltip: strings.removeLocation,
-                            onPressed: state.submitting || state.outcomeUnknown
-                                ? null
-                                : controller.clearLocation,
+                            onPressed:
+                                state.locked ? null : controller.clearLocation,
                             icon: const Icon(Icons.close),
                           ),
                   ),
                 AppActionGroup(children: [
                   OutlinedButton.icon(
                     onPressed:
-                        _locating || state.submitting || state.outcomeUnknown
-                            ? null
-                            : _useCurrentLocation,
+                        _locating || state.locked ? null : _useCurrentLocation,
                     icon: _locating
                         ? const SizedBox(
                             width: 18,
@@ -297,7 +287,7 @@ class _AddObservationDetailsScreenState
                     label: Text(strings.updateLocationFromDevice),
                   ),
                   OutlinedButton.icon(
-                    onPressed: state.submitting || state.outcomeUnknown
+                    onPressed: state.locked
                         ? null
                         : () => context.push('/add/location'),
                     icon: const Icon(Icons.map_outlined),
@@ -309,7 +299,7 @@ class _AddObservationDetailsScreenState
             const SizedBox(height: AppSpacing.lg),
             TextFormField(
               key: ValueKey('${state.publicationId}:description'),
-              enabled: !state.submitting && !state.outcomeUnknown,
+              enabled: !state.locked,
               initialValue: state.description,
               decoration: InputDecoration(
                 labelText: needsHelp
@@ -329,7 +319,10 @@ class _AddObservationDetailsScreenState
             ],
             const SizedBox(height: AppSpacing.xl),
             FilledButton(
-              onPressed: state.submitting || _picking || _locating
+              onPressed: state.submitting ||
+                      state.completedUnavailable ||
+                      _picking ||
+                      _locating
                   ? null
                   : () async {
                       if (!state.hasPhoto) {
@@ -377,11 +370,13 @@ class _AddObservationDetailsScreenState
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Text(
-                      state.outcomeUnknown
-                          ? strings.checkPublicationStatus
-                          : needsHelp
-                              ? strings.publishNeedsHelp
-                              : strings.publishObservation,
+                      state.completedUnavailable
+                          ? strings.publicationAlreadyPublished
+                          : state.outcomeUnknown
+                              ? strings.checkPublicationStatus
+                              : needsHelp
+                                  ? strings.publishNeedsHelp
+                                  : strings.publishObservation,
                     ),
             ),
           ],

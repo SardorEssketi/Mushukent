@@ -1218,6 +1218,21 @@ class AppStrings {
           'Your post may already be saved. Check its status before resending. Your draft is kept on this screen.',
       };
 
+  String get publicationCompletedUnavailable => switch (this) {
+        _RussianStrings() =>
+          'Публикация уже создана, но открыть её здесь нельзя. Для новой публикации начните новый черновик.',
+        _UzbekStrings() =>
+          'Post allaqachon chop etilgan, lekin uni bu yerda ochib bo‘lmaydi. Boshqa post uchun yangi qoralama boshlang.',
+        _ =>
+          'This post was already published and cannot be opened here. To create another post, start a new draft.',
+      };
+
+  String get publicationAlreadyPublished => switch (this) {
+        _RussianStrings() => 'Уже опубликовано',
+        _UzbekStrings() => 'Allaqachon chop etilgan',
+        _ => 'Already published',
+      };
+
   String get checkPublicationStatus => switch (this) {
         _RussianStrings() => 'Проверить статус публикации',
         _UzbekStrings() => 'Post holatini tekshirish',

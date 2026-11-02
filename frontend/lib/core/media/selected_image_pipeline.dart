@@ -228,12 +228,14 @@ String selectedImageErrorMessage(AppStrings strings, Object error) {
 }
 
 String publicationErrorMessage(AppStrings strings, Object error) =>
-    error is MushukistanApiException &&
-            error.code == 'PUBLICATION_COORDINATION_UNAVAILABLE'
-        ? error.userMessage
-        : publicationOutcomeUncertain(error)
-            ? strings.publicationOutcomeUnknown
-            : photoUploadErrorMessage(strings, error);
+    publicationCompletedUnavailable(error)
+        ? strings.publicationCompletedUnavailable
+        : error is MushukistanApiException &&
+                error.code == 'PUBLICATION_COORDINATION_UNAVAILABLE'
+            ? error.userMessage
+            : publicationOutcomeUncertain(error)
+                ? strings.publicationOutcomeUnknown
+                : photoUploadErrorMessage(strings, error);
 
 String photoUploadErrorMessage(AppStrings strings, Object error) {
   if (error is! MushukistanApiException) {

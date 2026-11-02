@@ -27,14 +27,22 @@ abstract class PublicationJournal {
 }
 
 class PublicationRecord {
-  const PublicationRecord(this.owner, this.fingerprint);
+  const PublicationRecord(this.owner, this.fingerprint,
+      {this.completedTargetId});
   final String owner;
   final String fingerprint;
-  String encode() => jsonEncode({'owner': owner, 'fingerprint': fingerprint});
+  // Completion is monotonic evidence: never POST again if status later vanishes.
+  final String? completedTargetId;
+  String encode() => jsonEncode({
+        'owner': owner,
+        'fingerprint': fingerprint,
+        if (completedTargetId != null) 'completed_target_id': completedTargetId,
+      });
   factory PublicationRecord.decode(String value) {
     final data = jsonDecode(value) as Map;
     return PublicationRecord(
-        data['owner'] as String, data['fingerprint'] as String);
+        data['owner'] as String, data['fingerprint'] as String,
+        completedTargetId: data['completed_target_id'] as String?);
   }
 }
 
@@ -104,6 +112,23 @@ Future<String> publicationFingerprint(String path, FormData form) async {
       ])))
       .toString();
 }
+
+/// A completed creation whose detail cannot be opened. This is not rejection.
+class PublicationCompletedUnavailable extends MushukistanApiException {
+  const PublicationCompletedUnavailable()
+      : super(
+          kind: ApiFailureKind.conflict,
+          code: 'PUBLICATION_COMPLETED_UNAVAILABLE',
+          message: 'This post was already published and cannot be opened here.',
+        );
+}
+
+bool publicationCompletedUnavailable(Object error) =>
+    error is PublicationCompletedUnavailable;
+
+bool publicationAllowsReplacement(Object error) =>
+    !publicationCompletedUnavailable(error) &&
+    !publicationOutcomeUncertain(error);
 
 bool publicationOutcomeUncertain(Object error) =>
     error is! MushukistanApiException ||

@@ -62,6 +62,25 @@ Two unrelated drafts with identical content have different UUIDs. Missing IDs ar
 rejected before transport. The journal binds each ID to a hashed account owner and
 request fingerprint before sending; no tokens, text or images are persisted there.
 Completed bindings remain saved so a delayed caller cannot allocate a replacement.
+Completion observed during reconciliation is saved in the existing journal as an
+optional `completed_target_id`, bound to the same account hash and fingerprint.
+Old journal records without that field remain readable. Once saved, recovery can
+only read that target; even a later missing operation/status response cannot
+permit another creation POST. No draft text, photos, tokens or moderation details
+are added to storage.
+
+A completed operation whose detail is definitively rejected (including 403/404,
+or authentication/validation rejection after refresh) produces the distinct terminal
+`PublicationCompletedUnavailable` result (`PUBLICATION_COMPLETED_UNAVAILABLE`).
+It is authoritative evidence of an earlier creation, not validation rejection or
+an uncertain creation. The UI retains the operation ID, locks that draft, disables
+submission and displays neutral "already published, cannot be opened here" copy.
+Queued callbacks are guarded too. The message does not identify moderation actions.
+An explicit new draft through the Create flow is required for another publication;
+no terminal recovery action silently allocates a replacement ID. Account transitions
+clear prior-account terminal state. Temporary detail/storage failures retain the
+original identity and fail closed; unavailable status still never authorizes POST.
+
 A retry first checks
 status: completed operations load the existing publication, active ones wait, and
 only absent, failed or expired operations may resend with the original key. A failed
@@ -95,8 +114,10 @@ Cancellation cannot undo a request already received or committed by the server;
 retain its ID for recovery under its original account.
 
 Local credential/journal failures and unexpected client exceptions remain uncertain;
-they must not cause a new operation key to be generated. Only a definite rejection
-allows the UI to start a replacement attempt when the user corrects its content.
+they must not cause a new operation key to be generated. Only a definite creation
+rejection allows the UI to start a replacement attempt when the user corrects its
+content.
+Completed-but-unavailable recovery explicitly forbids replacement.
 
 Creation screens distinguish uncertain outcomes and offer **Check publication
 status**, retaining form contents and locking edits while uncertain. Draft text and
@@ -204,3 +225,45 @@ timings, FastAPI stages, host load, DB pool waits and provider diagnostics at th
 same timestamps. A browser GET or ICMP loss measurement is insufficient to
 attribute multipart upload failures to SGP1. No DNS, proxy or server changes are
 part of this branch.
+
+## Completed-but-unavailable correction validation (2026-11-02)
+
+Starting publication commit: `c111c92a7f592c8abf0b88256920ef6db926f46a`.
+The integration candidate and shared main were not modified. No server runtime,
+migration, deployment script or shared configuration changed for this correction.
+
+The original eight four-type 403/404 cases failed before the correction and passed
+after it. Permanent coverage now includes 26 network recovery cases, eight screen
+cases and four additional real-socket/backend moderator-removal cases. Tests cover
+lost responses, authoritative completion, inaccessible detail, 401/422 after
+completion, client/journal recreation, repeated and queued interactions, retained
+identity, no second POST, status/detail/storage outages, neutral messages, account
+isolation, session transitions, and genuine validation correction. Backend socket
+cases also assert one publication, retained media and one removal notification.
+
+Executed validation for this correction:
+
+- Focused Flutter recovery/retry/session/screen regressions: **61 passed**.
+- Full Flutter VM suite after the final recovery guard: **635 passed, 4 skipped**.
+- Chrome coordination/session checks: **3 passed** using the previously documented
+  Windows runner workaround with read-only cached SDK assets. This was an owned
+  browser against this publication worktree, not the integration candidate.
+- Isolated backend publication, commit-outcome, pool, diagnostics/privacy,
+  authentication and moderator-deletion regressions: **147 passed**.
+- Flutter analysis: no issues. Ruff on the changed backend test and whitespace
+  checks passed. A test-fixture brace lint and Windows encoding of the new
+  localized copy were corrected; original localization content was verified
+  unchanged, and screen regressions were checked again.
+
+Backend tests used uniquely owned, CPU/memory-limited containers, an internal
+network, no published ports or persistent volumes, tmpfs PostgreSQL/PostGIS,
+read-only sources and mock media. The backend image's automatic migration/startup
+command was overridden. Ownership was verified before removing these resources.
+The full backend suite was not rerun: backend runtime and migration files are
+unchanged; the targeted run includes previous publication/privacy guarantees.
+
+No physical-device, live-R2 or two-full-app-tab end-to-end tests were performed.
+Existing rollout gates, retention/orphan limitations, incomplete draft restoration
+and unproven network causes remain as documented above. This correction closes the
+completed-but-unavailable blocker; integration still requires a fresh separately
+authorized preflight. No production or integration action is authorized here.

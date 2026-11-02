@@ -222,8 +222,9 @@ def test_lost_update_commit_ack_preserves_replacement_media(client, posts_runtim
 
 
 @pytest.mark.parametrize("kind", ["observation", "needs_help", "lost_pet", "adoption"])
+@pytest.mark.parametrize("removed", [False, True])
 def test_socket_timeout_then_replay_creates_one_publication(
-    client, posts_runtime, monkeypatch, kind
+    client, posts_runtime, monkeypatch, kind, removed
 ):
     import socket
     from threading import Thread
@@ -274,14 +275,47 @@ def test_socket_timeout_then_replay_creates_one_publication(
                 if status.status_code == 200 and status.json()["data"]["state"] == "completed":
                     break
                 sleep(0.03)
+            assert status.status_code == 200
+            assert status.json()["data"]["state"] == "completed"
+            target_id = status.json()["data"]["target_id"]
+            if removed:
+                _, moderator_token = _create_user_with_token(
+                    posts_runtime.db_session_manager,
+                    posts_runtime.token_service,
+                    email="recovery-moderator@example.test",
+                    is_moderator=True,
+                )
+                assert network.delete(
+                    f"{url}/{target_id}",
+                    headers={"Authorization": f"Bearer {moderator_token}"},
+                ).status_code == 204
+                assert network.get(f"{url}/{target_id}", headers=case[4]).status_code == 404
             replay = network.post(
                 url,
                 headers=case[4],
                 data=case[3],
                 files={"photos": ("test.jpg", _jpeg_bytes(), "image/jpeg")},
             )
-            assert replay.status_code == 201
-            assert replay.json()["data"]["id"] == status.json()["data"]["target_id"]
+            if removed:
+                assert replay.status_code == 404
+                reconciled = network.get(
+                    f"/api/v1/publication-operations/{case[4]['Idempotency-Key']}", headers=case[4]
+                )
+                assert reconciled.json()["data"]["state"] == "completed"
+                assert reconciled.json()["data"]["target_id"] == target_id
+                with posts_runtime.db_session_manager.session_scope() as session:
+                    notices = session.scalar(
+                        select(func.count()).select_from(schema.Notification).where(
+                            schema.Notification.kind == "publication_removed",
+                            schema.Notification.target_id == target_id,
+                        )
+                    )
+                    assert notices == 1
+            else:
+                assert replay.status_code == 201
+                assert replay.json()["data"]["id"] == target_id
+            with posts_runtime.db_session_manager.engine.connect() as connection:
+                assert connection.scalar(select(func.count()).select_from(case[2])) == 1
             assert len(posts_runtime.fake_storage.objects) == 2
     finally:
         server.should_exit = True
