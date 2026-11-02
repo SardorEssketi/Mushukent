@@ -66,9 +66,7 @@ class MediaStorageService:
                 canonical_kind = (
                     MediaKind.LOST_PET
                     if purpose == UploadPurpose.LOST_PET
-                    else MediaKind.ADOPTION
-                    if purpose == UploadPurpose.ADOPTION
-                    else MediaKind.POST
+                    else MediaKind.ADOPTION if purpose == UploadPurpose.ADOPTION else MediaKind.POST
                 )
                 canonical_variant = MediaVariant.ORIGINAL
                 thumbnail_variant = MediaVariant.THUMBNAIL
@@ -127,9 +125,9 @@ class MediaStorageService:
                 "media_upload_rejected",
                 purpose=purpose.value,
                 input_size=len(content),
-                content_type=content_type
-                if content_type in {"image/jpeg", "image/png"}
-                else "other",
+                content_type=(
+                    content_type if content_type in {"image/jpeg", "image/png"} else "other"
+                ),
                 reason="invalid_image",
             )
             raise

@@ -83,11 +83,9 @@ class PublicationDiagnosticsMiddleware:
                 "publication_request_finished",
                 request_id=request_id,
                 method=scope["method"],
-                route="status"
-                if "publication-operations" in path
-                else "update"
-                if update
-                else path,
+                route=(
+                    "status" if "publication-operations" in path else "update" if update else path
+                ),
                 status=status,
                 duration_ms=round((perf_counter() - started) * 1000),
             )

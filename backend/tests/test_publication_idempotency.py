@@ -285,10 +285,13 @@ def test_socket_timeout_then_replay_creates_one_publication(
                     email="recovery-moderator@example.test",
                     is_moderator=True,
                 )
-                assert network.delete(
-                    f"{url}/{target_id}",
-                    headers={"Authorization": f"Bearer {moderator_token}"},
-                ).status_code == 204
+                assert (
+                    network.delete(
+                        f"{url}/{target_id}",
+                        headers={"Authorization": f"Bearer {moderator_token}"},
+                    ).status_code
+                    == 204
+                )
                 assert network.get(f"{url}/{target_id}", headers=case[4]).status_code == 404
             replay = network.post(
                 url,
@@ -305,7 +308,9 @@ def test_socket_timeout_then_replay_creates_one_publication(
                 assert reconciled.json()["data"]["target_id"] == target_id
                 with posts_runtime.db_session_manager.session_scope() as session:
                     notices = session.scalar(
-                        select(func.count()).select_from(schema.Notification).where(
+                        select(func.count())
+                        .select_from(schema.Notification)
+                        .where(
                             schema.Notification.kind == "publication_removed",
                             schema.Notification.target_id == target_id,
                         )

@@ -15,11 +15,9 @@ logger = get_logger(__name__)
 _upload_processing_limiter = CapacityLimiter(2)
 
 
-async def run_upload_processing[ResultT](
-    function: Callable[..., ResultT],
-    *args: object,
-    **kwargs: object,
-) -> ResultT:
+async def run_upload_processing[
+    ResultT
+](function: Callable[..., ResultT], *args: object, **kwargs: object,) -> ResultT:
     call = partial(function, *args, **kwargs)
     queued_at = perf_counter()
 
