@@ -891,7 +891,16 @@ class _FeedLoading extends StatelessWidget {
   }
 }
 
-class _FeedFilterBar extends StatelessWidget {
+/// Feed category order of the filter strip.
+const feedFilterModes = <String>[
+  'recent',
+  'popular',
+  'needs_help',
+  'lost_pets',
+  'adoption',
+];
+
+class _FeedFilterBar extends StatefulWidget {
   const _FeedFilterBar({
     required this.selectedMode,
     required this.strings,
@@ -905,51 +914,84 @@ class _FeedFilterBar extends StatelessWidget {
   final ValueChanged<String> onSelected;
 
   @override
+  State<_FeedFilterBar> createState() => _FeedFilterBarState();
+}
+
+class _FeedFilterBarState extends State<_FeedFilterBar> {
+  final Map<String, GlobalKey> _tabKeys = {
+    for (final mode in feedFilterModes) mode: GlobalKey(debugLabel: mode),
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    // The strip is rebuilt at its start when the Feed comes back (for example
+    // from the sign-in gate): bring the selected filter into view at once.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealSelected(false));
+  }
+
+  @override
+  void didUpdateWidget(_FeedFilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedMode != widget.selectedMode) {
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _revealSelected(true));
+    }
+  }
+
+  /// Scrolls only as far as needed for the selected chip to be fully visible;
+  /// a chip already in view does not move the strip.
+  void _revealSelected(bool animate) {
+    if (!mounted) return;
+    final target = _tabKeys[widget.selectedMode]?.currentContext;
+    final box = target?.findRenderObject();
+    if (target == null || box == null) return;
+    // Only the strip's own (horizontal) position: the Feed list around it must
+    // not move.
+    final strip = Scrollable.maybeOf(target)?.position;
+    if (strip == null || !strip.hasContentDimensions) return;
+    final duration =
+        animate ? AppMotion.of(context, AppMotion.fast) : Duration.zero;
+    for (final policy in [
+      ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    ]) {
+      strip.ensureVisible(
+        box,
+        duration: duration,
+        curve: AppMotion.curve,
+        alignmentPolicy: policy,
+      );
+    }
+  }
+
+  String _label(String mode) => switch (mode) {
+        'popular' => widget.strings.popular,
+        'needs_help' => widget.strings.needsHelp,
+        'lost_pets' => widget.strings.lostPets,
+        'adoption' => widget.strings.adoption,
+        _ => widget.strings.recent,
+      };
+
+  @override
   Widget build(BuildContext context) {
     // The strip scrolls to the column edges while the first pill rests on
     // the shared gutter, so long translations scroll without a hard clip.
-    return SizedBox(
-      height: 48,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(
-          horizontal: gutter,
-          vertical: AppSpacing.xs + AppSpacing.xxs,
-        ),
-        child: Row(
-          children: [
+    // Each tab is a full-height (>= 48 dp) touch target around its pill.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.symmetric(horizontal: widget.gutter),
+      child: Row(
+        children: [
+          for (final mode in feedFilterModes)
             _FilterTab(
-              value: 'recent',
-              selectedValue: selectedMode,
-              label: strings.recent,
-              onSelected: onSelected,
+              key: _tabKeys[mode],
+              value: mode,
+              selectedValue: widget.selectedMode,
+              label: _label(mode),
+              onSelected: widget.onSelected,
             ),
-            _FilterTab(
-              value: 'popular',
-              selectedValue: selectedMode,
-              label: strings.popular,
-              onSelected: onSelected,
-            ),
-            _FilterTab(
-              value: 'needs_help',
-              selectedValue: selectedMode,
-              label: strings.needsHelp,
-              onSelected: onSelected,
-            ),
-            _FilterTab(
-              value: 'lost_pets',
-              selectedValue: selectedMode,
-              label: strings.lostPets,
-              onSelected: onSelected,
-            ),
-            _FilterTab(
-              value: 'adoption',
-              selectedValue: selectedMode,
-              label: strings.adoption,
-              onSelected: onSelected,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -957,6 +999,7 @@ class _FeedFilterBar extends StatelessWidget {
 
 class _FilterTab extends StatelessWidget {
   const _FilterTab({
+    super.key,
     required this.value,
     required this.selectedValue,
     required this.label,
@@ -978,32 +1021,53 @@ class _FilterTab extends StatelessWidget {
         button: true,
         selected: selected,
         label: label,
+        onTap: () => onSelected(value),
         child: ExcludeSemantics(
-          child: AnimatedContainer(
-            duration: AppMotion.of(context, AppMotion.fast),
-            curve: AppMotion.curve,
-            decoration: BoxDecoration(
-              color: selected ? colors.primary : colors.surface,
-              borderRadius: BorderRadius.circular(AppRadii.pill),
-              border: Border.all(
-                color: selected ? colors.primary : colors.outlineVariant,
+          // The pill stays compact (36 dp); the transparent area above and
+          // below it is part of the same target, so the hit region is at least
+          // 48 dp tall without overlapping the neighboring tabs.
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onSelected(value),
+            child: ConstrainedBox(
+              key: ValueKey('feed-filter-target-$value'),
+              constraints: const BoxConstraints(
+                minWidth: kMinInteractiveDimension,
+                minHeight: kMinInteractiveDimension,
               ),
-            ),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppRadii.pill),
-              onTap: () => onSelected(value),
-              child: Container(
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                alignment: Alignment.center,
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: selected ? colors.onPrimary : colors.onSurface,
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w600,
+              child: Center(
+                widthFactor: 1,
+                child: AnimatedContainer(
+                  duration: AppMotion.of(context, AppMotion.fast),
+                  curve: AppMotion.curve,
+                  decoration: BoxDecoration(
+                    color: selected ? colors.primary : colors.surface,
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                    border: Border.all(
+                      color: selected ? colors.primary : colors.outlineVariant,
+                    ),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                    onTap: () => onSelected(value),
+                    child: Container(
+                      constraints:
+                          const BoxConstraints(minWidth: 48, minHeight: 36),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      alignment: Alignment.center,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              color: selected
+                                  ? colors.onPrimary
+                                  : colors.onSurface,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w600,
+                            ),
                       ),
+                    ),
+                  ),
                 ),
               ),
             ),
