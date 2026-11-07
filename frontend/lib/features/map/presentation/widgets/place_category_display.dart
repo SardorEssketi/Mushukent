@@ -33,3 +33,25 @@ String mapPlaceCategoryLabel(String category, AppStrings strings) =>
       'shelter' => strings.shelters,
       _ => strings.shops,
     };
+
+/// Singular type of one place ("veterinary clinic").
+String mapPlaceTypeLabel(String category, AppStrings strings) =>
+    switch (category) {
+      'veterinary' => strings.placeTypeVeterinary,
+      'veterinary_pharmacy' => strings.placeTypeVetPharmacy,
+      'shelter' => strings.placeTypeShelter,
+      _ => strings.placeTypePetShop,
+    };
+
+/// Accessible name of one place marker: the place's own name (unchanged,
+/// never translated) and its type, so markers of one category stay distinct.
+/// Clusters keep the category name with a count instead.
+String mapPlaceMarkerLabel(
+  String name,
+  String category,
+  AppStrings strings,
+) {
+  final type = mapPlaceTypeLabel(category, strings);
+  final trimmed = name.trim();
+  return trimmed.isEmpty ? type : '$trimmed, $type';
+}

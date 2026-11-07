@@ -1310,6 +1310,32 @@ class AppStrings {
     };
   }
 
+  /// Singular place types, used after a place's own name on Map markers
+  /// ("Elvet, veterinary clinic").
+  String get placeTypeVeterinary => switch (this) {
+        _UzbekStrings() => 'veterinariya klinikasi',
+        _RussianStrings() => 'ветклиника',
+        _ => 'veterinary clinic',
+      };
+
+  String get placeTypeVetPharmacy => switch (this) {
+        _UzbekStrings() => 'veterinariya dorixonasi',
+        _RussianStrings() => 'ветаптека',
+        _ => 'vet pharmacy',
+      };
+
+  String get placeTypePetShop => switch (this) {
+        _UzbekStrings() => 'zoodo‘kon',
+        _RussianStrings() => 'зоомагазин',
+        _ => 'pet shop',
+      };
+
+  String get placeTypeShelter => switch (this) {
+        _UzbekStrings() => 'boshpana',
+        _RussianStrings() => 'приют',
+        _ => 'shelter',
+      };
+
   String get addCatPhotos {
     return switch (this) {
       _UzbekStrings() => 'Mushuk rasmlarini qoʻshish',

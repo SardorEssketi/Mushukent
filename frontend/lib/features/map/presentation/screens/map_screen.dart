@@ -576,7 +576,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
               valueListenable: _markerSelection.listenableFor(key),
               builder: (context, selected, _) => MapMarkerVisual(
                 kind: _placeClusterKind(place.category),
-                label: _placeCategoryLabel(place.category, strings),
+                label: mapPlaceMarkerLabel(place.name, place.category, strings),
                 selected: selected,
                 onTap: () => _selectMarker(
                     key,
