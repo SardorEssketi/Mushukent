@@ -16,6 +16,8 @@ void main() {
   group('comment mutation feedback', () {
     testWidgets('guest comment action requests authentication', (tester) async {
       final client = _client();
+      client.setHandler('GET', 'posts/post-1/comments',
+          (_) => {'items': <Object>[], 'limit': 20});
       final router = GoRouter(
         routes: [
           GoRoute(
@@ -40,9 +42,6 @@ void main() {
             mushukistanApiProvider.overrideWithValue(
               MushukistanApi(client: client),
             ),
-            commentsProvider('post-1').overrideWith(
-              (ref) async => const ApiPage<CommentData>(items: [], limit: 20),
-            ),
             authRepositoryProvider.overrideWithValue(
               FakeAuthRepository(
                 restoreResult: const SessionRestoreMissing(),
@@ -61,7 +60,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Account required'), findsOneWidget);
-      expect(client.calls, isEmpty);
+      expect(client.calls.where((call) => call.method != 'GET'), isEmpty);
     });
 
     testWidgets('successful create shows one posted message', (tester) async {
@@ -163,18 +162,20 @@ void main() {
 Future<void> _pumpComments(
   WidgetTester tester, {
   required FakeApiClient client,
-  CommentData? comment,
+  Map<String, Object?>? comment,
 }) async {
-  final items =
-      comment == null ? const <CommentData>[] : <CommentData>[comment];
+  client.setHandler(
+      'GET',
+      'posts/post-1/comments',
+      (_) => {
+            'items': [if (comment != null) comment],
+            'limit': 20,
+          });
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         mushukistanApiProvider.overrideWithValue(
           MushukistanApi(client: client),
-        ),
-        commentsProvider('post-1').overrideWith(
-          (ref) async => ApiPage<CommentData>(items: items, limit: 20),
         ),
         currentUserProvider.overrideWithValue(_user()),
         authControllerProvider.overrideWith(
@@ -217,16 +218,7 @@ MushukistanUser _user() {
   );
 }
 
-CommentData _comment() {
-  return CommentData(
-    id: 'comment-1',
-    postId: 'post-1',
-    user: const CommentUserData(id: 'user-1', name: 'Author'),
-    content: 'Original comment',
-    createdAt: DateTime.utc(2026, 9, 20, 10),
-    editUntil: DateTime.utc(2026, 9, 20, 10, 30),
-  );
-}
+Map<String, Object?> _comment() => _commentPayload(content: 'Original comment');
 
 Future<void> _openEdit(WidgetTester tester, String replacement) async {
   await tester.tap(find.byIcon(Icons.more_vert));
