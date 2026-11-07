@@ -1332,3 +1332,253 @@ def test_post_delete_authorization_and_moderator_audit(
     with posts_runtime.db_session_manager.session_scope() as session:
         post = session.get(schema.Post, other_post_id)
         assert post is not None and post.deleted_at is not None
+
+
+# --- DEV-GAP-01: a location added while editing locates the cat ----------------
+
+_HELP_BBOX = "69.26,41.30,69.30,41.33"
+_A = (41.311, 69.2797)
+_B = (41.321, 69.2897)
+
+
+def _create_post_api(
+    client: TestClient,
+    token: str,
+    *,
+    kind: str = "observation",
+    location: tuple[float, float] | None = None,
+    cat_name: str | None = None,
+    cat_id: UUID | None = None,
+) -> dict:
+    data: dict[str, str] = {"kind": kind, "is_public": "true"}
+    if kind == "needs_help":
+        data["description"] = "Needs a vet"
+    if location is not None:
+        data["location"] = json.dumps({"latitude": location[0], "longitude": location[1]})
+    if cat_name is not None:
+        data["new_cat"] = json.dumps({"name": cat_name})
+    if cat_id is not None:
+        data["cat_id"] = str(cat_id)
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        data=data,
+        files=[("photos", ("edit.jpg", _jpeg_bytes(), "image/jpeg"))],
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["data"]
+
+
+def _edit_post_api(client: TestClient, token: str, post_id: str, body: dict):
+    return client.patch(
+        f"/api/v1/posts/{post_id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json=body,
+    )
+
+
+def _to_help(location: tuple[float, float] | None) -> dict:
+    return {
+        "kind": "needs_help",
+        "description": "Needs a vet",
+        "location": (
+            None if location is None else {"latitude": location[0], "longitude": location[1]}
+        ),
+    }
+
+
+def _counts(posts_runtime, cat_id: UUID) -> tuple[int, int]:
+    with posts_runtime.db_session_manager.session_scope() as session:
+        posts = session.scalar(
+            select(func.count()).select_from(schema.Post).where(schema.Post.cat_id == cat_id)
+        )
+        history = session.scalar(
+            select(func.count())
+            .select_from(schema.PostHistory)
+            .join(schema.Post, schema.Post.id == schema.PostHistory.post_id)
+            .where(schema.Post.cat_id == cat_id)
+        )
+    return int(posts), int(history)
+
+
+@pytest.mark.parametrize("cat_name", ["Edited Named", None])
+def test_edit_into_needs_help_with_new_location_reaches_map(
+    client: TestClient, posts_runtime, cat_name: str | None
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email=f"edit-help-{'named' if cat_name else 'unnamed'}@example.com",
+    )
+    created = _create_post_api(client, token, cat_name=cat_name)
+    cat_id = UUID(created["cat"]["id"])
+    assert _stored_cat_point(posts_runtime, cat_id) is None
+    assert str(cat_id) not in _map_cat_ids(client, kind=None, bbox=_HELP_BBOX)
+
+    edited = _edit_post_api(client, token, created["id"], _to_help(_A))
+
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["data"]["kind"] == "needs_help"
+    assert _stored_cat_point(posts_runtime, cat_id) == (pytest.approx(_A[0]), pytest.approx(_A[1]))
+    assert str(cat_id) in _map_cat_ids(client, kind="needs_help", bbox=_HELP_BBOX)
+    assert str(cat_id) not in _map_cat_ids(client, kind="observation", bbox=_HELP_BBOX)
+    # One post, exactly one audited edit, no extra observation.
+    assert _counts(posts_runtime, cat_id) == (1, 1)
+
+
+def test_edit_adding_location_to_ordinary_post_locates_cat(
+    client: TestClient, posts_runtime
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager, posts_runtime.token_service, email="edit-obs@example.com"
+    )
+    created = _create_post_api(client, token)
+    cat_id = UUID(created["cat"]["id"])
+
+    edited = _edit_post_api(
+        client, token, created["id"], {"location": {"latitude": _A[0], "longitude": _A[1]}}
+    )
+
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["data"]["kind"] == "observation"
+    assert str(cat_id) in _map_cat_ids(client, kind="observation", bbox=_HELP_BBOX)
+
+
+def test_edit_never_moves_a_located_cat(client: TestClient, posts_runtime) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager, posts_runtime.token_service, email="edit-move@example.com"
+    )
+    created = _create_post_api(client, token, location=_A, cat_name="Located")
+    cat_id = UUID(created["cat"]["id"])
+
+    edited = _edit_post_api(client, token, created["id"], _to_help(_B))
+
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["data"]["location"]["latitude"] == pytest.approx(_B[0])
+    assert _stored_cat_point(posts_runtime, cat_id) == (pytest.approx(_A[0]), pytest.approx(_A[1]))
+
+
+def test_edit_does_not_locate_an_existing_cat_it_did_not_create(
+    client: TestClient, posts_runtime
+) -> None:
+    owner, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager, posts_runtime.token_service, email="cat-owner@example.com"
+    )
+    _, other_token = _create_user_with_token(
+        posts_runtime.db_session_manager, posts_runtime.token_service, email="cat-guest@example.com"
+    )
+    own_cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id)
+    others_cat = _create_cat(posts_runtime.db_session_manager, creator_id=owner.id, name="Shared")
+
+    # The owner's own later post on a cat created separately (POST /cats).
+    own_post = _create_post_api(client, owner_token, cat_id=own_cat.id)
+    # Another user's post referencing the owner's cat.
+    other_post = _create_post_api(client, other_token, cat_id=others_cat.id)
+
+    for token, post in ((owner_token, own_post), (other_token, other_post)):
+        edited = _edit_post_api(client, token, post["id"], _to_help(_A))
+        assert edited.status_code == 200, edited.text
+
+    assert _stored_cat_point(posts_runtime, own_cat.id) is None
+    assert _stored_cat_point(posts_runtime, others_cat.id) is None
+
+
+def test_location_removed_then_added_keeps_first_cat_location(
+    client: TestClient, posts_runtime
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="edit-remove-add@example.com",
+    )
+    created = _create_post_api(client, token)
+    cat_id = UUID(created["cat"]["id"])
+    post_id = created["id"]
+
+    assert _edit_post_api(client, token, post_id, _to_help(_A)).status_code == 200
+    removed = _edit_post_api(client, token, post_id, {"kind": "observation", "location": None})
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["data"].get("location") is None
+    assert _stored_cat_point(posts_runtime, cat_id) == (pytest.approx(_A[0]), pytest.approx(_A[1]))
+
+    assert _edit_post_api(client, token, post_id, _to_help(_B)).status_code == 200
+    assert _stored_cat_point(posts_runtime, cat_id) == (pytest.approx(_A[0]), pytest.approx(_A[1]))
+    assert _counts(posts_runtime, cat_id) == (1, 3)
+
+    # Created with a point, removed, then a different point: cat never moves.
+    located = _create_post_api(client, token, location=_A)
+    located_cat = UUID(located["cat"]["id"])
+    assert _edit_post_api(client, token, located["id"], {"location": None}).status_code == 200
+    assert _edit_post_api(client, token, located["id"], _to_help(_B)).status_code == 200
+    assert _stored_cat_point(posts_runtime, located_cat) == (
+        pytest.approx(_A[0]),
+        pytest.approx(_A[1]),
+    )
+
+
+def test_unrelated_field_edit_does_not_locate_cat(client: TestClient, posts_runtime) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="edit-unrelated@example.com",
+    )
+    created = _create_post_api(client, token, location=_A, cat_name="Legacy")
+    cat_id = UUID(created["cat"]["id"])
+    # A record left unlocated by the pre-AUTH-205 creation bug.
+    with posts_runtime.db_session_manager.session_scope() as session:
+        session.get(schema.Cat, cat_id).canonical_location = None
+
+    edited = _edit_post_api(client, token, created["id"], {"description": "Better details"})
+
+    assert edited.status_code == 200, edited.text
+    assert _stored_cat_point(posts_runtime, cat_id) is None
+
+
+def test_unauthorized_edit_changes_nothing(client: TestClient, posts_runtime) -> None:
+    _, owner_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="edit-owner@example.com",
+    )
+    _, other_token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="edit-intruder@example.com",
+    )
+    created = _create_post_api(client, owner_token)
+    cat_id = UUID(created["cat"]["id"])
+
+    forbidden = _edit_post_api(client, other_token, created["id"], _to_help(_A))
+    anonymous = client.patch(f"/api/v1/posts/{created['id']}", json=_to_help(_A))
+
+    assert forbidden.status_code == 403
+    assert anonymous.status_code == 401
+    assert _stored_cat_point(posts_runtime, cat_id) is None
+    assert _counts(posts_runtime, cat_id) == (1, 0)
+
+
+def test_edit_failure_rolls_back_post_and_cat_location(
+    client: TestClient, posts_runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="edit-rollback@example.com",
+    )
+    created = _create_post_api(client, token, cat_name="Rollback")
+    cat_id = UUID(created["cat"]["id"])
+
+    def failing_history(self, **kwargs):
+        raise RuntimeError("history write failed")
+
+    monkeypatch.setattr(SqlAlchemyPostRepository, "add_history", failing_history)
+    failed = _edit_post_api(client, token, created["id"], _to_help(_A))
+    monkeypatch.undo()
+
+    assert failed.status_code == 500
+    assert _stored_cat_point(posts_runtime, cat_id) is None
+    with posts_runtime.db_session_manager.session_scope() as session:
+        post = session.get(schema.Post, UUID(created["id"]))
+        assert post.location is None
+        assert post.kind == schema.PostKind.OBSERVATION
+    assert _counts(posts_runtime, cat_id) == (1, 0)

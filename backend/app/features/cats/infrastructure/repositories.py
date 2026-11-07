@@ -8,7 +8,7 @@ from uuid import UUID
 
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import and_, cast, func, or_, select, true
+from sqlalchemy import and_, cast, exists, func, or_, select, true, update
 from sqlalchemy.orm import Session
 
 from app.features.cats.domain.models import (
@@ -126,6 +126,41 @@ class SqlAlchemyCatRepository(CatRepository):
         model.deleted_at = cat.deleted_at
         self.session.flush()
         return self.get_by_id(model.id) or cat
+
+    def set_canonical_location_if_missing(
+        self,
+        cat_id: UUID,
+        location: GeoPoint,
+        *,
+        originating_post_id: UUID,
+    ) -> bool:
+        """Give an unlocated cat the location of the post that created it.
+
+        One conditional UPDATE: only a live, unmerged cat whose canonical
+        location is still NULL, and only when ``originating_post_id`` is the
+        post created in the same transaction as the cat (same ``created_at``)
+        by the cat's creator. An existing location is never changed.
+        """
+        originating_post = exists().where(
+            schema.Post.id == originating_post_id,
+            schema.Post.cat_id == schema.Cat.id,
+            schema.Post.created_at == schema.Cat.created_at,
+            schema.Post.user_id == schema.Cat.created_by,
+            schema.Post.deleted_at.is_(None),
+        )
+        result = self.session.execute(
+            update(schema.Cat)
+            .where(
+                schema.Cat.id == cat_id,
+                schema.Cat.canonical_location.is_(None),
+                schema.Cat.deleted_at.is_(None),
+                schema.Cat.merged_into.is_(None),
+                originating_post,
+            )
+            .values(canonical_location=_point_to_wkt(location))
+            .execution_options(synchronize_session=False)
+        )
+        return bool(getattr(result, "rowcount", 0))
 
     def get_by_id(self, cat_id: UUID) -> CatRecord | None:
         statement = self._record_select_statement().where(schema.Cat.id == cat_id)

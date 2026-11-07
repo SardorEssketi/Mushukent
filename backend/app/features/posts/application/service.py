@@ -419,6 +419,15 @@ class PostsService:
                     return to_post_response(current)
 
                 updated = post_repository.update(post_id, draft)
+                if location is not None and location != current.location:
+                    # DEV-GAP-01: a location added (or set) by an edit locates a
+                    # cat that this post created and that still has no location,
+                    # in the same transaction. Never moves a located cat.
+                    self.cat_repository_factory(session).set_canonical_location_if_missing(
+                        current.cat_id,
+                        location,
+                        originating_post_id=post_id,
+                    )
                 after = post_history_snapshot(updated)
                 post_repository.add_history(
                     post_id=post_id,
