@@ -2,6 +2,7 @@
 // EMU-102 (selected filter visible after returning), EMU-104 (action names),
 // EMU-106 (filter touch targets) and AUTH-207 (end of list).
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -457,11 +458,11 @@ void main() {
       ]) {
         final data = action(tester, label);
         expect(data.hasAction(SemanticsAction.tap), isTrue, reason: label);
-        expect(data.hasFlag(SemanticsFlag.isButton), isTrue, reason: label);
+        expect(data.flagsCollection.isButton, isTrue, reason: label);
       }
       final like = action(tester, 'Like, 4');
-      expect(like.hasFlag(SemanticsFlag.hasToggledState), isTrue);
-      expect(like.hasFlag(SemanticsFlag.isToggled), isFalse);
+      expect(like.flagsCollection.isToggled, isNot(Tristate.none));
+      expect(like.flagsCollection.isToggled, Tristate.isFalse);
       // No bare-number nodes left.
       expect(find.bySemanticsLabel(RegExp(r'^\d+$')), findsNothing);
       handle.dispose();
@@ -485,7 +486,7 @@ void main() {
       await tester.tap(find.bySemanticsLabel('Like, 4'));
       await tester.pumpAndSettle();
       final unlike = action(tester, 'Unlike, 5');
-      expect(unlike.hasFlag(SemanticsFlag.isToggled), isTrue);
+      expect(unlike.flagsCollection.isToggled, Tristate.isTrue);
 
       fail = true;
       await tester.tap(find.bySemanticsLabel('Unlike, 5'));
@@ -500,7 +501,7 @@ void main() {
       final handle = tester.ensureSemantics();
       final backend = _Backend()
         ..feed['recent'] = _page([_post('one', likes: 2, comments: 3)]);
-      final (_, router) = await _mount(tester, backend.client);
+      await _mount(tester, backend.client);
       await tester.tap(find.bySemanticsLabel('Like, 2'));
       await tester.pumpAndSettle();
       expect(find.text('Continue browsing'), findsOneWidget);
