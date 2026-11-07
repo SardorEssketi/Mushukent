@@ -474,8 +474,12 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  /// [describeFailure] turns a Google flow failure into the localized message
+  /// shown on Login; without it a neutral English text is used. Cancelling the
+  /// Google sheet is not an error: it leaves no message (and clears an old one).
   Future<void> loginWithGoogle({
     Future<void> Function(String token)? onPasswordRequired,
+    String Function(GoogleSignInFailure failure)? describeFailure,
   }) async {
     if (state.isBusy) return;
     state = AuthState.authenticating();
@@ -484,7 +488,14 @@ class AuthController extends StateNotifier<AuthState> {
       idToken = await _googleIdentityTokens.authenticate();
       await loginWithGoogleIdToken(idToken);
     } on GoogleSignInFlowException catch (error) {
-      state = AuthState.unauthenticated(message: error.message);
+      if (error.failure == GoogleSignInFailure.cancelled) {
+        state = AuthState.unauthenticated();
+        return;
+      }
+      state = AuthState.unauthenticated(
+        message: describeFailure?.call(error.failure) ??
+            _defaultGoogleFailureMessage(error.failure),
+      );
       rethrow;
     } on MushukistanApiException catch (error) {
       state = AuthState.unauthenticated(message: error.userMessage);
@@ -649,3 +660,11 @@ class AuthController extends StateNotifier<AuthState> {
     super.dispose();
   }
 }
+
+String _defaultGoogleFailureMessage(GoogleSignInFailure failure) =>
+    switch (failure) {
+      GoogleSignInFailure.notConfigured =>
+        'Google sign-in is not configured for this build.',
+      GoogleSignInFailure.unavailable => 'Google sign-in is unavailable.',
+      _ => 'Google sign-in failed.',
+    };
