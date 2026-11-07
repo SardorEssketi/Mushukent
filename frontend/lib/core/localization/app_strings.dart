@@ -1940,6 +1940,35 @@ class AppStrings {
     };
   }
 
+  /// "1 post", "2 posts"; Russian "1 пост / 2 поста / 5 постов"; Uzbek uses
+  /// the singular after a number ("5 ta post").
+  String postCount(int count) => switch (this) {
+        _UzbekStrings() => '$count ta post',
+        _RussianStrings() =>
+          '$count ${_russianPlural(count, 'пост', 'поста', 'постов')}',
+        _ => '$count ${count == 1 ? 'post' : 'posts'}',
+      };
+
+  /// "1 like", "2 likes"; Russian "1 лайк / 2 лайка / 5 лайков"; Uzbek
+  /// "5 ta layk".
+  String likeCount(int count) => switch (this) {
+        _UzbekStrings() => '$count ta layk',
+        _RussianStrings() =>
+          '$count ${_russianPlural(count, 'лайк', 'лайка', 'лайков')}',
+        _ => '$count ${count == 1 ? 'like' : 'likes'}',
+      };
+
+  /// Russian noun form for [count]: one (1, 21, 101), few (2-4, 22-24) or
+  /// many (0, 5-20, 25, 111-114).
+  static String _russianPlural(int count, String one, String few, String many) {
+    final n = count.abs();
+    final lastTwo = n % 100;
+    final last = n % 10;
+    if (last == 1 && lastTwo != 11) return one;
+    if (last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14)) return few;
+    return many;
+  }
+
   String get adoption {
     return switch (this) {
       _UzbekStrings() => 'Asrab olish',

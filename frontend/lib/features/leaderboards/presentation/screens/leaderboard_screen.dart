@@ -580,9 +580,9 @@ String _metricText(
   AppStrings strings,
 ) {
   if (type == 'most_popular') {
-    return '${entry.likeCount} ${strings.likes}';
+    return strings.likeCount(entry.likeCount);
   }
-  return '${entry.observationCount} ${strings.observations}';
+  return strings.postCount(entry.observationCount);
 }
 
 class _RankBadge extends StatelessWidget {
