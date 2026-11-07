@@ -396,31 +396,33 @@ def _stored_cat_point(posts_runtime, cat_id: UUID) -> tuple[float, float] | None
         return float(row[0]), float(row[1])
 
 
-def _map_cat_ids(client: TestClient, *, kind: str, bbox: str) -> set[str]:
-    response = client.get(
-        "/api/v1/cats",
-        params={"filter": "recently_added", "kind": kind, "bbox": bbox, "limit": 100},
-    )
+def _map_cat_ids(client: TestClient, *, kind: str | None, bbox: str) -> set[str]:
+    params: dict[str, object] = {"filter": "recently_added", "bbox": bbox, "limit": 100}
+    if kind is not None:
+        params["kind"] = kind
+    response = client.get("/api/v1/cats", params=params)
     assert response.status_code == 200
     return {item["id"] for item in response.json()["data"]["items"]}
 
 
+@pytest.mark.parametrize("kind", ["needs_help", "observation"])
 @pytest.mark.parametrize("cat_name", ["QA Help Named", None])
 def test_needs_help_multipart_creation_is_discoverable_on_map(
     client: TestClient,
     posts_runtime,
     cat_name: str | None,
+    kind: str,
 ) -> None:
     """AUTH-205: the mobile client sends new_cat with only a name plus a
     top-level location; the created cat must still be map-eligible."""
     _, token = _create_user_with_token(
         posts_runtime.db_session_manager,
         posts_runtime.token_service,
-        email=f"help-map-{'named' if cat_name else 'unnamed'}@example.com",
+        email=f"help-map-{kind}-{'named' if cat_name else 'unnamed'}@example.com",
     )
     latitude, longitude = 41.31116078338159, 69.27969999999999
     data: dict[str, str] = {
-        "kind": "needs_help",
+        "kind": kind,
         "is_public": "true",
         "description": "Injured paw, needs a vet",
         "location": json.dumps({"latitude": latitude, "longitude": longitude}),
@@ -448,9 +450,11 @@ def test_needs_help_multipart_creation_is_discoverable_on_map(
     assert stored[1] == pytest.approx(longitude, abs=1e-9)
 
     bbox = "69.26,41.30,69.30,41.33"
-    assert cat_id in _map_cat_ids(client, kind="needs_help", bbox=bbox)
-    assert cat_id not in _map_cat_ids(client, kind="observation", bbox=bbox)
-    assert cat_id not in _map_cat_ids(client, kind="needs_help", bbox="69.0,41.0,69.1,41.1")
+    other_kind = "observation" if kind == "needs_help" else "needs_help"
+    assert cat_id in _map_cat_ids(client, kind=kind, bbox=bbox)
+    assert cat_id in _map_cat_ids(client, kind=None, bbox=bbox)
+    assert cat_id not in _map_cat_ids(client, kind=other_kind, bbox=bbox)
+    assert cat_id not in _map_cat_ids(client, kind=kind, bbox="69.0,41.0,69.1,41.1")
 
     with posts_runtime.db_session_manager.session_scope() as session:
         post_count = session.scalar(
