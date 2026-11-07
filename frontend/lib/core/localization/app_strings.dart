@@ -716,6 +716,13 @@ class AppStrings {
     };
   }
 
+  /// Shown under the last Feed post once every page has been loaded.
+  String get noMorePosts => switch (this) {
+        _UzbekStrings() => 'Boshqa postlar yo‘q.',
+        _RussianStrings() => 'Больше публикаций нет.',
+        _ => 'No more posts.',
+      };
+
   String get newPosts => switch (this) {
         _UzbekStrings() => 'Yangi postlar',
         _RussianStrings() => 'Новые публикации',
