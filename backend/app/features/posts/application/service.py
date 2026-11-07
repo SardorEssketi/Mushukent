@@ -165,11 +165,7 @@ class PostsService:
                             ),
                             approximate_age_smallyears=None,
                             cover_photo_url=None,
-                            canonical_location=(
-                                payload.new_cat.canonical_location
-                                if payload.new_cat is not None
-                                else payload.location
-                            ),
+                            canonical_location=cat.canonical_location,
                             first_seen_at=None,
                             last_seen_at=None,
                             total_observations=0,
@@ -603,7 +599,14 @@ class PostsService:
             status=payload.new_cat.status,
             approximate_age_smallyears=None,
             cover_photo_url=None,
-            canonical_location=payload.new_cat.canonical_location,
+            # A named new cat is still created from this publication, so its
+            # canonical location follows the publication point unless the
+            # client supplies an explicit one (API.md, POST /posts new_cat).
+            canonical_location=(
+                payload.new_cat.canonical_location
+                if payload.new_cat.canonical_location is not None
+                else payload.location
+            ),
             first_seen_at=None,
             last_seen_at=None,
             total_observations=0,

@@ -479,7 +479,7 @@ Feature: Posts (Observations)
 - Request options:
   a) multipart/form-data with file:
   - photo/photos (one to five files) required OR photo_url string
-     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional. Mobile clients omit cat_id and may send new_cat.name to name the automatically created cat.
+     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional. Mobile clients omit cat_id and may send new_cat.name to name the automatically created cat. A newly created cat (named or unnamed) takes `new_cat.canonical_location` when supplied, otherwise the publication `location`; this is the point `GET /cats` uses for map (`bbox`) and nearby discovery.
      - description string (max 2000)
      - kind (`observation` or `needs_help`, defaults to `observation`)
      - status (cat_status, independent metadata when supplied)
