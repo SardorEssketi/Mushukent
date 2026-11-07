@@ -2579,6 +2579,446 @@ class AppStrings {
     };
   }
 
+  // --- Moderation workflow (AUTH-208/210/213/214/215/216) ---------------------
+
+  String get reportFilterOpen => switch (this) {
+        _UzbekStrings() => 'Ochiq',
+        _RussianStrings() => 'Открытые',
+        _ => 'Open',
+      };
+
+  String get reportFilterResolved => switch (this) {
+        _UzbekStrings() => 'Hal qilingan',
+        _RussianStrings() => 'Решённые',
+        _ => 'Resolved',
+      };
+
+  String get reportFilterDismissed => switch (this) {
+        _UzbekStrings() => 'Rad etilgan',
+        _RussianStrings() => 'Отклонённые',
+        _ => 'Dismissed',
+      };
+
+  String get noResolvedReports => switch (this) {
+        _UzbekStrings() => 'Hal qilingan shikoyatlar yoʻq.',
+        _RussianStrings() => 'Решённых жалоб нет.',
+        _ => 'No resolved reports.',
+      };
+
+  String get noDismissedReports => switch (this) {
+        _UzbekStrings() => 'Rad etilgan shikoyatlar yoʻq.',
+        _RussianStrings() => 'Отклонённых жалоб нет.',
+        _ => 'No dismissed reports.',
+      };
+
+  String get reportStatusOpen => switch (this) {
+        _UzbekStrings() => 'Ochiq',
+        _RussianStrings() => 'Открыта',
+        _ => 'Open',
+      };
+
+  String get reportStatusResolved => switch (this) {
+        _UzbekStrings() => 'Hal qilingan',
+        _RussianStrings() => 'Решена',
+        _ => 'Resolved',
+      };
+
+  String get reportStatusDismissed => switch (this) {
+        _UzbekStrings() => 'Rad etilgan',
+        _RussianStrings() => 'Отклонена',
+        _ => 'Dismissed',
+      };
+
+  String get reportStatusUnknown => switch (this) {
+        _UzbekStrings() => 'Nomaʼlum holat',
+        _RussianStrings() => 'Неизвестный статус',
+        _ => 'Unknown status',
+      };
+
+  String get reportTargetPost => switch (this) {
+        _UzbekStrings() => 'Post',
+        _RussianStrings() => 'Публикация',
+        _ => 'Post',
+      };
+
+  String get reportTargetComment => switch (this) {
+        _UzbekStrings() => 'Izoh',
+        _RussianStrings() => 'Комментарий',
+        _ => 'Comment',
+      };
+
+  String get reportTargetUser => switch (this) {
+        _UzbekStrings() => 'Foydalanuvchi profili',
+        _RussianStrings() => 'Профиль пользователя',
+        _ => 'User profile',
+      };
+
+  String get reportTargetCat => switch (this) {
+        _UzbekStrings() => 'Mushuk',
+        _RussianStrings() => 'Кошка',
+        _ => 'Cat',
+      };
+
+  String get reportTargetLostPet => switch (this) {
+        _UzbekStrings() => 'Yoʻqolgan hayvon eʼloni',
+        _RussianStrings() => 'Объявление о пропаже',
+        _ => 'Lost pet post',
+      };
+
+  String get reportTargetAdoptionPost => switch (this) {
+        _UzbekStrings() => 'Asrab olish eʼloni',
+        _RussianStrings() => 'Объявление о пристройстве',
+        _ => 'Rehoming post',
+      };
+
+  String get reportTargetOther => switch (this) {
+        _UzbekStrings() => 'Boshqa kontent',
+        _RussianStrings() => 'Другой контент',
+        _ => 'Other content',
+      };
+
+  String get targetStateVisible => switch (this) {
+        _UzbekStrings() => 'Koʻrinadi',
+        _RussianStrings() => 'Виден',
+        _ => 'Visible',
+      };
+
+  String get targetStatePrivate => switch (this) {
+        _UzbekStrings() => 'Yopiq',
+        _RussianStrings() => 'Скрыт владельцем',
+        _ => 'Private',
+      };
+
+  String get targetStateDeleted => switch (this) {
+        _UzbekStrings() => 'Oʻchirilgan',
+        _RussianStrings() => 'Удалён',
+        _ => 'Deleted',
+      };
+
+  String get targetStateSuspended => switch (this) {
+        _UzbekStrings() => 'Bloklangan',
+        _RussianStrings() => 'Заблокирован',
+        _ => 'Suspended',
+      };
+
+  String get targetStateUnavailable => switch (this) {
+        _UzbekStrings() => 'Mavjud emas',
+        _RussianStrings() => 'Недоступен',
+        _ => 'Unavailable',
+      };
+
+  String targetDeletedExplanation(String time) => switch (this) {
+        _UzbekStrings() =>
+          '$time da oʻchirilgan. Foydalanuvchilar uni endi koʻrmaydi.',
+        _RussianStrings() => 'Удалено $time. Пользователи больше его не видят.',
+        _ => 'Deleted $time. It is no longer visible to users.',
+      };
+
+  String get targetDeletedNoTime => switch (this) {
+        _UzbekStrings() =>
+          'Kontent oʻchirilgan. Foydalanuvchilar uni endi koʻrmaydi.',
+        _RussianStrings() =>
+          'Контент удалён. Пользователи больше его не видят.',
+        _ => 'This content was deleted. It is no longer visible to users.',
+      };
+
+  String get targetUnavailableExplanation => switch (this) {
+        _UzbekStrings() => 'Shikoyat qilingan kontent endi mavjud emas.',
+        _RussianStrings() => 'Обжалованный контент больше не существует.',
+        _ => 'The reported content no longer exists.',
+      };
+
+  String get targetSuspendedExplanation => switch (this) {
+        _UzbekStrings() => 'Bu akkaunt bloklangan.',
+        _RussianStrings() => 'Этот аккаунт заблокирован.',
+        _ => 'This account is suspended.',
+      };
+
+  String get targetPrivateExplanation => switch (this) {
+        _UzbekStrings() => 'Faqat egasi va moderatorlar koʻradi.',
+        _RussianStrings() => 'Видят только владелец и модераторы.',
+        _ => 'Only its owner and moderators can see it.',
+      };
+
+  String get reportedByLabel => switch (this) {
+        _UzbekStrings() => 'Shikoyatchi',
+        _RussianStrings() => 'Автор жалобы',
+        _ => 'Reported by',
+      };
+
+  String get deletedAccount => switch (this) {
+        _UzbekStrings() => 'Oʻchirilgan akkaunt',
+        _RussianStrings() => 'Удалённый аккаунт',
+        _ => 'Deleted account',
+      };
+
+  String get submittedLabel => switch (this) {
+        _UzbekStrings() => 'Yuborilgan',
+        _RussianStrings() => 'Отправлена',
+        _ => 'Submitted',
+      };
+
+  String get reasonLabel => switch (this) {
+        _UzbekStrings() => 'Sabab',
+        _RussianStrings() => 'Причина',
+        _ => 'Reason',
+      };
+
+  String get reportedContentLabel => switch (this) {
+        _UzbekStrings() => 'Shikoyat qilingan kontent',
+        _RussianStrings() => 'Обжалованный контент',
+        _ => 'Reported content',
+      };
+
+  String get contentStateLabel => switch (this) {
+        _UzbekStrings() => 'Kontent holati',
+        _RussianStrings() => 'Состояние контента',
+        _ => 'Content state',
+      };
+
+  String get contentTypeLabel => switch (this) {
+        _UzbekStrings() => 'Turi',
+        _RussianStrings() => 'Тип',
+        _ => 'Type',
+      };
+
+  String get handledByLabel => switch (this) {
+        _UzbekStrings() => 'Koʻrib chiqqan',
+        _RussianStrings() => 'Обработал',
+        _ => 'Handled by',
+      };
+
+  String get handledAtLabel => switch (this) {
+        _UzbekStrings() => 'Koʻrib chiqilgan vaqt',
+        _RussianStrings() => 'Время обработки',
+        _ => 'Handled',
+      };
+
+  String reportedByLine(String name, String time) => switch (this) {
+        _UzbekStrings() => '$name · $time',
+        _RussianStrings() => '$name · $time',
+        _ => '$name · $time',
+      };
+
+  String handledByLine(String name, String time) => switch (this) {
+        _UzbekStrings() => 'Koʻrib chiqdi: $name · $time',
+        _RussianStrings() => 'Обработал: $name · $time',
+        _ => 'Handled by $name · $time',
+      };
+
+  String get decisionTitle => switch (this) {
+        _UzbekStrings() => 'Qaror',
+        _RussianStrings() => 'Решение',
+        _ => 'Decision',
+      };
+
+  String get decisionDismiss => switch (this) {
+        _UzbekStrings() => 'Shikoyatni rad etish',
+        _RussianStrings() => 'Отклонить жалобу',
+        _ => 'Dismiss report',
+      };
+
+  String get decisionDismissHint => switch (this) {
+        _UzbekStrings() => 'Qoidabuzarlik yoʻq. Kontent oʻzgarishsiz qoladi.',
+        _RussianStrings() => 'Нарушения нет. Контент остаётся без изменений.',
+        _ => 'No rule was broken. The content stays as it is.',
+      };
+
+  String get decisionResolveKeep => switch (this) {
+        _UzbekStrings() => 'Oʻchirmasdan hal qilish',
+        _RussianStrings() => 'Решить без удаления',
+        _ => 'Resolve, keep content',
+      };
+
+  String get decisionResolveKeepHint => switch (this) {
+        _UzbekStrings() =>
+          'Hech narsani oʻchirmasdan shikoyatni koʻrib chiqilgan deb belgilash.',
+        _RussianStrings() =>
+          'Отметить жалобу как обработанную, ничего не удаляя.',
+        _ => 'Mark the report as handled without removing anything.',
+      };
+
+  String get decisionRemove => switch (this) {
+        _UzbekStrings() => 'Hal qilish va oʻchirish',
+        _RussianStrings() => 'Решить и удалить',
+        _ => 'Resolve and remove',
+      };
+
+  String get decisionRemovePublicationHint => switch (this) {
+        _UzbekStrings() =>
+          'Eʼlon hammadan yashiriladi, egasiga bildirishnoma yuboriladi.',
+        _RussianStrings() =>
+          'Публикация будет скрыта от всех, владелец получит уведомление.',
+        _ => 'Removes the publication from public view and notifies its owner.',
+      };
+
+  String get decisionRemoveCommentHint => switch (this) {
+        _UzbekStrings() => 'Izoh muhokamadan oʻchiriladi.',
+        _RussianStrings() => 'Комментарий будет удалён из обсуждения.',
+        _ => 'Removes the comment from the discussion.',
+      };
+
+  String get decisionSuspend => switch (this) {
+        _UzbekStrings() => 'Hal qilish va akkauntni bloklash',
+        _RussianStrings() => 'Решить и заблокировать аккаунт',
+        _ => 'Resolve and suspend account',
+      };
+
+  String get decisionSuspendHint => switch (this) {
+        _UzbekStrings() => 'Akkauntdan endi foydalanib boʻlmaydi.',
+        _RussianStrings() => 'Аккаунтом больше нельзя будет пользоваться.',
+        _ => 'The account can no longer be used.',
+      };
+
+  String get removalUnavailableHint => switch (this) {
+        _UzbekStrings() =>
+          'Kontent allaqachon mavjud emas, uni qayta oʻchirib boʻlmaydi. Shikoyatni hal qiling yoki rad eting.',
+        _RussianStrings() =>
+          'Контент уже недоступен, удалить его повторно нельзя. Решите или отклоните жалобу.',
+        _ =>
+          'The content is already gone, so it cannot be removed again. Resolve or dismiss the report.',
+      };
+
+  String confirmRemovalTitle(String type) => switch (this) {
+        _UzbekStrings() => '$type oʻchirilsinmi?',
+        _RussianStrings() => 'Удалить: $type?',
+        _ => 'Remove this ${type.toLowerCase()}?',
+      };
+
+  String confirmRemovalBody(String title) => switch (this) {
+        _UzbekStrings() =>
+          '«$title» oddiy koʻrinishdan olib tashlanadi va shikoyat hal qilingan deb belgilanadi.',
+        _RussianStrings() =>
+          '«$title» будет скрыто из обычного просмотра, а жалоба будет отмечена как решённая.',
+        _ =>
+          '“$title” will be removed from normal visibility, and the report will be marked resolved.',
+      };
+
+  String get confirmSuspendTitle => switch (this) {
+        _UzbekStrings() => 'Bu akkaunt bloklansinmi?',
+        _RussianStrings() => 'Заблокировать этот аккаунт?',
+        _ => 'Suspend this account?',
+      };
+
+  String confirmSuspendBody(String name) => switch (this) {
+        _UzbekStrings() =>
+          '$name endi akkauntdan foydalana olmaydi va shikoyat hal qilingan deb belgilanadi.',
+        _RussianStrings() =>
+          '$name больше не сможет пользоваться аккаунтом, а жалоба будет отмечена как решённая.',
+        _ =>
+          '$name will no longer be able to use the account, and the report will be marked resolved.',
+      };
+
+  String get confirmRemove => switch (this) {
+        _UzbekStrings() => 'Oʻchirish',
+        _RussianStrings() => 'Удалить',
+        _ => 'Remove',
+      };
+
+  String get confirmSuspend => switch (this) {
+        _UzbekStrings() => 'Bloklash',
+        _RussianStrings() => 'Заблокировать',
+        _ => 'Suspend',
+      };
+
+  String get moderationDecisionSaved => switch (this) {
+        _UzbekStrings() => 'Qaror saqlandi.',
+        _RussianStrings() => 'Решение сохранено.',
+        _ => 'Decision saved.',
+      };
+
+  String get reportAlreadyHandledTitle => switch (this) {
+        _UzbekStrings() => 'Allaqachon koʻrib chiqilgan',
+        _RussianStrings() => 'Жалоба уже обработана',
+        _ => 'Already handled',
+      };
+
+  String get reportAlreadyHandledMessage => switch (this) {
+        _UzbekStrings() =>
+          'Siz koʻrib chiqayotganingizda boshqa moderator bu shikoyatni hal qildi. Joriy qaror quyida koʻrsatilgan.',
+        _RussianStrings() =>
+          'Другой модератор обработал эту жалобу, пока вы её просматривали. Ниже показано текущее решение.',
+        _ =>
+          'Another moderator handled this report while you were reviewing it. Its current decision is shown below.',
+      };
+
+  String get decisionNetworkError => switch (this) {
+        _UzbekStrings() =>
+          'Qarorni saqlab boʻlmadi. Internet aloqasini tekshirib, qayta urinib koʻring.',
+        _RussianStrings() =>
+          'Не удалось сохранить решение. Проверьте подключение и попробуйте снова.',
+        _ =>
+          'Could not save the decision. Check your connection and try again.',
+      };
+
+  String get decisionForbidden => switch (this) {
+        _UzbekStrings() => 'Sizda endi moderator huquqi yoʻq.',
+        _RussianStrings() => 'У вас больше нет прав модератора.',
+        _ => 'You no longer have moderator access.',
+      };
+
+  String get decisionInvalid => switch (this) {
+        _UzbekStrings() => 'Bu amal ushbu shikoyat uchun mavjud emas.',
+        _RussianStrings() => 'Это действие недоступно для этой жалобы.',
+        _ => 'This action is not available for this report.',
+      };
+
+  String get decisionFailed => switch (this) {
+        _UzbekStrings() => 'Qarorni saqlab boʻlmadi. Qayta urinib koʻring.',
+        _RussianStrings() => 'Не удалось сохранить решение. Попробуйте снова.',
+        _ => 'Could not save the decision. Try again.',
+      };
+
+  String get moderatorAccessRequired => switch (this) {
+        _UzbekStrings() => 'Moderator huquqi talab qilinadi.',
+        _RussianStrings() => 'Требуются права модератора.',
+        _ => 'Moderator access is required.',
+      };
+
+  String get reportsNetworkError => switch (this) {
+        _UzbekStrings() =>
+          'Shikoyatlarni yuklab boʻlmadi. Internet aloqasini tekshiring.',
+        _RussianStrings() =>
+          'Не удалось загрузить жалобы. Проверьте подключение.',
+        _ => 'Could not load reports. Check your connection.',
+      };
+
+  String get openReportedContent => switch (this) {
+        _UzbekStrings() => 'Kontentni ochish',
+        _RussianStrings() => 'Открыть контент',
+        _ => 'Open content',
+      };
+
+  String get viewPostHistory => switch (this) {
+        _UzbekStrings() => 'Post tarixini koʻrish',
+        _RussianStrings() => 'История публикации',
+        _ => 'View post history',
+      };
+
+  String get loadMoreReports => switch (this) {
+        _UzbekStrings() => 'Yana shikoyatlarni yuklash',
+        _RussianStrings() => 'Загрузить ещё жалобы',
+        _ => 'Load more reports',
+      };
+
+  String get noMoreReports => switch (this) {
+        _UzbekStrings() => 'Boshqa shikoyatlar yoʻq.',
+        _RussianStrings() => 'Больше жалоб нет.',
+        _ => 'No more reports.',
+      };
+
+  String get reportClosedNote => switch (this) {
+        _UzbekStrings() => 'Shikoyat yopilgan. Qarorni oʻzgartirib boʻlmaydi.',
+        _RussianStrings() => 'Жалоба закрыта. Решение изменить нельзя.',
+        _ => 'This report is closed. Its decision cannot be changed.',
+      };
+
+  String get optionalModeratorNote => switch (this) {
+        _UzbekStrings() => 'Izoh (ixtiyoriy)',
+        _RussianStrings() => 'Заметка (необязательно)',
+        _ => 'Note (optional)',
+      };
+
   String get reportContent {
     return switch (this) {
       _UzbekStrings() => 'Kontentdan shikoyat qilish',
