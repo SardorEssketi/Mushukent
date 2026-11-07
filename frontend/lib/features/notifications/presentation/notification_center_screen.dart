@@ -27,12 +27,17 @@ class NotificationBell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unread = ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0;
     return IconButton(
-      tooltip: ref.watch(notificationStringsProvider).get('title'),
+      // The tooltip is the button's accessible name: "Notifications" plus the
+      // unread count. The badge is visual only; its number used to replace
+      // the name for assistive technology.
+      tooltip: ref.watch(notificationStringsProvider).bellLabel(unread),
       onPressed: () => context.push('/notifications'),
-      icon: Badge(
-        isLabelVisible: unread > 0,
-        label: Text(unread > 99 ? '99+' : '$unread'),
-        child: const Icon(Icons.notifications_outlined),
+      icon: ExcludeSemantics(
+        child: Badge(
+          isLabelVisible: unread > 0,
+          label: Text(unread > 99 ? '99+' : '$unread'),
+          child: const Icon(Icons.notifications_outlined),
+        ),
       ),
     );
   }

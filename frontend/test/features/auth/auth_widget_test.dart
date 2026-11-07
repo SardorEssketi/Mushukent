@@ -1124,7 +1124,7 @@ void main() {
     expect(find.text('Sardor'), findsWidgets);
     expect(find.text('user@example.com'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(find.byTooltip('Profile actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
@@ -1136,7 +1136,7 @@ void main() {
     expect(find.text('Sardor'), findsWidgets);
     expect(repo.logoutCalled, isFalse);
 
-    await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(find.byTooltip('Profile actions'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Logout'));
     await tester.pumpAndSettle();
