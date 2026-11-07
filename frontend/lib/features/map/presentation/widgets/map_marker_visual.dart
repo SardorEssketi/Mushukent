@@ -83,6 +83,7 @@ class MapMarkerVisual extends StatelessWidget {
       label: label,
       child: Tooltip(
         message: label,
+        excludeFromSemantics: true,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
@@ -151,8 +152,11 @@ class MapClusterVisual extends StatelessWidget {
     return Semantics(
       button: true,
       label: '$label: $count',
+      // The visible count is already in the label.
+      excludeSemantics: true,
       child: Tooltip(
         message: '$label: $count',
+        excludeFromSemantics: true,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
