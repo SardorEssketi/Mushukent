@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -10,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from geoalchemy2.elements import WKTElement
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.auth import AuthenticatedPrincipal, Role
 from app.core.config import Settings
@@ -380,6 +381,137 @@ def test_create_post_with_new_cat_workflow(client: TestClient, posts_runtime) ->
         assert stored_cat.created_by == user.id
         assert stored_post is not None
         assert stored_post.cat_id == stored_cat.id
+
+
+def _stored_cat_point(posts_runtime, cat_id: UUID) -> tuple[float, float] | None:
+    with posts_runtime.db_session_manager.session_scope() as session:
+        row = session.execute(
+            select(
+                func.ST_Y(schema.Cat.canonical_location),
+                func.ST_X(schema.Cat.canonical_location),
+            ).where(schema.Cat.id == cat_id)
+        ).one()
+        if row[0] is None:
+            return None
+        return float(row[0]), float(row[1])
+
+
+def _map_cat_ids(client: TestClient, *, kind: str | None, bbox: str) -> set[str]:
+    params: dict[str, object] = {"filter": "recently_added", "bbox": bbox, "limit": 100}
+    if kind is not None:
+        params["kind"] = kind
+    response = client.get("/api/v1/cats", params=params)
+    assert response.status_code == 200
+    return {item["id"] for item in response.json()["data"]["items"]}
+
+
+@pytest.mark.parametrize("kind", ["needs_help", "observation"])
+@pytest.mark.parametrize("cat_name", ["QA Help Named", None])
+def test_needs_help_multipart_creation_is_discoverable_on_map(
+    client: TestClient,
+    posts_runtime,
+    cat_name: str | None,
+    kind: str,
+) -> None:
+    """AUTH-205: the mobile client sends new_cat with only a name plus a
+    top-level location; the created cat must still be map-eligible."""
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email=f"help-map-{kind}-{'named' if cat_name else 'unnamed'}@example.com",
+    )
+    latitude, longitude = 41.31116078338159, 69.27969999999999
+    data: dict[str, str] = {
+        "kind": kind,
+        "is_public": "true",
+        "description": "Injured paw, needs a vet",
+        "location": json.dumps({"latitude": latitude, "longitude": longitude}),
+    }
+    if cat_name is not None:
+        data["new_cat"] = json.dumps({"name": cat_name})
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        data=data,
+        files=[("photos", ("help.jpg", _jpeg_bytes(), "image/jpeg"))],
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()["data"]
+    cat_id = payload["cat"]["id"]
+    assert payload["cat"].get("name") == cat_name
+    assert payload["location"]["latitude"] == pytest.approx(latitude)
+    assert payload["location"]["longitude"] == pytest.approx(longitude)
+
+    stored = _stored_cat_point(posts_runtime, UUID(cat_id))
+    assert stored is not None
+    assert stored[0] == pytest.approx(latitude, abs=1e-9)
+    assert stored[1] == pytest.approx(longitude, abs=1e-9)
+
+    bbox = "69.26,41.30,69.30,41.33"
+    other_kind = "observation" if kind == "needs_help" else "needs_help"
+    assert cat_id in _map_cat_ids(client, kind=kind, bbox=bbox)
+    assert cat_id in _map_cat_ids(client, kind=None, bbox=bbox)
+    assert cat_id not in _map_cat_ids(client, kind=other_kind, bbox=bbox)
+    assert cat_id not in _map_cat_ids(client, kind=kind, bbox="69.0,41.0,69.1,41.1")
+
+    with posts_runtime.db_session_manager.session_scope() as session:
+        post_count = session.scalar(
+            select(func.count()).select_from(schema.Post).where(schema.Post.cat_id == UUID(cat_id))
+        )
+    assert post_count == 1
+
+
+def test_named_new_cat_keeps_explicit_canonical_location(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="explicit-canonical@example.com",
+    )
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "photo_url": "https://storage.example/explicit.jpg",
+            "new_cat": {
+                "name": "Explicit",
+                "canonical_location": {"latitude": 41.2, "longitude": 69.1},
+            },
+            "location": {"latitude": 41.31, "longitude": 69.26},
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    stored = _stored_cat_point(posts_runtime, UUID(response.json()["data"]["cat"]["id"]))
+    assert stored == (pytest.approx(41.2), pytest.approx(69.1))
+
+
+def test_named_new_cat_without_any_location_stays_unlocated(
+    client: TestClient,
+    posts_runtime,
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="no-location-named@example.com",
+    )
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "photo_url": "https://storage.example/no-location.jpg",
+            "new_cat": {"name": "Nowhere"},
+        },
+    )
+
+    assert response.status_code == 201, response.text
+    assert _stored_cat_point(posts_runtime, UUID(response.json()["data"]["cat"]["id"])) is None
 
 
 def test_create_observation_without_cat_creates_unknown_cat(
