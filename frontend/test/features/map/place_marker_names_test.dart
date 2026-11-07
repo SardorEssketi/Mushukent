@@ -104,7 +104,7 @@ void main() {
       'Synthetic Pet Shop, pet shop',
     ]) {
       final node = _node(tester, label);
-      expect(node.hasFlag(SemanticsFlag.isButton), isTrue, reason: label);
+      expect(node.flagsCollection.isButton, isTrue, reason: label);
       expect(node.tooltip, isEmpty, reason: 'no duplicate announcement');
     }
     // No two individual markers share a name; no category-only names.
