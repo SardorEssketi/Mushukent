@@ -1580,6 +1580,27 @@ class AppStrings {
     };
   }
 
+  /// Neutral wording for a publication that cannot be shown: it never says
+  /// whether it was deleted, removed by a moderator, hidden or blocked.
+  String get publicationUnavailableTitle => switch (this) {
+        _UzbekStrings() => 'Bu nashr mavjud emas',
+        _RussianStrings() => 'Публикация недоступна',
+        _ => 'This publication is not available',
+      };
+
+  String get publicationUnavailableMessage => switch (this) {
+        _UzbekStrings() =>
+          'U olib tashlangan yoki endi siz uchun ko‘rinmaydigan bo‘lishi mumkin.',
+        _RussianStrings() => 'Возможно, она удалена или больше не видна вам.',
+        _ => 'It may have been removed or is no longer visible to you.',
+      };
+
+  String get goToFeed => switch (this) {
+        _UzbekStrings() => 'Lentaga o‘tish',
+        _RussianStrings() => 'Перейти в ленту',
+        _ => 'Go to Feed',
+      };
+
   String get changeLocation {
     return switch (this) {
       _UzbekStrings() => 'Joylashuvni oʻzgartirish',
