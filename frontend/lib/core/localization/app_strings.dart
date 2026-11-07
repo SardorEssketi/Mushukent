@@ -2483,83 +2483,11 @@ class AppStrings {
     };
   }
 
-  String targetTitle(String title) {
-    return switch (this) {
-      _UzbekStrings() => 'Sarlavha: $title',
-      _RussianStrings() => 'Заголовок: $title',
-      _ => 'Title: $title',
-    };
-  }
-
-  String targetStatus(String status) {
-    return switch (this) {
-      _UzbekStrings() => 'Holat: $status',
-      _RussianStrings() => 'Статус: $status',
-      _ => 'Status: $status',
-    };
-  }
-
-  String get resolve {
-    return switch (this) {
-      _UzbekStrings() => 'Hal qilish',
-      _RussianStrings() => 'Решить',
-      _ => 'Resolve',
-    };
-  }
-
-  String get dismiss {
-    return switch (this) {
-      _UzbekStrings() => 'Rad etish',
-      _RussianStrings() => 'Отклонить',
-      _ => 'Dismiss',
-    };
-  }
-
   String get reportStatus {
     return switch (this) {
       _UzbekStrings() => 'Shikoyat holati',
       _RussianStrings() => 'Статус жалобы',
       _ => 'Report status',
-    };
-  }
-
-  String get noAction {
-    return switch (this) {
-      _UzbekStrings() => 'Amal yoʻq',
-      _RussianStrings() => 'Без действия',
-      _ => 'No action',
-    };
-  }
-
-  String get softDeletePost {
-    return switch (this) {
-      _UzbekStrings() => 'Postni yashirib oʻchirish',
-      _RussianStrings() => 'Мягко удалить пост',
-      _ => 'Soft delete post',
-    };
-  }
-
-  String get softDeleteComment {
-    return switch (this) {
-      _UzbekStrings() => 'Izohni yashirib oʻchirish',
-      _RussianStrings() => 'Мягко удалить комментарий',
-      _ => 'Soft delete comment',
-    };
-  }
-
-  String get suspendUser {
-    return switch (this) {
-      _UzbekStrings() => 'Foydalanuvchini toʻxtatish',
-      _RussianStrings() => 'Заблокировать пользователя',
-      _ => 'Suspend user',
-    };
-  }
-
-  String get moderationAction {
-    return switch (this) {
-      _UzbekStrings() => 'Moderatsiya amali',
-      _RussianStrings() => 'Действие модерации',
-      _ => 'Moderation action',
     };
   }
 
