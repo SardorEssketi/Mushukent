@@ -91,9 +91,10 @@ class _ReportContentScreenState extends ConsumerState<ReportContentScreen> {
         body: AppStatePanel(
           icon: Icons.check_circle_outline,
           title: strings.reportSubmitted,
+          // The button is named Feed, so it opens the Feed root instead of
+          // going back to the reported content (Back still does that).
           action: FilledButton(
-            onPressed: () =>
-                context.canPop() ? context.pop() : context.go('/feed'),
+            onPressed: () => context.go('/feed'),
             child: Text(strings.feed),
           ),
         ),

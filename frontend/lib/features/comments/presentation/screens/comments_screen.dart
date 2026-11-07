@@ -40,11 +40,21 @@ final CommentThreadProvider adoptionPostCommentsProvider =
 );
 
 /// Scrolls to the existing comments section when a notification opens a post.
+///
+/// The scroll waits until [ready] (the discussion has loaded or failed): while
+/// it loads the section is short and the page may not be scrollable yet, so an
+/// earlier scroll would stop at the top. It runs once, after that frame's
+/// layout, and is skipped if the user has already scrolled the page.
 class CommentDeepLinkFocus extends StatefulWidget {
-  const CommentDeepLinkFocus(
-      {super.key, required this.focus, required this.child});
+  const CommentDeepLinkFocus({
+    super.key,
+    required this.focus,
+    this.ready = true,
+    required this.child,
+  });
 
   final bool focus;
+  final bool ready;
   final Widget child;
 
   @override
@@ -52,20 +62,58 @@ class CommentDeepLinkFocus extends StatefulWidget {
 }
 
 class _CommentDeepLinkFocusState extends State<CommentDeepLinkFocus> {
+  bool _laidOut = false;
+  bool _scheduled = false;
+  bool _done = false;
+  double? _initialPixels;
+
   @override
   void initState() {
     super.initState();
-    if (widget.focus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Scrollable.ensureVisible(
-            context,
-            duration: const Duration(milliseconds: 300),
-            alignment: 0.08,
-          );
-        }
-      });
+    if (!widget.focus) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _laidOut = true;
+      _initialPixels = Scrollable.maybeOf(context)?.position.pixels;
+      if (widget.ready) _focus();
+    });
+  }
+
+  @override
+  void didUpdateWidget(CommentDeepLinkFocus oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Called while a frame is being built, so the callback runs after its
+    // layout, when the loaded discussion has its real height.
+    if (!widget.focus || !widget.ready || !_laidOut || _done || _scheduled) {
+      return;
     }
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      if (mounted) _focus();
+    });
+  }
+
+  void _focus() {
+    if (_done) return;
+    _done = true;
+    final position = Scrollable.maybeOf(context)?.position;
+    final initial = _initialPixels;
+    if (position != null &&
+        initial != null &&
+        (position.pixels - initial).abs() > 1) {
+      return; // The user is already reading elsewhere on the page.
+    }
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    Scrollable.ensureVisible(
+      context,
+      duration:
+          reduceMotion ? Duration.zero : const Duration(milliseconds: 300),
+      // Heading at the top of the viewport. A fractional alignment is applied
+      // to (viewport - section height), which pushes the heading of a long
+      // discussion off-screen.
+      alignment: 0,
+    );
   }
 
   @override

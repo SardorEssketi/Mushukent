@@ -188,7 +188,16 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     decoration: InputDecoration(
                       labelText: strings.phoneNumber,
                       hintText: uzbekPhoneFormat,
-                      helperText: strings.uzbekPhoneFormatHelp,
+                      // The format is needed to type a valid number, so it
+                      // wraps at any text size. helperText is ellipsized to
+                      // one line by default; a helper widget has no limit.
+                      helper: Text(
+                        strings.uzbekPhoneFormatHelp,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                      errorMaxLines: 12,
                     ),
                     keyboardType: TextInputType.phone,
                     maxLength: 32,

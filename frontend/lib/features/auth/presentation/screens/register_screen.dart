@@ -10,6 +10,7 @@ import '../../../../core/widgets/brand_header.dart';
 import '../../../../core/localization/account_security_strings.dart';
 import '../../../../core/localization/language_controller.dart';
 import '../../../../core/routing/auth_navigation.dart';
+import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../application/auth_controller.dart';
 import '../../domain/auth_models.dart';
 import '../widgets/google_sign_in_action.dart';
@@ -145,17 +146,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       onFieldSubmitted: (_) => unawaited(_submit()),
                       decoration: InputDecoration(
                         labelText: strings.password,
-                        suffixIcon: IconButton(
+                        suffixIcon: PasswordVisibilityButton(
+                          obscured: _obscurePassword,
+                          strings: strings,
                           onPressed: isLoading
                               ? null
                               : () => setState(() {
                                     _obscurePassword = !_obscurePassword;
                                   }),
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
                         ),
                       ),
                       validator: (value) => _validatePassword(value, strings),

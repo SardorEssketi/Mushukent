@@ -12,6 +12,7 @@ import '../../../../core/media/selected_image_pipeline.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../application/add_observation_controller.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
@@ -195,8 +196,10 @@ class _AddObservationDetailsScreenState
                         Positioned(
                           right: 0,
                           top: 0,
-                          child: IconButton.filledTonal(
-                            tooltip: strings.removePhoto,
+                          child: PhotoRemoveButton(
+                            position: index + 1,
+                            total: state.photos.length,
+                            strings: strings,
                             onPressed: _picking || state.locked
                                 ? null
                                 : () {
@@ -204,7 +207,6 @@ class _AddObservationDetailsScreenState
                                       ..removeAt(index);
                                     controller.setPhotos(photos);
                                   },
-                            icon: const Icon(Icons.close, size: 16),
                           ),
                         ),
                       ]),

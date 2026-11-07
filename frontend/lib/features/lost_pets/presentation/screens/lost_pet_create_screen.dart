@@ -19,6 +19,7 @@ import '../../../../core/storage/token_store.dart';
 import '../../../../core/storage/token_store_provider.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 final _tashkentBounds = LatLngBounds(
@@ -268,7 +269,10 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                         Positioned(
                           right: 0,
                           top: 0,
-                          child: IconButton.filledTonal(
+                          child: PhotoRemoveButton(
+                            position: index + 1,
+                            total: _photos.length,
+                            strings: strings,
                             onPressed: _draftLocked
                                 ? null
                                 : () {
@@ -276,7 +280,6 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                                       _photos.removeAt(index);
                                     });
                                   },
-                            icon: const Icon(Icons.close, size: 16),
                           ),
                         ),
                       ],

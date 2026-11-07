@@ -1080,6 +1080,25 @@ class AppStrings {
         _ => 'Remove photo',
       };
 
+  /// Names one photo of a draft, so several removal buttons stay distinct.
+  String removePhotoNumber(int position, int total) => switch (this) {
+        _UzbekStrings() => '$position-rasmni olib tashlash ($total tadan)',
+        _RussianStrings() => 'Удалить фото $position из $total',
+        _ => 'Remove photo $position of $total',
+      };
+
+  String get showPassword => switch (this) {
+        _UzbekStrings() => 'Parolni ko‘rsatish',
+        _RussianStrings() => 'Показать пароль',
+        _ => 'Show password',
+      };
+
+  String get hidePassword => switch (this) {
+        _UzbekStrings() => 'Parolni yashirish',
+        _RussianStrings() => 'Скрыть пароль',
+        _ => 'Hide password',
+      };
+
   String get catObservationSubtitle {
     return switch (this) {
       _UzbekStrings() =>

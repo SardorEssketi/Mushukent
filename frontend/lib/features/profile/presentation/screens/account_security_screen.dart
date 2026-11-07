@@ -6,6 +6,7 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../auth/infrastructure/account_security_repository.dart';
 
@@ -185,14 +186,13 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
                                   obscureText: !_showPassword,
                                   decoration: InputDecoration(
                                     labelText: strings.newPassword,
-                                    suffixIcon: IconButton(
+                                    suffixIcon: PasswordVisibilityButton(
+                                      obscured: !_showPassword,
+                                      strings: ref.watch(appStringsProvider),
                                       onPressed: _busy
                                           ? null
                                           : () => setState(() =>
                                               _showPassword = !_showPassword),
-                                      icon: Icon(_showPassword
-                                          ? Icons.visibility_off_outlined
-                                          : Icons.visibility_outlined),
                                     ),
                                   ),
                                   validator: (value) => value != null &&
