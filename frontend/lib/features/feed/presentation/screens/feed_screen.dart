@@ -1492,6 +1492,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                 icon: liked ? Icons.favorite : Icons.favorite_outline,
                 count: likeCount,
                 active: liked,
+                toggled: liked,
                 onPressed: _toggleLike,
               ),
               FeedCountAction(
