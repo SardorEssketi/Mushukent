@@ -11,6 +11,7 @@ import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
+import '../../../../core/widgets/publication_unavailable.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
@@ -462,17 +463,22 @@ class _AdoptionPostDetailScreenState
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => AppStatePanel(
-          icon: Icons.error_outline,
-          title: strings.adoption,
-          message: strings.couldNotLoadSection,
-          action: FilledButton(
-            onPressed: () => ref.invalidate(
-              adoptionPostDetailProvider(adoptionPostId),
-            ),
-            child: Text(strings.retry),
-          ),
-        ),
+        // Gone for good (deleted, removed, hidden, blocked or unknown id):
+        // explain neutrally and offer the Feed; other failures keep Retry.
+        error: (error, stackTrace) =>
+            isPublicationUnavailable(error, 'ADOPTION_POST_NOT_FOUND')
+                ? PublicationUnavailablePanel(strings: strings)
+                : AppStatePanel(
+                    icon: Icons.error_outline,
+                    title: strings.adoption,
+                    message: strings.couldNotLoadSection,
+                    action: FilledButton(
+                      onPressed: () => ref.invalidate(
+                        adoptionPostDetailProvider(adoptionPostId),
+                      ),
+                      child: Text(strings.retry),
+                    ),
+                  ),
       ),
     );
   }
