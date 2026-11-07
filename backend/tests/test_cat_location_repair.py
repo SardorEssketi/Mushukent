@@ -20,6 +20,8 @@ from scripts.repair_cat_canonical_location import (
 
 pytestmark = pytest.mark.integration
 
+_NOW = datetime.now(UTC)
+
 
 def _point(latitude: float, longitude: float) -> WKTElement:
     return WKTElement(f"POINT({longitude} {latitude})", srid=4326)
@@ -44,8 +46,13 @@ def _cat_with_post(
     post_deleted: bool = False,
     cat_deleted: bool = False,
     kind: schema.PostKind = schema.PostKind.NEEDS_HELP,
+    created_at: datetime | None = None,
+    touched: bool = False,
 ) -> tuple[UUID, UUID]:
-    created_at = datetime.now(UTC) - timedelta(hours=1)
+    """A cat and its post. ``touched`` marks the post row as updated later
+    (an edit or a like/comment counter), so ``updated_at > created_at``."""
+    created_at = created_at or _NOW - timedelta(hours=1)
+    post_created_at = created_at + post_created_offset
     with db_session_manager.session_scope() as session:
         cat = schema.Cat(
             name="Named",
@@ -64,12 +71,47 @@ def _cat_with_post(
             kind=kind,
             description="Needs help",
             is_public=True,
-            created_at=created_at + post_created_offset,
+            created_at=post_created_at,
+            updated_at=post_created_at + (timedelta(minutes=1) if touched else timedelta(0)),
             deleted_at=created_at if post_deleted else None,
         )
         session.add(post)
         session.flush()
         return cat.id, post.id
+
+
+def _snapshot(location: tuple[float, float] | None) -> dict:
+    return post_history_snapshot_from_values(
+        description="Needs help",
+        kind="needs_help",
+        status=None,
+        location_latitude=location[0] if location else None,
+        location_longitude=location[1] if location else None,
+        is_public=True,
+        photo_urls=[],
+    )
+
+
+def _history(
+    db_session_manager,
+    *,
+    post_id: UUID,
+    before_location: tuple[float, float] | None,
+    after_location: tuple[float, float] | None,
+    created_at: datetime,
+    before: dict | None = None,
+    after: dict | None = None,
+) -> None:
+    with db_session_manager.session_scope() as session:
+        session.add(
+            schema.PostHistory(
+                post_id=post_id,
+                action="edited",
+                before=before if before is not None else _snapshot(before_location),
+                after=after if after is not None else _snapshot(after_location),
+                created_at=created_at,
+            )
+        )
 
 
 def _canonical(db_session_manager, cat_id: UUID) -> tuple[float, float] | None:
@@ -143,7 +185,9 @@ def test_repair_sets_only_originating_post_location(
 
     with db_session_manager.session_scope() as session:
         post_count = session.scalar(select(func.count()).select_from(schema.Post))
+        history_count = session.scalar(select(func.count()).select_from(schema.PostHistory))
     assert post_count == 8
+    assert history_count == 0
 
     with integration_engine.begin() as connection:
         reasons = {item.cat_id: item.reason for item in classify(connection).excluded}
@@ -160,153 +204,182 @@ def test_repair_sets_only_originating_post_location(
         assert apply_repairs(connection, candidates) == []
 
 
-def _history(
-    db_session_manager,
-    *,
-    post_id: UUID,
-    before_location: tuple[float, float] | None,
-    after_location: tuple[float, float] | None,
-    created_at: datetime,
-    before: dict | None = None,
-) -> None:
-    def snapshot(location):
-        return post_history_snapshot_from_values(
-            description="Needs help",
-            kind="needs_help",
-            status=None,
-            location_latitude=location[0] if location else None,
-            location_longitude=location[1] if location else None,
-            is_public=True,
-            photo_urls=[],
-        )
-
-    with db_session_manager.session_scope() as session:
-        session.add(
-            schema.PostHistory(
-                post_id=post_id,
-                action="edited",
-                before=before if before is not None else snapshot(before_location),
-                after=snapshot(after_location),
-                created_at=created_at,
-            )
-        )
-
-
-def test_repair_uses_original_location_from_edit_history(
+def test_history_completeness_and_location_changes(
     integration_engine: Engine, db_session_manager
 ) -> None:
+    """Missing history is not proof of "never edited": only posts created
+    after history logging was live, or rows never updated at all, count as
+    complete. Any recorded location change excludes the cat."""
     owner = _user(db_session_manager, "repair-history@example.com")
-    edited_at = datetime.now(UTC) - timedelta(minutes=30)
+    epoch = _NOW - timedelta(hours=2)
+    legacy = _NOW - timedelta(hours=3)
+    modern = _NOW - timedelta(hours=1)
+    edited_at = _NOW - timedelta(minutes=30)
+    a, b = (41.31, 69.27), (41.33, 69.33)
 
-    # Location moved twice after creation: the first edit's "before" is the
-    # creation point, not the current point and not the intermediate one.
-    moved, moved_post = _cat_with_post(
-        db_session_manager, user_id=owner, post_location=(41.33, 69.33)
+    # The earliest history row in the database (an unrelated, located cat).
+    _, epoch_post = _cat_with_post(
+        db_session_manager,
+        user_id=owner,
+        post_location=a,
+        canonical_location=a,
+        created_at=epoch - timedelta(minutes=5),
+        touched=True,
     )
     _history(
         db_session_manager,
+        post_id=epoch_post,
+        before_location=a,
+        after_location=a,
+        created_at=epoch,
+    )
+
+    def cat(location, *, created_at=modern, touched=False):
+        return _cat_with_post(
+            db_session_manager,
+            user_id=owner,
+            post_location=location,
+            created_at=created_at,
+            touched=touched,
+        )
+
+    legacy_untouched, _ = cat(a, created_at=legacy)
+    legacy_touched, _ = cat(a, created_at=legacy, touched=True)
+    legacy_text_edit, legacy_text_post = cat(a, created_at=legacy, touched=True)
+    _history(
+        db_session_manager,
+        post_id=legacy_text_post,
+        before_location=a,
+        after_location=a,
+        created_at=edited_at,
+    )
+    modern_counter_bumped, _ = cat(a, touched=True)
+    modern_text_edit, modern_text_post = cat(a, touched=True)
+    _history(
+        db_session_manager,
+        post_id=modern_text_post,
+        before_location=a,
+        after_location=a,
+        created_at=edited_at,
+    )
+    moved, moved_post = cat(b, touched=True)
+    _history(
+        db_session_manager,
         post_id=moved_post,
-        before_location=(41.31, 69.27),
-        after_location=(41.32, 69.30),
+        before_location=a,
+        after_location=b,
+        created_at=edited_at,
+    )
+    moved_back, moved_back_post = cat(a, touched=True)
+    _history(
+        db_session_manager,
+        post_id=moved_back_post,
+        before_location=a,
+        after_location=b,
         created_at=edited_at,
     )
     _history(
         db_session_manager,
-        post_id=moved_post,
-        before_location=(41.32, 69.30),
-        after_location=(41.33, 69.33),
-        created_at=edited_at + timedelta(minutes=5),
+        post_id=moved_back_post,
+        before_location=b,
+        after_location=a,
+        created_at=edited_at + timedelta(minutes=1),
     )
-    # Edited, but not its location.
-    text_only, text_post = _cat_with_post(
-        db_session_manager, user_id=owner, post_location=(41.25, 69.25)
-    )
-    _history(
-        db_session_manager,
-        post_id=text_post,
-        before_location=(41.25, 69.25),
-        after_location=(41.25, 69.25),
-        created_at=edited_at,
-    )
-    # Created without a point, location added by a later edit: the creation
-    # contract left this cat unlocated (separate follow-up, not AUTH-205).
-    added_later, added_post = _cat_with_post(
-        db_session_manager, user_id=owner, post_location=(41.3, 69.3)
-    )
+    added, added_post = cat(a, touched=True)
     _history(
         db_session_manager,
         post_id=added_post,
         before_location=None,
-        after_location=(41.3, 69.3),
+        after_location=a,
         created_at=edited_at,
     )
-    # The owner removed the point: never publish it again.
-    removed, removed_post = _cat_with_post(db_session_manager, user_id=owner, post_location=None)
+    removed, removed_post = cat(None, touched=True)
     _history(
         db_session_manager,
         post_id=removed_post,
-        before_location=(41.2, 69.2),
+        before_location=a,
         after_location=None,
         created_at=edited_at,
     )
-    # Two history rows tie for the earliest edit: the original is ambiguous.
-    tied, tied_post = _cat_with_post(db_session_manager, user_id=owner, post_location=(41.4, 69.4))
-    for location in ((41.1, 69.1), (41.15, 69.15)):
-        _history(
-            db_session_manager,
-            post_id=tied_post,
-            before_location=location,
-            after_location=(41.4, 69.4),
-            created_at=edited_at,
-        )
-    # A snapshot without a usable location is not evidence.
-    malformed, malformed_post = _cat_with_post(
-        db_session_manager, user_id=owner, post_location=(41.4, 69.4)
+    missing_key, missing_key_post = cat(a, touched=True)
+    _history(
+        db_session_manager,
+        post_id=missing_key_post,
+        before_location=None,
+        after_location=None,
+        created_at=edited_at,
+        before={"description": "old"},
+        after={"description": "new"},
     )
+    malformed, malformed_post = cat(a, touched=True)
+    bad = {"location": {"latitude": "41.31", "longitude": 69.27}}
     _history(
         db_session_manager,
         post_id=malformed_post,
         before_location=None,
-        after_location=(41.4, 69.4),
+        after_location=None,
         created_at=edited_at,
-        before={"location": {"latitude": "41.1", "longitude": 69.1}},
+        before=bad,
+        after=bad,
     )
+    # History says nothing moved, but the post no longer has that point.
+    diverged, diverged_post = cat(b, touched=True)
+    _history(
+        db_session_manager,
+        post_id=diverged_post,
+        before_location=a,
+        after_location=a,
+        created_at=edited_at,
+    )
+    unlocated, _ = cat(None)
 
     with integration_engine.begin() as connection:
         result = classify(connection)
     eligible = {candidate.cat_id: candidate for candidate in result.eligible}
     reasons = {item.cat_id: item.reason for item in result.excluded}
 
-    assert set(eligible) == {moved, text_only}
-    assert (eligible[moved].latitude, eligible[moved].longitude) == (41.31, 69.27)
-    assert eligible[moved].location_edited is True
-    assert eligible[text_only].location_edited is False
+    assert set(eligible) == {legacy_untouched, modern_counter_bumped, modern_text_edit}
     assert reasons == {
-        added_later: "no_original_location",
-        removed: "location_removed_by_owner",
-        tied: "original_location_ambiguous",
+        legacy_touched: "edit_history_incomplete",
+        legacy_text_edit: "edit_history_incomplete",
+        moved: "location_changed_after_creation",
+        moved_back: "location_changed_after_creation",
+        added: "location_changed_after_creation",
+        removed: "location_changed_after_creation",
+        missing_key: "original_location_ambiguous",
         malformed: "original_location_ambiguous",
+        diverged: "original_location_ambiguous",
+        unlocated: "no_original_location",
     }
 
-    with integration_engine.begin() as connection:
-        skipped = classify(connection, skip_edited_locations=True)
-    assert {candidate.cat_id for candidate in skipped.eligible} == {text_only}
-    skipped_reasons = {item.cat_id: item.reason for item in skipped.excluded}
-    assert skipped_reasons[moved] == "location_edited_skipped"
-
     # Classification (dry run) wrote nothing.
-    for cat_id in (moved, text_only, added_later, removed, tied, malformed):
+    for cat_id in [*eligible, *reasons]:
         assert _canonical(db_session_manager, cat_id) is None
 
     with integration_engine.begin() as connection:
-        apply_repairs(connection, result.eligible)
-    assert _canonical(db_session_manager, moved) == (pytest.approx(41.31), pytest.approx(69.27))
-    assert _canonical(db_session_manager, text_only) == (
-        pytest.approx(41.25),
-        pytest.approx(69.25),
-    )
-    for cat_id in (added_later, removed, tied, malformed):
+        repaired = apply_repairs(connection, result.eligible)
+    assert {candidate.cat_id for candidate in repaired} == set(eligible)
+    for cat_id in eligible:
+        assert _canonical(db_session_manager, cat_id) == (pytest.approx(a[0]), pytest.approx(a[1]))
+    for cat_id in reasons:
         assert _canonical(db_session_manager, cat_id) is None
+
+
+def test_without_any_history_only_never_updated_rows_are_complete(
+    integration_engine: Engine, db_session_manager
+) -> None:
+    owner = _user(db_session_manager, "repair-no-history@example.com")
+    untouched, _ = _cat_with_post(db_session_manager, user_id=owner, post_location=(41.3, 69.3))
+    touched, _ = _cat_with_post(
+        db_session_manager, user_id=owner, post_location=(41.3, 69.3), touched=True
+    )
+
+    with integration_engine.begin() as connection:
+        result = classify(connection)
+    assert [candidate.cat_id for candidate in result.eligible] == [untouched]
+    assert [(item.cat_id, item.reason) for item in result.excluded] == [
+        (touched, "edit_history_incomplete")
+    ]
 
 
 def test_multiple_originating_posts_are_excluded(
@@ -328,6 +401,7 @@ def test_multiple_originating_posts_are_excluded(
                 description="Second",
                 is_public=True,
                 created_at=first.created_at,
+                updated_at=first.created_at,
             )
         )
 
@@ -359,6 +433,27 @@ def test_repair_skips_cat_that_gained_location_after_selection(
     assert _canonical(db_session_manager, cat_id) == (pytest.approx(41.0), pytest.approx(69.0))
 
 
+def test_repair_skips_post_moved_after_selection(
+    integration_engine: Engine, db_session_manager
+) -> None:
+    owner = _user(db_session_manager, "repair-moved-race@example.com")
+    cat_id, post_id = _cat_with_post(db_session_manager, user_id=owner, post_location=(41.3, 69.3))
+    with integration_engine.begin() as connection:
+        candidates = find_candidates(connection)
+    assert [candidate.cat_id for candidate in candidates] == [cat_id]
+    with integration_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE posts SET location = "
+                "ST_SetSRID(ST_MakePoint(69.4, 41.4), 4326) WHERE id = :id"
+            ),
+            {"id": post_id},
+        )
+    with integration_engine.begin() as connection:
+        assert apply_repairs(connection, candidates) == []
+    assert _canonical(db_session_manager, cat_id) is None
+
+
 def test_cli_dry_run_writes_nothing_and_apply_requires_database_name(
     integration_engine: Engine,
     integration_database_url: str,
@@ -367,12 +462,17 @@ def test_cli_dry_run_writes_nothing_and_apply_requires_database_name(
 ) -> None:
     owner = _user(db_session_manager, "repair-cli@example.com")
     cat_id, post_id = _cat_with_post(db_session_manager, user_id=owner, post_location=(41.3, 69.3))
+    excluded_cat, _ = _cat_with_post(
+        db_session_manager, user_id=owner, post_location=(41.3, 69.3), touched=True
+    )
 
     assert main(["--database-url", integration_database_url]) == 0
     output = capsys.readouterr()
     assert str(cat_id) in output.out and str(post_id) in output.out
     assert '"applied": false' in output.out
-    assert "1 eligible" in output.err
+    assert f'"cat_id": "{excluded_cat}"' in output.out
+    assert '"excluded": "edit_history_incomplete"' in output.out
+    assert "1 eligible" in output.err and "1 excluded" in output.err
     assert _canonical(db_session_manager, cat_id) is None
 
     assert main(["--database-url", integration_database_url, "--apply"]) == 2
@@ -399,6 +499,7 @@ def test_cli_dry_run_writes_nothing_and_apply_requires_database_name(
     )
     assert '"applied": true' in capsys.readouterr().out
     assert _canonical(db_session_manager, cat_id) == (pytest.approx(41.3), pytest.approx(69.3))
+    assert _canonical(db_session_manager, excluded_cat) is None
 
 
 def test_repaired_cat_becomes_visible_on_needs_help_map(

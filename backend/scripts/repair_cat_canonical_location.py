@@ -6,40 +6,40 @@ NULL canonical location, even though the publication itself had a point. The
 map (``GET /cats?bbox=...``) only uses ``cats.canonical_location``, so such
 cats never appeared there.
 
-Repair rule (deterministic, conservative, idempotent). A cat is *eligible*
-only when every condition holds; otherwise it is reported as *excluded* with
-a reason and left unchanged:
+Repair policy (owner-approved): cover every post kind linked to a cat, never
+repair a post whose location changed after creation, never overwrite a
+canonical location, exclude anything ambiguous, and produce an auditable dry
+run. A cat is *eligible* only when every condition below holds; otherwise it
+is reported as *excluded* with a reason and left unchanged:
 
 * the cat has ``canonical_location IS NULL`` and is not deleted or merged;
 * exactly one *originating* post exists: created in the same transaction as
   the cat (same ``created_at``, both from the transaction's ``now()``) by the
   cat's creator (``no_originating_post`` / ``multiple_originating_posts``);
 * that post is not deleted (``originating_post_deleted``);
-* its *original* creation location is known unambiguously. Every post edit
-  writes a ``post_history`` row with a ``before`` snapshot in the same
-  transaction (editing and history were introduced together), so:
+* the post's edit history is provably complete. Missing history is not
+  taken to mean "never edited". Completeness is proven only by database
+  evidence: the post was created at or after the earliest ``post_history``
+  row in the database (history logging was already live when it was
+  created), or the row was never updated at all (``updated_at =
+  created_at``; any edit or counter update moves ``updated_at``). Otherwise
+  ``edit_history_incomplete``: listed for separate review;
+* no history row records a location change (``location_changed_after_creation``,
+  which includes a location removed or added by an edit), and every history
+  snapshot has a well-formed location equal to the current one
+  (``original_location_ambiguous``);
+* the post has a location (``no_original_location``: created unlocated).
 
-  - no history row: the current location is the creation location;
-  - otherwise the earliest history row's ``before.location`` is; a tie for
-    the earliest row, a missing ``location`` key or invalid coordinates make
-    it ``original_location_ambiguous``;
-  - an original without a point is ``no_original_location`` (the cat was
-    correctly created unlocated; a location added by a later edit is a
-    separate case, see docs/CAT_LOCATION_REPAIR.md);
-* the post still has a location (``location_removed_by_owner``: the owner
-  removed it, so no point is published again).
-
-An eligible cat gets its originating post's *original* coordinates, exactly
-what the fixed creation path would have stored. ``location_edited`` in the
-output marks posts whose location changed after creation;
-``--skip-edited-locations`` leaves those out. No other column, post or cat is
-touched and an existing canonical location is never overwritten.
+An eligible cat gets its originating post's location, which by the rules
+above is its unchanged creation location: exactly what the fixed creation
+path stores. No other column, post or cat is touched and an existing
+canonical location is never overwritten.
 
 Dry run by default: prints one JSON line per eligible and excluded cat and
 writes nothing. ``--apply`` also requires ``--confirm-database`` to equal the
 connected database name; each repaired row is printed as one JSON line for
-the audit record. Do not run against production without the owner's approval
-for that run (docs/DEPLOYMENT.md).
+the audit record. Do not run against any persistent database without the
+owner's approval for that run (docs/CAT_LOCATION_REPAIR.md).
 """
 
 from __future__ import annotations
@@ -55,7 +55,10 @@ from uuid import UUID
 from sqlalchemy import Connection, create_engine, text
 
 _CLASSIFY_SQL = """
-WITH unlocated AS (
+WITH history_epoch AS (
+    SELECT min(created_at) AS first_history_at FROM post_history
+),
+unlocated AS (
     SELECT c.id AS cat_id, c.created_at, c.created_by
     FROM cats c
     WHERE c.canonical_location IS NULL
@@ -66,8 +69,10 @@ origin AS (
     SELECT u.cat_id,
            p.id AS post_id,
            p.deleted_at AS post_deleted_at,
-           ST_Y(p.location) AS current_latitude,
-           ST_X(p.location) AS current_longitude,
+           p.created_at AS post_created_at,
+           p.updated_at AS post_updated_at,
+           ST_Y(p.location) AS latitude,
+           ST_X(p.location) AS longitude,
            count(*) OVER (PARTITION BY u.cat_id) AS origin_matches
     FROM unlocated u
     JOIN posts p
@@ -75,50 +80,64 @@ origin AS (
      AND p.created_at = u.created_at
      AND p.user_id IS NOT DISTINCT FROM u.created_by
 ),
-first_history AS (
-    SELECT o.post_id,
-           count(*) AS earliest_rows,
-           (array_agg(h.before ORDER BY h.id))[1] AS before
-    FROM origin o
-    JOIN post_history h ON h.post_id = o.post_id
-    WHERE h.created_at = (
-        SELECT min(h2.created_at) FROM post_history h2 WHERE h2.post_id = o.post_id
-    )
-    GROUP BY o.post_id
+history_summary AS (
+    SELECT h.post_id,
+           count(*) AS history_rows,
+           bool_or(NOT (h.before ? 'location') OR NOT (h.after ? 'location'))
+               AS missing_location_key,
+           bool_or(h.before -> 'location' IS DISTINCT FROM h.after -> 'location')
+               AS location_changed
+    FROM post_history h
+    WHERE h.post_id IN (SELECT post_id FROM origin)
+    GROUP BY h.post_id
 )
 SELECT u.cat_id,
        o.post_id,
        o.origin_matches,
        o.post_deleted_at IS NOT NULL AS post_deleted,
-       o.current_latitude,
-       o.current_longitude,
-       fh.post_id IS NOT NULL AS has_history,
-       fh.earliest_rows,
-       fh.before ? 'location' AS history_has_location_key,
-       jsonb_typeof(fh.before -> 'location') AS history_location_type,
-       jsonb_typeof(fh.before -> 'location' -> 'latitude') AS history_latitude_type,
-       jsonb_typeof(fh.before -> 'location' -> 'longitude') AS history_longitude_type,
-       CASE WHEN jsonb_typeof(fh.before -> 'location' -> 'latitude') = 'number'
-            THEN (fh.before -> 'location' ->> 'latitude')::double precision END
-           AS history_latitude,
-       CASE WHEN jsonb_typeof(fh.before -> 'location' -> 'longitude') = 'number'
-            THEN (fh.before -> 'location' ->> 'longitude')::double precision END
-           AS history_longitude
+       o.latitude,
+       o.longitude,
+       coalesce(hs.history_rows, 0) AS history_rows,
+       coalesce(hs.missing_location_key, false) AS missing_location_key,
+       coalesce(hs.location_changed, false) AS location_changed,
+       (
+           (e.first_history_at IS NOT NULL AND o.post_created_at >= e.first_history_at)
+           OR (hs.post_id IS NULL AND o.post_updated_at = o.post_created_at)
+       ) AS history_complete
 FROM unlocated u
+CROSS JOIN history_epoch e
 LEFT JOIN origin o ON o.cat_id = u.cat_id
-LEFT JOIN first_history fh ON fh.post_id = o.post_id
+LEFT JOIN history_summary hs ON hs.post_id = o.post_id
 ORDER BY u.cat_id, o.post_id
+"""
+
+# Every snapshot of an eligible post must hold the current location; checked
+# separately so a malformed or diverging snapshot is never trusted.
+_SNAPSHOTS_MATCH_SQL = """
+SELECT bool_and(
+    coalesce(
+        jsonb_typeof(h.before -> 'location' -> 'latitude') = 'number'
+        AND jsonb_typeof(h.before -> 'location' -> 'longitude') = 'number'
+        AND (h.before -> 'location' ->> 'latitude')::double precision = :latitude
+        AND (h.before -> 'location' ->> 'longitude')::double precision = :longitude,
+        false
+    )
+) AS all_match
+FROM post_history h
+WHERE h.post_id = :post_id
 """
 
 _REPAIR_SQL = """
 UPDATE cats c
-SET canonical_location = ST_SetSRID(ST_MakePoint(:longitude, :latitude), 4326)
+SET canonical_location = p.location
 FROM posts p
 WHERE c.id = :cat_id
   AND p.id = :post_id
   AND p.cat_id = c.id
   AND p.deleted_at IS NULL
   AND p.location IS NOT NULL
+  AND ST_Y(p.location) = :latitude
+  AND ST_X(p.location) = :longitude
   AND c.canonical_location IS NULL
   AND c.deleted_at IS NULL
   AND c.merged_into IS NULL
@@ -131,7 +150,6 @@ class RepairCandidate:
     post_id: UUID
     latitude: float
     longitude: float
-    location_edited: bool = False
 
     def as_audit_record(self, *, applied: bool) -> dict[str, object]:
         return {
@@ -139,7 +157,6 @@ class RepairCandidate:
             "source_post_id": str(self.post_id),
             "latitude": self.latitude,
             "longitude": self.longitude,
-            "location_edited": self.location_edited,
             "applied": applied,
         }
 
@@ -164,57 +181,38 @@ class Classification:
     excluded: list[ExcludedCat]
 
 
-def _valid(latitude: float | None, longitude: float | None) -> bool:
-    return (
-        latitude is not None
-        and longitude is not None
-        and -90 <= latitude <= 90
-        and -180 <= longitude <= 180
-    )
-
-
-def _classify_row(row) -> RepairCandidate | ExcludedCat:
+def _classify_row(connection: Connection, row) -> RepairCandidate | ExcludedCat:
     if row.post_id is None:
         return ExcludedCat(row.cat_id, None, "no_originating_post")
     if row.origin_matches != 1:
         return ExcludedCat(row.cat_id, None, "multiple_originating_posts")
     if row.post_deleted:
         return ExcludedCat(row.cat_id, row.post_id, "originating_post_deleted")
+    if not row.history_complete:
+        return ExcludedCat(row.cat_id, row.post_id, "edit_history_incomplete")
+    if row.missing_location_key:
+        return ExcludedCat(row.cat_id, row.post_id, "original_location_ambiguous")
+    if row.location_changed:
+        return ExcludedCat(row.cat_id, row.post_id, "location_changed_after_creation")
+    if row.latitude is None or row.longitude is None:
+        return ExcludedCat(row.cat_id, row.post_id, "no_original_location")
 
-    if row.has_history:
-        if row.earliest_rows != 1 or not row.history_has_location_key:
+    latitude, longitude = float(row.latitude), float(row.longitude)
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return ExcludedCat(row.cat_id, row.post_id, "original_location_ambiguous")
+    if row.history_rows:
+        all_match = connection.execute(
+            text(_SNAPSHOTS_MATCH_SQL),
+            {"post_id": row.post_id, "latitude": latitude, "longitude": longitude},
+        ).scalar_one()
+        if all_match is not True:
             return ExcludedCat(row.cat_id, row.post_id, "original_location_ambiguous")
-        if row.history_location_type == "null":
-            return ExcludedCat(row.cat_id, row.post_id, "no_original_location")
-        if (
-            row.history_location_type != "object"
-            or row.history_latitude_type != "number"
-            or row.history_longitude_type != "number"
-            or not _valid(row.history_latitude, row.history_longitude)
-        ):
-            return ExcludedCat(row.cat_id, row.post_id, "original_location_ambiguous")
-        latitude, longitude = float(row.history_latitude), float(row.history_longitude)
-    else:
-        if row.current_latitude is None or row.current_longitude is None:
-            return ExcludedCat(row.cat_id, row.post_id, "no_original_location")
-        latitude, longitude = float(row.current_latitude), float(row.current_longitude)
-
-    if row.current_latitude is None or row.current_longitude is None:
-        return ExcludedCat(row.cat_id, row.post_id, "location_removed_by_owner")
-    edited = (latitude, longitude) != (
-        float(row.current_latitude),
-        float(row.current_longitude),
-    )
     return RepairCandidate(
-        cat_id=row.cat_id,
-        post_id=row.post_id,
-        latitude=latitude,
-        longitude=longitude,
-        location_edited=edited,
+        cat_id=row.cat_id, post_id=row.post_id, latitude=latitude, longitude=longitude
     )
 
 
-def classify(connection: Connection, *, skip_edited_locations: bool = False) -> Classification:
+def classify(connection: Connection) -> Classification:
     eligible: list[RepairCandidate] = []
     excluded: list[ExcludedCat] = []
     seen: set[UUID] = set()
@@ -222,18 +220,13 @@ def classify(connection: Connection, *, skip_edited_locations: bool = False) -> 
         if row.cat_id in seen:  # several originating posts: one line per cat
             continue
         seen.add(row.cat_id)
-        result = _classify_row(row)
-        if isinstance(result, RepairCandidate) and skip_edited_locations:
-            if result.location_edited:
-                result = ExcludedCat(result.cat_id, result.post_id, "location_edited_skipped")
+        result = _classify_row(connection, row)
         (eligible if isinstance(result, RepairCandidate) else excluded).append(result)
     return Classification(eligible=eligible, excluded=excluded)
 
 
-def find_candidates(
-    connection: Connection, *, limit: int = 500, skip_edited_locations: bool = False
-) -> list[RepairCandidate]:
-    return classify(connection, skip_edited_locations=skip_edited_locations).eligible[:limit]
+def find_candidates(connection: Connection, *, limit: int = 500) -> list[RepairCandidate]:
+    return classify(connection).eligible[:limit]
 
 
 def apply_repairs(
@@ -241,9 +234,9 @@ def apply_repairs(
 ) -> list[RepairCandidate]:
     """Apply the repair; returns only the rows actually changed.
 
-    Each UPDATE re-checks the conditions, so a cat that gained a canonical
-    location (or whose post was deleted or lost its point) after selection
-    is skipped.
+    Each UPDATE re-checks the conditions, including that the post still has
+    the classified coordinates, so a cat that gained a canonical location or
+    a post that was deleted or moved after selection is skipped.
     """
     repaired: list[RepairCandidate] = []
     for candidate in candidates:
@@ -274,11 +267,6 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         "--confirm-database",
         help="Required with --apply: the name of the database being changed.",
     )
-    parser.add_argument(
-        "--skip-edited-locations",
-        action="store_true",
-        help="Exclude cats whose originating post location changed after creation.",
-    )
     return parser.parse_args(argv)
 
 
@@ -301,7 +289,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     file=sys.stderr,
                 )
                 return 2
-            classification = classify(connection, skip_edited_locations=args.skip_edited_locations)
+            classification = classify(connection)
             candidates = classification.eligible[: args.limit]
             if not args.apply:
                 for candidate in candidates:
