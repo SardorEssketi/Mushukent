@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,23 +11,33 @@ import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/app_remote_image.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../../application/comment_thread_controller.dart';
 
-final commentsProvider = FutureProvider.autoDispose
-    .family<ApiPage<CommentData>, String>((ref, postId) async {
-  return ref.watch(mushukistanApiProvider).listComments(postId);
-});
+typedef CommentThreadProvider = AutoDisposeAsyncNotifierProviderFamily<
+    CommentThreadController, CommentThread, String>;
 
-final lostPetCommentsProvider = FutureProvider.autoDispose
-    .family<ApiPage<CommentData>, String>((ref, lostPetId) async {
-  return ref.watch(mushukistanApiProvider).listLostPetComments(lostPetId);
-});
+final CommentThreadProvider commentsProvider =
+    AsyncNotifierProvider.autoDispose.family(
+  () => CommentThreadController(
+    (api, postId, cursor) => api.listComments(postId, cursor: cursor),
+  ),
+);
 
-final adoptionPostCommentsProvider = FutureProvider.autoDispose
-    .family<ApiPage<CommentData>, String>((ref, adoptionPostId) async {
-  return ref
-      .watch(mushukistanApiProvider)
-      .listAdoptionPostComments(adoptionPostId);
-});
+final CommentThreadProvider lostPetCommentsProvider =
+    AsyncNotifierProvider.autoDispose.family(
+  () => CommentThreadController(
+    (api, lostPetId, cursor) =>
+        api.listLostPetComments(lostPetId, cursor: cursor),
+  ),
+);
+
+final CommentThreadProvider adoptionPostCommentsProvider =
+    AsyncNotifierProvider.autoDispose.family(
+  () => CommentThreadController(
+    (api, adoptionPostId, cursor) =>
+        api.listAdoptionPostComments(adoptionPostId, cursor: cursor),
+  ),
+);
 
 /// Scrolls to the existing comments section when a notification opens a post.
 class CommentDeepLinkFocus extends StatefulWidget {
@@ -143,6 +155,7 @@ class _PostCommentsSectionState extends ConsumerState<PostCommentsSection> {
           .createComment(widget.postId, content,
               parentCommentId: parentCommentId),
       onRefresh: () => ref.invalidate(commentsProvider(widget.postId)),
+      thread: ref.read(commentsProvider(widget.postId).notifier),
       onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
       currentUserId: currentUser?.id,
       isModerator: currentUser?.isModerator == true,
@@ -194,6 +207,7 @@ class _LostPetCommentsSectionState
               ),
       onRefresh: () =>
           ref.invalidate(lostPetCommentsProvider(widget.lostPetId)),
+      thread: ref.read(lostPetCommentsProvider(widget.lostPetId).notifier),
       onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
       currentUserId: currentUser?.id,
       isModerator: currentUser?.isModerator == true,
@@ -246,6 +260,8 @@ class _AdoptionPostCommentsSectionState
               ),
       onRefresh: () =>
           ref.invalidate(adoptionPostCommentsProvider(widget.adoptionPostId)),
+      thread: ref
+          .read(adoptionPostCommentsProvider(widget.adoptionPostId).notifier),
       onMutation: () => ref.read(postMutationRevisionProvider.notifier).state++,
       currentUserId: currentUser?.id,
       isModerator: currentUser?.isModerator == true,
@@ -271,6 +287,7 @@ class _CommentsContent extends StatefulWidget {
     required this.showCardChrome,
     required this.onSubmit,
     required this.onRefresh,
+    required this.thread,
     required this.onMutation,
     required this.currentUserId,
     required this.isModerator,
@@ -286,12 +303,14 @@ class _CommentsContent extends StatefulWidget {
     required this.setError,
   });
 
-  final AsyncValue<ApiPage<CommentData>> commentsAsync;
+  final AsyncValue<CommentThread> commentsAsync;
   final AppStrings strings;
   final EdgeInsetsGeometry padding;
   final bool showCardChrome;
-  final Future<void> Function(String content, String? parentCommentId) onSubmit;
+  final Future<CommentData> Function(String content, String? parentCommentId)
+      onSubmit;
   final VoidCallback onRefresh;
+  final CommentThreadController thread;
   final VoidCallback onMutation;
   final String? currentUserId;
   final bool isModerator;
@@ -312,8 +331,6 @@ class _CommentsContent extends StatefulWidget {
 
 class _CommentsContentState extends State<_CommentsContent> {
   CommentData? _replyingTo;
-  final Map<String, CommentData> _updatedComments = <String, CommentData>{};
-  final Set<String> _removedCommentIds = <String>{};
   final Set<String> _expiredEditCommentIds = <String>{};
   String? _busyCommentId;
 
@@ -356,8 +373,7 @@ class _CommentsContentState extends State<_CommentsContent> {
     try {
       final updated = await widget.onEdit(comment.id, editedContent);
       if (!mounted) return;
-      setState(() => _updatedComments[comment.id] = updated);
-      widget.onRefresh();
+      widget.thread.replace(updated);
       widget.onMutation();
       _showSuccess(widget.strings.commentUpdated);
     } catch (error) {
@@ -401,11 +417,10 @@ class _CommentsContentState extends State<_CommentsContent> {
     try {
       await widget.onDelete(comment.id);
       if (!mounted) return;
-      setState(() {
-        _removedCommentIds.add(comment.id);
-        if (_replyingTo?.id == comment.id) _replyingTo = null;
-      });
-      widget.onRefresh();
+      widget.thread.remove(comment.id);
+      if (_replyingTo?.id == comment.id) {
+        setState(() => _replyingTo = null);
+      }
       widget.onMutation();
       _showSuccess(widget.strings.commentDeleted);
     } catch (error) {
@@ -433,9 +448,9 @@ class _CommentsContentState extends State<_CommentsContent> {
     widget.setSubmitting(true);
     widget.setError(null);
     try {
-      await widget.onSubmit(content, parentCommentId);
+      final created = await widget.onSubmit(content, parentCommentId);
       widget.controller.clear();
-      widget.onRefresh();
+      unawaited(widget.thread.addCreated(created));
       widget.onMutation();
       _showSuccess(widget.strings.commentPosted);
       if (mounted) {
@@ -460,11 +475,8 @@ class _CommentsContentState extends State<_CommentsContent> {
     // error with its retry).
     return widget.commentsAsync.when(
       skipError: true,
-      data: (page) {
-        final visibleComments = page.items
-            .where((comment) => !_removedCommentIds.contains(comment.id))
-            .map((comment) => _updatedComments[comment.id] ?? comment)
-            .toList(growable: false);
+      data: (thread) {
+        final visibleComments = thread.items;
         final roots = _buildCommentTree(visibleComments);
         final content = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,7 +580,7 @@ class _CommentsContentState extends State<_CommentsContent> {
               ),
             ],
             const SizedBox(height: 16),
-            if (visibleComments.isEmpty)
+            if (visibleComments.isEmpty && !thread.hasMore)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Text(
@@ -602,6 +614,13 @@ class _CommentsContentState extends State<_CommentsContent> {
                   },
                 ),
               ),
+            if (thread.hasMore)
+              _LoadMoreComments(
+                strings: widget.strings,
+                loading: thread.loadingMore,
+                failed: thread.loadMoreError != null,
+                onLoadMore: widget.thread.loadMore,
+              ),
           ],
         );
 
@@ -634,6 +653,63 @@ class _CommentsContentState extends State<_CommentsContent> {
           onPressed: widget.onRefresh,
           child: Text(widget.strings.retry),
         ),
+      ),
+    );
+  }
+}
+
+class _LoadMoreComments extends StatelessWidget {
+  const _LoadMoreComments({
+    required this.strings,
+    required this.loading,
+    required this.failed,
+    required this.onLoadMore,
+  });
+
+  final AppStrings strings;
+  final bool loading;
+  final bool failed;
+  final Future<void> Function() onLoadMore;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Center(
+          child: Semantics(
+            label: strings.showMoreComments,
+            child: const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (failed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                strings.couldNotLoadMoreComments,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: onLoadMore,
+              icon: Icon(failed ? Icons.refresh : Icons.expand_more),
+              label: Text(failed ? strings.retry : strings.showMoreComments),
+            ),
+          ),
+        ],
       ),
     );
   }

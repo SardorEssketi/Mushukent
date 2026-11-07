@@ -450,6 +450,18 @@ class AppStrings {
     };
   }
 
+  String get showMoreComments => switch (this) {
+        _UzbekStrings() => 'Yana izohlarni ko‘rsatish',
+        _RussianStrings() => 'Показать ещё комментарии',
+        _ => 'Show more comments',
+      };
+
+  String get couldNotLoadMoreComments => switch (this) {
+        _UzbekStrings() => 'Qolgan izohlarni yuklab bo‘lmadi.',
+        _RussianStrings() => 'Не удалось загрузить остальные комментарии.',
+        _ => 'Could not load more comments.',
+      };
+
   String get commentPosted {
     return switch (this) {
       _UzbekStrings() => 'Izoh yuborildi',
