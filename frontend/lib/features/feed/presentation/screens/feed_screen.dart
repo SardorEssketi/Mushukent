@@ -614,6 +614,35 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         ),
                       ),
                     ),
+                  // Every page is loaded: say so instead of just stopping.
+                  if (_firstPage != null &&
+                      items.isNotEmpty &&
+                      _nextCursor == null &&
+                      !_loadingMore &&
+                      !_pageError &&
+                      !_replaceOnNextPage &&
+                      !pageAsync.isLoading)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        key: const ValueKey('feed-end-of-list'),
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          AppSpacing.sm,
+                          gutter,
+                          AppSpacing.lg,
+                        ),
+                        child: Text(
+                          strings.noMorePosts,
+                          textAlign: TextAlign.center,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                        ),
+                      ),
+                    ),
                   const SliverToBoxAdapter(
                     child: SizedBox(height: AppSpacing.md),
                   ),
