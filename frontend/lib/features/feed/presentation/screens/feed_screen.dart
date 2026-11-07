@@ -416,7 +416,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
     final strings = ref.watch(appStringsProvider);
 
     if (_activeKey != key) _resetForView(key);
-    final received = pageAsync.isLoading ? null : pageAsync.valueOrNull;
+    // An error keeps the provider's previous value, which may belong to the
+    // category shown before the filter changed: never adopt it. Data already
+    // accepted for this view stays in _firstPage, so a failed refresh of the
+    // same category still shows its posts.
+    final received = pageAsync.isLoading || pageAsync.hasError
+        ? null
+        : pageAsync.valueOrNull;
     if (received != null && !identical(received, _observedFirstPage)) {
       _acceptFirstPage(received);
     }
