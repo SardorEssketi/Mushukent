@@ -564,7 +564,7 @@ Feature: Posts (Observations)
 - Mutable fields: description (max 2000), kind, status, location, is_public, and a complete replacement set of 1-5 photos. Switching to `needs_help` requires location. Cat association, author, counters, creation timestamp, and deletion metadata are immutable.
 - Request: JSON for text/location/visibility changes, or multipart with 1-5 validated image uploads when replacing photos. Update requests do not accept arbitrary `photo_url` values.
 - Response: PostResponse, including `updated_at`, `is_public`, and history-derived `is_edited`.
-- Side effects: a changed update writes an atomic `post_history` version record. No-op updates do not create history.
+- Side effects: a changed update writes an atomic `post_history` version record. No-op updates do not create history. When an edit sets a new non-null location and the linked cat still has no `canonical_location`, the cat takes that location in the same transaction, but only if this post created the cat (same creation transaction, same author) and the cat is not deleted or merged. A cat that already has a location is never moved, and cats created separately or by another user are never changed (DEV-GAP-01).
 - Errors: 401 UNAUTHORIZED, 403 FORBIDDEN, 404 POST_NOT_FOUND, 422 VALIDATION_ERROR.
 
 4) DELETE /api/v1/posts/{post_id}

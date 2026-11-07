@@ -70,10 +70,16 @@ Procedure (after the fixed backend is deployed and a verified backup exists, `do
 
 Rollback: set `canonical_location = NULL` for the `cat_id`s in the audit record.
 
-## Related, not covered: location added by a later edit
+## Related: location added by a later edit (DEV-GAP-01)
 
-Post edits never update the cat (unchanged behaviour). A post created without a location
-(allowed for ordinary observations), then edited into Needs Help with a location, keeps a cat
-with a NULL canonical location and stays off the Map, named or unnamed. This is a different root
-cause from AUTH-205 (the edit path, not creation), it is not fixed here, and the repair reports
-such cats as `no_original_location`. It needs a separate owner decision.
+A post created without a location (allowed for ordinary observations), then edited into Needs
+Help (or any kind) with a location, used to keep a cat with a NULL canonical location, so it
+stayed off the Map, named or unnamed. This is a different root cause from AUTH-205 (the edit
+path, not creation). It is fixed going forward in `PATCH /posts/{id}` (`docs/API.md`): an edit
+that sets a new location gives an unlocated cat that this post created that location, in the
+same transaction. Located cats are never moved, and cats created separately or by another user
+are never changed.
+
+Records affected before that fix are not repaired automatically: their location was added after
+creation, so the repair lists them as `location_changed_after_creation` for separate review. A
+new edit that sets a location on such a post now locates the cat.
