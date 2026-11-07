@@ -478,6 +478,8 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
             ],
             comments: CommentDeepLinkFocus(
               focus: widget.focusComments,
+              ready: !widget.focusComments ||
+                  !ref.watch(lostPetCommentsProvider(lostPetId)).isLoading,
               child: LostPetCommentsSection(
                 lostPetId: lostPetId,
                 padding: EdgeInsets.zero,

@@ -450,6 +450,10 @@ class _AdoptionPostDetailScreenState
             ],
             comments: CommentDeepLinkFocus(
               focus: widget.focusComments,
+              ready: !widget.focusComments ||
+                  !ref
+                      .watch(adoptionPostCommentsProvider(adoptionPostId))
+                      .isLoading,
               child: AdoptionPostCommentsSection(
                 adoptionPostId: adoptionPostId,
                 padding: EdgeInsets.zero,

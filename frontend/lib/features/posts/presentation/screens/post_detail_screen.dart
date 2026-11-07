@@ -402,6 +402,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             ],
             comments: CommentDeepLinkFocus(
               focus: widget.focusComments,
+              ready: !widget.focusComments ||
+                  !ref.watch(commentsProvider(widget.postId)).isLoading,
               child: PostCommentsSection(
                 postId: widget.postId,
                 padding: EdgeInsets.zero,
