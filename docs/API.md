@@ -1099,8 +1099,11 @@ Feature: Moderation
 - Request model: ReportHandleRequest
   Example:
   {"status":"resolved","action":"soft_delete_post","note":"Removed spam"}
-- Response: updated ReportResponse
-- Errors: 401, 403, 404
+- Response: updated ReportResponse. Its `status`, `handled_by`, `handled_at` and target preview
+  (`is_active`, `deleted_at`) reflect the committed decision, so they equal an immediately
+  following GET of the same report.
+- Errors: 401, 403, 404, 409 `REPORT_ALREADY_HANDLED` (the report is no longer open, for example
+  after a concurrent decision by another moderator; nothing is changed)
 - Side effects: any action (delete post, suspend user) must be recorded in an audit trail.
   `soft_delete_post` removes the reported publication of any kind: a post (Needs Help included),
   a lost-pet post or an adoption post. A target that is already deleted is left unchanged, so
