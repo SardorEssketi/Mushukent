@@ -9,6 +9,7 @@ from app.features.cats.domain.models import (
     CatListFilter,
     CatRecord,
     CatSummary,
+    GeoPoint,
     ObservationSortOrder,
     PostListItem,
 )
@@ -37,6 +38,14 @@ class CatRepository(Protocol):
     ) -> CatRecord: ...
 
     def save(self, cat: CatRecord) -> CatRecord: ...
+
+    def set_canonical_location_if_missing(
+        self,
+        cat_id: UUID,
+        location: GeoPoint,
+        *,
+        originating_post_id: UUID,
+    ) -> bool: ...
 
     def get_by_id(self, cat_id: UUID) -> CatRecord | None: ...
 

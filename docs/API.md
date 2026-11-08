@@ -479,7 +479,7 @@ Feature: Posts (Observations)
 - Request options:
   a) multipart/form-data with file:
   - photo/photos (one to five files) required OR photo_url string
-     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional. Mobile clients omit cat_id and may send new_cat.name to name the automatically created cat.
+     - cat_id (uuid) OR new_cat object {name,status,canonical_location}; both are optional. Mobile clients omit cat_id and may send new_cat.name to name the automatically created cat. A newly created cat (named or unnamed) takes `new_cat.canonical_location` when supplied, otherwise the publication `location`; this is the point `GET /cats` uses for map (`bbox`) and nearby discovery.
      - description string (max 2000)
      - kind (`observation` or `needs_help`, defaults to `observation`)
      - status (cat_status, independent metadata when supplied)
@@ -564,7 +564,7 @@ Feature: Posts (Observations)
 - Mutable fields: description (max 2000), kind, status, location, is_public, and a complete replacement set of 1-5 photos. Switching to `needs_help` requires location. Cat association, author, counters, creation timestamp, and deletion metadata are immutable.
 - Request: JSON for text/location/visibility changes, or multipart with 1-5 validated image uploads when replacing photos. Update requests do not accept arbitrary `photo_url` values.
 - Response: PostResponse, including `updated_at`, `is_public`, and history-derived `is_edited`.
-- Side effects: a changed update writes an atomic `post_history` version record. No-op updates do not create history.
+- Side effects: a changed update writes an atomic `post_history` version record. No-op updates do not create history. When an edit sets a new non-null location and the linked cat still has no `canonical_location`, the cat takes that location in the same transaction, but only if this post created the cat (same creation transaction, same author) and the cat is not deleted or merged. A cat that already has a location is never moved, and cats created separately or by another user are never changed (DEV-GAP-01).
 - Errors: 401 UNAUTHORIZED, 403 FORBIDDEN, 404 POST_NOT_FOUND, 422 VALIDATION_ERROR.
 
 4) DELETE /api/v1/posts/{post_id}
@@ -1099,8 +1099,11 @@ Feature: Moderation
 - Request model: ReportHandleRequest
   Example:
   {"status":"resolved","action":"soft_delete_post","note":"Removed spam"}
-- Response: updated ReportResponse
-- Errors: 401, 403, 404
+- Response: updated ReportResponse. Its `status`, `handled_by`, `handled_at` and target preview
+  (`is_active`, `deleted_at`) reflect the committed decision, so they equal an immediately
+  following GET of the same report.
+- Errors: 401, 403, 404, 409 `REPORT_ALREADY_HANDLED` (the report is no longer open, for example
+  after a concurrent decision by another moderator; nothing is changed)
 - Side effects: any action (delete post, suspend user) must be recorded in an audit trail.
   `soft_delete_post` removes the reported publication of any kind: a post (Needs Help included),
   a lost-pet post or an adoption post. A target that is already deleted is left unchanged, so

@@ -551,6 +551,77 @@ def test_list_comments_with_stable_pagination(client: TestClient, interactions_r
     assert third_page.json()["data"]["items"][0]["id"] == str(newer)
 
 
+def test_long_discussion_pages_reach_every_visible_comment(
+    client: TestClient,
+    interactions_runtime,
+) -> None:
+    """AUTH-212: a thread longer than one page is fully reachable with the
+    client's page size, ordered, without duplicates, including replies, a
+    comment added mid-pagination, and without deleted comments."""
+    manager = interactions_runtime.db_session_manager
+    author, token = _create_user_with_token(
+        manager, interactions_runtime.token_service, email="long-thread@example.com"
+    )
+    cat = _create_cat(manager, creator_id=author.id)
+    post_id = _create_post(manager, cat_id=cat.id, user_id=author.id)
+    base = datetime.now(UTC) - timedelta(hours=1)
+    created = [
+        _create_comment(
+            manager,
+            post_id=post_id,
+            user_id=author.id,
+            content=f"P-{index}",
+            created_at=base + timedelta(seconds=index),
+        )
+        for index in range(1, 46)
+    ]
+    with manager.session_scope() as session:
+        reply = schema.Comment(
+            post_id=post_id,
+            user_id=author.id,
+            parent_comment_id=created[2],
+            content="Reply to P-3",
+            created_at=base + timedelta(seconds=46),
+            updated_at=base + timedelta(seconds=46),
+        )
+        session.add(reply)
+        session.get(schema.Comment, created[9]).deleted_at = datetime.now(UTC)
+        session.flush()
+        reply_id = reply.id
+
+    headers = {"Authorization": f"Bearer {token}"}
+    seen: list[str] = []
+    cursor = None
+    pages = 0
+    while True:
+        params = {"limit": 20, "order": "asc"}
+        if cursor:
+            params["cursor"] = cursor
+        response = client.get(f"/api/v1/posts/{post_id}/comments", params=params, headers=headers)
+        assert response.status_code == 200, response.text
+        data = response.json()["data"]
+        seen.extend(item["id"] for item in data["items"])
+        pages += 1
+        if pages == 2:
+            late = _create_comment(
+                manager,
+                post_id=post_id,
+                user_id=author.id,
+                content="Late",
+                created_at=datetime.now(UTC),
+            )
+        cursor = data.get("next_cursor")
+        if not cursor:
+            break
+        assert pages < 10
+
+    expected = [str(c) for i, c in enumerate(created) if i != 9]
+    expected += [str(reply_id), str(late)]
+    assert seen == expected
+    assert len(seen) == len(set(seen)) == 46
+    assert pages == 3
+
+
 def test_comment_delete_by_author_and_moderator(
     client: TestClient,
     interactions_runtime,

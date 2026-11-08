@@ -119,6 +119,7 @@ class UserCommentsScreen extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
               final comment = page.items[index];
+              final route = commentActivityRoute(comment);
               return Card(
                 child: ListTile(
                   leading: const Icon(Icons.chat_bubble_outline),
@@ -128,8 +129,9 @@ class UserCommentsScreen extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(_formatDate(comment.createdAt)),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/posts/${comment.postId}'),
+                  trailing:
+                      route == null ? null : const Icon(Icons.chevron_right),
+                  onTap: route == null ? null : () => context.push(route),
                 ),
               );
             },
@@ -172,6 +174,27 @@ class _ActivityError extends ConsumerWidget {
           : FilledButton(onPressed: onRetry, child: Text(strings.retry)),
     );
   }
+}
+
+/// Detail route of the publication a comment belongs to.
+///
+/// A comment targets exactly one of an ordinary/Needs Help post, a Lost Pet
+/// or an Adoption post; the other identifiers are null. Returns null when no
+/// target identifier is present, so no `/posts/null` route is ever built.
+/// Deleted, private or blocked targets are handled by the detail screens.
+String? commentActivityRoute(CommentData comment) {
+  String? present(String? id) {
+    final value = id?.trim();
+    return value == null || value.isEmpty ? null : Uri.encodeComponent(value);
+  }
+
+  final postId = present(comment.postId);
+  if (postId != null) return '/posts/$postId';
+  final lostPetId = present(comment.lostPetId);
+  if (lostPetId != null) return '/lost-pets/$lostPetId';
+  final adoptionPostId = present(comment.adoptionPostId);
+  if (adoptionPostId != null) return '/adoption-posts/$adoptionPostId';
+  return null;
 }
 
 String _formatDate(DateTime dateTime) {

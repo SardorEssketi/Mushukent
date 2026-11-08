@@ -404,6 +404,7 @@ void main() {
     final google = FakeGoogleIdentityTokenProvider(
       error: const GoogleSignInFlowException(
         'Google sign-in is not configured for this build.',
+        failure: GoogleSignInFailure.notConfigured,
       ),
     );
     final controller = AuthController(repo, google);

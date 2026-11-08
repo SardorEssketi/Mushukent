@@ -9,6 +9,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/publication_unavailable.dart';
 import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../feed/presentation/widgets/feed_card_parts.dart';
@@ -318,6 +319,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       // A failed reload keeps the post that is already shown instead of an error page.
       body: postAsync.when(
         skipError: true,
+        // Keep the page (and scroll position) while a mutation reloads it, as
+        // the Lost Pet and Adoption details do. Showing the loading state here
+        // unmounted the discussion and reset its loaded pages to page 1.
+        skipLoadingOnReload: true,
         data: (post) {
           final likeOverride = ref.watch(postLikeOverridesProvider)[post.id];
           final isLiked =
@@ -402,6 +407,8 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
             ],
             comments: CommentDeepLinkFocus(
               focus: widget.focusComments,
+              ready: !widget.focusComments ||
+                  !ref.watch(commentsProvider(widget.postId)).isLoading,
               child: PostCommentsSection(
                 postId: widget.postId,
                 padding: EdgeInsets.zero,
@@ -410,15 +417,21 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => AppStatePanel(
-          icon: Icons.error_outline,
-          title: strings.post,
-          message: strings.couldNotLoadSection,
-          action: FilledButton(
-            onPressed: () => ref.invalidate(postDetailProvider(widget.postId)),
-            child: Text(strings.retry),
-          ),
-        ),
+        // Gone for good (deleted, removed, hidden, blocked or unknown id):
+        // explain neutrally and offer the Feed; other failures keep Retry.
+        error: (error, stackTrace) =>
+            isPublicationUnavailable(error, 'POST_NOT_FOUND')
+                ? PublicationUnavailablePanel(strings: strings)
+                : AppStatePanel(
+                    icon: Icons.error_outline,
+                    title: strings.post,
+                    message: strings.couldNotLoadSection,
+                    action: FilledButton(
+                      onPressed: () =>
+                          ref.invalidate(postDetailProvider(widget.postId)),
+                      child: Text(strings.retry),
+                    ),
+                  ),
       ),
     );
   }

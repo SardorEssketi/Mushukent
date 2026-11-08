@@ -165,11 +165,7 @@ class PostsService:
                             ),
                             approximate_age_smallyears=None,
                             cover_photo_url=None,
-                            canonical_location=(
-                                payload.new_cat.canonical_location
-                                if payload.new_cat is not None
-                                else payload.location
-                            ),
+                            canonical_location=cat.canonical_location,
                             first_seen_at=None,
                             last_seen_at=None,
                             total_observations=0,
@@ -423,6 +419,15 @@ class PostsService:
                     return to_post_response(current)
 
                 updated = post_repository.update(post_id, draft)
+                if location is not None and location != current.location:
+                    # DEV-GAP-01: a location added (or set) by an edit locates a
+                    # cat that this post created and that still has no location,
+                    # in the same transaction. Never moves a located cat.
+                    self.cat_repository_factory(session).set_canonical_location_if_missing(
+                        current.cat_id,
+                        location,
+                        originating_post_id=post_id,
+                    )
                 after = post_history_snapshot(updated)
                 post_repository.add_history(
                     post_id=post_id,
@@ -603,7 +608,14 @@ class PostsService:
             status=payload.new_cat.status,
             approximate_age_smallyears=None,
             cover_photo_url=None,
-            canonical_location=payload.new_cat.canonical_location,
+            # A named new cat is still created from this publication, so its
+            # canonical location follows the publication point unless the
+            # client supplies an explicit one (API.md, POST /posts new_cat).
+            canonical_location=(
+                payload.new_cat.canonical_location
+                if payload.new_cat.canonical_location is not None
+                else payload.location
+            ),
             first_seen_at=None,
             last_seen_at=None,
             total_observations=0,

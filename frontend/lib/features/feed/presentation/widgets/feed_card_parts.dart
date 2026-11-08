@@ -722,39 +722,55 @@ class FeedCountAction extends StatelessWidget {
     required this.count,
     required this.onPressed,
     this.active = false,
+    this.toggled,
   });
 
+  /// The action ("Like", "Comments"); with [count] it is the accessible name.
   final String tooltip;
   final IconData icon;
   final int count;
   final VoidCallback? onPressed;
   final bool active;
 
+  /// On/off state for toggle actions such as Like; null for plain actions.
+  final bool? toggled;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(AppRadii.sm),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(icon,
-                  size: 21,
-                  color: active ? colors.error : colors.onSurfaceVariant),
-              const SizedBox(width: 6),
-              Text(
-                '$count',
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color:
-                          active ? colors.onSurface : colors.onSurfaceVariant,
-                    ),
-              ),
-            ]),
+    // One node per action, "Like, 4", instead of the bare count that the icon
+    // and number used to merge into.
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      toggled: toggled,
+      label: '$tooltip, $count',
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        excludeFromSemantics: true,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(AppRadii.sm),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon,
+                    size: 21,
+                    color: active ? colors.error : colors.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(
+                  '$count',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color:
+                            active ? colors.onSurface : colors.onSurfaceVariant,
+                      ),
+                ),
+              ]),
+            ),
           ),
         ),
       ),

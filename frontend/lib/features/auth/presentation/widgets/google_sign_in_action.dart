@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/api_error.dart';
 import '../../application/auth_controller.dart';
+import '../../infrastructure/google_sign_in_service.dart';
 import 'google_sign_in_entry_button.dart';
 
 /// The token exists only for this sign-in attempt, including password confirmation.
@@ -56,8 +57,16 @@ class _GoogleSignInActionState extends ConsumerState<GoogleSignInAction> {
           : () async {
               setState(() => _busy = true);
               try {
+                final strings = ref.read(appStringsProvider);
                 await ref.read(authControllerProvider.notifier).loginWithGoogle(
                       onPasswordRequired: _confirmPassword,
+                      describeFailure: (failure) => switch (failure) {
+                        GoogleSignInFailure.notConfigured =>
+                          strings.googleSignInNotConfigured,
+                        GoogleSignInFailure.unavailable =>
+                          strings.googleSignInUnavailable,
+                        _ => strings.googleSignInFailed,
+                      },
                     );
               } on Object {
                 // AuthController exposes the sign-in error.

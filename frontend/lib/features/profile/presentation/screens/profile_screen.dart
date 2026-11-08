@@ -52,8 +52,9 @@ class ProfileScreen extends ConsumerWidget {
             onPressed: () => context.push('/profile/edit'),
             icon: const Icon(Icons.edit_outlined),
           ),
+          // Account actions (Logout); Settings has its own row on the page.
           PopupMenuButton<_ProfileAction>(
-            tooltip: strings.settings,
+            tooltip: strings.profileActions,
             onSelected: (action) async {
               switch (action) {
                 case _ProfileAction.logout:

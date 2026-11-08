@@ -195,14 +195,6 @@ class ReportsService:
                     "Report has already been handled.",
                 )
 
-            target = self._resolve_target(
-                session=session,
-                user=user,
-                target_type=report.target_type,
-                target_id=report.target_id,
-                allow_missing=True,
-            )
-
             self._apply_moderation_action(
                 session, user, report.target_type, report.target_id, payload
             )
@@ -214,6 +206,15 @@ class ReportsService:
             )
             if handled is None:
                 raise api_error(404, "REPORT_NOT_FOUND", "Report not found.")
+            # Built after the action, in the same transaction, so the response shows the
+            # committed target state (removal, deleted_at, suspension) like a later GET would.
+            target = self._resolve_target(
+                session=session,
+                user=user,
+                target_type=report.target_type,
+                target_id=report.target_id,
+                allow_missing=True,
+            )
 
             logger.info(
                 "report_handled",

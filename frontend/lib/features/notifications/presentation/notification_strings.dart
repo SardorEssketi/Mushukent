@@ -14,6 +14,7 @@ class NotificationStrings {
   static const _copy = <String, Map<String, String>>{
     'en': {
       'title': 'Notifications',
+      'bell_unread': 'Notifications, {count} unread',
       'empty': 'No notifications yet',
       'error': 'Could not load notifications',
       'mark_all': 'Mark all as read',
@@ -67,6 +68,7 @@ class NotificationStrings {
     },
     'ru': {
       'title': 'Уведомления',
+      'bell_unread': 'Уведомления, непрочитанных: {count}',
       'empty': 'Пока нет уведомлений',
       'error': 'Не удалось загрузить уведомления',
       'mark_all': 'Отметить все как прочитанные',
@@ -121,6 +123,7 @@ class NotificationStrings {
     },
     'uz': {
       'title': 'Bildirishnomalar',
+      'bell_unread': 'Bildirishnomalar, o‘qilmagan: {count}',
       'empty': 'Hozircha bildirishnomalar yo‘q',
       'error': 'Bildirishnomalarni yuklab bo‘lmadi',
       'mark_all': 'Barchasini o‘qilgan deb belgilash',
@@ -176,6 +179,13 @@ class NotificationStrings {
   };
 
   String get(String key) => _copy[language]?[key] ?? _copy['en']![key] ?? key;
+
+  /// Accessible name (and tooltip) of the app-bar bell: always the destination,
+  /// plus the exact unread count when there is one. The visual badge may
+  /// abbreviate ("99+"); this text never does.
+  String bellLabel(int unread) => unread > 0
+      ? get('bell_unread').replaceAll('{count}', '$unread')
+      : get('title');
 
   String forEntry(NotificationEntry entry) {
     if (entry.kind == 'nearby_lost_pet') return get('nearby_lost_pet');
