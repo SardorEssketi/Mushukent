@@ -319,6 +319,10 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       // A failed reload keeps the post that is already shown instead of an error page.
       body: postAsync.when(
         skipError: true,
+        // Keep the page (and scroll position) while a mutation reloads it, as
+        // the Lost Pet and Adoption details do. Showing the loading state here
+        // unmounted the discussion and reset its loaded pages to page 1.
+        skipLoadingOnReload: true,
         data: (post) {
           final likeOverride = ref.watch(postLikeOverridesProvider)[post.id];
           final isLiked =
