@@ -579,7 +579,7 @@ Feature: Posts (Observations)
 5) GET /api/v1/users/{user_id}/posts
 - Purpose: list posts by a user
 - Auth: optional
-- Query: cursor, limit, sort=latest|oldest
+- Query: cursor, limit, sort=latest|oldest, kind=observation|needs_help (optional; omitted lists both kinds, any other value returns 422)
 - Response: GenericListResponse[PostListItem]
 - Pydantic: PostListItem
 - Privacy: returns 403 ACTIVITY_PRIVATE when the target user has disabled public activity viewing, except for the owner and moderators.

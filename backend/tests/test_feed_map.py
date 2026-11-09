@@ -1307,6 +1307,73 @@ def test_public_user_posts_respect_activity_privacy(client: TestClient, feed_run
     assert [item["id"] for item in owner_response.json()["data"]["items"]] == [str(post_id)]
 
 
+def test_user_posts_can_be_filtered_by_kind(client: TestClient, feed_runtime) -> None:
+    author, token = _create_user_with_token(
+        feed_runtime.db_session_manager,
+        feed_runtime.token_service,
+        email="kind-filter@example.com",
+    )
+    cat = _create_cat(feed_runtime.db_session_manager, creator_id=author.id)
+    now = datetime.now(UTC)
+    photo_post = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        latitude=None,
+        longitude=None,
+        created_at=now - timedelta(minutes=2),
+    )
+    help_post = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        kind=PostKind.NEEDS_HELP,
+        created_at=now - timedelta(minutes=1),
+    )
+    private_photo_post = _create_post(
+        feed_runtime.db_session_manager,
+        cat_id=cat.id,
+        user_id=author.id,
+        is_public=False,
+        created_at=now,
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    def ids(params: dict[str, str], auth: bool = True) -> list[str]:
+        response = client.get(
+            f"/api/v1/users/{author.id}/posts",
+            params=params,
+            headers=headers if auth else None,
+        )
+        assert response.status_code == 200, response.text
+        return [item["id"] for item in response.json()["data"]["items"]]
+
+    assert ids({}) == [str(private_photo_post), str(help_post), str(photo_post)]
+    assert ids({"kind": "observation"}) == [str(private_photo_post), str(photo_post)]
+    assert ids({"kind": "needs_help"}) == [str(help_post)]
+    # Other viewers never see the author's private post, with or without the filter.
+    assert ids({"kind": "observation"}, auth=False) == [str(photo_post)]
+
+    paged = client.get(
+        f"/api/v1/users/{author.id}/posts",
+        params={"kind": "observation", "limit": 1},
+        headers=headers,
+    ).json()["data"]
+    assert [item["id"] for item in paged["items"]] == [str(private_photo_post)]
+    assert paged["next_cursor"]
+    second = client.get(
+        f"/api/v1/users/{author.id}/posts",
+        params={"kind": "observation", "limit": 1, "cursor": paged["next_cursor"]},
+        headers=headers,
+    ).json()["data"]
+    assert [item["id"] for item in second["items"]] == [str(photo_post)]
+
+    invalid = client.get(
+        f"/api/v1/users/{author.id}/posts", params={"kind": "lost_pet"}, headers=headers
+    )
+    assert invalid.status_code == 422
+
+
 def test_public_user_comments_respect_activity_privacy(client: TestClient, feed_runtime) -> None:
     author, token = _create_user_with_token(
         feed_runtime.db_session_manager,

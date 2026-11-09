@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, status
 
 from app.api.v1.uploads import read_image_upload, run_upload_processing
 from app.core.dependencies import (
@@ -35,6 +35,7 @@ from app.features.users.application.schemas import (
     UserUpdate,
 )
 from app.features.users.application.service import UsersService
+from app.infrastructure.db.enums import PostKind
 
 router = APIRouter(prefix="/users")
 
@@ -189,6 +190,7 @@ def read_public_profile(
 def read_user_posts(
     user_id: UUID,
     query: PostListQuery = Depends(),
+    kind: PostKind | None = Query(default=None),
     current_user: AuthUser | None = Depends(get_optional_current_user),
     posts_service: PostsService = Depends(get_posts_service),
 ) -> ApiSuccess[GenericListResponse[PostListItem]]:
@@ -199,6 +201,7 @@ def read_user_posts(
             limit=query.limit,
             cursor=query.cursor,
             sort=query.sort,
+            kind=kind,
         )
     )
 
