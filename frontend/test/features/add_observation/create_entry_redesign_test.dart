@@ -330,7 +330,15 @@ void main() {
     router.go('/add/details');
     await tester.pumpAndSettle();
     expect(find.text('Add a note (optional)'), findsOneWidget);
-    await tester.ensureVisible(find.text('Publish post'));
+    // A Cat post can be published without a location, and the form says so.
+    expect(find.text('Location (optional)'), findsOneWidget);
+    expect(
+        find.text(
+            'You can post without a location. Add one to show this post on the Map.'),
+        findsOneWidget);
+    // The longer optional-location helper pushes the button below the fold.
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Publish post'));
     await tester.pumpAndSettle();
     expect(find.text('Feed destination'), findsOneWidget);
@@ -354,6 +362,11 @@ void main() {
     );
     router.go('/add/details');
     await tester.pumpAndSettle();
+    // Location is required for a help request, so it is never labelled optional.
+    expect(find.text('Location (optional)'), findsNothing);
+    expect(find.text('Location'), findsOneWidget);
+    expect(find.text('Confirm the location so people can find the cat.'),
+        findsOneWidget);
     await tester.scrollUntilVisible(find.text('Publish help request'), 200,
         scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('Publish help request'));

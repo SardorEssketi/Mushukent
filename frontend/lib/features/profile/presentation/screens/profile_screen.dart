@@ -110,6 +110,18 @@ class ProfileScreen extends ConsumerWidget {
                 padding: EdgeInsets.zero,
                 child: Column(children: [
                   ProfileActionRow(
+                    icon: Icons.add_a_photo_outlined,
+                    title: strings.myCatPosts,
+                    onTap: () => context.push('/profile/cat-posts'),
+                  ),
+                  const Divider(height: 1),
+                  ProfileActionRow(
+                    icon: Icons.volunteer_activism_outlined,
+                    title: strings.myNeedsHelpPosts,
+                    onTap: () => context.push('/profile/needs-help-posts'),
+                  ),
+                  const Divider(height: 1),
+                  ProfileActionRow(
                     icon: Icons.search_outlined,
                     title: strings.myLostPets,
                     onTap: () => context.push('/profile/lost-pets'),

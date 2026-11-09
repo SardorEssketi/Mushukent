@@ -252,11 +252,11 @@ class _AddObservationDetailsScreenState
             ),
             const SizedBox(height: AppSpacing.md),
             FormSection(
-              title: strings.location,
+              title: needsHelp ? strings.location : strings.locationOptional,
               helper: state.location == null
                   ? (needsHelp
                       ? strings.needsHelpLocationHelp
-                      : strings.catPostLocationHelp)
+                      : strings.optionalCatPostLocationHelp)
                   : null,
               children: [
                 if (state.location != null)

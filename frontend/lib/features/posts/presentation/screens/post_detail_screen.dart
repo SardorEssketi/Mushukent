@@ -112,10 +112,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       ref.read(postMutationRevisionProvider.notifier).state++;
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
-      final userId = ref.read(currentUserProvider)?.id;
-      if (userId != null) {
-        ref.invalidate(userPostsProvider(userId));
-      }
+      ref.invalidate(userPostsProvider);
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         context.pop(true);
