@@ -103,8 +103,18 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('45'), findsOneWidget);
     expect(find.text('17'), findsOneWidget);
+    // Each post type the user can publish has its own activity entry.
+    expect(find.text('My cat posts'), findsOneWidget);
+    expect(find.text('My “Cat needs help” posts'), findsOneWidget);
     expect(find.text('My lost pets'), findsOneWidget);
     expect(find.text('My rehoming posts'), findsOneWidget);
+    final rows = [
+      'My cat posts',
+      'My “Cat needs help” posts',
+      'My lost pets',
+      'My rehoming posts',
+    ].map((label) => tester.getTopLeft(find.text(label)).dy).toList();
+    expect(rows, orderedEquals([...rows]..sort()));
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Moderation reports'), findsNWidgets(2));
   });

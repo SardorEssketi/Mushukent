@@ -109,12 +109,15 @@ class SqlAlchemyPostRepository(PostRepository):
         include_private: bool,
         require_visible_cat: bool,
         viewer_user_id: UUID | None = None,
+        kind: PostKind | None = None,
     ) -> PostPage:
         statement = self._base_list_statement(
             viewer_user_id=viewer_user_id,
             include_private=include_private,
             require_visible_cat=require_visible_cat,
         ).where(schema.Post.user_id == user_id)
+        if kind is not None:
+            statement = statement.where(schema.Post.kind == kind)
         statement = exclude_blocked(statement, viewer_user_id, schema.Post.user_id)
         statement = self._apply_cursor(statement, cursor, sort, limit)
         rows = self.session.execute(statement).mappings().all()

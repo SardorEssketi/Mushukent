@@ -9,16 +9,25 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../auth/application/auth_controller.dart';
 
+/// Which of a user's posts a [UserPostsScreen] lists.
+///
+/// [kind] is a backend post kind (`observation` or `needs_help`); null lists
+/// every kind together.
+typedef UserPostsQuery = ({String userId, String? kind});
+
+const _userPostsPageSize = 50;
+
 final userPostsProvider = FutureProvider.autoDispose
-    .family<ApiPage<PostSummary>, String>((ref, userId) async {
+    .family<ApiPage<PostSummary>, UserPostsQuery>((ref, query) async {
   ref.watch(postMutationRevisionProvider);
   final includeViewerContext = ref.watch(
     authControllerProvider.select((state) => state.isAuthenticated),
   );
   return ref.watch(mushukistanApiProvider).listUserPosts(
-        userId,
-        limit: 50,
+        query.userId,
+        limit: _userPostsPageSize,
         includeViewerContext: includeViewerContext,
+        kind: query.kind,
       );
 });
 
@@ -35,40 +44,134 @@ final userCommentsProvider = FutureProvider.autoDispose
       );
 });
 
-class UserPostsScreen extends ConsumerWidget {
+class UserPostsScreen extends ConsumerStatefulWidget {
   const UserPostsScreen({
     super.key,
     required this.userId,
     required this.isCurrentUser,
+    this.kind,
   });
 
   final String userId;
   final bool isCurrentUser;
 
+  /// Backend post kind to list (`observation` or `needs_help`); null lists
+  /// every kind.
+  final String? kind;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UserPostsScreen> createState() => _UserPostsScreenState();
+}
+
+class _UserPostsScreenState extends ConsumerState<UserPostsScreen> {
+  /// The first page that [_morePosts] and [_nextCursor] continue. When the
+  /// provider delivers a different first page (refresh, mutation), the extra
+  /// pages belong to a stale list and are dropped.
+  ApiPage<PostSummary>? _firstPage;
+  final List<PostSummary> _morePosts = [];
+  String? _nextCursor;
+  bool _loadingMore = false;
+  bool _loadMoreFailed = false;
+
+  UserPostsQuery get _query => (userId: widget.userId, kind: widget.kind);
+
+  void _syncWithFirstPage(ApiPage<PostSummary> page) {
+    if (identical(page, _firstPage)) return;
+    _firstPage = page;
+    _morePosts.clear();
+    _nextCursor = page.nextCursor;
+    _loadMoreFailed = false;
+  }
+
+  Future<void> _loadMore() async {
+    final cursor = _nextCursor;
+    final firstPage = _firstPage;
+    if (_loadingMore || cursor == null || firstPage == null) return;
+    setState(() {
+      _loadingMore = true;
+      _loadMoreFailed = false;
+    });
+    try {
+      final page = await ref.read(mushukistanApiProvider).listUserPosts(
+            widget.userId,
+            limit: _userPostsPageSize,
+            cursor: cursor,
+            includeViewerContext:
+                ref.read(authControllerProvider).isAuthenticated,
+            kind: widget.kind,
+          );
+      if (!mounted || !identical(firstPage, _firstPage)) return;
+      final known = {
+        for (final post in firstPage.items) post.id,
+        for (final post in _morePosts) post.id,
+      };
+      setState(() {
+        _morePosts.addAll(page.items.where((post) => !known.contains(post.id)));
+        _nextCursor = page.nextCursor;
+      });
+    } catch (_) {
+      if (mounted && identical(firstPage, _firstPage)) {
+        setState(() => _loadMoreFailed = true);
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  String _title(AppStrings strings) {
+    if (!widget.isCurrentUser) return strings.userObservations;
+    return switch (widget.kind) {
+      'observation' => strings.myCatPosts,
+      'needs_help' => strings.myNeedsHelpPosts,
+      _ => strings.myObservations,
+    };
+  }
+
+  String _emptyMessage(AppStrings strings) => switch (widget.kind) {
+        'observation' => strings.noCatPostsYet,
+        'needs_help' => strings.noNeedsHelpPostsYet,
+        _ => strings.noObservationsYet,
+      };
+
+  @override
+  Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
-    final postsAsync = ref.watch(userPostsProvider(userId));
+    final postsAsync = ref.watch(userPostsProvider(_query));
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-            isCurrentUser ? strings.myObservations : strings.userObservations),
-      ),
+      appBar: AppBar(title: Text(_title(strings))),
       body: postsAsync.when(
         data: (page) {
-          if (page.items.isEmpty) {
-            return Center(child: Text(strings.noObservationsYet));
+          _syncWithFirstPage(page);
+          final posts = [...page.items, ..._morePosts];
+          if (posts.isEmpty) {
+            return Center(child: Text(_emptyMessage(strings)));
           }
+          final hasFooter = _nextCursor != null;
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
               child: ListView.separated(
                 padding: const EdgeInsets.only(bottom: 12),
-                itemCount: page.items.length,
+                itemCount: posts.length + (hasFooter ? 1 : 0),
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, index) {
-                  final post = page.items[index];
+                  if (index == posts.length) {
+                    return Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Center(
+                        child: _loadingMore
+                            ? const CircularProgressIndicator()
+                            : TextButton(
+                                onPressed: _loadMore,
+                                child: Text(_loadMoreFailed
+                                    ? strings.retry
+                                    : strings.loadMorePosts),
+                              ),
+                      ),
+                    );
+                  }
+                  final post = posts[index];
                   return FeedPostCard(
                     post: post,
                     onTap: () => context.push('/posts/${post.id}'),
@@ -82,7 +185,7 @@ class UserPostsScreen extends ConsumerWidget {
         error: (error, stackTrace) => _ActivityError(
           error: error,
           fallbackMessage: strings.couldNotLoadSection,
-          onRetry: () => ref.invalidate(userPostsProvider(userId)),
+          onRetry: () => ref.invalidate(userPostsProvider(_query)),
         ),
       ),
     );

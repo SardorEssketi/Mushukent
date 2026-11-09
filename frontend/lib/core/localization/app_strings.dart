@@ -3509,6 +3509,51 @@ class AppStrings {
         _ => 'No',
       };
 
+  String get locationOptional => switch (this) {
+        _UzbekStrings() => 'Joylashuv (ixtiyoriy)',
+        _RussianStrings() => 'Местоположение (необязательно)',
+        _ => 'Location (optional)',
+      };
+
+  String get optionalCatPostLocationHelp => switch (this) {
+        _UzbekStrings() =>
+          'Joylashuvsiz ham post qilish mumkin. Post xaritada chiqishi uchun joylashuv qo‘shing.',
+        _RussianStrings() =>
+          'Можно опубликовать и без места. Добавьте место, чтобы пост появился на карте.',
+        _ =>
+          'You can post without a location. Add one to show this post on the Map.',
+      };
+
+  String get myCatPosts => switch (this) {
+        _UzbekStrings() => 'Mening mushuk postlarim',
+        _RussianStrings() => 'Мои посты о кошках',
+        _ => 'My cat posts',
+      };
+
+  String get myNeedsHelpPosts => switch (this) {
+        _UzbekStrings() => 'Mening «Mushukka yordam kerak» postlarim',
+        _RussianStrings() => 'Мои посты «Кошке нужна помощь»',
+        _ => 'My “Cat needs help” posts',
+      };
+
+  String get noCatPostsYet => switch (this) {
+        _UzbekStrings() => 'Hali mushuk postlari yo‘q.',
+        _RussianStrings() => 'Пока нет постов о кошках.',
+        _ => 'No cat posts yet.',
+      };
+
+  String get noNeedsHelpPostsYet => switch (this) {
+        _UzbekStrings() => 'Hali «Mushukka yordam kerak» postlari yo‘q.',
+        _RussianStrings() => 'Пока нет постов «Кошке нужна помощь».',
+        _ => 'No “Cat needs help” posts yet.',
+      };
+
+  String get loadMorePosts => switch (this) {
+        _UzbekStrings() => 'Yana postlarni yuklash',
+        _RussianStrings() => 'Загрузить ещё посты',
+        _ => 'Load more posts',
+      };
+
   String get myLostPets => switch (this) {
         _UzbekStrings() => 'Mening yo‘qolgan uy hayvonlarim',
         _RussianStrings() => 'Мои потерянные питомцы',

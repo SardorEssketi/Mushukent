@@ -451,6 +451,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     },
                   ),
                   GoRoute(
+                    path: 'cat-posts',
+                    builder: (context, state) {
+                      final user = ref.read(currentUserProvider);
+                      return UserPostsScreen(
+                        userId: user?.id ?? '',
+                        isCurrentUser: true,
+                        kind: 'observation',
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'needs-help-posts',
+                    builder: (context, state) {
+                      final user = ref.read(currentUserProvider);
+                      return UserPostsScreen(
+                        userId: user?.id ?? '',
+                        isCurrentUser: true,
+                        kind: 'needs_help',
+                      );
+                    },
+                  ),
+                  GoRoute(
                     path: 'comments',
                     builder: (context, state) {
                       final user = ref.read(currentUserProvider);

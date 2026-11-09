@@ -74,6 +74,7 @@ class PostRepository(Protocol):
         include_private: bool,
         require_visible_cat: bool,
         viewer_user_id: UUID | None = None,
+        kind: PostKind | None = None,
     ) -> PostPage: ...
 
     def list_for_cat(

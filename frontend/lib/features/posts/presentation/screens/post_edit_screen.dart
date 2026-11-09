@@ -12,7 +12,6 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
-import '../../../auth/application/auth_controller.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../../profile/presentation/screens/user_activity_screen.dart';
 import 'post_detail_screen.dart';
@@ -173,10 +172,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
       ref.invalidate(postDetailProvider(widget.postId));
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
-      final userId = ref.read(currentUserProvider)?.id;
-      if (userId != null) {
-        ref.invalidate(userPostsProvider(userId));
-      }
+      ref.invalidate(userPostsProvider);
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         context.pop(true);
@@ -294,7 +290,7 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                   subtitle: Text(_location == null
                       ? (_kind == 'needs_help'
                           ? strings.needsHelpLocationHelp
-                          : strings.catPostLocationHelp)
+                          : strings.optionalCatPostLocationHelp)
                       : '${_location!.latitude.toStringAsFixed(5)}, ${_location!.longitude.toStringAsFixed(5)}'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: _saving ? null : () => _useCurrentLocation(strings),

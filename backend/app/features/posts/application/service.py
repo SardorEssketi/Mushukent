@@ -498,6 +498,7 @@ class PostsService:
         limit: int = 20,
         cursor: str | None = None,
         sort: PostSortOrder = PostSortOrder.LATEST,
+        kind: PostKind | None = None,
     ) -> GenericListResponse[PostListItem]:
         with self.db_session_manager.session_scope() as session:
             user_repository = self.user_repository_factory(session)
@@ -529,6 +530,7 @@ class PostsService:
                 include_private=include_private,
                 require_visible_cat=not include_private,
                 viewer_user_id=current_user.id if current_user is not None else None,
+                kind=kind,
             )
             return to_post_page_response(page)
 

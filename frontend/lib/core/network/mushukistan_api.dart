@@ -332,6 +332,7 @@ class MushukistanApi {
     String? cursor,
     String sort = 'latest',
     bool includeViewerContext = true,
+    String? kind,
   }) {
     return _client.get<ApiPage<PostSummary>>(
       'users/$userId/posts',
@@ -340,6 +341,7 @@ class MushukistanApi {
         'limit': limit,
         'sort': sort,
         if (cursor != null) 'cursor': cursor,
+        if (kind != null) 'kind': kind,
       },
       decoder: (json) => ApiPage.fromJson(
         json,
