@@ -81,40 +81,65 @@ class _MyAdoptionPostsScreenState extends ConsumerState<MyAdoptionPostsScreen> {
       appBar: AppBar(title: Text(strings.myAdoptionPosts)),
       body: RefreshIndicator(
         onRefresh: () => _load(reset: true),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (_loaded && visibleItems.isEmpty)
-              Text(strings.noAdoptionPostsYet),
-            for (final post in visibleItems)
-              Card(
-                child: ListTile(
-                  leading: AppRemoteImage(
-                    post.thumbUrl ?? post.photoUrl,
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.pets),
+        child: _loaded &&
+                visibleItems.isEmpty &&
+                !_loading &&
+                !_error &&
+                _cursor == null
+            // Centred like the other "My ..." activity lists; still
+            // scrollable so pull-to-refresh works on the empty screen.
+            ? CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          strings.noAdoptionPostsYet,
+                          key: const ValueKey('my-activity-empty'),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
                   ),
-                  title: Text(post.petName),
-                  subtitle: Text(post.isResolved
-                      ? strings.rehomedAdoptionPost
-                      : strings.activeAdoptionPost),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.push('/adoption-posts/${post.id}'),
-                ),
+                ],
+              )
+            : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  for (final post in visibleItems)
+                    Card(
+                      child: ListTile(
+                        leading: AppRemoteImage(
+                          post.thumbUrl ?? post.photoUrl,
+                          width: 52,
+                          height: 52,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.pets),
+                        ),
+                        title: Text(post.petName),
+                        subtitle: Text(post.isResolved
+                            ? strings.rehomedAdoptionPost
+                            : strings.activeAdoptionPost),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => context.push('/adoption-posts/${post.id}'),
+                      ),
+                    ),
+                  if (_error)
+                    TextButton(
+                      onPressed: () => _load(reset: !_loaded),
+                      child: Text(strings.retry),
+                    ),
+                  if (_loading)
+                    const Center(child: CircularProgressIndicator()),
+                  if (!_loading && _cursor != null)
+                    TextButton(
+                        onPressed: _load,
+                        child: Text(strings.loadMoreAdoptionPosts)),
+                ],
               ),
-            if (_error)
-              TextButton(
-                onPressed: () => _load(reset: !_loaded),
-                child: Text(strings.retry),
-              ),
-            if (_loading) const Center(child: CircularProgressIndicator()),
-            if (!_loading && _cursor != null)
-              TextButton(
-                  onPressed: _load, child: Text(strings.loadMoreAdoptionPosts)),
-          ],
-        ),
       ),
     );
   }
