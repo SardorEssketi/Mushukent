@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -80,6 +82,77 @@ void main() {
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pumpAndSettle();
       expect(find.text('Comment posted'), findsOneWidget);
+    });
+
+    testWidgets('on a computer Enter publishes, Shift+Enter adds a line',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        final client = _client();
+        final posted = <Object?>[];
+        client.setHandler('POST', 'posts/post-1/comments', (call) {
+          posted.add(call.body);
+          return _commentPayload(content: 'Hello');
+        });
+        await _pumpComments(tester, client: client);
+        await tester.tap(find.byType(TextField));
+        await tester.enterText(find.byType(TextField), 'Hello');
+
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pumpAndSettle();
+        expect(posted, isEmpty);
+
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(posted, hasLength(1));
+        expect(find.text('Comment posted'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('holding Enter sends once and adds no blank lines',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final client = _client();
+        client.setHandler('POST', 'posts/post-1/comments',
+            (_) => _commentPayload(content: 'Hello'));
+        await _pumpComments(tester, client: client);
+        await tester.tap(find.byType(TextField));
+        await tester.enterText(find.byType(TextField), 'Hello');
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+        for (var i = 0; i < 3; i++) {
+          await tester.sendKeyRepeatEvent(LogicalKeyboardKey.enter);
+        }
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(client.calls.where((c) => c.method == 'POST'), hasLength(1));
+        expect(
+            tester.widget<TextField>(find.byType(TextField)).controller!.text,
+            isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('on phones Enter does not publish', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        final client = _client();
+        client.setHandler('POST', 'posts/post-1/comments',
+            (_) => _commentPayload(content: 'Hello'));
+        await _pumpComments(tester, client: client);
+        await tester.tap(find.byType(TextField));
+        await tester.enterText(find.byType(TextField), 'Hello');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+        expect(client.calls.where((c) => c.method == 'POST'), isEmpty);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
 
     testWidgets('failed create does not show posted message', (tester) async {
