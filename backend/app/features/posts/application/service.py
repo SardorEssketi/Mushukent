@@ -534,6 +534,50 @@ class PostsService:
             )
             return to_post_page_response(page)
 
+    def save_post(self, post_id: UUID, user: AuthUser) -> None:
+        """Adds another user's visible cat post to the user's saved posts (idempotent)."""
+        with self.db_session_manager.session_scope() as session:
+            post_repository = self.post_repository_factory(session)
+            post = post_repository.get_by_id(
+                post_id,
+                include_deleted=False,
+                viewer_user_id=user.id,
+                respect_blocks=True,
+            )
+            if post is None:
+                raise api_error(404, "POST_NOT_FOUND", "Post not found.")
+            # Own posts first, so the author always gets this reason (even for a private or
+            # Needs-help post of theirs).
+            if post.user_id == user.id:
+                raise api_error(422, "CANNOT_SAVE_OWN_POST", "You cannot save your own post.")
+            # Only publicly visible posts: the saved list shows nothing else, so a moderator
+            # must not be able to save a private or hidden-cat post that would never appear.
+            if not self._can_view_post(post, None):
+                raise api_error(404, "POST_NOT_FOUND", "Post not found.")
+            if post.kind != PostKind.OBSERVATION:
+                raise api_error(422, "POST_NOT_SAVEABLE", "Only cat posts can be saved.")
+            post_repository.save_post(post_id, user.id)
+            logger.info("post_saved", post_id=str(post_id), actor_id=str(user.id))
+
+    def unsave_post(self, post_id: UUID, user: AuthUser) -> None:
+        """Removes a post from the user's saved posts. Removing an unsaved or deleted post
+        succeeds, so the button never gets stuck."""
+        with self.db_session_manager.session_scope() as session:
+            self.post_repository_factory(session).unsave_post(post_id, user.id)
+
+    def list_saved_posts(
+        self,
+        user: AuthUser,
+        *,
+        limit: int = 20,
+        cursor: str | None = None,
+    ) -> GenericListResponse[PostListItem]:
+        with self.db_session_manager.session_scope() as session:
+            page = self.post_repository_factory(session).list_saved(
+                user.id, limit=limit, cursor=cursor
+            )
+            return to_post_page_response(page)
+
     def list_posts_by_cat(
         self,
         cat_id: UUID,

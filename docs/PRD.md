@@ -302,7 +302,15 @@ Users shall be able to change their preferred app language later from Settings.
 
 Users shall be able to delete their own account from Settings under About account.
 
-MVP account deletion shall anonymize the account, deactivate login, end the current session, delete likes, and hide/anonymize user-owned posts, comments, lost-pet alerts, and adoption or rehoming posts according to the account lifecycle policy.
+MVP account deletion shall anonymize the account, deactivate login, end the current session, delete likes and saved posts, and hide/anonymize user-owned posts, comments, lost-pet alerts, and adoption or rehoming posts according to the account lifecycle policy.
+
+Saved posts
+
+Signed-in users shall be able to save other users' cat posts from the post's ⋮ menu (on the feed card and on the post page) and find them under Profile → Saved posts.
+
+- Only cat posts (`observation`) can be saved; Needs help, Lost Pets and Adoption posts cannot. Users do not save their own posts (those are under My posts).
+- The list is private, newest saved first, and shows only posts the user can still see. "Remove from saved" is available in the same menu.
+
 Leaderboards
 
 The application shall include Active and Popular user rankings.

@@ -292,6 +292,7 @@ class UsersService:
                 if post is not None:
                     post.like_count = max(0, post.like_count - int(like_count))
             session.execute(delete(schema.Like).where(schema.Like.user_id == user.id))
+            session.execute(delete(schema.SavedPost).where(schema.SavedPost.user_id == user.id))
             session.execute(
                 delete(schema.UserBlock).where(
                     or_(

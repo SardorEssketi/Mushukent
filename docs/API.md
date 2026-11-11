@@ -1011,6 +1011,32 @@ Feature: Post views
 - Side effects: insert into post_views and increment the post's view_count in one transaction
 - Feed, list and detail items of all three kinds include `view_count`.
 
+Feature: Saved posts
+--------------------
+A signed-in user can save other users' cat posts (`kind=observation`) and see them in a
+private list. Needs-help posts, Lost Pets and Adoption posts cannot be saved.
+
+1) POST /api/v1/posts/{post_id}/saved
+- Purpose: add a post to the caller's saved posts. Idempotent: saving again succeeds.
+- Auth: required
+- Response: 204 No Content
+- Errors: 404 POST_NOT_FOUND (missing, deleted, hidden or blocked author),
+  422 POST_NOT_SAVEABLE (not a cat post), 422 CANNOT_SAVE_OWN_POST
+
+2) DELETE /api/v1/posts/{post_id}/saved
+- Purpose: remove a post from the caller's saved posts. Idempotent, also for deleted posts.
+- Auth: required
+- Response: 204 No Content
+
+3) GET /api/v1/users/me/saved-posts
+- Purpose: the caller's saved posts, most recently saved first. Private to the caller.
+- Auth: required
+- Query params: limit (1-100, default 20), cursor
+- Response: GenericListResponse[PostListItem] (same items as GET /users/{id}/posts)
+- Only posts the caller can still see are listed: deleted, private, hidden-cat and
+  blocked-author posts drop out (and return if they become visible again).
+- Post list, feed and detail items include `is_saved_by_me` (always false for guests).
+
 Feature: Leaderboards
 ---------------------
 1) GET /api/v1/leaderboards/{type}

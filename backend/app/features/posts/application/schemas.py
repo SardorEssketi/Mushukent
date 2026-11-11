@@ -64,6 +64,7 @@ class PostListItem(BaseModel):
     comment_count: int = 0
     view_count: int = 0
     is_liked_by_me: bool = False
+    is_saved_by_me: bool = False
 
 
 class PostResponse(PostListItem):

@@ -58,6 +58,7 @@ class PostRecord:
     author: PostAuthorSummary | None
     cat: PostCatSummary
     is_liked_by_me: bool = False
+    is_saved_by_me: bool = False
     is_edited: bool = False
     view_count: int = 0
 
