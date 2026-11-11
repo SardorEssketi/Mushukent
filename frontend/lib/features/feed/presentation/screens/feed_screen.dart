@@ -780,15 +780,18 @@ class _FeedIntroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final itemStyle = theme.textTheme.bodySmall?.copyWith(
+    // bodyMedium (14) rather than bodySmall (12): the tips are the first
+    // thing new users read, and 12px was too small to notice.
+    final itemStyle = theme.textTheme.bodyMedium?.copyWith(
       color: colors.onPrimaryContainer,
+      fontWeight: FontWeight.w600,
     );
     Widget item(IconData icon, String text) => Padding(
           padding: const EdgeInsets.only(top: AppSpacing.xs),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 18, color: colors.onPrimaryContainer),
+              Icon(icon, size: 22, color: colors.onPrimaryContainer),
               const SizedBox(width: AppSpacing.sm),
               Expanded(child: Text(text, style: itemStyle)),
             ],
@@ -817,7 +820,7 @@ class _FeedIntroCard extends StatelessWidget {
                     header: true,
                     child: Text(
                       strings.feedIntroTitle,
-                      style: theme.textTheme.titleSmall?.copyWith(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         color: colors.onPrimaryContainer,
                         fontWeight: FontWeight.w800,
                       ),

@@ -300,7 +300,16 @@ void main() {
       // flutter_test renders text in a wide square-glyph font, so copy wraps
       // more than with Manrope.
       expect(tester.getSize(card).height, lessThan(300));
-      expect(tester.getTopLeft(find.byType(FeedCardFrame)).dy, lessThan(420));
+      // Readable size: tips use 14px body text, the title 16px.
+      final tip = tester.widget<Text>(find.descendant(
+          of: card, matching: find.text('Add – post a cat you saw')));
+      expect(tip.style?.fontSize, greaterThanOrEqualTo(14));
+      final title = tester.widget<Text>(find.descendant(
+          of: card, matching: find.text('What you can do here')));
+      expect(title.style?.fontSize, greaterThanOrEqualTo(16));
+      // Allows for the larger 14px tips; the first post still starts in the
+      // top half of a phone screen.
+      expect(tester.getTopLeft(find.byType(FeedCardFrame)).dy, lessThan(440));
 
       await tester.tap(find.text('Create account'));
       await tester.pumpAndSettle();
