@@ -34,7 +34,10 @@ class MapMarkerGroup {
 }
 
 /// Keeps the expensive MarkerLayer projection cache across camera pans and
-/// unrelated parent rebuilds. Clusters are recalculated only on zoom/data changes.
+/// unrelated parent rebuilds. Clusters are recalculated only when the data
+/// changes or the camera crosses a whole zoom level, so a pinch gesture (which
+/// moves through fractional zooms every frame) does not reshuffle pins between
+/// clusters and make them jitter.
 class MapClusteredMarkerLayer extends StatefulWidget {
   const MapClusteredMarkerLayer({
     super.key,
@@ -62,7 +65,7 @@ class MapClusteredMarkerLayer extends StatefulWidget {
 }
 
 class _MapClusteredMarkerLayerState extends State<MapClusteredMarkerLayer> {
-  double? _zoom;
+  double? _clusterZoom;
   MarkerLayer? _layer;
 
   @override
@@ -78,7 +81,8 @@ class _MapClusteredMarkerLayerState extends State<MapClusteredMarkerLayer> {
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
-    if (_layer == null || _zoom != camera.zoom) {
+    final clusterZoom = mapClusterZoomLevel(camera.zoom);
+    if (_layer == null || _clusterZoom != clusterZoom) {
       assert(() {
         MapClusteredMarkerLayer.debugRecomputeCount++;
         MapClusteredMarkerLayer.debugRecomputeByLayer.update(
@@ -88,7 +92,7 @@ class _MapClusteredMarkerLayerState extends State<MapClusteredMarkerLayer> {
         );
         return true;
       }());
-      _zoom = camera.zoom;
+      _clusterZoom = clusterZoom;
       _layer = MarkerLayer(
         key: ValueKey(widget.layerKey),
         markers: [
@@ -115,7 +119,10 @@ List<Marker> clusterMarkerSpecs(
   required void Function(LatLng point) onClusterTap,
 }) {
   if (specs.isEmpty) return const <Marker>[];
-  final cellSize = mapClusterCellSizeForZoom(camera.zoom);
+  // Group on a whole zoom level: the pixel grid is then fixed for the whole
+  // level instead of sliding under the pins on every frame of a pinch.
+  final clusterZoom = mapClusterZoomLevel(camera.zoom);
+  final cellSize = mapClusterCellSizeForZoom(clusterZoom);
   if (cellSize == null) {
     return [
       for (final spec in specs)
@@ -131,7 +138,7 @@ List<Marker> clusterMarkerSpecs(
 
   final groups = <String, List<MapMarkerSpec>>{};
   for (final spec in specs) {
-    final projected = camera.projectAtZoom(spec.point, camera.zoom);
+    final projected = camera.projectAtZoom(spec.point, clusterZoom);
     final cellX = (projected.dx / cellSize).floor();
     final cellY = (projected.dy / cellSize).floor();
     groups.putIfAbsent('$cellX:$cellY', () => []).add(spec);

@@ -60,6 +60,12 @@ MapDensityTier mapDensityTierForZoom(double zoom) {
   return MapDensityTier.high;
 }
 
+/// The whole zoom level clusters are computed at. Clusters stay fixed while a
+/// pinch moves within a level. Trade-off: just below the next level a cell
+/// covers up to 2x its nominal size on screen. Tier boundaries (14, 16) are
+/// whole numbers, so this never changes the density tier.
+double mapClusterZoomLevel(double zoom) => zoom.floorToDouble();
+
 double? mapClusterCellSizeForZoom(double zoom) {
   return switch (mapDensityTierForZoom(zoom)) {
     MapDensityTier.low => 96,
