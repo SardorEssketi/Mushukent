@@ -29,6 +29,9 @@ final publicProfileProvider =
     FutureProvider.autoDispose.family<PublicProfileBundle, String>(
   (ref, userId) async {
     ref.watch(postMutationRevisionProvider);
+    final signedIn = ref.watch(
+      authControllerProvider.select((state) => state.isAuthenticated),
+    );
     final api = ref.watch(mushukistanApiProvider);
     final profile = await api.getPublicProfile(userId);
     if (!profile.allowPublicActivityView) {
@@ -39,7 +42,11 @@ final publicProfileProvider =
       );
     }
     try {
-      final posts = await api.listPublicProfilePosts(userId, limit: 4);
+      final posts = await api.listPublicProfilePosts(
+        userId,
+        limit: 4,
+        includeViewerContext: signedIn,
+      );
       return PublicProfileBundle(
         profile: profile,
         posts: posts,

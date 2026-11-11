@@ -410,18 +410,23 @@ class MushukistanApi {
     );
   }
 
+  /// Posts for a public profile preview. Signed-in viewers send their
+  /// session ([includeViewerContext]) so like and saved state are their own,
+  /// blocked authors stay hidden, and moderators see what they may see; the
+  /// full list behind it (`/users/{id}/observations`) already does this.
   Future<ApiPage<PostSummary>> listPublicProfilePosts(
     String userId, {
     int limit = 20,
     String? cursor,
     String sort = 'latest',
+    bool includeViewerContext = false,
   }) {
     return listUserPosts(
       userId,
       limit: limit,
       cursor: cursor,
       sort: sort,
-      includeViewerContext: false,
+      includeViewerContext: includeViewerContext,
     );
   }
 
