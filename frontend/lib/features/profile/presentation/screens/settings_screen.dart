@@ -331,20 +331,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _isSaving ? null : _openAboutAccount,
               ),
-              const SizedBox(height: AppSpacing.xl),
-              FilledButton.icon(
-                onPressed: hasChanges && !_isSaving ? _saveChanges : null,
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined),
-                label: Text(strings.saveChanges),
-              ),
             ],
           ),
+        ),
+        bottomNavigationBar: _SaveChangesBar(
+          visible: hasChanges || _isSaving,
+          isSaving: _isSaving,
+          label: strings.saveChanges,
+          onSave: _saveChanges,
         ),
       ),
     );
@@ -369,5 +363,84 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (unsavedChanges.mounted) unsavedChanges.state = false;
     });
     super.dispose();
+  }
+}
+
+/// Save button pinned to the bottom of Settings. It slides in as soon as
+/// there is something to save, so it is never hidden below the list, and
+/// slides out again when the pending changes are saved or undone.
+class _SaveChangesBar extends StatelessWidget {
+  const _SaveChangesBar({
+    required this.visible,
+    required this.isSaving,
+    required this.label,
+    required this.onSave,
+  });
+
+  final bool visible;
+  final bool isSaving;
+  final String label;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    // AnimatedSwitcher keeps the outgoing bar on screen while it collapses,
+    // so hiding is as smooth as showing (AnimatedSize would drop the content
+    // at once and only shrink the empty space).
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) => SizeTransition(
+        sizeFactor: animation,
+        alignment: Alignment.topCenter,
+        child: child,
+      ),
+      child: !visible
+          ? const SizedBox(
+              key: ValueKey('settings-save-bar-hidden'),
+              width: double.infinity,
+            )
+          : Material(
+              key: const ValueKey('settings-save-bar'),
+              color: colors.surfaceContainer,
+              elevation: 8,
+              child: SafeArea(
+                top: false,
+                child: Center(
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(maxWidth: AppWidths.compact),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg,
+                        AppSpacing.md,
+                        AppSpacing.lg,
+                        AppSpacing.md,
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          key: const ValueKey('settings-save-button'),
+                          onPressed: isSaving ? null : onSave,
+                          icon: isSaving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: Text(label),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+    );
   }
 }
