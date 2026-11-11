@@ -11,12 +11,15 @@ import '../../../../core/widgets/app_remote_image.dart';
 final leaderboardTypeProvider = StateProvider<String>((ref) => 'most_active');
 final leaderboardPeriodProvider = StateProvider<String>((ref) => 'month');
 
+/// Leaderboards show the top 10 users for the chosen type and period.
+const leaderboardTopCount = 10;
+
 final leaderboardProvider =
     FutureProvider.autoDispose<List<LeaderboardEntryData>>((ref) async {
   final api = ref.watch(mushukistanApiProvider);
   final type = ref.watch(leaderboardTypeProvider);
   final period = ref.watch(leaderboardPeriodProvider);
-  return api.listLeaderboard(type, period: period, limit: 20);
+  return api.listLeaderboard(type, period: period, limit: leaderboardTopCount);
 });
 
 class LeaderboardScreen extends ConsumerWidget {
