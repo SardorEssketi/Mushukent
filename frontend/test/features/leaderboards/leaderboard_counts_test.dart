@@ -9,6 +9,8 @@ import 'package:mushukistan_frontend/core/localization/language_controller.dart'
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/leaderboards/presentation/screens/leaderboard_screen.dart';
 
+import '../../support/fakes.dart';
+
 const _numbers = [0, 1, 2, 5, 11, 21, 22, 25, 101];
 
 LeaderboardEntryData _entry(int rank, int posts, int likes) =>
@@ -157,5 +159,18 @@ void main() {
     await _pump(tester,
         language: AppLanguage.uzbek, entries: [_entry(1, 1, 0)]);
     expect(find.text('1 ta post'), findsOneWidget);
+  });
+
+  test('leaderboard requests only the top 10', () async {
+    final client = FakeApiClient()
+      ..setHandler('GET', 'leaderboards/most_active', (_) => <Object?>[]);
+    final container = ProviderContainer(overrides: [
+      mushukistanApiProvider.overrideWithValue(MushukistanApi(client: client)),
+    ]);
+    addTearDown(container.dispose);
+    final sub = container.listen(leaderboardProvider, (_, __) {});
+    addTearDown(sub.close);
+    await container.read(leaderboardProvider.future);
+    expect(client.calls.single.queryParameters?['limit'], 10);
   });
 }

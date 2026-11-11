@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -585,35 +587,52 @@ class _CommentsContentState extends State<_CommentsContent> {
                           ),
                         ],
                       ),
-                    TextField(
-                      controller: widget.controller,
-                      readOnly: !widget.isAuthenticated,
-                      onTap: widget.isAuthenticated
-                          ? null
-                          : widget.onAuthenticationRequired,
-                      minLines: 1,
-                      maxLines: 5,
-                      maxLength: 1000,
-                      decoration: InputDecoration(
-                        hintText: widget.strings.addComment,
-                        border: InputBorder.none,
-                        counterText: '',
-                        suffixIcon: widget.submitting
-                            ? const Padding(
-                                padding: EdgeInsets.all(12),
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                    Focus(
+                      canRequestFocus: false,
+                      skipTraversal: true,
+                      onKeyEvent: (_, event) {
+                        // Holding Enter after sending must not type new
+                        // lines into the emptied box.
+                        if (commentEnterIsRepeat(event)) {
+                          return KeyEventResult.handled;
+                        }
+                        if (!commentEnterShouldSubmit(
+                            event, widget.controller.value)) {
+                          return KeyEventResult.ignored;
+                        }
+                        unawaited(_submit());
+                        return KeyEventResult.handled;
+                      },
+                      child: TextField(
+                        controller: widget.controller,
+                        readOnly: !widget.isAuthenticated,
+                        onTap: widget.isAuthenticated
+                            ? null
+                            : widget.onAuthenticationRequired,
+                        minLines: 1,
+                        maxLines: 5,
+                        maxLength: 1000,
+                        decoration: InputDecoration(
+                          hintText: widget.strings.addComment,
+                          border: InputBorder.none,
+                          counterText: '',
+                          suffixIcon: widget.submitting
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   ),
+                                )
+                              : IconButton(
+                                  tooltip: widget.strings.postComment,
+                                  onPressed: _submit,
+                                  icon: const Icon(Icons.send_rounded),
                                 ),
-                              )
-                            : IconButton(
-                                tooltip: widget.strings.postComment,
-                                onPressed: _submit,
-                                icon: const Icon(Icons.send_rounded),
-                              ),
+                        ),
                       ),
                     ),
                   ],
@@ -1116,3 +1135,36 @@ String _formatDate(DateTime dateTime) {
   final local = dateTime.toLocal();
   return '${local.year.toString().padLeft(4, '0')}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
 }
+
+/// On computers (Windows, macOS, Linux, also the web app in a desktop
+/// browser) Enter publishes the comment and Shift+Enter starts a new line.
+/// Touch keyboards keep Enter as a new line. Enter while an IME is still
+/// composing a word only confirms that word.
+bool commentEnterShouldSubmit(KeyEvent event, TextEditingValue value) {
+  if (event is! KeyDownEvent) return false;
+  if (event.logicalKey != LogicalKeyboardKey.enter &&
+      event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+    return false;
+  }
+  if (!_isDesktopPlatform()) return false;
+  if (HardwareKeyboard.instance.isShiftPressed) return false;
+  if (value.composing.isValid && !value.composing.isCollapsed) return false;
+  return true;
+}
+
+/// A held-down Enter (key repeat) on a computer, where Enter sends: swallowed
+/// so it does not add new lines after the comment was sent.
+bool commentEnterIsRepeat(KeyEvent event) =>
+    event is KeyRepeatEvent &&
+    (event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+    _isDesktopPlatform() &&
+    !HardwareKeyboard.instance.isShiftPressed;
+
+bool _isDesktopPlatform() => switch (defaultTargetPlatform) {
+      TargetPlatform.windows ||
+      TargetPlatform.macOS ||
+      TargetPlatform.linux =>
+        true,
+      _ => false,
+    };

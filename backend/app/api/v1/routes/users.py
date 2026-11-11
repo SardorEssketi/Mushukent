@@ -170,6 +170,21 @@ async def update_my_avatar(
 
 
 @router.get(
+    "/me/saved-posts",
+    response_model=ApiSuccess[GenericListResponse[PostListItem]],
+    response_model_exclude_none=True,
+)
+def read_my_saved_posts(
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+    current_user: AuthUser = Depends(get_current_active_user),
+    posts_service: PostsService = Depends(get_posts_service),
+) -> ApiSuccess[GenericListResponse[PostListItem]]:
+    """The signed-in user's saved cat posts, most recently saved first. Private."""
+    return ApiSuccess(data=posts_service.list_saved_posts(current_user, limit=limit, cursor=cursor))
+
+
+@router.get(
     "/{user_id}",
     response_model=ApiSuccess[UserPublic],
     response_model_exclude_none=True,

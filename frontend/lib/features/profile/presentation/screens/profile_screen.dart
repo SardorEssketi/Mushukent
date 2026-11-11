@@ -29,6 +29,19 @@ class ProfileScreen extends ConsumerWidget {
     final strings = ref.watch(appStringsProvider);
     final feedbackStrings = ref.watch(feedbackStringsProvider);
 
+    Future<void> logout() async {
+      if (ref.read(authControllerProvider).isBusy) return;
+      if (!await confirmLeavingSettings(context, ref)) return;
+      if (!context.mounted) return;
+      final confirmed = await _confirmLogout(context, strings);
+      if (confirmed) {
+        await controller.logout();
+        if (context.mounted) {
+          context.go('/feed');
+        }
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(
         actions: [
@@ -52,38 +65,22 @@ class ProfileScreen extends ConsumerWidget {
             onPressed: () => context.push('/profile/edit'),
             icon: const Icon(Icons.edit_outlined),
           ),
-          // Account actions (Logout); Settings has its own row on the page.
-          PopupMenuButton<_ProfileAction>(
-            tooltip: strings.profileActions,
-            onSelected: (action) async {
-              switch (action) {
-                case _ProfileAction.logout:
-                  if (authState.isBusy) {
-                    return;
-                  }
-                  if (!await confirmLeavingSettings(context, ref)) {
-                    return;
-                  }
-                  if (!context.mounted) {
-                    return;
-                  }
-                  final confirmed = await _confirmLogout(context, strings);
-                  if (confirmed) {
-                    await controller.logout();
-                    if (context.mounted) {
-                      context.go('/feed');
-                    }
-                  }
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: _ProfileAction.logout,
-                enabled: !authState.isBusy,
-                child: Text(strings.logout),
-              ),
-            ],
-          ),
+          // Logout is the only account action here (Settings has its own row
+          // on the page), so it is a direct button instead of a one-item menu.
+          if (MediaQuery.sizeOf(context).width < AppWidths.compact)
+            IconButton(
+              key: const ValueKey('profile-logout'),
+              tooltip: strings.logout,
+              onPressed: authState.isBusy ? null : logout,
+              icon: const Icon(Icons.logout),
+            )
+          else
+            TextButton.icon(
+              key: const ValueKey('profile-logout'),
+              onPressed: authState.isBusy ? null : logout,
+              icon: const Icon(Icons.logout),
+              label: Text(strings.logout),
+            ),
         ],
       ),
       body: profileAsync.when(
@@ -133,6 +130,18 @@ class ProfileScreen extends ConsumerWidget {
                     onTap: () => context.push('/profile/adoption-posts'),
                   ),
                 ]),
+              ),
+              // Saved posts are other people's posts, so they get their own
+              // card instead of sitting in the list of the user's own posts.
+              const SizedBox(height: AppSpacing.md),
+              AppCard(
+                key: const ValueKey('profile-saved-posts-card'),
+                padding: EdgeInsets.zero,
+                child: ProfileActionRow(
+                  icon: Icons.bookmark_outline,
+                  title: strings.savedPosts,
+                  onTap: () => context.push('/profile/saved-posts'),
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
               ProfileSectionHeading(title: strings.resourcesAndAccount),
@@ -293,5 +302,3 @@ Future<bool> _confirmLogout(BuildContext context, AppStrings strings) async {
 
   return confirmed ?? false;
 }
-
-enum _ProfileAction { logout }

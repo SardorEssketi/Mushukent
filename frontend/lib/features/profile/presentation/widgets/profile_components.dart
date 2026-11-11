@@ -179,7 +179,8 @@ class _ProfileStat extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return Material(
+    final tappable = onTap != null;
+    final tile = Material(
         color: colors.surfaceContainer,
         borderRadius: BorderRadius.circular(AppRadii.md),
         child: InkWell(
@@ -212,6 +213,32 @@ class _ProfileStat extends StatelessWidget {
             ),
           ),
         ));
+    if (!tappable) return tile;
+    // Tappable tiles get an "open" arrow in the corner so they do not look
+    // like the static Likes received count next to them.
+    return Semantics(
+      button: true,
+      child: Stack(
+        // Passes the row's stretched height through, so the tile keeps the
+        // same height as the static Likes tile.
+        fit: StackFit.passthrough,
+        children: [
+          tile,
+          Positioned(
+            top: AppSpacing.xs,
+            right: AppSpacing.xs,
+            child: IgnorePointer(
+              child: Icon(
+                Icons.arrow_outward,
+                key: const ValueKey('profile-stat-open-icon'),
+                size: 16,
+                color: colors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

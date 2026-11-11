@@ -16,6 +16,11 @@ final mushukistanApiProvider = Provider<MushukistanApi>((ref) {
 /// A lightweight invalidation signal shared by every post surface.
 final postMutationRevisionProvider = StateProvider<int>((ref) => 0);
 
+/// Save/unsave results not yet reflected in cached feed or detail data,
+/// keyed by post id (true = saved).
+final savedPostOverridesProvider =
+    StateProvider<Map<String, bool>>((ref) => const {});
+
 /// Lost Pets resolved in this app session stay hidden while Map refreshes.
 final resolvedLostPetIdsProvider = StateProvider<Set<String>>((ref) => {});
 
@@ -405,18 +410,23 @@ class MushukistanApi {
     );
   }
 
+  /// Posts for a public profile preview. Signed-in viewers send their
+  /// session ([includeViewerContext]) so like and saved state are their own,
+  /// blocked authors stay hidden, and moderators see what they may see; the
+  /// full list behind it (`/users/{id}/observations`) already does this.
   Future<ApiPage<PostSummary>> listPublicProfilePosts(
     String userId, {
     int limit = 20,
     String? cursor,
     String sort = 'latest',
+    bool includeViewerContext = false,
   }) {
     return listUserPosts(
       userId,
       limit: limit,
       cursor: cursor,
       sort: sort,
-      includeViewerContext: false,
+      includeViewerContext: includeViewerContext,
     );
   }
 
@@ -569,6 +579,37 @@ class MushukistanApi {
 
   Future<void> unlikePost(String postId) {
     return _client.delete('posts/$postId/likes');
+  }
+
+  /// Adds another user's cat post to the viewer's saved posts (idempotent).
+  Future<void> savePost(String postId) async {
+    await _client.postJson<Object?>(
+      'posts/$postId/saved',
+      decoder: (json) => json,
+    );
+  }
+
+  /// Removes a post from the viewer's saved posts (idempotent).
+  Future<void> unsavePost(String postId) {
+    return _client.delete('posts/$postId/saved');
+  }
+
+  /// The viewer's saved cat posts, most recently saved first.
+  Future<ApiPage<PostSummary>> listSavedPosts({
+    int limit = 20,
+    String? cursor,
+  }) {
+    return _client.get<ApiPage<PostSummary>>(
+      'users/me/saved-posts',
+      queryParameters: <String, dynamic>{
+        'limit': limit,
+        if (cursor != null) 'cursor': cursor,
+      },
+      decoder: (json) => ApiPage.fromJson(
+        json,
+        (item) => PostSummary.fromJson(item),
+      ),
+    );
   }
 
   /// Records that a post page was opened; returns the post's view count.
@@ -1262,6 +1303,7 @@ class PostSummary extends FeedItem {
     required this.likeCount,
     required this.commentCount,
     required this.isLikedByMe,
+    this.isSavedByMe = false,
     this.viewCount = 0,
     this.kind = 'observation',
     this.author,
@@ -1288,6 +1330,9 @@ class PostSummary extends FeedItem {
   final int commentCount;
   final int viewCount;
   final bool isLikedByMe;
+
+  /// Whether the signed-in viewer saved this post (see `savePost`).
+  final bool isSavedByMe;
   final String kind;
 
   factory PostSummary.fromJson(Object? json) {
@@ -1314,6 +1359,7 @@ class PostSummary extends FeedItem {
       commentCount: _readInt(map['comment_count']),
       viewCount: _readInt(map['view_count']),
       isLikedByMe: _readBool(map['is_liked_by_me']),
+      isSavedByMe: _readBoolOrNull(map['is_saved_by_me']) ?? false,
     );
   }
 }
@@ -1329,6 +1375,7 @@ class PostDetail extends PostSummary {
     required super.likeCount,
     required super.commentCount,
     required super.isLikedByMe,
+    super.isSavedByMe,
     super.viewCount,
     this.updatedAt,
     this.isPublic = true,
@@ -1363,6 +1410,7 @@ class PostDetail extends PostSummary {
       commentCount: summary.commentCount,
       viewCount: summary.viewCount,
       isLikedByMe: summary.isLikedByMe,
+      isSavedByMe: summary.isSavedByMe,
       updatedAt: map['updated_at'] == null
           ? summary.createdAt
           : _readDateTime(map['updated_at']),

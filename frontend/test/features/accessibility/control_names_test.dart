@@ -273,8 +273,9 @@ void main() {
   group('AUTH-203 profile overflow', () {
     late FakeAuthRepository auth;
 
-    Future<GoRouter> mountProfile(WidgetTester tester) async {
-      tester.view.physicalSize = const Size(800, 1400);
+    Future<GoRouter> mountProfile(WidgetTester tester,
+        {double width = 800}) async {
+      tester.view.physicalSize = Size(width, 1400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -324,15 +325,22 @@ void main() {
       return router;
     }
 
-    testWidgets('app-bar menu is named for its actions, not Settings',
+    testWidgets('app bar has a direct Logout button, not a one-item menu',
         (tester) async {
       final handle = tester.ensureSemantics();
       await mountProfile(tester);
-      expect(find.byTooltip('Profile actions'), findsOneWidget);
+      expect(find.byTooltip('Profile actions'), findsNothing);
       expect(find.byTooltip('Settings'), findsNothing);
-      final menu = _button(tester, 'Profile actions');
-      expect(menu.tooltip, 'Profile actions');
-      expect(menu.hasAction(SemanticsAction.tap), isTrue);
+      final logout = find.byKey(const ValueKey('profile-logout'));
+      expect(logout, findsOneWidget);
+      expect(find.descendant(of: logout, matching: find.text('Logout')),
+          findsOneWidget);
+      expect(
+          tester
+              .getSemantics(logout)
+              .getSemanticsData()
+              .hasAction(SemanticsAction.tap),
+          isTrue);
       // The only control named Settings is the page row that opens settings.
       expect(find.text('Settings'), findsOneWidget);
       await tester.tap(find.text('Settings'));
@@ -341,12 +349,31 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('Saved posts has its own card, apart from own activity',
+        (tester) async {
+      await mountProfile(tester);
+      final card = find.byKey(const ValueKey('profile-saved-posts-card'));
+      expect(card, findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Saved posts')),
+          findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('My cat posts')),
+          findsNothing);
+      expect(find.text('Saved posts'), findsOneWidget);
+    });
+
+    testWidgets('on phones Logout is an icon button named Logout',
+        (tester) async {
+      await mountProfile(tester, width: 390);
+      final logout = find.byKey(const ValueKey('profile-logout'));
+      expect(logout, findsOneWidget);
+      expect(tester.widget<IconButton>(logout).tooltip, 'Logout');
+      expect(find.byTooltip('Profile actions'), findsNothing);
+    });
+
     testWidgets('logout keeps its confirmation; Cancel stays signed in',
         (tester) async {
       await mountProfile(tester);
-      await tester.tap(find.byTooltip('Profile actions'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Logout'));
+      await tester.tap(find.byKey(const ValueKey('profile-logout')));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       await tester.tap(find.text('Cancel'));
@@ -354,9 +381,7 @@ void main() {
       expect(auth.logoutCalled, isFalse);
       expect(find.byType(ProfileScreen), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Profile actions'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Logout'));
+      await tester.tap(find.byKey(const ValueKey('profile-logout')));
       await tester.pumpAndSettle();
       await tester.tap(find.descendant(
           of: find.byType(AlertDialog), matching: find.text('Logout')));

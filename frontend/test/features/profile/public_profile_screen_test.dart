@@ -347,4 +347,26 @@ void main() {
     expect(find.text('SM'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('preview posts carry the viewer session only when signed in',
+      (tester) async {
+    final (guestClient, _, _) =
+        await mount(tester, publicActivity: true, authenticated: false);
+    expect(
+        guestClient.calls
+            .where((call) => call.path == 'users/other/posts')
+            .single
+            .authenticated,
+        isFalse);
+    await tester.pumpWidget(const SizedBox());
+
+    final (client, _, _) =
+        await mount(tester, publicActivity: true, authenticated: true);
+    expect(
+        client.calls
+            .where((call) => call.path == 'users/other/posts')
+            .last
+            .authenticated,
+        isTrue);
+  });
 }

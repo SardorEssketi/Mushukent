@@ -205,6 +205,17 @@ CREATE TABLE likes (
 CREATE INDEX idx_likes_post_id ON likes (post_id);
 CREATE INDEX idx_likes_user_id ON likes (user_id);
 
+-- Saved posts (Alembic 20261110_0031): cat posts a user saved for later; private.
+CREATE TABLE saved_posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    post_id UUID NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, post_id)
+);
+CREATE INDEX idx_saved_posts_user_id_created_at ON saved_posts (user_id, created_at, id);
+CREATE INDEX idx_saved_posts_post_id ON saved_posts (post_id);
+
 CREATE TABLE user_blocks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

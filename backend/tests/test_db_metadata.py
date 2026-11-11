@@ -20,6 +20,7 @@ def test_metadata_discovers_application_tables() -> None:
         "post_history",
         "comments",
         "likes",
+        "saved_posts",
         "lost_pet_photos",
         "lost_pets",
         "lost_pet_contact_events",

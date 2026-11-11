@@ -250,3 +250,29 @@ def delete_post(
 ):
     posts_service.delete_post(post_id, current_user)
     return None
+
+
+@router.post(
+    "/{post_id}/saved",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def save_post(
+    post_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    posts_service: PostsService = Depends(get_posts_service),
+):
+    posts_service.save_post(post_id, current_user)
+    return None
+
+
+@router.delete(
+    "/{post_id}/saved",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def unsave_post(
+    post_id: UUID,
+    current_user: AuthUser = Depends(get_current_active_user),
+    posts_service: PostsService = Depends(get_posts_service),
+):
+    posts_service.unsave_post(post_id, current_user)
+    return None

@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -280,6 +281,79 @@ void main() {
     });
   });
 
+  testWidgets('each feed card has the post actions menu at the top right',
+      (tester) async {
+    _size(tester, 390, 1400);
+    await _pumpRouted(tester, [_post('one')]);
+    final card = find.byType(FeedCardFrame).first;
+    final menu =
+        find.descendant(of: card, matching: find.byTooltip('Post actions'));
+    expect(menu, findsOneWidget);
+    final cardRect = tester.getRect(card);
+    final menuRect = tester.getRect(menu);
+    expect(cardRect.right - menuRect.right, lessThan(24));
+    expect(menuRect.top - cardRect.top, lessThan(24));
+  });
+
+  testWidgets('trackpad drags scroll the feed, only touch swipes photos',
+      (tester) async {
+    _size(tester, 390, 1400);
+    await _pumpRouted(tester, [
+      _post('multi', photos: ['invalid:1', 'invalid:2', 'invalid:3'])
+    ]);
+    final media = find.byKey(const ValueKey('feed-media'));
+    expect(find.text('1/3'), findsOneWidget);
+
+    // Two-finger trackpad gesture that drifts sideways: photo stays.
+    final trackpad =
+        await tester.createGesture(kind: PointerDeviceKind.trackpad);
+    await trackpad.panZoomStart(tester.getCenter(media));
+    for (var i = 1; i <= 10; i++) {
+      await trackpad.panZoomUpdate(tester.getCenter(media),
+          pan: Offset(-25.0 * i, -4.0 * i));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await trackpad.panZoomEnd();
+    await tester.pumpAndSettle();
+    expect(find.text('1/3'), findsOneWidget);
+
+    await tester.dragFrom(tester.getCenter(media), const Offset(-250, 0),
+        kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(find.text('1/3'), findsOneWidget);
+
+    // A finger swipe on a phone still changes the photo.
+    await tester.dragFrom(tester.getCenter(media), const Offset(-250, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('2/3'), findsOneWidget);
+
+    // And the arrow button still works for desktop users.
+    await tester.tap(find.byTooltip('Next photo'));
+    await tester.pumpAndSettle();
+    expect(find.text('3/3'), findsOneWidget);
+  });
+
+  testWidgets('wheel or web-trackpad scroll over photos scrolls the feed',
+      (tester) async {
+    _size(tester, 390, 900);
+    await _pumpRouted(tester, [
+      _post('multi', photos: ['invalid:1', 'invalid:2', 'invalid:3']),
+      _post('two'),
+      _post('three'),
+    ]);
+    final media = find.byKey(const ValueKey('feed-media')).first;
+    final topBefore = tester.getTopLeft(media).dy;
+    // Browsers deliver trackpad scrolling as wheel events; this one drifts
+    // sideways while mostly going down.
+    final pointer = TestPointer(1, PointerDeviceKind.trackpad);
+    await tester.sendEventToBinding(pointer.hover(tester.getCenter(media)));
+    await tester.sendEventToBinding(pointer.scroll(const Offset(80, 120)));
+    await tester.pumpAndSettle();
+    expect(find.text('1/3'), findsOneWidget, reason: 'photo must not change');
+    expect(tester.getTopLeft(media).dy, lessThan(topBefore),
+        reason: 'feed scrolled down');
+  });
+
   group('feed introduction', () {
     testWidgets('is compact on phones and its sign-up button works',
         (tester) async {
@@ -300,7 +374,16 @@ void main() {
       // flutter_test renders text in a wide square-glyph font, so copy wraps
       // more than with Manrope.
       expect(tester.getSize(card).height, lessThan(300));
-      expect(tester.getTopLeft(find.byType(FeedCardFrame)).dy, lessThan(420));
+      // Readable size: tips use 14px body text, the title 16px.
+      final tip = tester.widget<Text>(find.descendant(
+          of: card, matching: find.text('Add – post a cat you saw')));
+      expect(tip.style?.fontSize, greaterThanOrEqualTo(14));
+      final title = tester.widget<Text>(find.descendant(
+          of: card, matching: find.text('What you can do here')));
+      expect(title.style?.fontSize, greaterThanOrEqualTo(16));
+      // Allows for the larger 14px tips; the first post still starts in the
+      // top half of a phone screen.
+      expect(tester.getTopLeft(find.byType(FeedCardFrame)).dy, lessThan(440));
 
       await tester.tap(find.text('Create account'));
       await tester.pumpAndSettle();

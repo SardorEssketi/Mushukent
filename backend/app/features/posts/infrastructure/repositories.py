@@ -8,8 +8,9 @@ from uuid import UUID
 
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKTElement
-from sqlalchemy import and_, cast, exists, func, literal, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, cast, delete, exists, func, literal, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session, aliased
 
 from app.features.cats.domain.models import CatStatus, GeoPoint
 from app.features.posts.domain.models import (
@@ -124,6 +125,73 @@ class SqlAlchemyPostRepository(PostRepository):
         items = self._rows_to_records(rows[:limit])
         next_cursor = (
             self._encode_cursor(rows[limit - 1]["created_at"], rows[limit - 1]["post_id"])
+            if len(rows) > limit
+            else None
+        )
+        return PostPage(items=items, next_cursor=next_cursor, limit=limit)
+
+    def save_post(self, post_id: UUID, user_id: UUID) -> None:
+        self.session.execute(
+            pg_insert(schema.SavedPost)
+            .values(post_id=post_id, user_id=user_id)
+            .on_conflict_do_nothing(
+                index_elements=[schema.SavedPost.user_id, schema.SavedPost.post_id]
+            )
+        )
+
+    def unsave_post(self, post_id: UUID, user_id: UUID) -> None:
+        self.session.execute(
+            delete(schema.SavedPost).where(
+                schema.SavedPost.post_id == post_id,
+                schema.SavedPost.user_id == user_id,
+            )
+        )
+
+    def list_saved(self, user_id: UUID, *, limit: int, cursor: str | None) -> PostPage:
+        """The user's saved cat posts, most recently saved first.
+
+        Only posts the user can still see are listed: deleted, private or hidden-cat posts,
+        posts that are no longer cat posts, and posts by blocked users drop out (the saved row
+        stays, so they come back if the post becomes visible again).
+        """
+        # Aliased: the base statement's is_saved_by_me check also reads saved_posts.
+        saved = aliased(schema.SavedPost)
+        statement = (
+            self._base_list_statement(
+                viewer_user_id=user_id,
+                include_private=False,
+                require_visible_cat=True,
+            )
+            .add_columns(
+                saved.id.label("saved_id"),
+                saved.created_at.label("saved_at"),
+            )
+            .join(
+                saved,
+                and_(
+                    saved.post_id == schema.Post.id,
+                    saved.user_id == user_id,
+                ),
+            )
+            .where(schema.Post.kind == PostKind.OBSERVATION)
+        )
+        statement = exclude_blocked(statement, user_id, schema.Post.user_id)
+        if cursor is not None:
+            saved_at, saved_id = self._decode_cursor(cursor)
+            statement = statement.where(
+                or_(
+                    saved.created_at < saved_at,
+                    and_(
+                        saved.created_at == saved_at,
+                        saved.id < saved_id,
+                    ),
+                )
+            )
+        statement = statement.order_by(saved.created_at.desc(), saved.id.desc()).limit(limit + 1)
+        rows = self.session.execute(statement).mappings().all()
+        items = self._rows_to_records(rows[:limit])
+        next_cursor = (
+            self._encode_cursor(rows[limit - 1]["saved_at"], rows[limit - 1]["saved_id"])
             if len(rows) > limit
             else None
         )
@@ -377,6 +445,16 @@ class SqlAlchemyPostRepository(PostRepository):
             if viewer_user_id is not None
             else literal(False)
         )
+        saved_by_me = (
+            exists(
+                select(1).where(
+                    schema.SavedPost.post_id == schema.Post.id,
+                    schema.SavedPost.user_id == viewer_user_id,
+                )
+            )
+            if viewer_user_id is not None
+            else literal(False)
+        )
         is_edited = exists(
             select(1).where(
                 schema.PostHistory.post_id == schema.Post.id,
@@ -415,6 +493,7 @@ class SqlAlchemyPostRepository(PostRepository):
                 schema.User.name.label("author_name"),
                 schema.User.avatar_url.label("author_avatar_url"),
                 liked_by_me.label("is_liked_by_me"),
+                saved_by_me.label("is_saved_by_me"),
                 is_edited.label("is_edited"),
             )
             .select_from(schema.Post)
@@ -721,6 +800,7 @@ class SqlAlchemyPostRepository(PostRepository):
             "updated_at": mapping["updated_at"],
             "deleted_at": mapping["deleted_at"],
             "is_liked_by_me": bool(mapping["is_liked_by_me"]),
+            "is_saved_by_me": bool(mapping["is_saved_by_me"]),
             "is_edited": bool(mapping["is_edited"]),
             "author": (
                 PostAuthorSummary(

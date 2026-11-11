@@ -187,18 +187,28 @@ class _PublicationGalleryState extends State<PublicationGallery> {
                   ),
                   ColoredBox(color: Colors.black.withValues(alpha: 0.22)),
                 ],
-                PageView.builder(
-                  controller: _controller,
-                  itemCount: count,
-                  onPageChanged: (value) => setState(() => _index = value),
-                  itemBuilder: (context, index) => AppRemoteImage(
-                    widget.photoUrls[index],
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => Center(
-                      child: Icon(
-                        Icons.image_not_supported_outlined,
-                        size: 48,
-                        color: colors.onSurfaceVariant,
+                // Same rule as the feed cards: only touch swipes change
+                // photos, so a trackpad scroll moves the page (arrows on
+                // desktop).
+                ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    dragDevices: feedMediaDragDevices,
+                  ),
+                  child: PageView.builder(
+                    controller: _controller,
+                    itemCount: count,
+                    onPageChanged: (value) => setState(() => _index = value),
+                    itemBuilder: (context, index) => GalleryScrollToPage(
+                      child: AppRemoteImage(
+                        widget.photoUrls[index],
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => Center(
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            size: 48,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -215,26 +225,27 @@ class _PublicationGalleryState extends State<PublicationGallery> {
                     bottom: AppSpacing.md,
                     child: _GalleryDots(count: count, activeIndex: _index),
                   ),
-                  if (size.width >= AppBreakpoints.medium) ...[
-                    Positioned(
-                      left: AppSpacing.sm,
-                      top: 0,
-                      bottom: 0,
-                      child: _GalleryArrow(
-                        icon: Icons.chevron_left,
-                        onPressed: _index == 0 ? null : () => _move(-1),
-                      ),
+                  // Arrows at every width (like the feed cards): only touch
+                  // swipes page the gallery, so mouse and trackpad users on
+                  // narrow windows or tablets need them too.
+                  Positioned(
+                    left: AppSpacing.sm,
+                    top: 0,
+                    bottom: 0,
+                    child: _GalleryArrow(
+                      icon: Icons.chevron_left,
+                      onPressed: _index == 0 ? null : () => _move(-1),
                     ),
-                    Positioned(
-                      right: AppSpacing.sm,
-                      top: 0,
-                      bottom: 0,
-                      child: _GalleryArrow(
-                        icon: Icons.chevron_right,
-                        onPressed: _index == count - 1 ? null : () => _move(1),
-                      ),
+                  ),
+                  Positioned(
+                    right: AppSpacing.sm,
+                    top: 0,
+                    bottom: 0,
+                    child: _GalleryArrow(
+                      icon: Icons.chevron_right,
+                      onPressed: _index == count - 1 ? null : () => _move(1),
                     ),
-                  ],
+                  ),
                 ],
               ],
             ),

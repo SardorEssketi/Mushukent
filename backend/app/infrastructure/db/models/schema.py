@@ -560,6 +560,29 @@ class Like(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
 
 
+class SavedPost(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    """A cat post a user saved for later. Private to that user."""
+
+    __tablename__ = "saved_posts"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    post_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "post_id", name="uq_saved_posts_user_id_post_id"),
+        Index("idx_saved_posts_user_id_created_at", "user_id", "created_at", "id"),
+        Index("idx_saved_posts_post_id", "post_id"),
+    )
+
+
 class UserBlock(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "user_blocks"
 

@@ -14,6 +14,7 @@ import '../../../comments/presentation/screens/comments_screen.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 import '../../../feed/presentation/widgets/feed_card_parts.dart';
 import '../../application/post_view_recorder.dart';
+import '../../application/saved_posts.dart';
 import '../widgets/publication_detail_parts.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../auth/application/auth_controller.dart';
@@ -113,6 +114,11 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       ref.invalidate(feedPostsProvider);
       ref.invalidate(profileMeProvider);
       ref.invalidate(userPostsProvider);
+      // Drop it from the Saved posts list too (it may be open underneath).
+      ref.read(savedPostOverridesProvider.notifier).state = {
+        ...ref.read(savedPostOverridesProvider),
+        post.id: false,
+      };
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         context.pop(true);
@@ -236,8 +242,22 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     required AppStrings strings,
     required bool isOwner,
     required bool isModerator,
+    required PostDetail post,
   }) {
+    final canSave = canSavePost(post, ref.watch(currentUserProvider));
     return [
+      if (canSave)
+        isPostSaved(ref, post)
+            ? PublicationMenuEntry(
+                value: _PostAction.save,
+                label: strings.removeFromSaved,
+                icon: Icons.bookmark_remove_outlined,
+              )
+            : PublicationMenuEntry(
+                value: _PostAction.save,
+                label: strings.savePost,
+                icon: Icons.bookmark_add_outlined,
+              ),
       if (isOwner)
         PublicationMenuEntry(
           value: _PostAction.edit,
@@ -296,8 +316,13 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                 strings: strings,
                 isOwner: isOwner,
                 isModerator: isModerator,
+                post: loaded,
               ),
               onSelected: (action) {
+                if (action == _PostAction.save) {
+                  toggleSavedPost(context, ref, loaded);
+                  return;
+                }
                 if (action == _PostAction.report) {
                   _report(loaded);
                   return;
@@ -434,4 +459,4 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
   }
 }
 
-enum _PostAction { edit, delete, history, report }
+enum _PostAction { save, edit, delete, history, report }
