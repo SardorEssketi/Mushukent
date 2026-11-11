@@ -20,6 +20,7 @@ import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../map/application/map_viewport.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../application/feed_intro.dart';
+import '../widgets/feed_card_menu.dart';
 import '../widgets/feed_card_parts.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
@@ -1198,6 +1199,7 @@ class _LostPetCard extends StatelessWidget {
           strings: strings,
           onAuthorTap:
               authorId == null ? null : () => context.push('/users/$authorId'),
+          trailing: FeedCardMenu(item: lostPet),
         ),
         FeedMedia(
           photoUrl: lostPet.photoUrl,
@@ -1298,6 +1300,7 @@ class _AdoptionPostCard extends StatelessWidget {
           strings: strings,
           onAuthorTap:
               authorId == null ? null : () => context.push('/users/$authorId'),
+          trailing: FeedCardMenu(item: post),
         ),
         FeedMedia(
           photoUrl: post.photoUrl,
@@ -1476,6 +1479,7 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
           strings: strings,
           onAuthorTap:
               authorId == null ? null : () => context.push('/users/$authorId'),
+          trailing: FeedCardMenu(item: widget.post),
         ),
         FeedMedia(
           photoUrl: widget.post.photoUrl,

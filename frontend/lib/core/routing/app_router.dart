@@ -45,6 +45,7 @@ import '../../features/profile/presentation/screens/feedback_screen.dart';
 import '../../features/profile/presentation/screens/blocked_users_screen.dart';
 import '../../features/profile/presentation/screens/settings_screen.dart';
 import '../../features/profile/presentation/screens/account_security_screen.dart';
+import '../../features/profile/presentation/screens/saved_posts_screen.dart';
 import '../../features/profile/presentation/screens/user_activity_screen.dart';
 import '../network/mushukistan_api.dart';
 import '../navigation/back_to_feed_scope.dart';
@@ -451,6 +452,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     },
                   ),
                   GoRoute(
+                    path: 'saved-posts',
+                    builder: (context, state) => const SavedPostsScreen(),
+                  ),
+                  GoRoute(
                     path: 'cat-posts',
                     builder: (context, state) {
                       final user = ref.read(currentUserProvider);
@@ -609,6 +614,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ref.invalidate(profileMeProvider);
       ref.invalidate(feedPostsProvider);
       ref.invalidate(postLikeOverridesProvider);
+      ref.invalidate(savedPostOverridesProvider);
       ref.invalidate(addObservationControllerProvider);
       ref.invalidate(lostPetMutationOverridesProvider);
       ref.invalidate(deletedLostPetIdsProvider);

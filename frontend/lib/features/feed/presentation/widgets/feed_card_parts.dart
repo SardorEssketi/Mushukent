@@ -84,12 +84,16 @@ class FeedAuthorHeader extends StatelessWidget {
     required this.createdAt,
     required this.strings,
     required this.onAuthorTap,
+    this.trailing,
   });
 
   final PostAuthorData? author;
   final DateTime createdAt;
   final AppStrings strings;
   final VoidCallback? onAuthorTap;
+
+  /// Shown at the top right of the card, e.g. the card's "more" menu.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -142,6 +146,7 @@ class FeedAuthorHeader extends StatelessWidget {
             ),
           ),
         ),
+        if (trailing != null) trailing!,
       ]),
     );
   }

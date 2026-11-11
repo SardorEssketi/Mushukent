@@ -349,6 +349,18 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('Saved posts has its own card, apart from own activity',
+        (tester) async {
+      await mountProfile(tester);
+      final card = find.byKey(const ValueKey('profile-saved-posts-card'));
+      expect(card, findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('Saved posts')),
+          findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('My cat posts')),
+          findsNothing);
+      expect(find.text('Saved posts'), findsOneWidget);
+    });
+
     testWidgets('on phones Logout is an icon button named Logout',
         (tester) async {
       await mountProfile(tester, width: 390);

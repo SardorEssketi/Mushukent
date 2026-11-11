@@ -263,6 +263,44 @@ class AppStrings {
         _ => 'Post actions',
       };
 
+  String get savePost => switch (this) {
+        _UzbekStrings() => 'Saqlash',
+        _RussianStrings() => 'Сохранить',
+        _ => 'Save',
+      };
+
+  String get removeFromSaved => switch (this) {
+        _UzbekStrings() => 'Saqlanganlardan olib tashlash',
+        _RussianStrings() => 'Убрать из сохранённых',
+        _ => 'Remove from saved',
+      };
+
+  String get postSaved => switch (this) {
+        _UzbekStrings() => 'Saqlanganlarga qo‘shildi',
+        _RussianStrings() => 'Добавлено в сохранённые',
+        _ => 'Added to saved posts',
+      };
+
+  String get postRemovedFromSaved => switch (this) {
+        _UzbekStrings() => 'Saqlanganlardan olib tashlandi',
+        _RussianStrings() => 'Убрано из сохранённых',
+        _ => 'Removed from saved posts',
+      };
+
+  String get savedPosts => switch (this) {
+        _UzbekStrings() => 'Saqlangan postlar',
+        _RussianStrings() => 'Сохранённые посты',
+        _ => 'Saved posts',
+      };
+
+  String get noSavedPostsYet => switch (this) {
+        _UzbekStrings() =>
+          'Hali saqlangan postlar yo‘q. Postdagi ⋮ menyusidan «Saqlash»ni tanlang.',
+        _RussianStrings() =>
+          'Пока нет сохранённых постов. Выберите «Сохранить» в меню ⋮ у поста.',
+        _ => 'No saved posts yet. Choose Save in a post’s ⋮ menu.',
+      };
+
   String get postPublished => switch (this) {
         _UzbekStrings() => 'Post joylandi',
         _RussianStrings() => 'Пост опубликован',

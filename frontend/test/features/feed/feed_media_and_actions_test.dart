@@ -281,6 +281,20 @@ void main() {
     });
   });
 
+  testWidgets('each feed card has the post actions menu at the top right',
+      (tester) async {
+    _size(tester, 390, 1400);
+    await _pumpRouted(tester, [_post('one')]);
+    final card = find.byType(FeedCardFrame).first;
+    final menu =
+        find.descendant(of: card, matching: find.byTooltip('Post actions'));
+    expect(menu, findsOneWidget);
+    final cardRect = tester.getRect(card);
+    final menuRect = tester.getRect(menu);
+    expect(cardRect.right - menuRect.right, lessThan(24));
+    expect(menuRect.top - cardRect.top, lessThan(24));
+  });
+
   testWidgets('trackpad drags scroll the feed, only touch swipes photos',
       (tester) async {
     _size(tester, 390, 1400);

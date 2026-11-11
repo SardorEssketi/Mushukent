@@ -131,6 +131,18 @@ class ProfileScreen extends ConsumerWidget {
                   ),
                 ]),
               ),
+              // Saved posts are other people's posts, so they get their own
+              // card instead of sitting in the list of the user's own posts.
+              const SizedBox(height: AppSpacing.md),
+              AppCard(
+                key: const ValueKey('profile-saved-posts-card'),
+                padding: EdgeInsets.zero,
+                child: ProfileActionRow(
+                  icon: Icons.bookmark_outline,
+                  title: strings.savedPosts,
+                  onTap: () => context.push('/profile/saved-posts'),
+                ),
+              ),
               const SizedBox(height: AppSpacing.xl),
               ProfileSectionHeading(title: strings.resourcesAndAccount),
               AppCard(

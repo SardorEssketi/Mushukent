@@ -129,11 +129,15 @@ void main() {
     failNext = true;
     await tester.scrollUntilVisible(find.text('Load more posts'), 200,
         scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.text('Load more posts'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Load more posts'));
     await tester.pumpAndSettle();
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('Post b'), findsNothing);
 
+    await tester.ensureVisible(find.text('Retry'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
 
