@@ -243,15 +243,34 @@ the owner's existing profile area. Answering No leaves it active. Migration
 `20260928_0022` adds contact-event and follow-up tables and a partial unique
 index for pending follow-ups. It does not rewrite existing Lost Pet rows.
 
-## ADR-0024: Count post views once per person when a post is opened
+## ADR-0024: Count post views once per person when a post is opened or seen in the feed
 
 - Status: Accepted
-- Date: 2026-10-29
+- Date: 2026-10-29, amended 2026-11-11 (feed cards count)
 
 Observations, Lost Pet posts and adoption/rehoming posts show a public view
-count. A view is recorded when a post page opens: the client calls
-`POST /{kind}/{id}/views`. Reading a post never counts, so refreshes,
-moderation reads and link previews do not inflate it.
+count. A view is recorded when a post page opens (the client calls
+`POST /{kind}/{id}/views`) or when its Feed card stays at least half on screen
+(or fills at least half the viewport, for a card taller than it) for one
+second while the Feed is the visible page. Seen cards are queued on the device
+and sent together to `POST /views/seen`, at most 20 per request, after a
+10-second wait, when the Feed closes, or when the app is hidden. The long
+wait keeps view reports to a few requests per minute, because they share the
+per-minute API allowance with likes, comments and post pages. Reading a post through the API never
+counts, so refreshes, moderation reads and link previews do not inflate it.
+Only the main Feed reports seen cards; profile, saved-posts and activity lists
+do not.
+
+The 2026-11-11 amendment added the Feed rule because opening a post was the
+only way to count, so posts that many people read in the Feed showed very few
+views. Seeing a card and opening its post are the same view: whichever
+happens first counts, and the other adds nothing. The batch endpoint applies
+the same visibility rules as the detail endpoints, but skips posts the viewer
+may not see instead of failing, because a Feed page can go stale while the
+batch waits. The batch checks visibility first and then writes in a fixed
+(kind, id) order, so concurrent batches cannot deadlock on post rows. The device reports each post at most once per app session, and
+the counts the server returns update Feed cards and post pages without a
+reload.
 
 Each person counts once per post. Signed-in viewers are keyed by account.
 Guests send a random per-install identifier; the server stores only an

@@ -54,7 +54,7 @@ Contact data published by the user:
 Technical and security data:
 - API request metadata used for authentication, rate limiting, abuse prevention, security, troubleshooting, and operational logs.
 - Android push device token stored encrypted, token hash, notification preferences, inbox read state, and bounded delivery status.
-- Post views: when you open a post, Mushukistan records that your account viewed it, so each person is counted once in the post's view count. If you are not signed in, the app sends a random identifier created on your device instead; it is not linked to your name, account, or device hardware, and the server stores only a keyed one-way hash of it. Other users see only the total number of views.
+- Post views: when you open a post, or a post's card stays on your screen in the feed for about a second, Mushukistan records that your account viewed it, so each person is counted once in the post's view count. If you are not signed in, the app sends a random identifier created on your device instead; it is not linked to your name, account, or device hardware, and the server stores only a keyed one-way hash of it. Other users see only the total number of views.
 
 ## 3. Photos and media
 

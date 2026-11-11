@@ -1,4 +1,4 @@
-"""Post views: each person counted once per post when they open it (docs/ADRS.md, ADR-0024)."""
+"""Post views: one per person per post, on opening it or seeing its feed card (ADR-0024)."""
 
 from __future__ import annotations
 
@@ -119,3 +119,77 @@ def test_account_deletion_removes_view_records_but_keeps_totals(client, runtime)
     assert _view_rows(runtime) == []
     with runtime.manager.session_scope() as session:
         assert session.get(schema.Post, post_id).view_count == 1
+
+
+def _seen(client, items, *, viewer=None, guest_id: str | None = None):
+    headers = dict(viewer.h) if viewer is not None else {}
+    if guest_id is not None:
+        headers["X-Viewer-Id"] = guest_id
+    return client.post(f"{API}/views/seen", headers=headers, json={"items": items})
+
+
+def test_feed_cards_seen_count_once_together_with_opening(client, runtime) -> None:
+    owner, viewer = make_user(runtime, "Owner"), make_user(runtime, "Viewer")
+    post_id = make_post(runtime, owner)
+    lost_id = make_lost_pet(runtime, owner)
+    adoption_id = make_adoption(runtime, owner)
+    items = [
+        {"kind": "post", "id": str(post_id)},
+        {"kind": "lost_pet", "id": str(lost_id)},
+        {"kind": "adoption", "id": str(adoption_id)},
+        {"kind": "post", "id": str(post_id)},
+    ]
+
+    first = _seen(client, items, viewer=viewer)
+    assert first.status_code == 200, first.text
+    assert first.json()["data"]["items"] == [
+        {"kind": "post", "id": str(post_id), "view_count": 1, "counted": True},
+        {"kind": "lost_pet", "id": str(lost_id), "view_count": 1, "counted": True},
+        {"kind": "adoption", "id": str(adoption_id), "view_count": 1, "counted": True},
+    ]
+    # Seeing the card and then opening the post is still one view.
+    assert _view(client, "posts", post_id, viewer=viewer).json()["data"] == {
+        "view_count": 1,
+        "counted": False,
+    }
+    again = _seen(client, items[:1], guest_id=str(uuid4())).json()["data"]["items"]
+    assert again == [{"kind": "post", "id": str(post_id), "view_count": 2, "counted": True}]
+
+
+def test_seen_batch_skips_hidden_and_missing_posts_and_authors(client, runtime) -> None:
+    owner, viewer = make_user(runtime, "Owner"), make_user(runtime, "Viewer")
+    other = make_user(runtime, "Other")
+    blocked_post = make_post(runtime, owner)
+    visible_post = make_post(runtime, other)
+    own_post = make_post(runtime, viewer)
+    assert block(client, owner, viewer).status_code in (200, 201, 204)
+
+    response = _seen(
+        client,
+        [
+            {"kind": "post", "id": str(blocked_post)},
+            {"kind": "lost_pet", "id": str(uuid4())},
+            {"kind": "post", "id": str(own_post)},
+            {"kind": "post", "id": str(visible_post)},
+        ],
+        viewer=viewer,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["items"] == [
+        {"kind": "post", "id": str(own_post), "view_count": 0, "counted": False},
+        {"kind": "post", "id": str(visible_post), "view_count": 1, "counted": True},
+    ]
+    assert len(_view_rows(runtime)) == 1
+
+
+def test_seen_batch_rejects_bad_requests(client, runtime) -> None:
+    post_id = make_post(runtime, make_user(runtime, "Owner"))
+    guest = str(uuid4())
+    assert _seen(client, [], guest_id=guest).status_code == 422
+    assert _seen(client, [{"kind": "story", "id": str(post_id)}], guest_id=guest).status_code == 422
+    too_many = [{"kind": "post", "id": str(uuid4())} for _ in range(21)]
+    assert _seen(client, too_many, guest_id=guest).status_code == 422
+    # A guest without an id is accepted but never counted.
+    no_id = _seen(client, [{"kind": "post", "id": str(post_id)}])
+    assert no_id.json()["data"]["items"][0]["counted"] is False
+    assert _view_rows(runtime) == []

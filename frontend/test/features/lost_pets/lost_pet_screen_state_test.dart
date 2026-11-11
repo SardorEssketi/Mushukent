@@ -634,8 +634,16 @@ void main() {
       child: const MaterialApp(home: LostPetDetailScreen(lostPetId: 'pet-1')),
     ));
     await tester.pumpAndSettle();
+    // The comment button's count; the bar also shows the view count.
     Finder countText(String value) => find.descendant(
-        of: find.byType(PublicationEngagementBar), matching: find.text(value));
+        of: find
+            .ancestor(
+                of: find.descendant(
+                    of: find.byType(PublicationEngagementBar),
+                    matching: find.byIcon(Icons.mode_comment_outlined)),
+                matching: find.byType(Tooltip))
+            .first,
+        matching: find.text(value));
     expect(countText('1'), findsOneWidget);
 
     // A comment was deleted (or its author blocked) somewhere: the revision bumps.

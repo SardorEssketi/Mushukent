@@ -18,10 +18,12 @@ import '../../../auth/application/auth_controller.dart';
 import '../../../auth/presentation/screens/session_unavailable_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
 import '../../../map/application/map_viewport.dart';
+import '../../../posts/application/post_view_recorder.dart';
 import '../../../profile/presentation/screens/profile_screen.dart';
 import '../../application/feed_intro.dart';
 import '../widgets/feed_card_menu.dart';
 import '../widgets/feed_card_parts.dart';
+import '../widgets/seen_on_screen.dart';
 
 final feedModeProvider = StateProvider<String>((ref) => 'recent');
 
@@ -172,11 +174,22 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_checkLoadMore);
+    _viewRecorder = ref.read(postViewRecorderProvider);
+  }
+
+  /// Receives feed cards seen on screen. What is queued is sent when the Feed
+  /// closes, so no view waits on a timer after the Feed is gone.
+  late PostViewRecorder _viewRecorder;
+
+  void _markSeen(FeedItem item) {
+    _viewRecorder = ref.read(postViewRecorderProvider);
+    _viewRecorder.markSeen(_viewCollection(item), item.id);
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    unawaited(_viewRecorder.flush());
     super.dispose();
   }
 
@@ -582,9 +595,12 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                           gutter,
                           AppSpacing.md,
                         ),
-                        child: _FeedItemCard(
-                          item: items[index],
-                          strings: strings,
+                        child: SeenOnScreen(
+                          onSeen: () => _markSeen(items[index]),
+                          child: _FeedItemCard(
+                            item: items[index],
+                            strings: strings,
+                          ),
                         ),
                       ),
                     ),
@@ -1151,6 +1167,13 @@ class _PopularPeriodBar extends StatelessWidget {
   }
 }
 
+/// The view-counting collection of a feed item (docs/ADRS.md, ADR-0024).
+String _viewCollection(FeedItem item) => switch (item) {
+      LostPetData() => PostViewCollection.lostPet,
+      AdoptionPostData() => PostViewCollection.adoption,
+      _ => PostViewCollection.observation,
+    };
+
 class _FeedItemCard extends StatelessWidget {
   const _FeedItemCard({required this.item, required this.strings});
 
@@ -1237,7 +1260,12 @@ class _LostPetCard extends StatelessWidget {
                 onPressed: openPost,
               ),
               if (mapLocation != null)
-                FeedViewCount(label: strings.views, count: lostPet.viewCount),
+                LiveFeedViewCount(
+                  label: strings.views,
+                  collection: PostViewCollection.lostPet,
+                  id: lostPet.id,
+                  count: lostPet.viewCount,
+                ),
               if (mapLocation != null)
                 // Shares the row with comments and views, so on the narrowest
                 // phones a long translation ellipsizes instead of overflowing.
@@ -1268,7 +1296,12 @@ class _LostPetCard extends StatelessWidget {
                 )
               else ...[
                 const Spacer(),
-                FeedViewCount(label: strings.views, count: lostPet.viewCount),
+                LiveFeedViewCount(
+                  label: strings.views,
+                  collection: PostViewCollection.lostPet,
+                  id: lostPet.id,
+                  count: lostPet.viewCount,
+                ),
               ],
             ],
           ),
@@ -1338,7 +1371,12 @@ class _AdoptionPostCard extends StatelessWidget {
                 onPressed: openPost,
               ),
               const Spacer(),
-              FeedViewCount(label: strings.views, count: post.viewCount),
+              LiveFeedViewCount(
+                label: strings.views,
+                collection: PostViewCollection.adoption,
+                id: post.id,
+                count: post.viewCount,
+              ),
             ],
           ),
         ),
@@ -1538,14 +1576,18 @@ class _FeedPostCardState extends ConsumerState<FeedPostCard> {
                 onPressed: widget.onTap,
               ),
               if (mapLocation != null)
-                FeedViewCount(
+                LiveFeedViewCount(
                   label: strings.views,
+                  collection: PostViewCollection.observation,
+                  id: widget.post.id,
                   count: widget.post.viewCount,
                 )
               else ...[
                 const Spacer(),
-                FeedViewCount(
+                LiveFeedViewCount(
                   label: strings.views,
+                  collection: PostViewCollection.observation,
+                  id: widget.post.id,
                   count: widget.post.viewCount,
                 ),
               ],

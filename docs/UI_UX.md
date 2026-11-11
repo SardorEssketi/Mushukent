@@ -279,6 +279,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - tapping the selected filter keeps it selected.
   - Popular alone shows compact Today, Month, All time period chips.
   - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface. The header ends with a ⋮ actions menu holding the same actions as the publication's detail page (owner: Edit, Delete; others: Report and, on others' Cat posts, Save / Remove from saved; moderators also Remove, and History on Cat posts); it renders nothing when the viewer has no action.
+  - a card that stays at least half on screen for one second counts as a view of its post (ADR-0024). Feed cards and post pages show the latest view count the app received, without reloading; post pages show it at the end of the comments/likes bar.
   - media uses a contained (never cropped) image in a fixed frame: 0.9 of the card width on phones (at most 380px) and at most 420px on tablet/web. A softly blurred, dimmed copy of the same photo fills any remaining space; failed images keep the neutral frame and icon. Multiple photos have a count and compact previous/next controls (36px visual, 48px target). Only touch swipes change photos; mouse-wheel and trackpad scrolling over a photo scrolls the page (photos change with the arrows), and the detail gallery shows its arrows at every width.
 - Post card contents:
   - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.

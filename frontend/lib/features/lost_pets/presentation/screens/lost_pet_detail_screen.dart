@@ -62,7 +62,6 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
     ref.read(postViewRecorderProvider).record(
           PostViewCollection.lostPet,
           widget.lostPetId,
-          signedIn: ref.read(authControllerProvider).isAuthenticated,
         );
   }
 
@@ -474,6 +473,12 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
               PublicationEngagementBar(
                 strings: strings,
                 commentCount: lostPet.commentCount,
+                viewCount: liveViewCount(
+                  ref,
+                  PostViewCollection.lostPet,
+                  lostPet.id,
+                  lostPet.viewCount,
+                ),
                 onComments: _openComments,
               ),
             ],
