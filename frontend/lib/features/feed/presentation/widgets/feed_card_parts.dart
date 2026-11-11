@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/localization/app_strings.dart';
@@ -181,6 +182,44 @@ class FeedAuthorAvatar extends StatelessWidget {
   }
 }
 
+/// Pointer kinds that may swipe between a card's photos (see [FeedMedia]).
+const feedMediaDragDevices = <PointerDeviceKind>{
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+  PointerDeviceKind.unknown,
+};
+
+/// Wraps a gallery page so mouse-wheel and trackpad scrolling over a photo
+/// scrolls the page vertically instead of moving the horizontal gallery.
+///
+/// In browsers a trackpad scroll arrives as wheel events; the innermost
+/// scrollable (the gallery) would claim any event with a small sideways part
+/// and the feed would stop scrolling. This sits inside the gallery, so it is
+/// asked first and hands the vertical part to the nearest vertical scroll.
+/// Photos change with the arrow buttons (or a touch swipe).
+class GalleryScrollToPage extends StatelessWidget {
+  const GalleryScrollToPage({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      onPointerSignal: (event) {
+        if (event is! PointerScrollEvent) return;
+        final page = Scrollable.maybeOf(context, axis: Axis.vertical);
+        GestureBinding.instance.pointerSignalResolver.register(event, (event) {
+          final dy = (event as PointerScrollEvent).scrollDelta.dy;
+          if (page == null || dy == 0) return;
+          page.position.pointerScroll(dy);
+        });
+      },
+      child: child,
+    );
+  }
+}
+
 class FeedMedia extends StatefulWidget {
   const FeedMedia({
     super.key,
@@ -253,24 +292,35 @@ class _FeedMediaState extends State<FeedMedia> {
         key: const ValueKey('feed-media'),
         height: height,
         child: Stack(fit: StackFit.expand, children: [
-          PageView.builder(
-            controller: _controller,
-            itemCount: photos.length,
-            onPageChanged: (index) => setState(() => _index = index),
-            itemBuilder: (context, index) => ColoredBox(
-              color: colors.surfaceContainer,
-              child: Stack(fit: StackFit.expand, children: [
-                _PhotoBackdrop(url: photos[index]),
-                AppRemoteImage(
-                  photos[index],
-                  fit: BoxFit.contain,
-                  width: double.infinity,
-                  errorBuilder: (_, __, ___) => Center(
-                    child: Icon(Icons.image_not_supported_outlined,
-                        size: 36, color: colors.onSurfaceVariant),
-                  ),
+          // Only touch swipes change photos. Trackpad (and mouse) drags are
+          // left to the feed: a two-finger scroll on a laptop trackpad that
+          // drifts sideways otherwise flipped photos instead of scrolling the
+          // page. On desktop the arrow buttons switch photos.
+          ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: feedMediaDragDevices,
+            ),
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: photos.length,
+              onPageChanged: (index) => setState(() => _index = index),
+              itemBuilder: (context, index) => GalleryScrollToPage(
+                child: ColoredBox(
+                  color: colors.surfaceContainer,
+                  child: Stack(fit: StackFit.expand, children: [
+                    _PhotoBackdrop(url: photos[index]),
+                    AppRemoteImage(
+                      photos[index],
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Icon(Icons.image_not_supported_outlined,
+                            size: 36, color: colors.onSurfaceVariant),
+                      ),
+                    ),
+                  ]),
                 ),
-              ]),
+              ),
             ),
           ),
           if (photos.length > 1) ...[
