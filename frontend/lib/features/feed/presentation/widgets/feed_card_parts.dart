@@ -3,11 +3,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_remote_image.dart';
+import '../../../posts/application/post_view_recorder.dart';
 
 /// Horizontal gutter shared by the Feed header, filters and cards so they all
 /// align on one column edge. Phones use a narrower gutter to give photos room.
@@ -732,6 +734,30 @@ class _FeedBodyTextState extends State<FeedBodyText> {
 
 /// How many people opened the post (ADR-0024). Display only, so it is not a
 /// tap target; it lines up with the like and comment counts.
+/// [FeedViewCount] that also shows views recorded since the list loaded.
+class LiveFeedViewCount extends ConsumerWidget {
+  const LiveFeedViewCount({
+    super.key,
+    required this.label,
+    required this.collection,
+    required this.id,
+    required this.count,
+  });
+
+  final String label;
+
+  /// One of [PostViewCollection].
+  final String collection;
+  final String id;
+  final int count;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => FeedViewCount(
+        label: label,
+        count: liveViewCount(ref, collection, id, count),
+      );
+}
+
 class FeedViewCount extends StatelessWidget {
   const FeedViewCount({super.key, required this.label, required this.count});
 

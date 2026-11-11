@@ -63,7 +63,6 @@ class _AdoptionPostDetailScreenState
     ref.read(postViewRecorderProvider).record(
           PostViewCollection.adoption,
           widget.adoptionPostId,
-          signedIn: ref.read(authControllerProvider).isAuthenticated,
         );
   }
 
@@ -446,6 +445,12 @@ class _AdoptionPostDetailScreenState
               PublicationEngagementBar(
                 strings: strings,
                 commentCount: post.commentCount,
+                viewCount: liveViewCount(
+                  ref,
+                  PostViewCollection.adoption,
+                  post.id,
+                  post.viewCount,
+                ),
                 onComments: _openComments,
               ),
             ],

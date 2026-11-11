@@ -56,7 +56,6 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
     ref.read(postViewRecorderProvider).record(
           PostViewCollection.observation,
           widget.postId,
-          signedIn: ref.read(authControllerProvider).isAuthenticated,
         );
   }
 
@@ -423,6 +422,12 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
                 liked: isLiked,
                 likeCount: likeCount,
                 commentCount: post.commentCount,
+                viewCount: liveViewCount(
+                  ref,
+                  PostViewCollection.observation,
+                  post.id,
+                  post.viewCount,
+                ),
                 onLike: _submittingLike ? null : () => _toggleLike(post),
                 onComments: _openComments,
               ),

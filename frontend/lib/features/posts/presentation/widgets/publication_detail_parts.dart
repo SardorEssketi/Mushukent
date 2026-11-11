@@ -637,10 +637,14 @@ class PublicationEngagementBar extends StatelessWidget {
     this.liked = false,
     this.likeCount,
     this.onLike,
+    this.viewCount,
   });
 
   final AppStrings strings;
   final int commentCount;
+
+  /// Null hides the view counter.
+  final int? viewCount;
   final VoidCallback onComments;
 
   /// Null hides the like action (Lost Pet and Rehoming have no likes).
@@ -674,6 +678,10 @@ class PublicationEngagementBar extends StatelessWidget {
               label: strings.comments,
               onPressed: onComments,
             ),
+            if (viewCount != null) ...[
+              const Spacer(),
+              FeedViewCount(label: strings.views, count: viewCount!),
+            ],
           ],
         ),
       ),

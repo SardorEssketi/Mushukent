@@ -629,6 +629,33 @@ class MushukistanApi {
     );
   }
 
+  /// Feed cards the viewer saw; posts they may no longer see are left out of
+  /// the result.
+  Future<List<({String kind, String id, int viewCount})>> recordSeenPosts(
+    List<({String kind, String id})> items, {
+    String? guestViewerId,
+  }) {
+    return _client.postJson<List<({String kind, String id, int viewCount})>>(
+      'views/seen',
+      body: <String, Object?>{
+        'items': [
+          for (final item in items) {'kind': item.kind, 'id': item.id},
+        ],
+      },
+      headers: guestViewerId == null
+          ? null
+          : <String, String>{'X-Viewer-Id': guestViewerId},
+      decoder: (json) => [
+        for (final raw in _readList(_readMap(json)['items']))
+          (
+            kind: _readString(_readMap(raw)['kind']),
+            id: _readString(_readMap(raw)['id']),
+            viewCount: _readInt(_readMap(raw)['view_count']),
+          ),
+      ],
+    );
+  }
+
   Future<ReportData> createReport({
     required String targetType,
     required String targetId,
