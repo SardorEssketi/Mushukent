@@ -1124,9 +1124,7 @@ void main() {
     expect(find.text('Sardor'), findsWidgets);
     expect(find.text('user@example.com'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Profile actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Logout'));
+    await tester.tap(find.byKey(const ValueKey('profile-logout')));
     await tester.pumpAndSettle();
 
     expect(find.text('Log out?'), findsOneWidget);
@@ -1136,9 +1134,7 @@ void main() {
     expect(find.text('Sardor'), findsWidgets);
     expect(repo.logoutCalled, isFalse);
 
-    await tester.tap(find.byTooltip('Profile actions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Logout'));
+    await tester.tap(find.byKey(const ValueKey('profile-logout')));
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Logout'));
