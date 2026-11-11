@@ -444,7 +444,7 @@ CREATE UNIQUE INDEX uq_adoption_follow_ups_pending ON adoption_follow_ups (adopt
     WHERE completed_at IS NULL;
 CREATE INDEX idx_adoption_follow_ups_owner_due ON adoption_follow_ups (owner_id, due_at);
 
--- One row per person who opened a post (ADR-0024). Exactly one of user_id / guest_key is set.
+-- One row per person who opened a post or saw its Feed card (ADR-0024). Exactly one of user_id / guest_key is set.
 -- guest_key is HMAC-SHA256 of the guest's random per-install id; the id itself is never stored.
 CREATE TABLE post_views (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

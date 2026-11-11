@@ -1011,6 +1011,21 @@ Feature: Post views
 - Side effects: insert into post_views and increment the post's view_count in one transaction
 - Feed, list and detail items of all three kinds include `view_count`.
 
+4) POST /api/v1/views/seen
+- Purpose: record Feed cards the viewer saw on screen (ADR-0024). Clients queue seen cards and send
+  them together; seeing a card and opening the post are the same view.
+- Auth: optional, with the same `X-Viewer-Id` rule as above.
+- Request:
+  {"items": [{"kind": "post" | "lost_pet" | "adoption", "id": "uuid"}]}
+  1 to 20 items; repeated items are counted once.
+- Response: PostViewBatchResponse (200)
+  Example:
+  {"success": true, "data": {"items": [{"kind": "post", "id": "uuid", "view_count": 12, "counted": true}]}}
+- Behavior: the same counting rules as opening a post. Items the viewer may not see (missing,
+  hidden, deleted, blocked) are left out of `items` instead of failing the request.
+- Errors: 422 (empty list, more than 20 items, unknown kind, invalid id)
+- Side effects: as above, for each counted item, in one transaction
+
 Feature: Saved posts
 --------------------
 A signed-in user can save other users' cat posts (`kind=observation`) and see them in a
