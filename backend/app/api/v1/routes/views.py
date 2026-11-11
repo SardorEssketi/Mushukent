@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, Header
 from app.core.dependencies import get_optional_current_user, get_views_service
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
-from app.features.views.application.schemas import PostViewResponse
+from app.features.views.application.schemas import (
+    PostViewBatchRequest,
+    PostViewBatchResponse,
+    PostViewResponse,
+)
 from app.features.views.application.service import ViewsService
 
 router = APIRouter()
@@ -58,4 +62,17 @@ def record_adoption_post_view(
         data=views_service.record_adoption_post_view(
             adoption_post_id, current_user, _guest_id(viewer_id)
         )
+    )
+
+
+@router.post("/views/seen", response_model=ApiSuccess[PostViewBatchResponse])
+def record_seen_views(
+    payload: PostViewBatchRequest,
+    viewer_id: str | None = Header(default=None, alias="X-Viewer-Id"),
+    current_user: AuthUser | None = Depends(get_optional_current_user),
+    views_service: ViewsService = Depends(get_views_service),
+) -> ApiSuccess[PostViewBatchResponse]:
+    """Feed cards the viewer saw on screen; posts they may not see are skipped."""
+    return ApiSuccess(
+        data=views_service.record_seen(payload.items, current_user, _guest_id(viewer_id))
     )
