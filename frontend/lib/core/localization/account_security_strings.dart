@@ -25,6 +25,10 @@ class AccountSecurityStrings {
     required this.emailUnavailable,
     required this.emailVerified,
     required this.emailNeedsVerification,
+    required this.currentPasswordIncorrect,
+    required this.passwordNotSet,
+    required this.saveFailed,
+    required this.tooManyAttempts,
   });
 
   final String title;
@@ -44,6 +48,10 @@ class AccountSecurityStrings {
   final String emailUnavailable;
   final String emailVerified;
   final String emailNeedsVerification;
+  final String currentPasswordIncorrect;
+  final String passwordNotSet;
+  final String saveFailed;
+  final String tooManyAttempts;
 
   static AccountSecurityStrings forLanguage(AppLanguage language) =>
       switch (language) {
@@ -65,6 +73,11 @@ class AccountSecurityStrings {
             emailUnavailable: 'Email address unavailable',
             emailVerified: 'Verified',
             emailNeedsVerification: 'Needs verification',
+            currentPasswordIncorrect: 'Current password is incorrect.',
+            passwordNotSet: 'This account has no password yet.',
+            saveFailed: 'Could not save the password. Try again.',
+            tooManyAttempts:
+                'Too many attempts. Wait a few minutes and try again.',
           ),
         AppLanguage.uzbek => const AccountSecurityStrings(
             title: 'Xavfsizlik',
@@ -84,6 +97,11 @@ class AccountSecurityStrings {
             emailUnavailable: 'Elektron pochta manzili mavjud emas',
             emailVerified: 'Tasdiqlangan',
             emailNeedsVerification: 'Tasdiqlash kerak',
+            currentPasswordIncorrect: 'Joriy parol noto‘g‘ri.',
+            passwordNotSet: 'Bu hisobda hali parol yo‘q.',
+            saveFailed: 'Parolni saqlab bo‘lmadi. Qayta urinib ko‘ring.',
+            tooManyAttempts:
+                'Urinishlar juda ko‘p. Bir necha daqiqadan so‘ng qayta urinib ko‘ring.',
           ),
         AppLanguage.russian => const AccountSecurityStrings(
             title: 'Безопасность',
@@ -103,6 +121,11 @@ class AccountSecurityStrings {
             emailUnavailable: 'Адрес электронной почты недоступен',
             emailVerified: 'Подтверждён',
             emailNeedsVerification: 'Требуется подтверждение',
+            currentPasswordIncorrect: 'Текущий пароль указан неверно.',
+            passwordNotSet: 'У этого аккаунта ещё нет пароля.',
+            saveFailed: 'Не удалось сохранить пароль. Попробуйте ещё раз.',
+            tooManyAttempts:
+                'Слишком много попыток. Подождите несколько минут и попробуйте снова.',
           ),
       };
 }

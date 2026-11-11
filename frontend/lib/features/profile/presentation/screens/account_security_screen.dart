@@ -72,12 +72,60 @@ class _AccountSecurityScreenState extends ConsumerState<AccountSecurityScreen> {
       });
       _reload();
     } on MushukistanApiException catch (error) {
-      if (mounted) setState(() => _error = error.userMessage);
+      if (mounted) {
+        setState(() => _error = _passwordErrorMessage(error, strings));
+      }
     } on Object {
-      if (mounted) setState(() => _error = strings.loadFailed);
+      if (mounted) setState(() => _error = strings.saveFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Change-password errors in the user's language. The generic API message
+  /// for INVALID_CREDENTIALS mentions the email, which is not part of this form.
+  static String _passwordErrorMessage(
+    MushukistanApiException error,
+    AccountSecurityStrings strings,
+  ) {
+    switch (error.code) {
+      case 'INVALID_CREDENTIALS':
+        return strings.currentPasswordIncorrect;
+      case 'PASSWORD_NOT_SET':
+        return strings.passwordNotSet;
+      case 'RATE_LIMIT_EXCEEDED':
+        return strings.tooManyAttempts;
+      case 'VALIDATION_ERROR':
+        // The service reports a mismatch as {confirm_password: [...]};
+        // schema errors on any password field are about its length.
+        final details = error.details;
+        if (details is Map && details.containsKey('confirm_password')) {
+          return strings.passwordMismatch;
+        }
+        final fields = _invalidFields(details);
+        if (fields.contains('password') ||
+            fields.contains('new_password') ||
+            fields.contains('confirm_password')) {
+          return strings.passwordLength;
+        }
+        return strings.saveFailed;
+      default:
+        return strings.saveFailed;
+    }
+  }
+
+  /// Field names in a VALIDATION_ERROR: the service sends a map of field to
+  /// reasons, request-schema errors a list of `{loc: [..., field]}` entries.
+  static Set<String> _invalidFields(Object? details) {
+    if (details is Map) return {for (final key in details.keys) '$key'};
+    if (details is List) {
+      return {
+        for (final entry in details)
+          if (entry is Map && entry['loc'] is List)
+            for (final part in entry['loc'] as List) '$part',
+      };
+    }
+    return const {};
   }
 
   @override
