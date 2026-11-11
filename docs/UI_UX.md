@@ -278,8 +278,8 @@ Bottom navigation with 5 tabs on main tab roots:
   - horizontal, scrollable filters directly under the header: Recent, Popular, Cat needs help, Lost pets, and Adoption on mobile and desktop; Recent is visibly selected by default. The compact guest welcome card (short headline and one-line purpose, Create account and Map actions) follows the filters.
   - tapping the selected filter keeps it selected.
   - Popular alone shows compact Today, Month, All time period chips.
-  - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface.
-  - media uses a contained (never cropped) image in a fixed frame: 0.9 of the card width on phones (at most 380px) and at most 420px on tablet/web. A softly blurred, dimmed copy of the same photo fills any remaining space; failed images keep the neutral frame and icon. Multiple photos have a count and compact previous/next controls (36px visual, 48px target).
+  - each feed card has an author/date header, bounded media frame, compact body, and icon/count actions on a subtle shared surface. The header ends with a ⋮ actions menu holding the same actions as the publication's detail page (owner: Edit, Delete; others: Report and, on others' Cat posts, Save / Remove from saved; moderators also Remove, and History on Cat posts); it renders nothing when the viewer has no action.
+  - media uses a contained (never cropped) image in a fixed frame: 0.9 of the card width on phones (at most 380px) and at most 420px on tablet/web. A softly blurred, dimmed copy of the same photo fills any remaining space; failed images keep the neutral frame and icon. Multiple photos have a count and compact previous/next controls (36px visual, 48px target). Only touch swipes change photos; mouse-wheel and trackpad scrolling over a photo scrolls the page (photos change with the arrows), and the detail gallery shows its arrows at every width.
 - Post card contents:
   - author avatar/name with initials fallback and publication date; tapping the author opens their public profile.
   - ordinary Cat posts remain neutral, showing a useful cat name and note without a kind badge; Cat needs help uses a calm semantic badge and top accent, and adds View on Map beside likes and comments when its location lies inside the Map area (the action is hidden otherwise); it opens the Map centered on the post coordinates with a tertiary focus ring.
@@ -322,7 +322,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - comment list rendered as nested conversation threads,
   - each comment shows author, full publication date, content, report action, and Reply action,
   - reply composer identifies the selected parent comment and can be cancelled,
-  - input box + send button
+  - input box + send button; on computers (Windows, macOS, Linux, including the web app in a desktop browser) Enter sends and Shift+Enter starts a new line, while touch keyboards keep Enter as a new line
 - Interactions:
   - tap comment author -> User Profile
   - submit comment,
@@ -345,7 +345,7 @@ Bottom navigation with 5 tabs on main tab roots:
 - Layout:
   - two-option segmented control: Active and Popular
   - compact period selector: Day, Week, Month, All time; Month is the default
-  - modest emphasis for the top three users, followed by a clean list for later ranks
+  - modest emphasis for the top three users, followed by a clean list for later ranks; the board shows the top 10
   - show avatar, name, rank, and only the metric used for that ranking: posts for Active, likes for Popular
 - Interactions:
   - tap user -> User Profile
@@ -357,11 +357,12 @@ Bottom navigation with 5 tabs on main tab roots:
 - Purpose: manage personal profile and view contribution stats.
 - Layout:
   - shared profile summary surface with large avatar, display name, short bio, and secondary owner-only email, phone, and Telegram details.
-  - compact stats: posts, likes received, comments. Posts and Comments open their existing activity screens.
-  - Your activity section: My lost pets and My rehoming posts.
+  - compact stats: posts, likes received, comments. Posts and Comments open their existing activity screens and carry a small open-arrow icon so they read as tappable; Likes received is static.
+  - Your activity section: My cat posts, My Cat needs help posts, My lost pets and My rehoming posts.
+  - Saved posts in its own card directly below Your activity (other users' Cat posts saved from the ⋮ menu; private list, newest saved first, route `/profile/saved-posts`).
   - Resources and account section: adoption guidance, Settings, and Feedback (Beta badge; see 5.17.3).
   - moderator-only Moderation reports section.
-  - app bar: Donate to author (icon only on compact screens), Edit Profile, and Logout in the overflow menu.
+  - app bar: Donate to author (icon only on compact screens), Edit Profile, and a direct Logout button (icon only on compact screens; there is no overflow menu).
   - donation dialog identifies Sardor Muxtorov as the recipient and shows the existing support card number as selectable text with a copy action.
   - one column on phones; on wide screens, summary and actions sit side by side in a centered layout bounded by AppWidths.wide.
 - Interactions:
@@ -378,7 +379,7 @@ Bottom navigation with 5 tabs on main tab roots:
 - Purpose: view another contributor.
 - Layout:
   - same identity and stats surface as the self profile, with name, avatar, short public bio, posts, likes received, and comments. No email, phone, Telegram, language, or account internals appear.
-  - Recent posts shows up to four current Feed post cards and a See all action to the existing posts screen; comments open from the stat.
+  - Recent posts shows up to four current Feed post cards and a See all action to the existing posts screen; comments open from the stat. Signed-in viewers load the preview with their session, so like and saved state on those cards are their own and a blocked pair sees no posts (docs/BLOCKING.md).
   - on wide screens, the summary stays fixed in the left column while the recent-post list scrolls within the available viewport height; compact screens use one vertical page scroll.
   - Report and Block appear in the app bar overflow menu. The menu offers Block or Unblock depending on whether the viewer has blocked the user; both confirm with a snackbar. Blocked accounts are listed under Settings > Blocked users with an Unblock action.
   - one column on phones; on wide screens, identity/stats and recent posts sit side by side within AppWidths.wide.
@@ -419,7 +420,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - Notifications entry leading to grouped notification preferences
   - Account Security entry
   - About account entry
-  - Save changes button
+  - Save changes bar pinned to the bottom of the screen; it slides in only while theme, language or privacy edits are pending and slides out when they are saved or undone
 - Interaction:
   - theme and language changes remain pending until the user taps Save changes.
   - saving updates the app locale immediately and persists the language preference and activity privacy preference to the authenticated user's profile.
