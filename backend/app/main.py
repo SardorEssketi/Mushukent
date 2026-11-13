@@ -10,6 +10,7 @@ from app.api.v1.router import api_v1_router
 from app.core.analytics import Analytics
 from app.core.container import build_container
 from app.core.errors import register_error_handlers
+from app.core.load_shedding import LoadSheddingMiddleware
 from app.core.logging import configure_logging
 from app.core.publication_diagnostics import PublicationDiagnosticsMiddleware
 from app.core.rate_limit import add_rate_limit_middleware
@@ -116,6 +117,13 @@ def create_app() -> FastAPI:
     app.add_middleware(
         UploadSingleFlightMiddleware,
         identify=verified_user_identifier(JoseAccessTokenService(settings)),
+    )
+    # In-flight cap: added after the upload guard (so it wraps it) and before CORS (so its 503
+    # carries CORS headers).
+    app.add_middleware(
+        LoadSheddingMiddleware,
+        max_in_flight=settings.max_in_flight_requests,
+        retry_after=settings.service_busy_retry_after_seconds,
     )
     app.add_middleware(
         CORSMiddleware,
