@@ -40,6 +40,18 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
 
+    # API request limits (load audit LT-02). A request never waits more than the pool timeout for
+    # a connection, and Postgres cancels statements that outlive the client's 15 s timeout.
+    db_pool_timeout_seconds: float = Field(default=3, gt=0, alias="DB_POOL_TIMEOUT_SECONDS")
+    db_statement_timeout_ms: int = Field(default=15_000, ge=0, alias="DB_STATEMENT_TIMEOUT_MS")
+    db_lock_timeout_ms: int = Field(default=3_000, ge=0, alias="DB_LOCK_TIMEOUT_MS")
+    db_idle_in_transaction_timeout_ms: int = Field(
+        default=15_000, ge=0, alias="DB_IDLE_IN_TRANSACTION_TIMEOUT_MS"
+    )
+    service_busy_retry_after_seconds: int = Field(
+        default=5, ge=1, alias="SERVICE_BUSY_RETRY_AFTER_SECONDS"
+    )
+
     jwt_secret_key: str = Field(default="change-me", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_access_token_exp_minutes: int = Field(default=60, alias="JWT_ACCESS_TOKEN_EXP_MINUTES")
