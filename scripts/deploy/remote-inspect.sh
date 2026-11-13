@@ -12,6 +12,44 @@
 
 section() { printf '\n=== %s\n' "$1"; }
 
+# Capacity mode (load-test sizing): hardware, container usage, Postgres settings, nginx/compose
+# config, and a ~3 s single-threaded CPU benchmark at the lowest priority inside the running
+# backend container (same Python as the load-test image, nothing installed, nothing written).
+# No row counts, no table contents, no environment values.
+#   ssh "$(bash scripts/deploy/ssh-target.sh)" 'sh -s -- capacity' < scripts/deploy/remote-inspect.sh
+if [ "${1:-}" = "capacity" ]; then
+  section "cpu"
+  nproc
+  lscpu 2>/dev/null | grep -E '^(Architecture|CPU\(s\)|Model name|Thread|Core|Socket|CPU MHz|CPU max MHz|BogoMIPS|Hypervisor vendor|Virtualization type|L2 cache|L3 cache)'
+  section "memory and disk"
+  free -m
+  df -h / 2>/dev/null
+  section "containers (ps, one stats sample, limits, backend command)"
+  docker ps --format '{{.Names}} {{.Image}} {{.Status}}'
+  docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} pids={{.PIDs}}'
+  for c in $(docker ps --format '{{.Names}}'); do
+    docker inspect --format '{{.Name}} memory={{.HostConfig.Memory}} nanocpus={{.HostConfig.NanoCpus}} cpuset={{.HostConfig.CpusetCpus}} restart={{.HostConfig.RestartPolicy.Name}} restarts={{.RestartCount}} cmd={{json .Config.Cmd}}' "$c"
+  done
+  section "postgres version and non-default / capacity settings (pg_settings, read only)"
+  docker exec mushukistan-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -AtF "|" -c "BEGIN READ ONLY; SELECT version(); SELECT name, setting, unit, source FROM pg_settings WHERE source NOT IN ('"'"'default'"'"', '"'"'override'"'"') OR name IN ('"'"'max_connections'"'"','"'"'shared_buffers'"'"','"'"'work_mem'"'"','"'"'maintenance_work_mem'"'"','"'"'effective_cache_size'"'"','"'"'max_parallel_workers_per_gather'"'"','"'"'max_parallel_workers'"'"','"'"'max_worker_processes'"'"','"'"'statement_timeout'"'"','"'"'lock_timeout'"'"','"'"'idle_in_transaction_session_timeout'"'"','"'"'random_page_cost'"'"','"'"'jit'"'"','"'"'autovacuum'"'"','"'"'checkpoint_timeout'"'"','"'"'max_wal_size'"'"','"'"'shared_preload_libraries'"'"') ORDER BY name; COMMIT;"' 2>&1
+  section "nginx as deployed (proxy/resolver/worker lines only)"
+  docker exec mushukistan-nginx sh -c 'nginx -T 2>/dev/null | grep -nE "worker_processes|worker_connections|keepalive|resolver|proxy_pass|proxy_read_timeout|proxy_send_timeout|client_max_body_size|client_body_timeout|limit_req"' 2>&1
+  section "cpu micro-benchmark (nice 19, best of 5, single thread, same image as the load test)"
+  docker exec mushukistan-backend nice -n 19 python -c '
+import time, hashlib
+def work():
+    t = time.perf_counter()
+    s = 0
+    for i in range(3_000_000):
+        s += i * i % 7
+    hashlib.sha256(b"x" * 20_000_000).hexdigest()
+    return time.perf_counter() - t
+print("bench_best_s", round(min(work() for _ in range(5)), 4))
+' 2>&1
+  echo; echo "done (read-only, capacity)"
+  exit 0
+fi
+
 section "host"
 hostname; date -u +%FT%TZ; uptime -p 2>/dev/null
 section "disk (df -h, root and docker)"
