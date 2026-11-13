@@ -1,0 +1,175 @@
+# Emulated production host for load tests. Never point this at a real database or service.
+#
+# The emulated box is a small single-host VPS: db + backend + notification worker + nginx on one
+# machine (sized from the operator's private production notes; those details stay private).
+# Emulation:
+#   * every "box" service is pinned to the SAME single CPU (cpuset "0"), so they compete for one
+#     core;
+#   * memory limits with swap disabled (memswap == mem), ~1.8 GB in total; a container that
+#     exceeds its share is OOM-killed;
+#   * the live backend image (mushukistan-backend:${BACKEND_TAG}), APP_ENV=production, the
+#     production single-worker uvicorn command and the production nginx config verbatim;
+#   * PostGIS 15-3.4 with default settings (as in production), plus pg_stat_statements and lock
+#     wait logging for observation only.
+# External services (R2, PostHog, FCM) are redirected to `mocks`, which runs OUTSIDE the box
+# (no cpuset), because in production they are remote.
+#
+# Usage: see loadtest/README.md (`bash loadtest/run.sh up`).
+
+name: mushukistan-load
+
+x-box-cpu: &box_cpu
+  cpuset: "0"
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    <<: *box_cpu
+    mem_limit: 768m
+    memswap_limit: 768m
+    environment:
+      POSTGRES_DB: mushukistan_load
+      POSTGRES_USER: mushukistan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run loadtest/run.sh secrets first}
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - log_lock_waits=on
+      - -c
+      - deadlock_timeout=1s
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - track_io_timing=on
+    volumes:
+      - load_pg:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mushukistan -d mushukistan_load"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: mushukistan-backend:${BACKEND_TAG:-8939818}
+    <<: *box_cpu
+    mem_limit: 768m
+    memswap_limit: 768m
+    depends_on:
+      db:
+        condition: service_healthy
+      mocks:
+        condition: service_started
+    env_file:
+      - ./loadtest.env
+      - ./.secrets/secrets.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://mushukistan:${POSTGRES_PASSWORD}@db:5432/mushukistan_load
+      PYTHONPATH: /loadtest-shim
+      LOADTEST_POOL_LOG: /loadtest-out/pool.jsonl
+    volumes:
+      - ./shim:/loadtest-shim:ro
+      - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
+      - ./results/_runtime:/loadtest-out
+    # Production overlay command: single uvicorn worker, no auto-migration.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)\"",
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 20s
+
+  notification-worker:
+    image: mushukistan-backend:${BACKEND_TAG:-8939818}
+    <<: *box_cpu
+    mem_limit: 192m
+    memswap_limit: 192m
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./loadtest.env
+      - ./.secrets/secrets.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://mushukistan:${POSTGRES_PASSWORD}@db:5432/mushukistan_load
+      PYTHONPATH: /loadtest-shim
+    volumes:
+      - ./shim:/loadtest-shim:ro
+      - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
+    command: ["python", "-m", "app.features.notifications.application.worker"]
+
+  nginx:
+    image: nginx:1.27-alpine
+    <<: *box_cpu
+    mem_limit: 64m
+    memswap_limit: 64m
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18443:443"
+    volumes:
+      - ../infrastructure/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.secrets/live:/etc/letsencrypt/live:ro
+      - ./nginx/empty:/usr/share/nginx/html:ro
+      - ./nginx/empty:/var/www/landing:ro
+      - ./nginx/empty:/var/www/certbot:ro
+
+  # Remote services (R2, PostHog). Not part of the emulated box.
+  mocks:
+    image: mushukistan-backend:${BACKEND_TAG:-8939818}
+    entrypoint: ["python", "/mocks/mock_server.py"]
+    environment:
+      MOCK_LATENCY_MS: "40"
+    volumes:
+      - ./mocks:/mocks:ro
+    ports:
+      - "127.0.0.1:19000:9000"
+
+  # One-shot helpers (profiles keep them out of `up`).
+  migrate:
+    image: mushukistan-backend:${BACKEND_TAG:-8939818}
+    profiles: ["tools"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./loadtest.env
+      - ./.secrets/secrets.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://mushukistan:${POSTGRES_PASSWORD}@db:5432/mushukistan_load
+      PYTHONPATH: /loadtest-shim
+    volumes:
+      - ./shim:/loadtest-shim:ro
+      - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
+    command: ["alembic", "upgrade", "head"]
+
+  seed:
+    image: mushukistan-backend:${BACKEND_TAG:-8939818}
+    profiles: ["tools"]
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./loadtest.env
+      - ./.secrets/secrets.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://mushukistan:${POSTGRES_PASSWORD}@db:5432/mushukistan_load
+    volumes:
+      - ./seed:/seed:ro
+      - ./results:/results
+    entrypoint: ["python", "/seed/seed.py"]
+
+volumes:
+  load_pg:

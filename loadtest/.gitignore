@@ -1,0 +1,4 @@
+.secrets/
+results/
+.venv/
+__pycache__/
