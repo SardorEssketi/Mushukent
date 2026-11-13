@@ -14,14 +14,16 @@ import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
-import '../../../../core/widgets/app_remote_image.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
+import '../../../feed/presentation/widgets/feed_card_parts.dart';
+import '../../../posts/application/post_view_recorder.dart';
 import '../../application/map_marker_selection.dart';
 import '../../application/map_places_cache.dart';
 import '../../application/map_viewport.dart';
 import '../widgets/map_clustered_marker_layer.dart';
 import '../widgets/map_floating_controls.dart';
 import '../widgets/map_marker_visual.dart';
+import '../widgets/map_post_preview.dart';
 import '../widgets/place_category_display.dart';
 
 /// This stays null until the user explicitly asks to use device location.
@@ -719,7 +721,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                       context,
                       cat,
                       strings,
-                      onOpenPost: () => unawaited(_openLatestCatPost(cat)),
+                      ref.read(mushukistanApiProvider),
+                      onOpenPost: (postId) => postId == null
+                          ? unawaited(_openLatestCatPost(cat))
+                          : context.push('/posts/$postId'),
                     )),
           ),
         ),
@@ -759,8 +764,14 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 kind: MapMarkerVisualKind.lostPets,
                 label: strings.lostPets,
                 selected: selected,
-                onTap: () => _selectMarker('pet:${visiblePet.id}',
-                    () => _showLostPetSheet(context, visiblePet, strings)),
+                onTap: () => _selectMarker(
+                    'pet:${visiblePet.id}',
+                    () => _showLostPetSheet(
+                          context,
+                          visiblePet,
+                          strings,
+                          ref.read(mushukistanApiProvider),
+                        )),
               ),
             ),
           ),
@@ -979,101 +990,142 @@ Uri? _telegramUri(String value) {
   return _webUri(trimmed);
 }
 
+/// The card of a cat marker: a preview of the cat's newest public post.
+///
+/// The marker knows the cat's name, cover photo and last-seen date, so those
+/// show at once; the post's text, author and counts appear when it has loaded.
+/// [onOpenPost] receives the loaded post's id, or null if it is not known yet.
 Future<void> _showCatSheet(
   BuildContext context,
   CatSummary cat,
-  AppStrings strings, {
-  required VoidCallback onOpenPost,
+  AppStrings strings,
+  MushukistanApi api, {
+  required void Function(String? postId) onOpenPost,
 }) {
   final markerKind = mapMarkerKindForPostKind(cat.latestPostKind);
-  final title = cat.name?.trim().isNotEmpty == true
-      ? cat.name!.trim()
-      : markerKind == MapMarkerKind.needsHelp
-          ? strings.needsHelp
-          : strings.catObservation;
+  final needsHelp = markerKind == MapMarkerKind.needsHelp;
+  final name = cat.name?.trim();
+  final named = name != null && name.isNotEmpty;
+  final latestPost = api
+      .listCatPosts(
+        cat.id,
+        limit: 1,
+        sort: 'latest',
+        includeViewerContext: false,
+      )
+      .then<PostSummary?>(
+        (page) => page.items.isEmpty ? null : page.items.first,
+        onError: (Object _) => null,
+      );
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
     constraints: const BoxConstraints(maxWidth: AppWidths.compact),
     builder: (sheetContext) {
-      final theme = Theme.of(sheetContext);
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: markerKind == MapMarkerKind.needsHelp
-                        ? theme.colorScheme.tertiaryContainer
-                        : theme.colorScheme.secondaryContainer,
-                    child: cat.coverPhotoUrl == null
-                        ? Icon(
-                            mapMarkerIconForKind(markerKind),
-                            color: markerKind == MapMarkerKind.needsHelp
-                                ? theme.colorScheme.onTertiaryContainer
-                                : theme.colorScheme.onSecondaryContainer,
-                          )
-                        : ClipOval(
-                            child: AppRemoteImage(
-                              cat.coverPhotoUrl!,
-                              width: 40,
-                              height: 40,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Icon(
-                                mapMarkerIconForKind(markerKind),
-                                color: markerKind == MapMarkerKind.needsHelp
-                                    ? theme.colorScheme.onTertiaryContainer
-                                    : theme.colorScheme.onSecondaryContainer,
-                              ),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(title, style: theme.textTheme.titleLarge),
-                  ),
-                ],
+      final colors = Theme.of(sheetContext).colorScheme;
+      final dates = MaterialLocalizations.of(sheetContext);
+      return FutureBuilder<PostSummary?>(
+        future: latestPost,
+        builder: (sheetContext, snapshot) {
+          final post = snapshot.data;
+          final seenAt = cat.lastSeenAt ?? post?.createdAt;
+          return _MarkerPostSheet(
+            child: MapPostPreview(
+              data: MapPostPreviewData(
+                title: named
+                    ? name
+                    : needsHelp
+                        ? strings.needsHelp
+                        : strings.catObservation,
+                // Without a name the title already says what kind of post it is.
+                badge: named && needsHelp
+                    ? FeedKindBadge(
+                        kind: FeedKind.needsHelp,
+                        label: strings.needsHelp,
+                      )
+                    : null,
+                dateLine: seenAt == null
+                    ? null
+                    : '${strings.lastSeen}: '
+                        '${dates.formatShortDate(seenAt.toLocal())}',
+                // The post's own photo once it is known; the cat's cover
+                // photo until then, or if the post cannot be loaded.
+                photoUrl: post?.thumbUrl ?? post?.photoUrl ?? cat.coverPhotoUrl,
+                description: post?.description,
+                authorName: post?.author?.name,
+                likeCount: post?.likeCount,
+                commentCount: post?.commentCount,
+                viewCount: post == null
+                    ? null
+                    : _LiveViews(
+                        collection: PostViewCollection.observation,
+                        id: post.id,
+                        loaded: post.viewCount,
+                      ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                markerKind == MapMarkerKind.needsHelp
-                    ? strings.needsHelp
-                    : strings.observation,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (cat.lastSeenAt != null) ...[
-                const SizedBox(height: 6),
-                Text('${strings.lastSeen}: ${_formatDate(cat.lastSeenAt!)}',
-                    style: theme.textTheme.bodySmall),
-              ],
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  onOpenPost();
-                },
-                icon: const Icon(Icons.open_in_new),
-                label: Text(strings.openPost),
-              ),
-            ],
-          ),
-        ),
+              fallbackIcon: mapMarkerIconForKind(markerKind),
+              accent: needsHelp
+                  ? colors.tertiaryContainer
+                  : colors.secondaryContainer,
+              onAccent: needsHelp
+                  ? colors.onTertiaryContainer
+                  : colors.onSecondaryContainer,
+              openLabel: strings.openPost,
+              likesLabel: strings.likes,
+              commentsLabel: strings.comments,
+              viewsLabel: strings.views,
+              onOpen: () {
+                Navigator.of(sheetContext).pop();
+                onOpenPost(post?.id);
+              },
+            ),
+          );
+        },
       );
     },
   );
 }
 
-String _formatDate(DateTime dateTime) {
-  final local = dateTime.toLocal();
-  return '${local.year.toString().padLeft(4, '0')}-'
-      '${local.month.toString().padLeft(2, '0')}-'
-      '${local.day.toString().padLeft(2, '0')}';
+/// A post's view count, kept current with views recorded in this session,
+/// the way Feed cards and post pages show it.
+class _LiveViews extends ConsumerWidget {
+  const _LiveViews({
+    required this.collection,
+    required this.id,
+    required this.loaded,
+  });
+
+  final String collection;
+  final String id;
+  final int loaded;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) =>
+      Text('${liveViewCount(ref, collection, id, loaded)}');
+}
+
+/// Padding and growth animation shared by the marker post cards.
+class _MarkerPostSheet extends StatelessWidget {
+  const _MarkerPostSheet({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        // The card grows a little when the post's text and counts arrive.
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          alignment: Alignment.topCenter,
+          child: child,
+        ),
+      ),
+    );
+  }
 }
 
 Future<void> _showPlaceSheet(
@@ -1254,57 +1306,65 @@ Future<void> _showPlaceSheet(
   );
 }
 
+/// The card of a Lost Pet marker: a preview of that post. The marker knows
+/// the pet's name and date; photo, text, author and counts load with the post.
 Future<void> _showLostPetSheet(
   BuildContext context,
   LostPetMapData lostPet,
   AppStrings strings,
+  MushukistanApi api,
 ) {
+  final details = api
+      .getLostPet(lostPet.id)
+      .then<LostPetData?>((post) => post, onError: (Object _) => null);
   return showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
+    isScrollControlled: true,
     constraints: const BoxConstraints(maxWidth: AppWidths.compact),
     builder: (sheetContext) {
-      final theme = Theme.of(sheetContext);
-      return SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: theme.colorScheme.errorContainer,
-                    child: Icon(
-                      Icons.search,
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      lostPet.petName,
-                      style: theme.textTheme.titleLarge,
-                    ),
-                  ),
-                ],
+      final colors = Theme.of(sheetContext).colorScheme;
+      final dates = MaterialLocalizations.of(sheetContext);
+      return FutureBuilder<LostPetData?>(
+        future: details,
+        builder: (sheetContext, snapshot) {
+          final post = snapshot.data;
+          return _MarkerPostSheet(
+            child: MapPostPreview(
+              data: MapPostPreviewData(
+                title: post?.petName ?? lostPet.petName,
+                badge: FeedKindBadge(
+                  kind: FeedKind.lostPet,
+                  label: strings.lostPet,
+                ),
+                dateLine: '${strings.mapPostedOn} '
+                    '${dates.formatShortDate(lostPet.createdAt.toLocal())}',
+                photoUrl: post?.thumbUrl ?? post?.photoUrl,
+                description: post?.additionalInfo,
+                authorName: post?.author?.name,
+                commentCount: post?.commentCount,
+                viewCount: post == null
+                    ? null
+                    : _LiveViews(
+                        collection: PostViewCollection.lostPet,
+                        id: post.id,
+                        loaded: post.viewCount,
+                      ),
               ),
-              const SizedBox(height: 12),
-              Text(
-                  '${strings.lostPet} · ${strings.mapPostedOn} ${_formatDate(lostPet.createdAt)}'),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  context.push('/lost-pets/${lostPet.id}');
-                },
-                icon: const Icon(Icons.open_in_new),
-                label: Text(strings.openPost),
-              ),
-            ],
-          ),
-        ),
+              fallbackIcon: Icons.search,
+              accent: colors.errorContainer,
+              onAccent: colors.onErrorContainer,
+              openLabel: strings.openPost,
+              likesLabel: strings.likes,
+              commentsLabel: strings.comments,
+              viewsLabel: strings.views,
+              onOpen: () {
+                Navigator.of(sheetContext).pop();
+                context.push('/lost-pets/${lostPet.id}');
+              },
+            ),
+          );
+        },
       );
     },
   );

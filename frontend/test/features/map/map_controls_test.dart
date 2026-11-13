@@ -164,7 +164,7 @@ void main() {
             widget is Semantics && widget.properties.selected == true),
         findsOneWidget);
     expect(find.text('Mittens'), findsOneWidget);
-    expect(find.textContaining('2026-09-28'), findsOneWidget);
+    expect(find.textContaining('Sep 28, 2026'), findsOneWidget);
     expect(find.text('Open post'), findsOneWidget);
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();

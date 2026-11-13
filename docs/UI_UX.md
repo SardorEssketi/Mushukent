@@ -178,7 +178,7 @@ Bottom navigation with 5 tabs on main tab roots:
   - legible crosshair recenter control that requests location only after a tap,
   - compact icon markers with round animal and rounded-square place shapes; alert markers use stronger fills,
   - zoom-aware category clusters with counts inside their marker body,
-  - compact marker previews with clear actions and a bounded width on wide screens.
+  - compact marker previews with clear actions and a bounded width on wide screens; a cat or Lost Pet preview shows the post's photo, name, date, author, text and counts, and opens the post when tapped.
 - Visibility:
   - cats appear on the map only when their latest public observation is within the last 10 days.
 - older cats remain available through Feed posts.
