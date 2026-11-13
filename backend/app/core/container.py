@@ -21,7 +21,13 @@ class AppContainer:
 
 def build_container() -> AppContainer:
     settings = get_settings()
-    db_session_manager = DatabaseSessionManager(settings.database_url)
+    db_session_manager = DatabaseSessionManager(
+        settings.database_url,
+        pool_timeout=settings.db_pool_timeout_seconds,
+        statement_timeout_ms=settings.db_statement_timeout_ms,
+        lock_timeout_ms=settings.db_lock_timeout_ms,
+        idle_in_transaction_timeout_ms=settings.db_idle_in_transaction_timeout_ms,
+    )
     object_storage = build_object_storage(settings)
     return AppContainer(
         settings=settings,
