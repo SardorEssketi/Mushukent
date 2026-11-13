@@ -408,6 +408,13 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         CheckConstraint("comment_count >= 0", name="comment_count_non_negative"),
         CheckConstraint("view_count >= 0", name="view_count_non_negative"),
         Index("posts_location_gist", "location", postgresql_using="gist"),
+        # Nearest-first `nearby` feed (KNN on geography; migration 20261114_0032).
+        Index(
+            "idx_posts_location_geography_knn",
+            text("geography(location)"),
+            postgresql_using="gist",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("idx_posts_created_at", "created_at"),
         Index(
             "idx_posts_active_created_at",
@@ -825,6 +832,12 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         CheckConstraint("comment_count >= 0", name="lost_pets_comment_count_non_negative"),
         CheckConstraint("view_count >= 0", name="lost_pets_view_count_non_negative"),
         Index("lost_pets_last_seen_location_gist", "last_seen_location", postgresql_using="gist"),
+        Index(
+            "idx_lost_pets_location_geography_knn",
+            text("geography(last_seen_location)"),
+            postgresql_using="gist",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("idx_lost_pets_created_at", "created_at"),
         Index(
             "idx_lost_pets_active_created_at",
