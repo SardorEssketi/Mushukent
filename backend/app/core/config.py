@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     db_idle_in_transaction_timeout_ms: int = Field(
         default=15_000, ge=0, alias="DB_IDLE_IN_TRANSACTION_TIMEOUT_MS"
     )
+    # Requests handled at once before new ones are answered 503 SERVICE_BUSY (LT-18). Sized
+    # above the thread pool (40) so normal bursts queue briefly, but a spike cannot leave a
+    # backlog that keeps the API busy long after the clients left.
+    max_in_flight_requests: int = Field(default=48, ge=1, alias="MAX_IN_FLIGHT_REQUESTS")
     service_busy_retry_after_seconds: int = Field(
         default=5, ge=1, alias="SERVICE_BUSY_RETRY_AFTER_SECONDS"
     )
