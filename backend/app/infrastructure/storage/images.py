@@ -9,7 +9,9 @@ from PIL import Image, ImageFile, ImageOps, UnidentifiedImageError
 
 from app.core.storage import StorageValidationError
 
-Image.MAX_IMAGE_PIXELS = 25_000_000
+# The app resizes every photo to <= 1920 px on the longest side before upload (<= 3.7 MP); 8 MP
+# leaves 2x headroom while keeping one decode within a few tens of MB (load audit FIX-6).
+Image.MAX_IMAGE_PIXELS = 8_000_000
 ImageFile.LOAD_TRUNCATED_IMAGES = False
 
 MAX_UPLOAD_SIZE_BYTES: Final = 10 * 1024 * 1024
@@ -66,6 +68,48 @@ def _has_alpha(image: Image.Image) -> bool:
     if image.mode == "P" and "transparency" in image.info:
         return True
     return False
+
+
+_ORIENTATION_TAG = 0x0112
+_SWAPS_AXES = {5, 6, 7, 8}  # EXIF orientations that rotate by 90 or 270 degrees
+
+
+def _oriented_size(image: Image.Image) -> tuple[int, int]:
+    """Displayed size from the header and EXIF orientation, without decoding pixels."""
+    width, height = image.size
+    try:
+        orientation = image.getexif().get(_ORIENTATION_TAG)
+    except Exception:  # unreadable EXIF is ignored, exactly as exif_transpose does
+        orientation = None
+    return (height, width) if orientation in _SWAPS_AXES else (width, height)
+
+
+def _decode_for(content: bytes, longest_side: int) -> Image.Image:
+    """The single full decode of an upload, oriented, at the smallest scale that still covers
+    ``longest_side``. JPEG decodes directly at 1/2..1/8 scale (``draft``), so a large photo
+    never materialises at full resolution; PNG has no reduced decode and stays as is.
+
+    Decoding errors (truncated or malformed data) are validation errors, as before.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            image = Image.open(io.BytesIO(content))
+        with image:
+            if image.format == "JPEG":
+                # Request the target size with the image's aspect ratio; libjpeg then picks the
+                # largest 1/2, 1/4 or 1/8 reduction that still covers it (avatars: a 1920 px photo
+                # decodes at 960 px). Photos already near the target decode at full size.
+                width, height = image.size
+                scale = longest_side / max(width, height)
+                if scale < 1:
+                    image.draft(
+                        image.mode, (max(1, int(width * scale)), max(1, int(height * scale)))
+                    )
+            image.load()
+            return ImageOps.exif_transpose(image)
+    except (OSError, UnidentifiedImageError, ValueError, Image.DecompressionBombError) as exc:
+        raise StorageValidationError("Unsupported or malformed image.") from exc
 
 
 def _fit(image: Image.Image, longest_side: int) -> Image.Image:
@@ -155,9 +199,9 @@ class ImageProcessor:
                 max_pixels = Image.MAX_IMAGE_PIXELS
                 if max_pixels is not None and width * height > max_pixels:
                     raise StorageValidationError("Image dimensions are too large.")
-                image.load()
-                transposed: Image.Image = ImageOps.exif_transpose(image)
-                width, height = transposed.size
+                # Header-only: dimensions, orientation and transparency come from the header and
+                # EXIF. The pixels are decoded once, later, in process_* (load audit FIX-6).
+                width, height = _oriented_size(image)
                 if width <= 0 or height <= 0:
                     raise StorageValidationError("Image dimensions are invalid.")
                 return ValidatedImage(
@@ -167,7 +211,7 @@ class ImageProcessor:
                     extension=extension,
                     width=width,
                     height=height,
-                    has_transparency=_has_alpha(transposed),
+                    has_transparency=_has_alpha(image),
                 )
         except StorageValidationError:
             raise
@@ -187,9 +231,8 @@ class ImageProcessor:
             original_filename=original_filename,
         )
 
-        with Image.open(io.BytesIO(content)) as image:
-            image.load()
-            transposed: Image.Image = ImageOps.exif_transpose(image)
+        transposed = _decode_for(content, self.observation_longest_side)
+        with transposed:
             canonical = _fit(transposed, self.observation_longest_side)
             thumb = _fit(transposed, self.thumbnail_longest_side)
             return (
@@ -222,9 +265,8 @@ class ImageProcessor:
             original_filename=original_filename,
         )
 
-        with Image.open(io.BytesIO(content)) as image:
-            image.load()
-            transposed: Image.Image = ImageOps.exif_transpose(image)
+        transposed = _decode_for(content, self.avatar_longest_side)
+        with transposed:
             canonical = _fit(transposed, self.avatar_longest_side)
             if validated.has_transparency:
                 return ProcessedImage(
