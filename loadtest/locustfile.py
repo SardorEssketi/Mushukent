@@ -452,7 +452,10 @@ if SHAPE:
         # 0 -> 300 in 1 min, hold 5 min, then drop to 30 users for 5 min to see if it recovers
         "spike": [(60, 300, 5), (360, 300, 5), (660, 30, 50)],
         # 3-minute steps of 20 users to locate the knee (target already fails at ~110)
-        "stress": [(180 * (i + 1), 20 * (i + 1), 2) for i in range(8)],
+        # LT_STEP_USERS per 3-minute step, LT_STEPS steps (defaults: 20 x 8)
+        "stress": [(int(os.getenv("LT_STEP_S", "180")) * (i + 1),
+                    int(os.getenv("LT_STEP_USERS", "20")) * (i + 1), 2)
+                   for i in range(int(os.getenv("LT_STEPS", "8")))],
         "soak": [(300, int(os.getenv("LT_USERS", "200")), 1),
                  (300 + int(os.getenv("LT_SOAK_S", "3600")), int(os.getenv("LT_USERS", "200")), 1)],
         "short": [(60, int(os.getenv("LT_USERS", "50")), 10),

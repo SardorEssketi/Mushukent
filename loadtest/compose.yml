@@ -3,31 +3,30 @@
 # The emulated box is a small single-host VPS: db + backend + notification worker + nginx on one
 # machine (sized from the operator's private production notes; those details stay private).
 # Emulation:
-#   * every "box" service is pinned to the SAME single CPU (cpuset "0"), so they compete for one
-#     core;
-#   * memory limits with swap disabled (memswap == mem), ~1.8 GB in total; a container that
-#     exceeds its share is OOM-killed;
+#   * every "box" service runs under ONE parent cgroup (tools/loadbox.sh): one CPU budget calibrated
+#     so a production core = 0.28 of a workstation core (measured with remote-inspect.sh capacity),
+#     and one shared memory pool without swap or per-container caps, as on the production host;
 #   * the live backend image (mushukistan-backend:${BACKEND_TAG}), APP_ENV=production, the
 #     production single-worker uvicorn command and the production nginx config verbatim;
 #   * PostGIS 15-3.4 with default settings (as in production), plus pg_stat_statements and lock
 #     wait logging for observation only.
 # External services (R2, PostHog, FCM) are redirected to `mocks`, which runs OUTSIDE the box
-# (no cpuset), because in production they are remote.
+# (not in the loadbox cgroup), because in production they are remote.
 #
 # Usage: see loadtest/README.md (`bash loadtest/run.sh up`).
 
 name: mushukistan-load
 
 x-box-cpu: &box_cpu
-  cpuset: "0"
+  # Shared parent cgroup created by tools/loadbox.sh: one CPU budget and one memory pool for all
+  # box services, no swap, no per-container caps (as on the production host).
+  cgroup_parent: loadbox
   restart: unless-stopped
 
 services:
   db:
     image: postgis/postgis:15-3.4
     <<: *box_cpu
-    mem_limit: 768m
-    memswap_limit: 768m
     environment:
       POSTGRES_DB: mushukistan_load
       POSTGRES_USER: mushukistan
@@ -47,7 +46,8 @@ services:
       - -c
       - track_io_timing=on
     volumes:
-      - load_pg:/var/lib/postgresql/data
+      # PG_VOLUME=load_pg (1x data) or load_pg_x10 (10x data); see README.
+      - ${PG_VOLUME:-load_pg}:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:15433:5432"
     healthcheck:
@@ -59,8 +59,6 @@ services:
   backend:
     image: mushukistan-backend:${BACKEND_TAG:-8939818}
     <<: *box_cpu
-    mem_limit: 768m
-    memswap_limit: 768m
     depends_on:
       db:
         condition: service_healthy
@@ -93,8 +91,6 @@ services:
   notification-worker:
     image: mushukistan-backend:${BACKEND_TAG:-8939818}
     <<: *box_cpu
-    mem_limit: 192m
-    memswap_limit: 192m
     depends_on:
       db:
         condition: service_healthy
@@ -112,8 +108,6 @@ services:
   nginx:
     image: nginx:1.27-alpine
     <<: *box_cpu
-    mem_limit: 64m
-    memswap_limit: 64m
     depends_on:
       backend:
         condition: service_healthy
@@ -173,3 +167,4 @@ services:
 
 volumes:
   load_pg:
+  load_pg_x10:

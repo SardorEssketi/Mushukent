@@ -38,6 +38,7 @@ case "$cmd" in
       "mushukistan-backend:${BACKEND_TAG:-8939818}" /tools/gen_secrets.py /out ;;
   up)
     [ -f .secrets/secrets.env ] || "$0" secrets
+    bash tools/loadbox.sh
     mkdir -p results/_runtime
     "${DC[@]}" up -d db mocks
     "${DC[@]}" --profile tools run --rm migrate
