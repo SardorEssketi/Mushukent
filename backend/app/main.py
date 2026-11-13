@@ -13,6 +13,7 @@ from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.publication_diagnostics import PublicationDiagnosticsMiddleware
 from app.core.rate_limit import add_rate_limit_middleware
+from app.core.upload_guard import UploadSingleFlightMiddleware, verified_user_identifier
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
 logger = get_logger(__name__)
@@ -111,6 +112,11 @@ def create_app() -> FastAPI:
                 r"(:\d+)?$"
             )
         }
+    # Added before CORS so its 409 carries CORS headers for the web app.
+    app.add_middleware(
+        UploadSingleFlightMiddleware,
+        identify=verified_user_identifier(JoseAccessTokenService(settings)),
+    )
     app.add_middleware(
         CORSMiddleware,
         **cors_kwargs,

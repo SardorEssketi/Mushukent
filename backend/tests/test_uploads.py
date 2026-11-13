@@ -53,9 +53,10 @@ def test_file_count_is_rejected_before_any_file_is_read() -> None:
 
 
 def test_upload_processing_limits_blocking_concurrency() -> None:
+    """One image-processing slot (load audit FIX-6): uploads are processed one at a time."""
     lock = Lock()
     release = Event()
-    two_started = Event()
+    one_started = Event()
     active = 0
     maximum_active = 0
 
@@ -64,8 +65,7 @@ def test_upload_processing_limits_blocking_concurrency() -> None:
         with lock:
             active += 1
             maximum_active = max(maximum_active, active)
-            if active == 2:
-                two_started.set()
+            one_started.set()
         try:
             assert release.wait(timeout=2)
         finally:
@@ -74,11 +74,11 @@ def test_upload_processing_limits_blocking_concurrency() -> None:
 
     async def run_requests() -> None:
         tasks = [asyncio.create_task(run_upload_processing(process_upload)) for _ in range(3)]
-        assert await asyncio.to_thread(two_started.wait, 1)
-        await asyncio.sleep(0.05)
-        assert maximum_active == 2
+        assert await asyncio.to_thread(one_started.wait, 1)
+        await asyncio.sleep(0.1)
+        assert maximum_active == 1
         release.set()
         await asyncio.gather(*tasks)
 
     asyncio.run(run_requests())
-    assert maximum_active == 2
+    assert maximum_active == 1

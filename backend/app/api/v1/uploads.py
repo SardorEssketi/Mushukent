@@ -12,7 +12,9 @@ from app.core.security import api_error
 from app.infrastructure.storage.images import MAX_UPLOAD_SIZE_BYTES
 
 logger = get_logger(__name__)
-_upload_processing_limiter = CapacityLimiter(2)
+# One image-processing slot: the work is CPU-bound on a single-core host, and two concurrent
+# full-size decodes were enough to OOM-kill the API (load audit LT-10).
+_upload_processing_limiter = CapacityLimiter(1)
 
 
 async def run_upload_processing[
