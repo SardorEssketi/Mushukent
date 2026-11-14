@@ -45,6 +45,9 @@ services:
       - log_min_duration_statement=500
       - -c
       - track_io_timing=on
+      - -c
+      # Production default is 2; FIX-10 sets 0 (pass PG_PARALLEL_PER_GATHER=0 for "after" runs).
+      - max_parallel_workers_per_gather=${PG_PARALLEL_PER_GATHER:-2}
     volumes:
       # PG_VOLUME=load_pg (1x data) or load_pg_x10 (10x data); see README.
       - ${PG_VOLUME:-load_pg}:/var/lib/postgresql/data
@@ -71,6 +74,7 @@ services:
       DATABASE_URL: postgresql+psycopg://mushukistan:${POSTGRES_PASSWORD}@db:5432/mushukistan_load
       PYTHONPATH: /loadtest-shim
       LOADTEST_POOL_LOG: /loadtest-out/pool.jsonl
+      MAX_IN_FLIGHT_REQUESTS: ${MAX_IN_FLIGHT_REQUESTS:-48}
     volumes:
       - ./shim:/loadtest-shim:ro
       - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
