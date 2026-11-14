@@ -14,6 +14,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/routing/auth_navigation.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/busy_retry_action.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../auth/presentation/screens/session_unavailable_screen.dart';
 import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
@@ -162,6 +163,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
   String? _nextCursor;
   bool _loadingMore = false;
   bool _pageError = false;
+  Object? _pageErrorObject;
   bool _replaceOnNextPage = false;
   bool _hasNewPosts = false;
   bool _resumeCheckInFlight = false;
@@ -307,12 +309,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _checkLoadMore();
       });
-    } catch (_) {
+    } catch (error) {
       if (!mounted || generation != _generation) return;
       _requestedCursors.remove(cursor);
       setState(() {
         _loadingMore = false;
         _pageError = true;
+        _pageErrorObject = error;
       });
     }
   }
@@ -567,9 +570,13 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                       child: AppStatePanel(
                         icon: Icons.error_outline,
                         title: strings.couldNotLoadSection,
-                        action: FilledButton(
-                          onPressed: () => ref.invalidate(feedPostsProvider),
-                          child: Text(strings.retry),
+                        // Busy (429/503): counts down and retries by itself (FIX-7).
+                        action: BusyRetryAction(
+                          error: pageAsync.error,
+                          filled: true,
+                          onRetry: () => ref.invalidate(feedPostsProvider),
+                          retryLabel: strings.retry,
+                          busyLabel: strings.busyRetryingIn,
                         ),
                       ),
                     )
@@ -623,9 +630,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen> {
                         child: Row(
                           children: [
                             Expanded(child: Text(strings.couldNotLoadSection)),
-                            TextButton(
-                              onPressed: _loadMore,
-                              child: Text(strings.retry),
+                            BusyRetryAction(
+                              error: _pageErrorObject,
+                              onRetry: _loadMore,
+                              retryLabel: strings.retry,
+                              busyLabel: strings.busyRetryingIn,
                             ),
                           ],
                         ),
