@@ -28,7 +28,11 @@ need_venv() {
 }
 
 psql_load() { docker exec mushukistan-load-db-1 psql -U mushukistan -d mushukistan_load "$@"; }
+. tools/guard.sh
 
+# Everything runs inside main, so bash has parsed the whole file before running any of it:
+# editing this script while a run is in progress cannot make bash re-execute part of it.
+main() {
 cmd=${1:-help}; shift || true
 case "$cmd" in
   secrets)
@@ -48,6 +52,9 @@ case "$cmd" in
     "${DC[@]}" --profile tools run --rm seed --scale "${1:-1}" ;;
   run)
     need_venv
+    guard_acquire run "$@"
+    guard_no_active_load
+    guard_memory
     name=${1:?scenario}; shift
     for kv in "$@"; do export "$kv"; done
     out="results/$(date +%Y%m%d-%H%M%S)-${name}${LT_TAG:+-$LT_TAG}"
@@ -88,3 +95,5 @@ case "$cmd" in
     "$0" run baseline; "$0" run target; "$0" run spike ;;
   *) sed -n '2,20p' "$0" ;;
 esac
+}
+main "$@"; exit $?

@@ -26,6 +26,8 @@ first use). The backend image `mushukistan-backend:${BACKEND_TAG:-8939818}` must
 | `tools/summarize.py` | Per-endpoint p50/p95/p99, 429/5xx/timeouts, box and pool stats. |
 | `tools/concurrency.py` | Hot-row likes, double submit, idempotency, contact reveal races, delete-while-viewing, token expiry, feed pagination drift. |
 | `tools/upload_stress.py` | Concurrent max-size publications with a latency probe (memory / OOM). |
+| `tools/guard.sh` | One heavy run at a time: a lock in `results/_runtime/`, a refusal when Locust or `upload_stress.py` already runs, a host free-memory floor (`LT_MIN_FREE_MB`, 1536) and a watchdog that stops a run below `LT_ABORT_FREE_MB` (1200) and writes `MEMORY_STOP`. A stopped run is never restarted automatically. Self-test: `bash tools/test_guard.sh`. |
+| `tools/remeasure.sh` | Re-measurement driver. `slope <variant> [users...]` measures per-container CPU (kernel cgroup counters) in clean 300 s steady windows, 0 users = idle; `tools/slope_fit.py` fits floor + slope x users. |
 
 ## Typical runs
 
