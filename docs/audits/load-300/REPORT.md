@@ -7,6 +7,14 @@ host** on a workstation. Production was not touched: no load, no writes, no SSH.
 Evidence labels: **Verified** = measured or reproduced here; **From code** = read, not reproduced;
 **Not checked** = not done, with the reason.
 
+> **Superseded capacity numbers (2026-11-14).** This report's capacity statements (the knee at
+> 60–80 users, "~11 ms of CPU per user-second", the 10× knee at 40 users and the latency-vs-users
+> figures) are superseded by `FIXES_RESULTS.md`, section "Superseded measurements". Two reasons:
+> the box here was one full workstation core, several times faster than the production core, and
+> the harness healthcheck loaded the load-test shim every 10 s, taking ~13% of that core. The
+> functional findings (no statement timeout, overload turning into an outage, upload memory,
+> carrier-NAT 429s, worker poison pill, nginx resolver) still stand. The text below is unchanged.
+
 ---
 
 ## 1. Verdict
