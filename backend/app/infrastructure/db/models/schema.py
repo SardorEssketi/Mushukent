@@ -416,6 +416,14 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
             text("id DESC"),
             postgresql_where=text("deleted_at IS NULL AND is_public IS true"),
         ),
+        # Popular feed order (migration 20261114_0034).
+        Index(
+            "idx_posts_popular",
+            text("like_count DESC"),
+            text("created_at DESC"),
+            text("id DESC"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         # Nearest-first `nearby` feed (KNN on geography; migration 20261114_0032).
         Index(
             "idx_posts_location_geography_knn",
