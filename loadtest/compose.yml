@@ -81,9 +81,10 @@ services:
       - ./results/_runtime:/loadtest-out
     # Production overlay command: single uvicorn worker, no auto-migration.
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    # Production's healthcheck (docker-compose.yml): same command and 30 s interval. It runs WITHOUT
-    # the shim: with PYTHONPATH=/loadtest-shim every check imported app modules (1.28 s of
-    # workstation CPU instead of 0.24 s) and, every 10 s, added ~0.35 production core to the box.
+    # Production's healthcheck: command, interval, timeout, retries and start timing match the
+    # deployed container (read-only inspection 2026-11-14). It runs WITHOUT the shim (production
+    # has no PYTHONPATH): with PYTHONPATH=/loadtest-shim every check imported app modules (1.28 s
+    # of workstation CPU instead of 0.24 s) and, every 10 s, added ~0.35 production core to the box.
     healthcheck:
       test:
         [
@@ -93,7 +94,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
+      start_interval: 2s
 
   notification-worker:
     image: mushukistan-backend:${BACKEND_TAG:-8939818}

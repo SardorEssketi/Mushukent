@@ -66,10 +66,12 @@ Raw data: `loadtest/results/cpu-slope/slope.csv` (gitignored), fit: `tools/slope
 
 The load-test harness ran the backend healthcheck **every 10 s with the load-test shim on
 `PYTHONPATH`**, so each check imported application modules: **1.28 s of workstation CPU per check
-instead of 0.24 s** (**Verified**). Production runs the plain check every 30 s (From code: the
-deployed compose file; confirmation of the deployed container's definition is pending a read-only
-inspection). Fixed in the harness (`0fac549`): the check now matches production. With it, the idle
-backend dropped from ~30% to ~4% of the production core (**Verified**).
+instead of 0.24 s** (**Verified**). Fixed in the harness (`0fac549`); the harness healthchecks now
+match production's deployed containers (command, interval, timeout, retries, start timing;
+**Verified** by read-only inspection, 2026-11-14). With it, the idle backend dropped from ~30% to
+~4% of the production core (**Verified**). The harness's idle box (~6% of the core) is within two
+percentage points of production's measured idle, slightly higher, so the floor is conservative
+(**Verified**).
 
 The following are **superseded** and must not be used for capacity decisions. They are kept in
 place, unedited, for the record.
