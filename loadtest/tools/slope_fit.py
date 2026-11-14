@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -91,7 +92,8 @@ def main() -> None:
                 continue  # an older measurement of a re-measured step
             seconds = float(row["seconds"])
             step["seconds"], step["run_dir"] = seconds, row["run_dir"]
-            step["cores"][row["container"]] = int(row["usage_us"]) / 1e6 / seconds / FACTOR
+            name = re.sub(r"-\d+$", "", row["container"])  # compose replica suffix
+            step["cores"][name] = int(row["usage_us"]) / 1e6 / seconds / FACTOR
 
     variants = sorted(order, key=order.get)
     for variant in variants:
