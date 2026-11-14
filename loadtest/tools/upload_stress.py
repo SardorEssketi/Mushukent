@@ -38,9 +38,12 @@ BASE = os.getenv("LT_HOST", "https://127.0.0.1:18443") + "/api/v1"
 def make_photo(size: str) -> bytes:
     if size == "phone":
         w, h, q = 1920, 1440, 90
+    elif size == "max25":
+        w, h, q = 5600, 4400, 92  # 24.6 MP: the largest accepted before FIX-6 (25 MP cap)
     else:
-        w, h, q = 5600, 4400, 92  # 24.6 MP, under the 25 MP decompression cap
-    small = Image.frombytes("RGB", (w // 8, h // 8), os.urandom((w // 8) * (h // 8) * 3))
+        w, h, q = 3264, 2448, 97  # 7.99 MP: the largest accepted after FIX-6 (8 MP cap)
+    # Noise at 1/2 scale keeps the JPEG close to the 10 MB per-file limit.
+    small = Image.frombytes("RGB", (w // 2, h // 2), os.urandom((w // 2) * (h // 2) * 3))
     image = small.resize((w, h), Image.Resampling.BILINEAR)
     while True:
         buf = io.BytesIO()
@@ -55,7 +58,7 @@ def main() -> None:
     ap.add_argument("out", type=Path)
     ap.add_argument("--concurrent", type=int, default=10)
     ap.add_argument("--files", type=int, default=5)
-    ap.add_argument("--size", choices=["phone", "max"], default="max")
+    ap.add_argument("--size", choices=["phone", "max", "max25"], default="max")
     ap.add_argument("--monitor", action="store_true")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)

@@ -62,6 +62,9 @@ case "$cmd" in
     LT_OUT="$out" LT_SHAPE="$name" "$PY" -m locust -f locustfile.py --headless \
       --csv "$out/locust" --csv-full-history --html "$out/report.html" \
       --only-summary --loglevel WARNING ${LT_EXTRA:-} 2> "$out/locust.log" || true
+    if [ "${LT_RECOVERY:-0}" = "1" ]; then  # measure self-recovery before anything else
+      "$PY" tools/recovery_probe.py "$out" | tee -a "$out/recovery.txt"
+    fi
     touch "$out/STOP"; wait "$mon" || true
     cp results/_runtime/pool.jsonl "$out/pool.jsonl"
     curl -s localhost:19000/__stats > "$out/external_calls.json"
