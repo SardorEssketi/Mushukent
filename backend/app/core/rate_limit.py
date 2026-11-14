@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 import time
 from collections import deque
 from collections.abc import Callable
@@ -17,6 +20,18 @@ from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
 # Bearer tokens longer than this are never decoded; they are treated as anonymous.
 MAX_BEARER_TOKEN_LENGTH = 4096
+
+# Load audit FIX-7: read-only public GETs that guests and map/feed users call constantly. They
+# share the generous public-read bucket instead of the 30/min anonymous one, which a few users
+# behind one carrier-NAT address exhausted in minutes (LT-08).
+_PUBLIC_READ_DETAIL = re.compile(
+    r"^/(posts|cats|lost-pets|adoption-posts|places)/[^/]+$"
+    r"|^/(posts|lost-pets|adoption-posts)/[^/]+/comments$"
+    r"|^/cats/[^/]+/posts$"
+    r"|^/lost-pets/map$"
+)
+# View counting is telemetry: own bucket, so it never competes with real reads.
+_TELEMETRY = re.compile(r"^/views/seen$|^/(posts|lost-pets|adoption-posts)/[^/]+/views$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,11 +168,52 @@ def add_rate_limit_middleware(
     async def rate_limit_middleware(request: Request, call_next: ASGIApp):
         if request.method.upper() == "OPTIONS":
             return await call_next(request)
+        refresh_keys = await _refresh_session_keys(request, settings)
+        if refresh_keys is not None:
+            # Backstop per address first, then the session's own budget.
+            for key, limit in refresh_keys:
+                decision = active_limiter.check(key=key, limit=limit)
+                if not decision.allowed:
+                    return _rate_limit_response(decision.retry_after_seconds)
+            return await call_next(request)
         key, limit = _rate_limit_key_and_limit(request, settings, token_service)
         decision = active_limiter.check(key=key, limit=limit)
         if not decision.allowed:
             return _rate_limit_response(decision.retry_after_seconds)
         return await call_next(request)
+
+
+async def _refresh_session_keys(
+    request: Request, settings: Settings
+) -> list[tuple[str, int]] | None:
+    """Buckets for POST /auth/refresh: per refresh session plus a per-IP backstop.
+
+    Returns None when this is not a refresh with a usable token, so the request falls back to
+    the per-IP auth bucket. Behind carrier NAT many users refresh from one address after an
+    idle period; a per-IP limit of 10/min failed most of them (load audit LT-08). The body is
+    cached by Starlette and replayed to the route.
+    """
+    path = request.url.path.rstrip("/")
+    if (
+        request.method.upper() != "POST"
+        or path != f"{settings.api_prefix.rstrip('/')}/auth/refresh"
+    ):
+        return None
+    try:
+        payload = json.loads(await request.body() or b"{}")
+    except (ValueError, UnicodeDecodeError):
+        return None
+    token = payload.get("refresh_token") if isinstance(payload, dict) else None
+    if not isinstance(token, str) or not token.strip() or len(token) > MAX_BEARER_TOKEN_LENGTH:
+        return None
+    session = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return [
+        (
+            f"refresh-ip:ip:{_client_ip(request, settings)}",
+            settings.rate_limit_refresh_ip_per_minute,
+        ),
+        (f"refresh:session:{session}", settings.rate_limit_refresh_per_minute),
+    ]
 
 
 def _build_rate_limiter(settings: Settings) -> FixedWindowRateLimiter:
@@ -195,6 +251,7 @@ def _rate_limit_key_and_limit(
     is_upload_endpoint = path in upload_paths and method in {"POST", "PATCH"}
     if method == "PATCH" and path.startswith(f"{api_prefix}/posts/"):
         is_upload_endpoint = True
+    relative = path[len(api_prefix) :] if path.startswith(api_prefix) else path
     is_public_read_endpoint = request.method.upper() == "GET" and (
         path == f"{api_prefix}/feed"
         or path == f"{api_prefix}/cats"
@@ -202,7 +259,9 @@ def _rate_limit_key_and_limit(
         or path == f"{api_prefix}/adoption-posts"
         or path == f"{api_prefix}/places"
         or path.startswith(f"{api_prefix}/leaderboards/")
+        or bool(_PUBLIC_READ_DETAIL.match(relative))
     )
+    is_telemetry_endpoint = method == "POST" and bool(_TELEMETRY.match(relative))
 
     if is_auth_endpoint or is_account_deletion_endpoint:
         return f"auth:ip:{_client_ip(request, settings)}", settings.rate_limit_auth_per_minute
@@ -220,6 +279,14 @@ def _rate_limit_key_and_limit(
 
     if is_public_read_endpoint:
         return f"public-read:{actor}", settings.rate_limit_public_read_per_minute
+
+    if is_telemetry_endpoint:
+        default = (
+            settings.rate_limit_user_per_minute
+            if bearer_identity is not None
+            else settings.rate_limit_anon_per_minute
+        )
+        return f"telemetry:{actor}", settings.rate_limit_telemetry_per_minute or default
 
     if bearer_identity is not None:
         return bearer_identity, settings.rate_limit_user_per_minute

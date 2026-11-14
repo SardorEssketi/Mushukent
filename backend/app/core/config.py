@@ -91,6 +91,19 @@ class Settings(BaseSettings):
     )
     rate_limit_user_per_minute: int = Field(default=60, alias="RATE_LIMIT_USER_PER_MINUTE")
     rate_limit_upload_per_minute: int = Field(default=10, alias="RATE_LIMIT_UPLOAD_PER_MINUTE")
+    # Load audit FIX-7. View telemetry (views/seen, .../views) has its own bucket; unset means
+    # "same number as the caller's normal bucket" (anon per IP, or per user when signed in).
+    rate_limit_telemetry_per_minute: int | None = Field(
+        default=None, ge=1, alias="RATE_LIMIT_TELEMETRY_PER_MINUTE"
+    )
+    # POST /auth/refresh is limited per refresh session, plus a per-IP backstop against floods
+    # of made-up tokens. Login and registration stay on the per-IP auth limit.
+    rate_limit_refresh_per_minute: int = Field(
+        default=10, ge=1, alias="RATE_LIMIT_REFRESH_PER_MINUTE"
+    )
+    rate_limit_refresh_ip_per_minute: int = Field(
+        default=120, ge=1, alias="RATE_LIMIT_REFRESH_IP_PER_MINUTE"
+    )
     # Contact reveal: unique posts whose owner contact a user may view per rolling window.
     contact_reveal_max_per_day: int = Field(default=15, ge=1, alias="CONTACT_REVEAL_MAX_PER_DAY")
     contact_reveal_max_per_week: int = Field(default=40, ge=1, alias="CONTACT_REVEAL_MAX_PER_WEEK")
