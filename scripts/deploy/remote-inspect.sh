@@ -20,6 +20,41 @@ section() { printf '\n=== %s\n' "$1"; }
 # CPU mode (load-test calibration): is the vCPU shared? CPU steal, pressure and a repeated
 # benchmark. Read-only; about 40 s, the benchmark at nice 19 inside the running backend container.
 #   ssh "$(bash scripts/deploy/ssh-target.sh)" 'sh -s -- cpu' < scripts/deploy/remote-inspect.sh
+# Health mode (load-test fidelity): the deployed containers' healthcheck definitions and the
+# backend's idle CPU from its cgroup counter, read twice 120 s apart. Read-only; ~2 min.
+#   ssh "$(bash scripts/deploy/ssh-target.sh)" 'sh -s -- health' < scripts/deploy/remote-inspect.sh
+if [ "${1:-}" = "health" ]; then
+  worker=$(docker ps --format '{{.Names}}' | grep -i notif | head -1)
+  section "healthcheck per container (docker inspect, Config.Healthcheck)"
+  for c in mushukistan-backend mushukistan-db mushukistan-nginx ${worker:-}; do
+    printf '%s: ' "$c"; docker inspect -f '{{json .Config.Healthcheck}}' "$c" 2>&1
+  done
+  section "backend PYTHONPATH (set/unset only)"
+  docker exec mushukistan-backend sh -c '[ -n "${PYTHONPATH:-}" ] && echo set || echo unset' 2>&1
+  section "uptime and docker stats --no-stream"
+  uptime
+  docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' 2>&1
+  cg() {  # cpu.stat usage_usec of a container (cgroup v2, systemd driver), or of the whole host
+    if [ "$1" = host ]; then awk '/^cpu /{print ($2+$3+$4+$7+$8)*10000}' /proc/stat; return; fi
+    id=$(docker inspect -f '{{.Id}}' "$1" 2>/dev/null) || { echo x; return; }
+    f=$(ls /sys/fs/cgroup/system.slice/docker-"$id".scope/cpu.stat /sys/fs/cgroup/docker/"$id"/cpu.stat 2>/dev/null | head -1)
+    if [ -n "$f" ]; then awk '/^usage_usec/{print $2}' "$f"; else echo x; fi
+  }
+  section "idle CPU over 120 s (usage_usec deltas; host = busy jiffies x 10000)"
+  names="host mushukistan-backend mushukistan-db mushukistan-nginx ${worker:-}"
+  before=""; for c in $names; do before="$before $(cg "$c" || echo x)"; done
+  t0=$(date +%s); sleep 120; t1=$(date +%s)
+  set -- $before
+  for c in $names; do
+    a=$1; shift; b=$(cg "$c" || echo x)
+    [ "$a" = x ] || [ "$b" = x ] || [ -z "$b" ] && { echo "$c: n/a"; continue; }
+    awk -v n="$c" -v a="$a" -v b="$b" -v s=$((t1 - t0)) \
+      'BEGIN { printf "%s: %.2f s CPU in %d s = %.2f%% of one core\n", n, (b - a) / 1e6, s, (b - a) / 1e4 / s }'
+  done
+  echo; echo "done (read-only, health)"
+  exit 0
+fi
+
 if [ "${1:-}" = "cpu" ]; then
   section "cpu identity"
   nproc
