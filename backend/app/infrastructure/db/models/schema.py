@@ -551,6 +551,13 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
             name="comments_exactly_one_target",
         ),
         Index("idx_comments_post_id", "post_id"),
+        # Visible comment counts as index-only scans (migration 20261114_0035).
+        Index(
+            "idx_comments_post_visible",
+            "post_id",
+            "user_id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("idx_comments_lost_pet_id", "lost_pet_id"),
         Index("idx_comments_adoption_post_id", "adoption_post_id"),
         Index("idx_comments_parent_comment_id", "parent_comment_id"),
