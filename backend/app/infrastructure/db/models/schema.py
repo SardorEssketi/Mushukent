@@ -408,6 +408,14 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         CheckConstraint("comment_count >= 0", name="comment_count_non_negative"),
         CheckConstraint("view_count >= 0", name="view_count_non_negative"),
         Index("posts_location_gist", "location", postgresql_using="gist"),
+        # Map pins: newest public post per cat (migration 20261114_0033).
+        Index(
+            "idx_posts_cat_public_latest",
+            "cat_id",
+            text("created_at DESC"),
+            text("id DESC"),
+            postgresql_where=text("deleted_at IS NULL AND is_public IS true"),
+        ),
         # Nearest-first `nearby` feed (KNN on geography; migration 20261114_0032).
         Index(
             "idx_posts_location_geography_knn",
