@@ -17,6 +17,42 @@ section() { printf '\n=== %s\n' "$1"; }
 # backend container (same Python as the load-test image, nothing installed, nothing written).
 # No row counts, no table contents, no environment values.
 #   ssh "$(bash scripts/deploy/ssh-target.sh)" 'sh -s -- capacity' < scripts/deploy/remote-inspect.sh
+# CPU mode (load-test calibration): is the vCPU shared? CPU steal, pressure and a repeated
+# benchmark. Read-only; about 40 s, the benchmark at nice 19 inside the running backend container.
+#   ssh "$(bash scripts/deploy/ssh-target.sh)" 'sh -s -- cpu' < scripts/deploy/remote-inspect.sh
+if [ "${1:-}" = "cpu" ]; then
+  section "cpu identity"
+  nproc
+  lscpu 2>/dev/null | grep -E '^(CPU\(s\)|Model name|Thread|Core|Socket|CPU MHz|BogoMIPS|Hypervisor vendor|Virtualization type|Flags)' | cut -c1-200
+  section "vmstat 1 10 (st = steal: CPU time taken by other tenants of the host)"
+  vmstat 1 10
+  section "top -bn1 | head -20"
+  top -bn1 | head -20
+  section "/proc/pressure/cpu (PSI; absent on older kernels)"
+  cat /proc/pressure/cpu 2>&1
+  section "/proc/stat cpu line twice, 5 s apart (steal = 8th value)"
+  grep '^cpu ' /proc/stat; sleep 5; grep '^cpu ' /proc/stat
+  section "benchmark x3 (nice 19, best of 5 each, same code as capacity mode)"
+  for run in 1 2 3; do
+    docker exec mushukistan-backend nice -n 19 python -c '
+import time, hashlib
+def work():
+    t = time.perf_counter()
+    s = 0
+    for i in range(3_000_000):
+        s += i * i % 7
+    hashlib.sha256(b"x" * 20_000_000).hexdigest()
+    return time.perf_counter() - t
+print("bench_best_s", round(min(work() for _ in range(5)), 4))
+' 2>&1
+    sleep 3
+  done
+  section "vmstat 1 5 after the benchmark"
+  vmstat 1 5
+  echo; echo "done (read-only, cpu)"
+  exit 0
+fi
+
 if [ "${1:-}" = "capacity" ]; then
   section "cpu"
   nproc
