@@ -19,6 +19,7 @@ class MushukistanApiException implements Exception {
     required this.message,
     this.statusCode,
     this.details,
+    this.retryAfter,
   });
 
   final ApiFailureKind kind;
@@ -26,6 +27,21 @@ class MushukistanApiException implements Exception {
   final String code;
   final String message;
   final Object? details;
+
+  /// Server-suggested wait before retrying (`Retry-After`), when it sent one.
+  final Duration? retryAfter;
+
+  /// The server is overloaded or rate-limits this client (429, or 503 SERVICE_BUSY): wait and
+  /// retry automatically instead of offering an immediate manual retry.
+  bool get isBusy =>
+      statusCode == 429 || (statusCode == 503 && code == 'SERVICE_BUSY');
+
+  /// Parses a `Retry-After` value given in seconds (the API never sends an HTTP date).
+  static Duration? parseRetryAfter(String? value) {
+    final seconds = int.tryParse(value?.trim() ?? '');
+    if (seconds == null || seconds < 0) return null;
+    return Duration(seconds: seconds.clamp(0, 300));
+  }
 
   bool get isRetryable =>
       kind == ApiFailureKind.network || kind == ApiFailureKind.server;
@@ -65,6 +81,7 @@ class MushukistanApiException implements Exception {
   factory MushukistanApiException.fromEnvelope(
     Object? raw, {
     int? statusCode,
+    Duration? retryAfter,
   }) {
     if (statusCode == 413) {
       return const MushukistanApiException(
@@ -87,6 +104,7 @@ class MushukistanApiException implements Exception {
           code: code,
           message: message,
           details: details,
+          retryAfter: retryAfter,
         );
       }
       final code = _fallbackCode(statusCode);
@@ -96,6 +114,7 @@ class MushukistanApiException implements Exception {
         code: code,
         message: 'Request failed.',
         details: raw,
+        retryAfter: retryAfter,
       );
     }
 
@@ -105,6 +124,7 @@ class MushukistanApiException implements Exception {
       code: _fallbackCode(statusCode),
       message: 'Request failed.',
       details: raw,
+      retryAfter: retryAfter,
     );
   }
 
@@ -122,7 +142,9 @@ class MushukistanApiException implements Exception {
     final responseData = error.response?.data;
     if (responseData != null) {
       return MushukistanApiException.fromEnvelope(responseData,
-          statusCode: statusCode);
+          statusCode: statusCode,
+          retryAfter:
+              parseRetryAfter(error.response?.headers.value('retry-after')));
     }
     return MushukistanApiException(
       kind: _kindForStatus(statusCode, _fallbackCode(statusCode)),

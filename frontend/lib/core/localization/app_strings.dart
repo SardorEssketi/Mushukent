@@ -767,6 +767,13 @@ class AppStrings {
         _ => 'New posts',
       };
 
+  /// Shown while the app waits to retry after the server said it is busy (429 / 503).
+  String busyRetryingIn(int seconds) => switch (this) {
+        _UzbekStrings() => 'Xizmat band. $seconds soniyadan keyin qayta urinamiz',
+        _RussianStrings() => 'Сервис занят. Повторим через $seconds с',
+        _ => 'Busy right now. Retrying in $seconds s',
+      };
+
   String get couldNotLoadSection {
     return switch (this) {
       _UzbekStrings() => 'Bu bo‘limni yuklab bo‘lmadi',

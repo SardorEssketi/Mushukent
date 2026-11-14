@@ -96,6 +96,7 @@ class DioMushukistanApiClient implements MushukistanApiClient {
   final AuthTokenStore _tokenStore;
   final Duration _uploadRequestTimeout;
   Future<bool>? _refreshInFlight;
+  final Map<String, Future<Response<Object?>>> _sharedReads = {};
   final PublicationJournal _publicationJournal;
   final _publicationInFlight = <String, Future<Object?>>{};
 
@@ -470,7 +471,19 @@ class DioMushukistanApiClient implements MushukistanApiClient {
     try {
       final requestBody = body is FormData ? body.clone() : body;
       final isMultipart = body is FormData;
-      final response = await _dio.request<Object?>(
+      // LT-21: start-up asks for the signed-in profile from several places at once (session
+      // restore, profile, add observation). Concurrent identical GET users/me for the same
+      // session share one HTTP request; each caller still checks and decodes the answer.
+      final shareKey = method == 'GET' &&
+              _normalizePath(path) == 'users/me' &&
+              body == null &&
+              queryParameters == null &&
+              bearerToken == null &&
+              publicationSession == null &&
+              !retriedAfterRefresh
+          ? 'users/me|$authenticated|${revision ?? 0}'
+          : null;
+      Future<Response<Object?>> send() => _dio.request<Object?>(
         _normalizePath(path),
         data: requestBody,
         cancelToken: publicationSession?.cancelToken,
@@ -493,6 +506,13 @@ class DioMushukistanApiClient implements MushukistanApiClient {
           receiveTimeout: isMultipart ? _uploadRequestTimeout : null,
         ),
       );
+      final response = shareKey == null
+          ? await send()
+          : await (_sharedReads[shareKey] ??=
+              send().whenComplete(() {
+              // Block body: returning the removed future would await itself.
+              _sharedReads.remove(shareKey);
+            }));
 
       if (publicationSession != null) await publicationSession.credentials();
       if (publicationSession == null &&
@@ -514,6 +534,8 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         final error = MushukistanApiException.fromEnvelope(
           payload,
           statusCode: statusCode,
+          retryAfter: MushukistanApiException.parseRetryAfter(
+              response.headers.value('retry-after')),
         );
         if (_shouldRefreshAndRetry(
           error,
@@ -683,6 +705,8 @@ class DioMushukistanApiClient implements MushukistanApiClient {
         final error = MushukistanApiException.fromEnvelope(
           payload,
           statusCode: statusCode,
+          retryAfter: MushukistanApiException.parseRetryAfter(
+              response.headers.value('retry-after')),
         );
         if (error.isSessionInvalid) {
           if (guarded != null) {

@@ -20,6 +20,7 @@ import '../../../posts/application/post_view_recorder.dart';
 import '../../application/map_marker_selection.dart';
 import '../../application/map_places_cache.dart';
 import '../../application/map_viewport.dart';
+import '../../../../core/widgets/busy_retry_action.dart';
 import '../widgets/map_clustered_marker_layer.dart';
 import '../widgets/map_floating_controls.dart';
 import '../widgets/map_marker_visual.dart';
@@ -514,7 +515,9 @@ class _MapScreenState extends ConsumerState<MapScreen>
             cat.id,
             limit: 1,
             sort: 'latest',
-            includeViewerContext: false,
+            // Signed-in users send their token so marker taps count against their own
+            // rate-limit bucket, not the per-IP anonymous one (load audit FIX-7).
+            includeViewerContext: true,
           );
       if (!mounted) {
         return;
@@ -900,8 +903,10 @@ class _MapScreenState extends ConsumerState<MapScreen>
                           constraints:
                               const BoxConstraints(maxWidth: AppWidths.compact),
                           child: _MapLoadError(
+                            error: error,
                             message: strings.couldNotLoadSection,
                             retryLabel: strings.retry,
+                            busyLabel: strings.busyRetryingIn,
                             onRetry: _refreshMap,
                           ),
                         ),
@@ -1011,7 +1016,7 @@ Future<void> _showCatSheet(
         cat.id,
         limit: 1,
         sort: 'latest',
-        includeViewerContext: false,
+        includeViewerContext: true, // own rate-limit bucket (FIX-7)
       )
       .then<PostSummary?>(
         (page) => page.items.isEmpty ? null : page.items.first,
@@ -1538,13 +1543,17 @@ class _PlaceDetailRow extends StatelessWidget {
 
 class _MapLoadError extends StatelessWidget {
   const _MapLoadError({
+    required this.error,
     required this.message,
     required this.retryLabel,
+    required this.busyLabel,
     required this.onRetry,
   });
 
+  final Object? error;
   final String message;
   final String retryLabel;
+  final String Function(int seconds) busyLabel;
   final VoidCallback onRetry;
 
   @override
@@ -1554,7 +1563,7 @@ class _MapLoadError extends StatelessWidget {
       elevation: 2,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.only(left: 12),
+        padding: const EdgeInsets.only(left: 12, right: 8),
         child: Row(
           children: [
             const Icon(Icons.error_outline, size: 20),
@@ -1563,7 +1572,13 @@ class _MapLoadError extends StatelessWidget {
               child:
                   Text(message, maxLines: 2, overflow: TextOverflow.ellipsis),
             ),
-            TextButton(onPressed: onRetry, child: Text(retryLabel)),
+            // Busy (429/503): counts down and retries by itself (load audit FIX-7).
+            BusyRetryAction(
+              error: error,
+              onRetry: onRetry,
+              retryLabel: retryLabel,
+              busyLabel: busyLabel,
+            ),
           ],
         ),
       ),

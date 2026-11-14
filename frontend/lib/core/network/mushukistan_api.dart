@@ -84,7 +84,9 @@ class MushukistanApi {
   }) {
     return _client.get<ApiPage<PlaceSummary>>(
       'places',
-      authenticated: false,
+      // Signed-in users send their token so these count against their own rate-limit
+      // bucket instead of the shared per-IP one (load audit FIX-7).
+      authenticated: true,
       queryParameters: <String, dynamic>{
         if (categories != null && categories.isNotEmpty) 'category': categories,
         if (lat != null) 'lat': lat,
@@ -104,7 +106,7 @@ class MushukistanApi {
   Future<PlaceSummary> getPlace(String placeId) {
     return _client.get<PlaceSummary>(
       'places/$placeId',
-      authenticated: false,
+      authenticated: true, // own rate-limit bucket (FIX-7)
       decoder: (json) => PlaceSummary.fromJson(json),
     );
   }
