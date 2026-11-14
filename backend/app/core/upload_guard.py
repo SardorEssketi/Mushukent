@@ -22,6 +22,8 @@ from typing import Any
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.core.request_auth import decode_access_token_once
+
 UPLOAD_BASES = ("/api/v1/posts", "/api/v1/lost-pets", "/api/v1/adoption-posts", "/api/v1/cats")
 AVATAR_PATH = "/api/v1/users/me/avatar"
 
@@ -91,7 +93,7 @@ def verified_user_identifier(token_service) -> Callable[[Scope], Any | None]:
         if scheme.casefold() != "bearer" or not token or len(token) > 4096:
             return None
         try:
-            return token_service.decode_access_token(token).user_id
+            return decode_access_token_once(scope, token_service, token).user_id
         except Exception:
             return None
 

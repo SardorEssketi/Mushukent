@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import AuthenticatedPrincipal
 from app.core.container import AppContainer
 from app.core.rbac import AuthorizationService, RoleBasedAuthorizationService
+from app.core.request_auth import decode_access_token_once
 from app.core.security import api_error, get_bearer_token, get_optional_bearer_token
 from app.core.storage import ObjectStorage
 from app.features.adoption_posts.application.service import AdoptionPostsService
@@ -51,13 +52,27 @@ from app.features.views.application.service import ViewsService
 from app.features.views.infrastructure.repositories import SqlAlchemyPostViewRepository
 from app.infrastructure.storage.service import MediaStorageService
 
+# Providers that only build objects from the container or check a flag do no I/O, so they are
+# ``async``: FastAPI then runs them on the event loop instead of a thread-pool round trip each
+# (load audit step 2: thread-pool hand-offs were ~20% of the API's CPU). Providers that touch the
+# database (sessions, user lookups) and the auth/Google services stay synchronous. Providers reused
+# by other providers call the private synchronous builders below.
 
-def get_container(request: Request) -> AppContainer:
+
+def _container(request: Request) -> AppContainer:
     return request.app.state.container
 
 
+def _access_token_service(request: Request) -> JoseAccessTokenService:
+    return JoseAccessTokenService(_container(request).settings)
+
+
+async def get_container(request: Request) -> AppContainer:
+    return _container(request)
+
+
 def get_db_session(request: Request) -> Generator[Session]:
-    container = get_container(request)
+    container = _container(request)
     db = container.db_session_manager.create_session()
     try:
         yield db
@@ -65,36 +80,36 @@ def get_db_session(request: Request) -> Generator[Session]:
         db.close()
 
 
-def get_password_hasher() -> PasslibPasswordHasher:
+async def get_password_hasher() -> PasslibPasswordHasher:
     return PasslibPasswordHasher()
 
 
-def get_access_token_service(request: Request) -> JoseAccessTokenService:
-    return JoseAccessTokenService(get_container(request).settings)
+async def get_access_token_service(request: Request) -> JoseAccessTokenService:
+    return _access_token_service(request)
 
 
 def get_google_token_verifier(request: Request) -> GoogleOAuthIdTokenVerifier:
-    return GoogleOAuthIdTokenVerifier(get_container(request).settings)
+    return GoogleOAuthIdTokenVerifier(_container(request).settings)
 
 
-def get_authorization_service() -> AuthorizationService:
+async def get_authorization_service() -> AuthorizationService:
     return RoleBasedAuthorizationService()
 
 
 def get_auth_service(request: Request) -> AuthService:
-    container = get_container(request)
+    container = _container(request)
     return AuthService(
         settings=container.settings,
         db_session_manager=container.db_session_manager,
-        password_hasher=get_password_hasher(),
+        password_hasher=PasslibPasswordHasher(),
         access_token_service=JoseAccessTokenService(container.settings),
         google_token_verifier=GoogleOAuthIdTokenVerifier(container.settings),
         repository_factory=SqlAlchemyAuthUserRepository,
     )
 
 
-def get_users_service(request: Request) -> UsersService:
-    container = get_container(request)
+async def get_users_service(request: Request) -> UsersService:
+    container = _container(request)
     media_storage_service = (
         MediaStorageService(storage=container.object_storage)
         if container.object_storage is not None
@@ -109,8 +124,8 @@ def get_users_service(request: Request) -> UsersService:
     )
 
 
-def get_cats_service(request: Request) -> CatsService:
-    container = get_container(request)
+async def get_cats_service(request: Request) -> CatsService:
+    container = _container(request)
     media_storage_service = (
         MediaStorageService(storage=container.object_storage)
         if container.object_storage is not None
@@ -123,8 +138,8 @@ def get_cats_service(request: Request) -> CatsService:
     )
 
 
-def get_posts_service(request: Request) -> PostsService:
-    container = get_container(request)
+def _posts_service(request: Request) -> PostsService:
+    container = _container(request)
     media_storage_service = (
         MediaStorageService(storage=container.object_storage)
         if container.object_storage is not None
@@ -140,8 +155,12 @@ def get_posts_service(request: Request) -> PostsService:
     )
 
 
-def get_feed_service(request: Request) -> FeedService:
-    container = get_container(request)
+async def get_posts_service(request: Request) -> PostsService:
+    return _posts_service(request)
+
+
+async def get_feed_service(request: Request) -> FeedService:
+    container = _container(request)
     return FeedService(
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyFeedRepository,
@@ -150,16 +169,16 @@ def get_feed_service(request: Request) -> FeedService:
     )
 
 
-def get_likes_service(request: Request) -> LikesService:
-    container = get_container(request)
+async def get_likes_service(request: Request) -> LikesService:
+    container = _container(request)
     return LikesService(
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyLikeRepository,
     )
 
 
-def get_views_service(request: Request) -> ViewsService:
-    container = get_container(request)
+async def get_views_service(request: Request) -> ViewsService:
+    container = _container(request)
     return ViewsService(
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyPostViewRepository,
@@ -170,8 +189,8 @@ def get_views_service(request: Request) -> ViewsService:
     )
 
 
-def get_comments_service(request: Request) -> CommentsService:
-    container = get_container(request)
+async def get_comments_service(request: Request) -> CommentsService:
+    container = _container(request)
     return CommentsService(
         settings=container.settings,
         db_session_manager=container.db_session_manager,
@@ -181,8 +200,8 @@ def get_comments_service(request: Request) -> CommentsService:
     )
 
 
-def get_reports_service(request: Request) -> ReportsService:
-    container = get_container(request)
+def _reports_service(request: Request) -> ReportsService:
+    container = _container(request)
     return ReportsService(
         db_session_manager=container.db_session_manager,
         report_repository_factory=SqlAlchemyReportRepository,
@@ -196,8 +215,12 @@ def get_reports_service(request: Request) -> ReportsService:
     )
 
 
-def get_feedback_service(request: Request) -> FeedbackService:
-    container = get_container(request)
+async def get_reports_service(request: Request) -> ReportsService:
+    return _reports_service(request)
+
+
+async def get_feedback_service(request: Request) -> FeedbackService:
+    container = _container(request)
     settings = container.settings
     return FeedbackService(
         db_session_manager=container.db_session_manager,
@@ -210,31 +233,31 @@ def get_feedback_service(request: Request) -> FeedbackService:
     )
 
 
-def get_moderation_service(request: Request) -> ModerationService:
+async def get_moderation_service(request: Request) -> ModerationService:
     return ModerationService(
-        reports_service=get_reports_service(request),
-        posts_service_factory=lambda: get_posts_service(request),
+        reports_service=_reports_service(request),
+        posts_service_factory=lambda: _posts_service(request),
     )
 
 
-def get_leaderboard_service(request: Request) -> LeaderboardService:
-    container = get_container(request)
+async def get_leaderboard_service(request: Request) -> LeaderboardService:
+    container = _container(request)
     return LeaderboardService(
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyLeaderboardRepository,
     )
 
 
-def get_places_service(request: Request) -> PlacesService:
-    container = get_container(request)
+async def get_places_service(request: Request) -> PlacesService:
+    container = _container(request)
     return PlacesService(
         db_session_manager=container.db_session_manager,
         repository_factory=SqlAlchemyPlaceRepository,
     )
 
 
-def get_lost_pets_service(request: Request) -> LostPetsService:
-    container = get_container(request)
+async def get_lost_pets_service(request: Request) -> LostPetsService:
+    container = _container(request)
     media_storage_service = (
         MediaStorageService(storage=container.object_storage)
         if container.object_storage is not None
@@ -248,8 +271,8 @@ def get_lost_pets_service(request: Request) -> LostPetsService:
     )
 
 
-def get_adoption_posts_service(request: Request) -> AdoptionPostsService:
-    container = get_container(request)
+async def get_adoption_posts_service(request: Request) -> AdoptionPostsService:
+    container = _container(request)
     media_storage_service = (
         MediaStorageService(storage=container.object_storage)
         if container.object_storage is not None
@@ -263,13 +286,13 @@ def get_adoption_posts_service(request: Request) -> AdoptionPostsService:
     )
 
 
-def get_notification_service(request: Request) -> NotificationService:
-    container = get_container(request)
+async def get_notification_service(request: Request) -> NotificationService:
+    container = _container(request)
     return NotificationService(container.db_session_manager, container.settings)
 
 
-def get_object_storage(request: Request) -> ObjectStorage:
-    container = get_container(request)
+def _object_storage(request: Request) -> ObjectStorage:
+    container = _container(request)
     if container.object_storage is None:
         raise api_error(
             500,
@@ -279,17 +302,20 @@ def get_object_storage(request: Request) -> ObjectStorage:
     return container.object_storage
 
 
-def get_media_storage_service(request: Request) -> MediaStorageService:
-    storage = get_object_storage(request)
+async def get_object_storage(request: Request) -> ObjectStorage:
+    return _object_storage(request)
+
+
+async def get_media_storage_service(request: Request) -> MediaStorageService:
+    storage = _object_storage(request)
     return MediaStorageService(storage=storage)
 
 
-def get_current_principal(
+async def get_current_principal(
     request: Request,
     token: str = Depends(get_bearer_token),
 ) -> AuthenticatedPrincipal:
-    access_token_service = get_access_token_service(request)
-    return access_token_service.decode_access_token(token)
+    return decode_access_token_once(request.scope, _access_token_service(request), token)
 
 
 def get_optional_current_principal(
@@ -299,7 +325,7 @@ def get_optional_current_principal(
     token = get_optional_bearer_token(authorization)
     if token is None:
         return None
-    return get_access_token_service(request).decode_access_token(token)
+    return decode_access_token_once(request.scope, _access_token_service(request), token)
 
 
 def get_current_user(
@@ -308,7 +334,7 @@ def get_current_user(
 ):
     # The repository returns a detached AuthUser value. Release the connection
     # before parsing bodies, waiting for the upload limiter, or calling storage.
-    with get_container(request).db_session_manager.create_session() as db:
+    with _container(request).db_session_manager.create_session() as db:
         user = SqlAlchemyAuthUserRepository(db).get_by_id(principal.user_id)
     if user is None:
         raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
@@ -324,7 +350,7 @@ def get_optional_current_user(
     principal = get_optional_current_principal(request, authorization)
     if principal is None:
         return None
-    with get_container(request).db_session_manager.create_session() as db:
+    with _container(request).db_session_manager.create_session() as db:
         user = SqlAlchemyAuthUserRepository(db).get_by_id(principal.user_id)
     if user is None:
         raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
@@ -333,11 +359,11 @@ def get_optional_current_user(
     return user
 
 
-def get_current_active_user(user=Depends(get_current_user)):
+async def get_current_active_user(user=Depends(get_current_user)):
     return user
 
 
-def require_moderator(user=Depends(get_current_user)) -> object:
+async def require_moderator(user=Depends(get_current_user)) -> object:
     if not user.is_moderator:
         raise api_error(403, "FORBIDDEN", "You do not have permission to perform this action.")
     return user

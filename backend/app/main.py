@@ -14,6 +14,7 @@ from app.core.load_shedding import LoadSheddingMiddleware
 from app.core.logging import configure_logging
 from app.core.publication_diagnostics import PublicationDiagnosticsMiddleware
 from app.core.rate_limit import add_rate_limit_middleware
+from app.core.request_auth import decode_access_token_once
 from app.core.upload_guard import UploadSingleFlightMiddleware, verified_user_identifier
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
@@ -25,6 +26,7 @@ class PostHogContextMiddleware:
 
     def __init__(self, app) -> None:
         self.app = app
+        self._token_service: JoseAccessTokenService | None = None
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
@@ -39,9 +41,11 @@ class PostHogContextMiddleware:
 
         authorization = dict(scope.get("headers", [])).get(b"authorization", b"").decode("latin-1")
         _, _, token = authorization.partition(" ")
+        if self._token_service is None:
+            self._token_service = JoseAccessTokenService(app.state.container.settings)
         try:
             principal = (
-                JoseAccessTokenService(app.state.container.settings).decode_access_token(token)
+                decode_access_token_once(scope, self._token_service, token)
                 if authorization.lower().startswith("bearer ") and token
                 else None
             )

@@ -45,9 +45,10 @@ def get_optional_bearer_token(authorization: str | None) -> str | None:
     return token
 
 
-def get_bearer_token(
+async def get_bearer_token(
     credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
 ) -> str:
+    # No I/O: runs on the event loop (see app/core/dependencies.py).
     token = _extract_bearer_token(credentials)
     if token is None:
         raise api_error(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -1221,14 +1222,14 @@ def test_rbac_dependency_rejects_non_moderator() -> None:
     user = SimpleNamespace(is_moderator=False)
 
     with pytest.raises(HTTPException) as excinfo:
-        require_moderator(user)
+        asyncio.run(require_moderator(user))
 
     assert excinfo.value.status_code == 403
 
 
 def test_rbac_dependency_allows_moderator() -> None:
     user = SimpleNamespace(is_moderator=True)
-    assert require_moderator(user) is user
+    assert asyncio.run(require_moderator(user)) is user
 
 
 def test_register_login_logout_flow(client: TestClient, auth_runtime) -> None:
