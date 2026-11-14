@@ -13,9 +13,11 @@ from typing import Protocol
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from starlette.types import ASGIApp
+from starlette.requests import ClientDisconnect
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
+from app.core.request_auth import decode_access_token_once
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
 # Bearer tokens longer than this are never decoded; they are treated as anonymous.
@@ -160,47 +162,104 @@ def add_rate_limit_middleware(
 ) -> None:
     if not settings.rate_limit_enabled:
         return
+    # Same place in the middleware stack as the former ``@app.middleware("http")`` registration.
+    app.add_middleware(
+        RateLimitMiddleware,
+        settings=settings,
+        limiter=limiter or _build_rate_limiter(settings),
+        token_service=JoseAccessTokenService(settings),
+    )
 
-    active_limiter = limiter or _build_rate_limiter(settings)
-    token_service = JoseAccessTokenService(settings)
 
-    @app.middleware("http")
-    async def rate_limit_middleware(request: Request, call_next: ASGIApp):
-        if request.method.upper() == "OPTIONS":
-            return await call_next(request)
-        refresh_keys = await _refresh_session_keys(request, settings)
-        if refresh_keys is not None:
-            # Backstop per address first, then the session's own budget.
-            for key, limit in refresh_keys:
-                decision = active_limiter.check(key=key, limit=limit)
-                if not decision.allowed:
-                    return _rate_limit_response(decision.retry_after_seconds)
-            return await call_next(request)
-        key, limit = _rate_limit_key_and_limit(request, settings, token_service)
-        decision = active_limiter.check(key=key, limit=limit)
+class RateLimitMiddleware:
+    """Per-bucket rate limiting as plain ASGI middleware.
+
+    Replaces a Starlette ``BaseHTTPMiddleware`` (load audit step 2, fix C), which ran every request
+    through an extra task, memory streams and a re-wrapped response. Responses are unchanged:
+    allowed requests pass through untouched, limited ones get the same 429 JSON and Retry-After.
+    Only POST /auth/refresh has its body read here (to key the refresh session); that body is
+    replayed to the route exactly as received.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        settings: Settings,
+        limiter: FixedWindowRateLimiter,
+        token_service: JoseAccessTokenService,
+    ) -> None:
+        self.app = app
+        self.settings = settings
+        self.limiter = limiter
+        self.token_service = token_service
+        self._refresh_path = f"{settings.api_prefix.rstrip('/')}/auth/refresh"
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"].upper() == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+        request = Request(scope)
+        if scope["method"].upper() == "POST" and request.url.path.rstrip("/") == self._refresh_path:
+            try:
+                body, receive = await _buffered(receive)
+            except ClientDisconnect:
+                return  # the client left before sending its body; nothing to answer
+            refresh_keys = _refresh_session_keys(request, self.settings, body)
+            if refresh_keys is not None:
+                # Backstop per address first, then the session's own budget.
+                for key, limit in refresh_keys:
+                    decision = self.limiter.check(key=key, limit=limit)
+                    if not decision.allowed:
+                        await _rate_limit_response(decision.retry_after_seconds)(
+                            scope, receive, send
+                        )
+                        return
+                await self.app(scope, receive, send)
+                return
+        key, limit = _rate_limit_key_and_limit(request, self.settings, self.token_service)
+        decision = self.limiter.check(key=key, limit=limit)
         if not decision.allowed:
-            return _rate_limit_response(decision.retry_after_seconds)
-        return await call_next(request)
+            await _rate_limit_response(decision.retry_after_seconds)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
-async def _refresh_session_keys(
-    request: Request, settings: Settings
+async def _buffered(receive: Receive) -> tuple[bytes, Receive]:
+    """Read the whole request body; return it and a receive() that replays it, then continues."""
+    chunks: list[bytes] = []
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            raise ClientDisconnect()
+        chunks.append(message.get("body", b""))
+        if not message.get("more_body", False):
+            break
+    body = b"".join(chunks)
+    replayed = False
+
+    async def replay() -> Message:
+        nonlocal replayed
+        if not replayed:
+            replayed = True
+            return {"type": "http.request", "body": body, "more_body": False}
+        return await receive()
+
+    return body, replay
+
+
+def _refresh_session_keys(
+    request: Request, settings: Settings, body: bytes
 ) -> list[tuple[str, int]] | None:
     """Buckets for POST /auth/refresh: per refresh session plus a per-IP backstop.
 
     Returns None when this is not a refresh with a usable token, so the request falls back to
     the per-IP auth bucket. Behind carrier NAT many users refresh from one address after an
     idle period; a per-IP limit of 10/min failed most of them (load audit LT-08). The body is
-    cached by Starlette and replayed to the route.
+    replayed to the route by the middleware.
     """
-    path = request.url.path.rstrip("/")
-    if (
-        request.method.upper() != "POST"
-        or path != f"{settings.api_prefix.rstrip('/')}/auth/refresh"
-    ):
-        return None
     try:
-        payload = json.loads(await request.body() or b"{}")
+        payload = json.loads(body or b"{}")
     except (ValueError, UnicodeDecodeError):
         return None
     token = payload.get("refresh_token") if isinstance(payload, dict) else None
@@ -347,7 +406,7 @@ def _verified_user_id(request: Request, token_service: JoseAccessTokenService):
     if scheme.casefold() != "bearer" or not token or len(token) > MAX_BEARER_TOKEN_LENGTH:
         return None
     try:
-        return token_service.decode_access_token(token).user_id
+        return decode_access_token_once(request.scope, token_service, token).user_id
     except Exception:
         return None
 
