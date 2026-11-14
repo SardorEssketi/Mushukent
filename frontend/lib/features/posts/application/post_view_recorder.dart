@@ -118,7 +118,7 @@ class PostViewRecorder {
     required bool Function() signedIn,
     void Function(String key, int count)? onCount,
     Random? random,
-    this.batchDelay = const Duration(seconds: 10),
+    this.batchDelay = const Duration(seconds: 30), // load audit FIX-3: was 10 s
     this.maxBatch = 20,
   })  : _api = api,
         _storage = storage,
