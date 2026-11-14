@@ -6,9 +6,12 @@
 #                            whose owner pid is gone is stale and is taken over. Released on exit.
 #   guard_no_active_load     exit 3 if a Locust or upload-stress process is already running.
 #   guard_memory             exit 4 if host free memory is below LT_MIN_FREE_MB (default 1536).
-#   guard_watchdog <pid> <out>  background: if free memory falls below LT_ABORT_FREE_MB (default
-#                            1200), kill <pid>, write <out>/MEMORY_STOP and stop. Drivers must not
-#                            restart a run that has MEMORY_STOP (remeasure.sh checks it).
+#   guard_watchdog <pid> <out> [parent]  background: if free memory falls below LT_ABORT_FREE_MB
+#                            (default 1200), kill <pid>, write <out>/MEMORY_STOP and stop. Drivers
+#                            must not restart a run that has MEMORY_STOP (remeasure.sh checks it).
+#                            If <parent> (the driver's own parent) dies, kill <pid> and write
+#                            <out>/ORPHAN_STOP: on Windows killing a shell leaves its children running.
+#   guard_exit_with_parent   background: end this driver when the shell that started it is gone.
 #
 # Why: on 2026-11-14 two 10-user CPU runs overlapped for 466 s. remeasure.sh was edited while it
 # ran; bash reads a script by byte offset, so it re-executed part of the file and started a second
@@ -72,9 +75,14 @@ guard_memory() {
   echo "guard: host free memory ${free} MB"
 }
 
-guard_watchdog() {  # guard_watchdog <pid> <out>   (run in the background)
-  local pid=$1 out=$2 floor=${LT_ABORT_FREE_MB:-1200} free low=$((1 << 30))
+guard_watchdog() {  # guard_watchdog <pid> <out> [parent]   (run in the background)
+  local pid=$1 out=$2 parent=${3:-} floor=${LT_ABORT_FREE_MB:-1200} free low=$((1 << 30))
   while kill -0 "$pid" 2>/dev/null; do
+    if [ -n "$parent" ] && ! kill -0 "$parent" 2>/dev/null; then
+      echo "driver (pid $parent) is gone at $(date '+%F %T'); run stopped" > "$out/ORPHAN_STOP"
+      kill "$pid" 2>/dev/null; sleep 2; kill -9 "$pid" 2>/dev/null
+      return
+    fi
     free=$(host_free_mb)
     [ "$free" -lt "$low" ] && low=$free && echo "$low" > "$out/host_free_min_mb.txt"
     if [ "$free" -lt "$floor" ]; then
@@ -86,4 +94,10 @@ guard_watchdog() {  # guard_watchdog <pid> <out>   (run in the background)
     fi
     sleep 5
   done
+}
+
+guard_exit_with_parent() {  # run as: guard_exit_with_parent &   (from the driver's main shell)
+  local me=$$ parent=$PPID
+  while kill -0 "$parent" 2>/dev/null && kill -0 "$me" 2>/dev/null; do sleep 5; done
+  kill "$me" 2>/dev/null
 }

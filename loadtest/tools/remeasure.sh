@@ -44,7 +44,7 @@ clear_stuck() {
 
 stop_if_memory_stopped() {  # never continue a sequence after a run was stopped for memory
   local m
-  m=$(ls -t results/*/MEMORY_STOP 2>/dev/null | head -1)
+  m=$(ls -t results/*/MEMORY_STOP results/*/ORPHAN_STOP 2>/dev/null | head -1)
   if [ -n "$m" ] && [ "$m" -nt "$GUARD_RUNTIME/remeasure.lock/since" ]; then
     echo "remeasure: $(dirname "$m") was stopped for memory: $(cat "$m"). Stopping the sequence." >&2
     exit 4
@@ -90,7 +90,9 @@ slope_step() {  # slope_step <variant> <users>: one clean steady window, appende
   if [ -n "$pid" ]; then
     wait "$pid"
     dir=$(ls -dt results/*-short-slope-"$variant"-u"$users" 2>/dev/null | head -1)
-    [ -f "$dir/MEMORY_STOP" ] && { echo "slope: $dir stopped for memory; step discarded" >&2; exit 4; }
+    if [ -f "$dir/MEMORY_STOP" ] || [ -f "$dir/ORPHAN_STOP" ]; then
+      echo "slope: $dir was stopped; step discarded" >&2; exit 4
+    fi
   fi
   join <(echo "$a" | sort) <(echo "$b" | sort) | while read -r name ua ub; do
     echo "$variant,$users,$((t1 - t0)),$name,$((ub - ua)),$dir,$t0" >> "$csv"
@@ -101,6 +103,7 @@ slope_step() {  # slope_step <variant> <users>: one clean steady window, appende
 
 main() {
   guard_acquire remeasure "$@"
+  guard_exit_with_parent &
   guard_no_active_load
   guard_memory
   case "${1:?mode}" in

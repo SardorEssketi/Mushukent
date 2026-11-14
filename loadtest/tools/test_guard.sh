@@ -23,5 +23,12 @@ sleep 1
 check "watchdog stopped the run" "$(kill -0 $victim 2>/dev/null && echo alive || echo stopped)" stopped
 check "watchdog wrote MEMORY_STOP" "$([ -f "$tmp/MEMORY_STOP" ] && echo yes || echo no)" yes
 
+sleep 60 & victim=$!
+bash -c 'sleep 2' & parent=$!
+( . tools/guard.sh; guard_watchdog $victim "$tmp" $parent )
+sleep 1
+check "watchdog stopped an orphaned run" "$(kill -0 $victim 2>/dev/null && echo alive || echo stopped)" stopped
+check "watchdog wrote ORPHAN_STOP" "$([ -f "$tmp/ORPHAN_STOP" ] && echo yes || echo no)" yes
+
 ( . tools/guard.sh; guard_no_active_load ) >/dev/null 2>&1; check "no load process running" $? 0
 rm -rf "$tmp"; exit $fail
