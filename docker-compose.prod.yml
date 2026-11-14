@@ -1,4 +1,11 @@
 services:
+  # NEEDS OWNER APPROVAL BEFORE DEPLOY (load audit FIX-10). On a single-core host a parallel query
+  # worker adds no CPU, but each one starts PostGIS again and costs memory during overload. Takes
+  # effect when the db container is recreated; to apply without a restart, run
+  # ALTER SYSTEM SET max_parallel_workers_per_gather = 0; SELECT pg_reload_conf();
+  db:
+    command: ["postgres", "-c", "max_parallel_workers_per_gather=0"]
+
   backend:
     ports: !reset []
     environment:
