@@ -70,6 +70,7 @@ ignore = ["B008", "UP037", "UP046"]
 "tests/test_post_views.py" = ["F811"]
 "tests/test_saved_posts.py" = ["F811"]
 "tests/test_feed_nearby_knn.py" = ["F811"]
+"tests/test_feed_recent_parity.py" = ["F811"]
 
 [tool.mypy]
 python_version = "3.13"
@@ -96,4 +97,3 @@ include-package-data = false
 [tool.setuptools.packages.find]
 include = ["app*"]
 exclude = ["alembic*"]
-
