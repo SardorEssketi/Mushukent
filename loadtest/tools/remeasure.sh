@@ -4,7 +4,8 @@
 # free memory before every step and stops the sequence if a run was stopped for memory.
 #
 #   bash tools/remeasure.sh slope <variant> [users...]   per-container CPU vs users (default 0 5 10 15 20)
-#        SLOPE_LABEL=<name> records the series under another name (e.g. a traced run)
+#        SLOPE_LABEL=<name> records the series under another name (e.g. a traced run);
+#        SLOPE_PG_PARALLEL=2 runs an image tag with parallel query on (production default)
 #        variant: before | after | <any image tag>      (before migrates down to 0031, others to head)
 #   bash tools/remeasure.sh after-1x                     the after-fix scenario set
 #   bash tools/remeasure.sh soak                         LT_USERS=<n> required
@@ -136,7 +137,7 @@ main() {
         after) image=$AFTER ;;&
         *) image=${image:-$variant}
           BACKEND_TAG=$image "${DC[@]}" --profile tools run --rm migrate 2>&1 | tail -1
-          switch "$image" 0 "${MAX_IN_FLIGHT_REQUESTS:-48}" ;;
+          switch "$image" "${SLOPE_PG_PARALLEL:-0}" "${MAX_IN_FLIGHT_REQUESTS:-48}" ;;
       esac
       for u in ${*:-0 5 10 15 20}; do slope_step "${SLOPE_LABEL:-$variant}" "$u"; done
       "$PY" tools/slope_fit.py results/cpu-slope/slope.csv ;;
