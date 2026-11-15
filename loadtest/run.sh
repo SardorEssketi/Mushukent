@@ -59,7 +59,7 @@ case "$cmd" in
     for kv in "$@"; do export "$kv"; done
     out="results/$(date +%Y%m%d-%H%M%S)-${name}${LT_TAG:+-$LT_TAG}"
     mkdir -p "$out"
-    : > results/_runtime/pool.jsonl
+    : > results/_runtime/pool.jsonl; : > results/_runtime/trace.jsonl
     psql_load -qc "select pg_stat_statements_reset()" >/dev/null
     psql_load -qc "select pg_stat_reset()" >/dev/null
     curl -s -X POST localhost:19000/__reset >/dev/null
@@ -74,6 +74,7 @@ case "$cmd" in
     fi
     touch "$out/STOP"; wait "$mon" || true
     cp results/_runtime/pool.jsonl "$out/pool.jsonl"
+    [ -s results/_runtime/trace.jsonl ] && cp results/_runtime/trace.jsonl "$out/trace.jsonl"
     curl -s localhost:19000/__stats > "$out/external_calls.json"
     psql_load -At -F '|' -c "select calls, round(total_exec_time::numeric,0) total_ms,
         round(mean_exec_time::numeric,2) mean_ms, round(max_exec_time::numeric,1) max_ms, rows,

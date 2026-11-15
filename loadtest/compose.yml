@@ -74,6 +74,7 @@ services:
       DATABASE_URL: postgresql+psycopg://mushukistan:${POSTGRES_PASSWORD}@db:5432/mushukistan_load
       PYTHONPATH: /loadtest-shim
       LOADTEST_POOL_LOG: /loadtest-out/pool.jsonl
+      LOADTEST_TRACE: ${LOADTEST_TRACE:+/loadtest-out/trace.jsonl}  # LOADTEST_TRACE=1: per-request time breakdown
       MAX_IN_FLIGHT_REQUESTS: ${MAX_IN_FLIGHT_REQUESTS:-48}
     volumes:
       - ./shim:/loadtest-shim:ro

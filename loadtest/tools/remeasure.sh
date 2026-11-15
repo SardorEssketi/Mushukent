@@ -4,6 +4,7 @@
 # free memory before every step and stops the sequence if a run was stopped for memory.
 #
 #   bash tools/remeasure.sh slope <variant> [users...]   per-container CPU vs users (default 0 5 10 15 20)
+#        SLOPE_LABEL=<name> records the series under another name (e.g. a traced run)
 #        variant: before | after | <any image tag>      (before migrates down to 0031, others to head)
 #   bash tools/remeasure.sh after-1x                     the after-fix scenario set
 #   bash tools/remeasure.sh soak                         LT_USERS=<n> required
@@ -70,6 +71,19 @@ cgroup_cpu() {  # "<container-name> <usage_usec>" per box container, then "total
       echo \"total \$(grep usage_usec /sys/fs/cgroup/loadbox/cpu.stat | cut -d' ' -f2)\""
 }
 
+cgroup_psi() {  # "<container-name> <cpu.pressure some total us>" per box container, then "total <us>"
+  local map
+  map=$(docker ps --no-trunc --filter name=mushukistan-load- --format '{{.ID}} {{.Names}}' | tr '\n' ';')
+  MSYS_NO_PATHCONV=1 docker run --rm --privileged --cgroupns=host \
+    -v /sys/fs/cgroup:/sys/fs/cgroup:ro alpine:3.20 sh -c "
+      echo \"$map\" | tr ';' '\n' | while read id name; do
+        f=/sys/fs/cgroup/loadbox/\$id/cpu.pressure; [ -n \"\$id\" ] && [ -f \$f ] || continue
+        echo \"\${name#mushukistan-load-} \$(sed -n 's/^some .*total=//p' \$f)\"
+      done
+      echo \"total \$(sed -n 's/^some .*total=//p' /sys/fs/cgroup/loadbox/cpu.pressure)\"
+      echo \"throttled \$(grep throttled_usec /sys/fs/cgroup/loadbox/cpu.stat | cut -d' ' -f2)\""
+}
+
 slope_step() {  # slope_step <variant> <users>: one clean steady window, appended to slope.csv
   local variant=$1 users=$2 csv=results/cpu-slope/slope.csv a b t0 t1 pid="" dir=""
   mkdir -p results/cpu-slope
@@ -84,9 +98,9 @@ slope_step() {  # slope_step <variant> <users>: one clean steady window, appende
   else
     sleep 60  # idle: let the previous step's tail settle
   fi
-  a=$(cgroup_cpu); t0=$(date +%s)
+  a=$(cgroup_cpu); pa=$(cgroup_psi); t0=$(date +%s)
   sleep "$WINDOW_S"
-  b=$(cgroup_cpu); t1=$(date +%s)
+  b=$(cgroup_cpu); pb=$(cgroup_psi); t1=$(date +%s)
   if [ -n "$pid" ]; then
     wait "$pid"
     dir=$(ls -dt results/*-short-slope-"$variant"-u"$users" 2>/dev/null | head -1)
@@ -96,6 +110,10 @@ slope_step() {  # slope_step <variant> <users>: one clean steady window, appende
   fi
   join <(echo "$a" | sort) <(echo "$b" | sort) | while read -r name ua ub; do
     echo "$variant,$users,$((t1 - t0)),$name,$((ub - ua)),$dir,$t0" >> "$csv"
+  done
+  [ -f results/cpu-slope/psi.csv ] || echo "variant,users,seconds,container,cpu_wait_us,step" > results/cpu-slope/psi.csv
+  join <(echo "$pa" | sort) <(echo "$pb" | sort) | while read -r name ua ub; do
+    echo "$variant,$users,$((t1 - t0)),$name,$((ub - ua)),$t0" >> results/cpu-slope/psi.csv
   done
   echo "slope: $variant u=$users done ($dir)"
   sleep 20
@@ -118,9 +136,9 @@ main() {
         after) image=$AFTER ;;&
         *) image=${image:-$variant}
           BACKEND_TAG=$image "${DC[@]}" --profile tools run --rm migrate 2>&1 | tail -1
-          switch "$image" 0 ;;
+          switch "$image" 0 "${MAX_IN_FLIGHT_REQUESTS:-48}" ;;
       esac
-      for u in ${*:-0 5 10 15 20}; do slope_step "$variant" "$u"; done
+      for u in ${*:-0 5 10 15 20}; do slope_step "${SLOPE_LABEL:-$variant}" "$u"; done
       "$PY" tools/slope_fit.py results/cpu-slope/slope.csv ;;
     after-1x)
       switch "$AFTER" 0

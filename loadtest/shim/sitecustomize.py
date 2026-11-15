@@ -87,3 +87,158 @@ if os.getenv("LOADTEST_SHIM") == "1":
                     pass
 
         threading.Thread(target=_reporter, name="loadtest-pool-reporter", daemon=True).start()
+
+    # Observation only (task 5a): where a request's server time goes. One JSON line per request
+    # with total server time, DB time (cursor execute), pool wait, thread-pool hand-off wait, sync
+    # run time and the CPU run-queue wait of the worker thread (/proc schedstat run_delay, which
+    # includes quota throttling on the emulated core), plus a 1 s sampler for the event loop
+    # (loop lag, loop thread run-queue wait). Enabled only with LOADTEST_TRACE=<file>.
+    _trace_out = os.getenv("LOADTEST_TRACE")
+    if _trace_out:
+        import asyncio
+        import contextvars
+        import json
+        import re
+        import threading
+
+        import anyio.to_thread
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+        from sqlalchemy.pool import QueuePool
+        from fastapi import FastAPI
+
+        _pc = time.perf_counter
+        _cur: contextvars.ContextVar = contextvars.ContextVar("loadtest_trace", default=None)
+        _rows: list = []
+        _ids = re.compile(r"/(?:\d+|[0-9a-f]{8}-[0-9a-f-]{27,})(?=/|$)")
+        _loop = {"tid": None, "lags": []}
+
+        def _run_delay(path="/proc/thread-self/schedstat"):
+            try:
+                with open(path) as handle:
+                    return int(handle.read().split()[1])
+            except (OSError, IndexError, ValueError):
+                return 0
+
+        _orig_get = QueuePool._do_get
+
+        def _traced_get(self):
+            started = _pc()
+            try:
+                return _orig_get(self)
+            finally:
+                rec = _cur.get()
+                if rec is not None:
+                    rec["pool_ms"] += (_pc() - started) * 1000
+
+        QueuePool._do_get = _traced_get
+
+        @event.listens_for(Engine, "before_cursor_execute")
+        def _before(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+            conn.info["loadtest_t0"] = _pc()
+
+        @event.listens_for(Engine, "after_cursor_execute")
+        def _after(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+            rec = _cur.get()
+            started = conn.info.pop("loadtest_t0", None)
+            if rec is not None and started is not None:
+                rec["db_ms"] += (_pc() - started) * 1000
+                rec["db_n"] += 1
+
+        _orig_run_sync = anyio.to_thread.run_sync
+
+        async def _traced_run_sync(func, *args, **kwargs):
+            rec = _cur.get()
+            if rec is None:
+                return await _orig_run_sync(func, *args, **kwargs)
+            submitted = _pc()
+
+            def _call(*inner):
+                started = _pc()
+                rd0 = _run_delay()
+                rec["tp_wait_ms"] += (started - submitted) * 1000
+                rec["tp_n"] += 1
+                try:
+                    return func(*inner)
+                finally:
+                    rec["tp_run_ms"] += (_pc() - started) * 1000
+                    rec["tp_rq_ms"] += (_run_delay() - rd0) / 1e6
+
+            return await _orig_run_sync(_call, *args, **kwargs)
+
+        anyio.to_thread.run_sync = _traced_run_sync
+
+        async def _lag_probe():
+            while True:
+                started = _pc()
+                await asyncio.sleep(0.05)
+                _loop["lags"].append((_pc() - started - 0.05) * 1000)
+
+        def _sampler():
+            path = None
+            while True:
+                time.sleep(1)
+                if path is None and _loop["tid"] is not None:
+                    path = f"/proc/self/task/{_loop['tid']}/schedstat"
+                lags, _loop["lags"] = sorted(_loop["lags"]), []
+                rows, _rows[:] = list(_rows), []
+                sample = {
+                    "kind": "loop",
+                    "t": time.time(),
+                    "loop_rq_ns": _run_delay(path) if path else 0,
+                    "lag_p50_ms": round(lags[len(lags) // 2], 2) if lags else None,
+                    "lag_p95_ms": round(lags[int(len(lags) * 0.95)], 2) if lags else None,
+                    "lag_max_ms": round(lags[-1], 2) if lags else None,
+                    "threads": threading.active_count(),
+                }
+                try:
+                    with open(_trace_out, "a", encoding="utf-8") as handle:
+                        for row in rows:
+                            handle.write(json.dumps(row) + "\n")
+                        handle.write(json.dumps(sample) + "\n")
+                except OSError:
+                    pass
+
+        def _start_observers():
+            _loop["tid"] = threading.get_native_id()
+            asyncio.get_running_loop().create_task(_lag_probe())
+            threading.Thread(target=_sampler, name="loadtest-trace", daemon=True).start()
+
+        _orig_build = FastAPI.build_middleware_stack  # FastAPI overrides Starlette's
+
+        def _traced_build(self):
+            inner = _orig_build(self)
+            started_observers = [False]
+
+            async def traced(scope, receive, send):
+                if scope["type"] != "http":
+                    return await inner(scope, receive, send)
+                if not started_observers[0]:
+                    started_observers[0] = True
+                    _start_observers()
+                rec = {
+                    "kind": "req", "t": time.time(), "m": scope["method"],
+                    "p": _ids.sub("/{id}", scope["path"]), "s": 0, "ms": 0.0,
+                    "db_ms": 0.0, "db_n": 0, "pool_ms": 0.0, "tp_wait_ms": 0.0, "tp_n": 0,
+                    "tp_run_ms": 0.0, "tp_rq_ms": 0.0,
+                }
+                token = _cur.set(rec)
+                began = _pc()
+
+                async def traced_send(message):
+                    if message["type"] == "http.response.start":
+                        rec["s"] = message["status"]
+                    await send(message)
+
+                try:
+                    await inner(scope, receive, traced_send)
+                finally:
+                    rec["ms"] = (_pc() - began) * 1000
+                    _cur.reset(token)
+                    for key in ("ms", "db_ms", "pool_ms", "tp_wait_ms", "tp_run_ms", "tp_rq_ms"):
+                        rec[key] = round(rec[key], 2)
+                    _rows.append(rec)
+
+            return traced
+
+        FastAPI.build_middleware_stack = _traced_build
