@@ -68,7 +68,19 @@ case "$cmd" in
     mon=$!
     LT_OUT="$out" LT_SHAPE="$name" "$PY" -m locust -f locustfile.py --headless \
       --csv "$out/locust" --csv-full-history --html "$out/report.html" \
-      --only-summary --loglevel WARNING ${LT_EXTRA:-} 2> "$out/locust.log" || true
+      --only-summary --loglevel WARNING ${LT_EXTRA:-} 2> "$out/locust.log" &
+    loc=$!
+    # Memory floor and orphan stop: kills Locust (whole process tree) if host free memory drops
+    # below LT_ABORT_FREE_MB or if whoever started this run is gone.
+    guard_watchdog "$loc" "$out" "$PPID" &
+    wdg=$!
+    wait "$loc" || true
+    kill "$wdg" 2>/dev/null || true
+    if [ -f "$out/MEMORY_STOP" ] || [ -f "$out/ORPHAN_STOP" ]; then
+      echo "run: stopped: $(cat "$out"/MEMORY_STOP "$out"/ORPHAN_STOP 2>/dev/null)" >&2
+      touch "$out/STOP"; wait "$mon" || true
+      exit 4
+    fi
     if [ "${LT_RECOVERY:-0}" = "1" ]; then  # measure self-recovery before anything else
       "$PY" tools/recovery_probe.py "$out" | tee -a "$out/recovery.txt"
     fi

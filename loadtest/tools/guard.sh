@@ -75,21 +75,30 @@ guard_memory() {
   echo "guard: host free memory ${free} MB"
 }
 
+kill_tree() {  # kill_tree <pid>: the process and its children (Windows: the venv python.exe is a
+  # launcher that starts the real interpreter as a child, so a plain kill can leave Locust running)
+  local win
+  win=$(cat "/proc/$1/winpid" 2>/dev/null)
+  if [ -n "$win" ] && command -v taskkill >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 taskkill /F /T /PID "$win" >/dev/null 2>&1
+  fi
+  kill "$1" 2>/dev/null; sleep 2; kill -9 "$1" 2>/dev/null
+  return 0
+}
+
 guard_watchdog() {  # guard_watchdog <pid> <out> [parent]   (run in the background)
   local pid=$1 out=$2 parent=${3:-} floor=${LT_ABORT_FREE_MB:-1200} free low=$((1 << 30))
   while kill -0 "$pid" 2>/dev/null; do
     if [ -n "$parent" ] && ! kill -0 "$parent" 2>/dev/null; then
       echo "driver (pid $parent) is gone at $(date '+%F %T'); run stopped" > "$out/ORPHAN_STOP"
-      kill "$pid" 2>/dev/null; sleep 2; kill -9 "$pid" 2>/dev/null
+      kill_tree "$pid"
       return
     fi
     free=$(host_free_mb)
     [ "$free" -lt "$low" ] && low=$free && echo "$low" > "$out/host_free_min_mb.txt"
     if [ "$free" -lt "$floor" ]; then
       echo "host free memory ${free} MB < ${floor} MB at $(date '+%F %T'); run stopped" > "$out/MEMORY_STOP"
-      kill "$pid" 2>/dev/null
-      sleep 2
-      kill -9 "$pid" 2>/dev/null
+      kill_tree "$pid"
       return
     fi
     sleep 5

@@ -30,5 +30,17 @@ sleep 1
 check "watchdog stopped an orphaned run" "$(kill -0 $victim 2>/dev/null && echo alive || echo stopped)" stopped
 check "watchdog wrote ORPHAN_STOP" "$([ -f "$tmp/ORPHAN_STOP" ] && echo yes || echo no)" yes
 
+PYV=.venv/Scripts/python.exe
+if [ -x "$PYV" ]; then  # Windows: the venv python is a launcher with the real interpreter as a child
+  "$PYV" -c "import time; time.sleep(60)  # guard-tree-test" & victim=$!
+  sleep 2
+  ( . tools/guard.sh; LT_ABORT_FREE_MB=99999999 guard_watchdog $victim "$tmp" )
+  sleep 2
+  left=$(powershell.exe -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \"Name like 'python%'\" | Where-Object { \$_.CommandLine -match 'guard-tree-test' }).Count" | tr -d '\r')
+  check "watchdog stopped the whole python process tree" "${left:-0}" 0
+fi
+
+check "run.sh starts the watchdog for Locust" "$(grep -c 'guard_watchdog "$loc" "$out" "$PPID" &' run.sh)" 1
+
 ( . tools/guard.sh; guard_no_active_load ) >/dev/null 2>&1; check "no load process running" $? 0
 rm -rf "$tmp"; exit $fail
