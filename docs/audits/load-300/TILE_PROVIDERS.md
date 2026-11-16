@@ -17,7 +17,7 @@ coverage the app shows today. Label language (Uzbek / Russian / English) differs
 |---|---|---|---|
 | Free tier | 3,000 credits/day; 1 tile = 0.25 credit → ~12,000 tiles/day (~360k/month) | 200,000 raster tiles/month (Static Tiles API); vector tiles 200,000/month | 100,000 requests and 5,000 map sessions/month |
 | Commercial use on free | **Yes**, stated in their FAQ, including production | Yes (the free tier is the start of usage pricing) | **No**: "testing, PoC, prototyping, personal, or non-commercial use" |
-| When the free tier runs out | requests fail until the next day (no overage on Free) | billed per use: raster $0.50 per 1,000 tiles from 200,001 (whether a card is required: **Not checked**) | the service pauses until the next month |
+| When the free tier runs out | no overage on Free; exact behaviour at the limit **Not checked** | billed per use: raster $0.50 per 1,000 tiles from 200,001 (whether a card is required: **Not checked**) | the service pauses until the next month |
 | Cheapest paid | $59/month, 10,000 credits/day | pay as you go (above) | Flex $30/month: 500k requests, 25k sessions; overage $0.15 per 1,000 requests |
 | Attribution | "Powered by Geoapify" link plus OSM data attribution | Mapbox logo and text attribution (exact wording **Not checked**) | MapTiler logo on Free (not on Flex); OSM attribution |
 | flutter_map URL (raster; form from provider docs, not tried against the live API) | `https://maps.geoapify.com/v1/tile/<style>/{z}/{x}/{y}.png?apiKey=…` | `https://api.mapbox.com/styles/v1/<user>/<style>/tiles/256/{z}/{x}/{y}@2x?access_token=…` | `https://api.maptiler.com/maps/<style>/{z}/{x}/{y}.png?key=…` |
