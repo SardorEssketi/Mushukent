@@ -236,11 +236,12 @@ Reading:
   48 is a hard upper bound on queued work.
 - Single runs per cell; differences under ~10% are within noise.
 
-**Recommendation: `MAX_IN_FLIGHT_REQUESTS=32`, no queue.**
+**Recommendation: `MAX_IN_FLIGHT_REQUESTS=32`, no queue. Accepted by the owner (2026-11-16).**
 - Zero refusals in a 40-session start-up burst, and overload behaviour no worse than 48.
 - Cap 16's better overload numbers cost refusals at the knee, which the brief rules out.
 - The queue prototype (`perf/cap-queue`, `86f4a6e`, ~45 lines of middleware logic with 4 tests;
-  the backend suite passes, 758 passed) stays unmerged.
+  the backend suite passes, 758 passed) stays unmerged. The branch is kept for reference, with
+  the results above. Settings: `IN_FLIGHT_QUEUE_SECONDS` (0 = off), `IN_FLIGHT_QUEUE_MAX`.
 
 ### 3.3 CGNAT, uploads (task 5c)
 
@@ -280,8 +281,12 @@ Package-1 configuration: image `bf7b7ff`, cap 16, parallel query **on** (no FIX-
   can be reported again later. The cost is lost view counts for guests behind a shared IP.
 - **Gate (guests ≤ 0.5% 429): not met as worded** (3.5–4.5% of guest-feed requests). Met if the
   gate is read as "no user-visible 429".
-- **Next option (not applied, needs the owner):** `RATE_LIMIT_TELEMETRY_PER_MINUTE`, e.g. 120.
-  It raises only the view-telemetry bucket, but it applies per user as well as per IP.
+- **Owner decision (2026-11-16):** the gate is read as "no user-visible 429", which is **met**.
+  `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=360` goes into package 1 (step 4, approval-flagged).
+- **Known limitation, accepted for package 1:** guest view counts are undercounted behind large
+  shared IPs (invisible to users). Candidate fix if real traffic shows it matters:
+  `RATE_LIMIT_TELEMETRY_PER_MINUTE=120` (an `.env` value, no new image; it raises only the
+  view-telemetry bucket, but per user as well as per IP). Not applied, not measured.
 - 503 sheds: all in the first 30 s (start-up burst, cap 16; section 3.2). After that, 0 × 5xx.
 
 **Uploads: 10 concurrent publications × 5 max-size photos (7.8 MB, ~24.6 MP each)**
@@ -366,12 +371,11 @@ stays 48. The value can be changed later without a new image.
   gets its own bucket, and refresh is limited per refresh session with a per-IP backstop. Login
   and registration limits are unchanged. Its gate is the CGNAT run in 5c: 0 × 429 for a normal
   profile behind a shared IP.
-- **5c result: not met for guests** (1–3% 429; signed-in 0–0.1%; whole run 0.54%, down from
-  15.5% before FIX-7; section 3.3). Owner decision pending.
-  - Dropping FIX-7 now would bring back the 15.5%, so keeping it is better than dropping it even
-    though it misses the gate.
-  - A higher `RATE_LIMIT_PUBLIC_READ_PER_MINUTE` (an `.env` value, no new image) would likely
-    close the remaining gap. Not measured.
+- **5c result:** at the code default (180/min) guests still saw 1–3% 429s; with
+  `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=360` guest and signed-in reads are at 0%, and the only 429s
+  left are guest view telemetry, which no user sees (section 3.3). The owner reads the gate as
+  "no user-visible 429": **met, with 360 in the `.env`** (step 4).
+  - Dropping FIX-7 would bring back the 15.5% whole-run 429 share.
 - **If 5c fails, or you do not want FIX-7 now:** drop both FIX-7 and A+B+C from the package.
   A+B+C has no measured capacity gain (section 3), so nothing measured is lost. Rebasing A+B+C
   without FIX-7 would produce a new, untested tree and is not recommended.
@@ -390,10 +394,10 @@ Assumptions (re-check at step 1): production runs backend image `8939818` at Ale
 | # | Step (gate) | Pre-checks | Rollback |
 |---|---|---|---|
 | 0 | Merge: PR of `perf/deploy-package-1` into `main`, CI green, pushed (owner) | CI green on the merge commit; the release is built only from `origin/main` | not merged = nothing changed |
-| 1 | Read-only inspection (G1): `remote-inspect.sh`, plus `health` | `alembic current` = `20261110_0031`; running image = overlay image; free disk for the indexes; no INVALID index: `select indexrelid::regclass from pg_index where not indisvalid` returns nothing; `.env` key **names** contain none of `DB_POOL_TIMEOUT_SECONDS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `SERVICE_BUSY_RETRY_AFTER_SECONDS`, `MAX_IN_FLIGHT_REQUESTS`, `RATE_LIMIT_TELEMETRY_PER_MINUTE`, `RATE_LIMIT_REFRESH_PER_MINUTE`, `RATE_LIMIT_REFRESH_IP_PER_MINUTE` (or their values are reviewed) | none needed |
+| 1 | Read-only inspection (G1): `remote-inspect.sh`, plus `health` | `alembic current` = `20261110_0031`; running image = overlay image; free disk for the indexes; no INVALID index: `select indexrelid::regclass from pg_index where not indisvalid` returns nothing; `.env` key **names** contain none of `DB_POOL_TIMEOUT_SECONDS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `SERVICE_BUSY_RETRY_AFTER_SECONDS`, `MAX_IN_FLIGHT_REQUESTS`, `RATE_LIMIT_PUBLIC_READ_PER_MINUTE`, `RATE_LIMIT_TELEMETRY_PER_MINUTE`, `RATE_LIMIT_REFRESH_PER_MINUTE`, `RATE_LIMIT_REFRESH_IP_PER_MINUTE` (or their values are reviewed) | none needed |
 | 2 | Build locally, `build-backend-image.sh` from the merge commit (G0); stage the release directory and `docker load` (G2) | exactly one Alembic head (`20261114_0035`); image checksum; overlay: only the two image tags changed; `config --quiet` passes | delete the staged directory; the image tag is unused |
 | 3 | Backup (G3): `backup-db.sh --execute`, copied off the server | `pg_restore --list` passes | none needed |
-| 4 | `.env` changes for the new release (owner edits; key names compared only): `MAX_IN_FLIGHT_REQUESTS=32`; `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=<value from 3.3>` (approval-flagged config item) | both keys absent before (step 1) | remove the lines (back to the code defaults, 48 and 180) |
+| 4 | `.env` changes for the new release (owner edits; key names compared only): `MAX_IN_FLIGHT_REQUESTS=32`; `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=360` (both approval-flagged config items) | both keys absent before (step 1) | remove the lines (back to the code defaults, 48 and 180) |
 | 5 | **Indexes first** (G5), while the old backend serves: `$DC run --rm --no-deps -T backend alembic upgrade head` (new image) | low-traffic window; step 1 checks done | a build that fails or is cancelled leaves an INVALID index: `DROP INDEX CONCURRENTLY <name>`, then re-run. A finished index is kept (old code ignores it; no `alembic downgrade`, per runbook) |
 | 6 | Check the indexes | `alembic current` = `20261114_0035`; all five indexes exist; the INVALID query returns nothing; the API stays healthy during the build | as step 5 |
 | 7 | Swap (G4): stop the worker, wait until no push job is `sending`, recreate the backend, wait for healthy, recreate the worker, **immediately** `nginx -t && nginx -s reload` | backup < 12 h old; step 6 passed | runbook "Backend failed, schema additive": Compose from the previous release directory (previous image), worker stop → backend → healthy → worker → Nginx reload. Keep the indexes |
@@ -465,6 +469,8 @@ auth code is the same on `main` and `perf/fixes`.
   busy countdown with 2–60 s backoff, no manual retry while busy) covers the feed and map
   screens only.
 - With cap 32 no start-up 503 occurred in the 40-session burst, so this path is a fallback.
+- Backlog (owner, 2026-11-16; not implemented): the start-up session check should honour
+  `Retry-After` on 503/429 (section 9).
 
 ### 8.6 Rollout order and gates: backend → web → Android
 
