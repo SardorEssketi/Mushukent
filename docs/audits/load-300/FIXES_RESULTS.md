@@ -289,7 +289,8 @@ Package-1 configuration: image `bf7b7ff`, cap 16, parallel query **on** (no FIX-
   view-telemetry bucket, but per user as well as per IP). Not applied, not measured.
 - 503 sheds: all in the first 30 s (start-up burst, cap 16; section 3.2). After that, 0 × 5xx.
 
-**Uploads: 10 concurrent publications × 5 max-size photos (7.8 MB, ~24.6 MP each)**
+**Uploads: 10 concurrent publications × 5 max-size photos** (package 1: 7.99 MP, ~7.8 MB each, the
+largest the new 8 MP cap accepts; the audit run used 24.6 MP, the largest accepted before FIX-6)
 (**Verified**):
 
 | | before FIX-6 (audit) | package 1 |
@@ -310,6 +311,147 @@ other requests, but it is not zero, and it makes the "expired tokens" runs nearl
 normal ones. Tokens were re-minted (`seed --tokens-only`) before the valid upload run. Since
 then, test tokens live 7 days, and `run.sh` refuses to start when they expire within 3 h
 (`tools/token_check.py`). `LT_EXPIRED_TOKENS=1` still sends genuinely expired tokens.
+
+### 3.5 10× data at 30 users (task 5f)
+
+Package-1 configuration (image `bf7b7ff`, cap 32, public read 360), the seeded 10× dataset
+(10× posts, users and comments; 12M view rows; database 4.6 GB, of which `post_views` 2.7 GB),
+30 users, 300 s steady window. One run each. (**Verified**)
+
+| Parallel query | Box CPU | Feed / map p95 | Errors | req/s |
+|---|---|---|---|---|
+| on (production setting) | saturated (0.997 core; db 0.57, backend 0.32) | 6.0 / 5.8 s | 0% | 6.9 |
+| off (FIX-10) | saturated (0.997 core) | 6.4 / **15.8 s** | **7.3%** | 5.6 |
+
+- **At 10× data the box does not hold 30 users.** The database's working set no longer fits in the
+  box's memory: the 10× database is several times the memory the whole box has.
+- The map pins query is the limit. Per `pg_stat_statements` in the parallel-on run, the two `/cats`
+  bbox variants averaged **1.9–2.3 s per call**, reading 55k–92k blocks from disk and spilling
+  167k–208k temp blocks. The `post_views` batch insert averaged 0.8 s (its unique index no longer
+  fits in memory).
+- Parallel query off is worse here, not better (the plans were not captured, so why is **Not
+  checked**). **FIX-10 is therefore not recommended** in its current form (8.4).
+- The capacity at 10× data was not located below 30 users (**Not checked**); the levers are the
+  map-pin denormalisation and bbox caching (7.6), `post_views` retention (7.5), and more memory
+  (section 6).
+
+Index build times for the package-1 migrations at 10× data, `CREATE INDEX CONCURRENTLY` on the
+box's one-core budget with the API stopped: knn posts 7.2 s, knn lost pets 0.6 s, cat latest post
+2.3 s, popular 2.5 s, visible comments 3.3 s; no invalid index left (**Verified**). At production
+data sizes (smaller than 1×) step 5 of 8.3 takes seconds.
+
+
+### 3.4 Before / after per scenario and per key endpoint
+
+**Per endpoint** (client side through nginx/TLS, 200s only, 300 s steady window; before = image
+`8939818` at Alembic 0031, after = package-1 tree `bf7b7ff`; same harness, one production core,
+1× data, parallel query on before and off after; **Verified**). Endpoints with fewer than 20
+samples in the window are left out (the first feed pages).
+
+| Endpoint | 10 users, before → after: p50 / p95 ms | 20 users, before → after: p50 / p95 ms |
+|---|---|---|
+| `GET /cats` (map pins) | 124 / 568 → 90 / 289 | 925 / 4,904 → 89 / 242 |
+| `GET /lost-pets/map` | 30 / 238 → 28 / 99 | 569 / 3,029 → 29 / 108 |
+| `POST /views/seen` | 428 / 1,692 → 44 / 219 | 4,296 / 14,670 → 48 / 165 |
+| `GET /feed` recent, later pages | 516 / 1,123 → 59 / 159 | 1,290 / 6,336 → 62 / 180 |
+| `GET /posts/{id}` | 39 / 341 → 28 / 85 | 781 / 3,674 → 31 / 104 |
+| `GET /posts/{id}/comments` | 59 / 248 → 42 / 92 | 688 / 3,290 → 50 / 129 |
+| `GET /cats/{id}/posts` (marker tap) | 34 / 365 → 28 / 203 | 689 / 4,091 → 30 / 110 |
+| `GET /notifications/unread-count` | 32 / 147 → 24 / 170 | 602 / 2,869 → 30 / 114 |
+| `GET /users/me` | n/a | 523 / 2,688 → 30 / 241 |
+| `GET /feed` nearby, later pages | n/a | n/a → 96 / 262 |
+
+At 20 users the old tree was saturated (every endpoint queued behind the slow ones); the new tree
+at 20 users is faster on every endpoint than the old one at 10.
+
+**Per scenario.** Pass criteria from the brief: Feed p95 < 500 ms, map p95 < 700 ms, 5xx < 0.5%,
+no timeouts, 0 × 429 for a user with their own IP, no OOM or restart in upload stress, no drift in
+the soak, self-recovery ≤ 60 s. "Before" figures come from the same harness where one exists; the
+original audit's figures carry the healthcheck artefact (last section) and are marked.
+
+| Scenario | Before | After (package 1) | Pass? |
+|---|---|---|---|
+| Knee (5a) | Feed p95 984 ms at 10 users; saturated at 20 | 30 users meet the targets in 3/3 runs, 35 in 2/4 (3.1) | yes, at 30 |
+| CPU per request | 148 ms of a production core | 55.9 ms, 2.6× less (3) | n/a |
+| 300 users, overload (5b; replaces 5e) | audit: 48.7% of requests failed for users, 1,660 × 504 (artefact-affected) | cap 32: server p95 of 200s 2.9 s; 1% shed in ~1 ms with 503 + `Retry-After`; 0 × 504 or timeouts; recovery 18 s (3.2) | shedding and recovery yes; latency no (10× the capacity) |
+| Spike with expired tokens (5d) | audit: the refresh storm spilled into reads | PENDING_5D | PENDING_5D |
+| CGNAT, 40 users / 1 IP (5c) | 15.5% 429 (guests 36–57%) | reads 0%; guest view telemetry 3.5–4.5%, invisible (3.3) | yes (owner's reading of the gate) |
+| Uploads, 10 × 5 max-size photos (5c) | 2 at once OOM-killed the backend | 10/10 published, box memory peak 78%, no OOM (3.3) | yes |
+| 10× data at 30 users (5f) | audit: saturated at 40 users (artefact-affected) | box saturated: Feed / map p95 6.0 / 5.8 s, 0 errors (parallel query on); 6.4 / 15.8 s, 7.3% errors with it off (3.5) | **no**: capacity at 10× data is below 30 users |
+| Soak, 1 h at 30 users (5g) | not run before | PENDING_5G | PENDING_5G |
+
+**5e (target 300, short) was replaced** by the traced 300-user runs of 5b and the cap follow-up
+(owner decision, 2026-11-16). Those runs already show the overload shedding and recovery that 5e
+was meant to confirm. With one Locust process, a full 300-user target run measures the load
+generator more than the server (3.2).
+
+## 4. Per-fix entries
+
+Gains under load were measured for the package as a whole (sections 3 and 3.4); fixes were not
+load-tested one at a time. The per-fix gain below is the query- or endpoint-level measurement
+behind the fix, plus where it shows in the endpoint table. Backend suite on the package tree:
+754 passed, 1 skipped, DB integration tests on (**Verified**).
+
+| Fix | What changed | Tests | Measured gain | Deviation from PROPOSED_FIXES, and why |
+|---|---|---|---|---|
+| FIX-1 `465427f` | 3 s pool timeout; statement 15 s, lock 3 s, idle-in-transaction 15 s on API connections; pool exhaustion and cancellations → 503 `SERVICE_BUSY` + `Retry-After` | `test_fail_fast.py` | Overload no longer becomes an outage: 0 × 504 or timeouts at 300 users, recovery 18 s with cap 32 (the audit box was still unusable after 10 min) (**Verified**) | Statement timeout 15 s, not 8 s: staged at the app's own request timeout, so it never cuts a request the client still waits for. Migrations, scripts and the worker keep engines without limits |
+| FIX-1 cap `5c4de4b` | in-flight cap: 503 `SERVICE_BUSY` at once above `MAX_IN_FLIGHT_REQUESTS` (code default 48; package 1 sets 32); health never shed | `test_load_shedding.py` | Shed in ~1 ms; cap 32: zero refusals in a 40-session burst (3.2) (**Verified**) | Not in the proposal: added because sync handlers keep running after the client gives up |
+| FIX-2 `2b40b35` | nearby feed nearest-first: KNN on geography GiST indexes, (limit+1)-th distance bound per branch; cats nearby box scaled by latitude | `test_feed_nearby_knn.py` | 10× data, page 1: 1,101 → 39 ms; page 10: 2 ms (query level, audit). The 6–9 s plan one statistics change away is gone (**Verified**) | Bound-then-collect instead of a plain `LIMIT`, so ties at one spot are never cut; the spheroid radius filter is kept (same items). The 1× stop-gap box prefilter was not shipped |
+| FIX-3 `57cd0f2` | `views/seen`: one visibility read per kind, one insert, one ordered increment per kind | `test_post_views_batch.py` | ~80 statements per batch → a fixed handful; endpoint p95 1,692 → 219 ms at 10 users (3.4) (**Verified**) | As proposed. The 30 s client interval is a separate client commit (`6921c99`) |
+| FIX-4 `e596e98` | partial index on the newest public post per cat (map pins) | backend suite | SQL part at z14: 19.6 → 10.8 ms (audit); `/cats` p95 568 → 289 ms at 10 users (3.4) | Index name differs. The denormalised "latest public post" column was not done (it needs a decision) |
+| FIX-5 `38a3f16` | recent mixed feed: cursor and `limit + 1` per branch before the merge | `test_feed_recent_parity.py` (page-by-page parity with the old global sort, ties across kinds) | key query 26 → 1.3 ms (audit); later pages p95 1,123 → 159 ms at 10 users (3.4) | As proposed; the old nearby code this path no longer used was removed |
+| FIX-5 hydration `174ec4f` | index-only count of the comments a viewer can see, per card | backend suite | answers the proposal's "a signed-in page costs ~80 ms more" follow-up: popular cards no longer read hundreds of comment rows each (plan; not load-tested alone) | Follow-up of FIX-5, not in the proposal's patch |
+| FIX-6 `0456ecb` | header-only validation; one reduced-scale JPEG decode; one processing slot; one publication per user in flight (409 `PUBLICATION_IN_PROGRESS`); pixel cap 25 → 8 MP | `test_upload_memory.py`, `test_uploads.py` | 10 concurrent max-size publications: before, OOM at 2; after, 10/10 with box memory peak 78% (3.3) (**Verified**) | Pixel cap 8 MP, not ~16 MP: twice what any client sends (every app build resizes to 1920 px first, **From code**) |
+| FIX-7 `eaa3c6f` | read-only public GETs → public-read bucket; own view-telemetry bucket; refresh per refresh session with a per-IP backstop | `test_rate_limit_buckets.py` | CGNAT 40 users / 1 IP: 15.5% → 0.54% 429s at 180/min; reads 0% at 360/min (3.3) (**Verified**) | Non-policy parts only: per-IP ceilings unchanged in code (360 comes from the `.env`); no install-id keying. The client part (token on marker taps and places, busy/`Retry-After` UX) shares commit `6a5a3db` with LT-21 (one `users/me` at start-up), because both change the same start-up and map request code |
+| FIX-8 `3fae54a` | worker: a bad job fails alone (data errors terminal, transport errors retried); keeps claiming while batches come back full | `test_notification_worker_resilience.py` | removes the ~100 pushes/min ceiling (From code; backlog drain not load-tested) | As proposed |
+| FIX-9 `522fb40` | nginx re-resolves the backend through Docker DNS (10 s) | manual: backend recreated, the 502s stopped without a reload (**Verified**) | removes the 22,378 × 502 failure mode | As proposed. Infrastructure, needs owner approval (package 2) |
+| FIX-10 `903497f` | `max_parallel_workers_per_gather=0` in the prod Compose file | n/a | 1×: none measurable (+3%, within noise; 8.4); 10×: **worse** with it off (map p95 15.8 vs 5.8 s, 7.3% vs 0% errors; 3.5) | Optional (owner decision); package 2 |
+| FIX-11 `7455510` | popular feed order index | backend suite | the popular page reads its rows from the index instead of scan + sort (plan) | Predicate `deleted_at IS NULL` only (the proposal also had `is_public`): a slightly larger index that also serves non-public rows |
+| LT-02 nginx `526628c` | 30 s read timeout for non-upload API requests | n/a | not load-tested alone; the 15 s statement and 3 s pool timeouts already bound requests | Infrastructure, package 2 |
+| A+B+C `bf7b7ff` | async no-I/O dependencies; one JWT decode per request; rate limiter as plain ASGI | `test_request_overhead.py` (3 → 1 decodes), `test_rate_limit_asgi.py`, `test_auth.py` | **none measurable** (slope 13.05 vs 13.10 ms) (3) | Kept: behaviour-neutral and tested, and FIX-7 sits on its limiter rewrite |
+| Client `6a5a3db`, `6921c99` | busy countdown with `Retry-After` on feed and map; token on marker taps and places; shared `users/me`; seen batches every 30 s | `busy_and_single_flight_test.dart`; Flutter suite 849 passed | old-client compatibility verified (8.5); the new client's own effect was not load-tested separately | Web + Android release, package 2 |
+| Queue prototype (not shipped) | `perf/cap-queue` `86f4a6e`: up to 2 s FIFO wait before shedding | 4 tests; backend suite 758 passed | hurts sustained overload (3.2) | Not merged (owner decision) |
+
+D (orjson responses) was skipped by the owner.
+
+## 5. Behaviour changes a user could notice
+
+All **From code** unless marked. None changes data or permissions.
+
+- **Overload.** Instead of a long spinner and then a timeout, an overloaded API answers 503 within
+  milliseconds. The current app shows its generic error with a retry button. The new app shows
+  "busy, retrying in N s" on the feed and map and retries by itself (`Retry-After`, back-off up
+  to 60 s). At start-up, either app shows "session unavailable" and reconnects after 3–48 s,
+  without signing the user out (8.5). With cap 32, no start-up 503 occurred in a 40-session burst
+  (**Verified**).
+- **Slow requests end at 15 s** with a 503 instead of running on; the app already gives up at 15 s.
+- **Nearby feed** is ordered nearest-first by sphere distance (about 0.3% different from the old
+  spheroid distance), so items at almost the same distance can swap places. The set of items is
+  the same.
+- **Cats "nearby" filter** now finds the ~13% of cats east or west of the user that the old box
+  missed.
+- **Uploads.** A second publication from the same account while one is still uploading gets 409
+  `PUBLICATION_IN_PROGRESS`; the app sends one at a time, so app users do not see it. Images over
+  8 MP are refused; every app build resizes to 1920 px first, so only direct API callers are
+  affected.
+- **Rate limits.** Far fewer 429s for people behind a shared mobile IP. Guest view counts can be
+  undercounted behind large shared IPs (invisible; 3.3). Login and registration limits are
+  unchanged.
+- **Push notifications** arrive sooner after a backlog, and one broken device token no longer
+  holds up everyone else's.
+- **View counts** (new client) are sent every 30 s instead of 10 s, so a count can lag by up to
+  30 s.
+- **Package 2 infrastructure:** with the nginx resolver, the API keeps working after a backend
+  recreate without a manual reload; with the 30 s timeout, non-upload API requests are cut at
+  nginx after 30 s (none legitimately take that long).
+
+## 6. Capacity options
+
+PENDING_6
+
+## 7. Decision memos
+
+PENDING_7
 
 ## 8. Deploy package 1: "no outage" + query fixes + A+B+C
 
@@ -431,7 +573,7 @@ Nginx or Compose configuration and needs its own approval and procedure.
 |---|---|---|---|
 | Nginx API read timeout (FIX-1, LT-02) | `526628c` | cut non-upload API requests after 30 s | web/Nginx release unit (procedure A); not required for package 1: the API's own 15 s statement timeout and 3 s pool timeout already bound requests |
 | Nginx resolver (FIX-9, LT-11) | `522fb40` | re-resolve the backend address at request time | removes the manual `nginx -s reload` after a backend swap; until then, step 7's reload is mandatory |
-| Parallel query off (FIX-10, LT-17) | `903497f` | `docker-compose.prod.yml`: no parallel workers for the single-core database | **Optional for package 1.** Package 1 without FIX-10 (parallel query on, the production setting) was measured at the knee: 35 users, Feed / map p95 389 / 358 ms, 0 errors, box CPU 0.510 vs 0.494 core with it off (+3%, within noise). It meets the targets (**Verified**, 1× data; the 10× data run in 5f will repeat it). Applying it through Compose recreates the database container. `ALTER SYSTEM` + reload would avoid a restart, but it is also a production configuration change. Either way it needs approval |
+| Parallel query off (FIX-10, LT-17) | `903497f` | `docker-compose.prod.yml`: no parallel workers for the single-core database | **Optional for package 1.** Package 1 without FIX-10 (parallel query on, the production setting) was measured at the knee: 35 users, Feed / map p95 389 / 358 ms, 0 errors, box CPU 0.510 vs 0.494 core with it off (+3%, within noise). It meets the targets (**Verified**, 1× data). **At 10× data, turning it off made things worse** (map p95 15.8 vs 5.8 s, 7.3% vs 0% errors; section 3.5), so FIX-10 is not recommended as it stands. Applying it through Compose recreates the database container. `ALTER SYSTEM` + reload would avoid a restart, but it is also a production configuration change. Either way it needs approval |
 
 ### 8.5 Backward compatibility: un-updated clients on the new backend
 
@@ -494,6 +636,55 @@ two reasons:
 
 Android users update slowly, so the old-client behaviour in 8.5 is what most users will see for
 weeks.
+
+## 9. Deploy package 2: everything else (plan only)
+
+Package 1 already carries every migration (0032–0035, all `CONCURRENTLY` index builds, applied
+before the backend swap; 8.3). **Package 2 has no migration.** It is four units, each with its own
+approval. None is needed for package 1 to work. **2a and 2c are one release unit:** the web build and
+the nginx config ship together (procedure A), so whatever nginx config is on `main` goes out with
+the next web release. To ship the client without the nginx changes, keep `522fb40` and `526628c` off
+`main` until they are approved.
+
+| # | Unit | Commits | Procedure and approval | Pre-checks | Rollback | Post-deploy checks |
+|---|---|---|---|---|---|---|
+| 2a | Web build with the client changes | `6a5a3db`, `6921c99` | web release, procedure A (`release-web`: prepare, owner `approve`, deploy) | package 1 live (so `SERVICE_BUSY` exists); Flutter suite and analyze green on the merge commit | `release-web rollback` to the previous web release (owner-signed approval) | sign-in, feed, map with marker tap and places, a like, a publication; views counted once; on a forced 429 the busy countdown shows |
+| 2b | Android release | same two commits, new build number | Play internal track, then production (owner) | as 2a; device QA on a slow network (section 10) | halt the staged rollout; the old build keeps working (8.5) | as 2a on a device; crash-free rate in the Play console |
+| 2c | nginx: re-resolve the backend (FIX-9) and the 30 s API read timeout (LT-02) | `522fb40`, `526628c` | `infrastructure/` change, **needs owner approval before deploy**; ships with a web release (same unit as 2a) | `nginx -t` in the staged release; upload routes keep 180 s | previous `default.conf` from the previous release directory, `nginx -t && nginx -s reload` | `/api/v1/health` 200; a photo publication succeeds (180 s route); recreate the backend once in a quiet window and confirm the API answers **without** an nginx reload |
+| 2d | Parallel query off (FIX-10): **not recommended** (3.5) | `903497f` | prod Compose change, **needs owner approval before deploy**; recreates the db container (seconds of downtime) or `ALTER SYSTEM` + reload (no restart, still a config change) | backup < 12 h old (G3); package 1 live (FIX-2 must be in first: with parallel query off, the old nearby plan goes from ~1 s to 6–9 s) | set it back to 2 (Compose) or `ALTER SYSTEM RESET` + reload | `show max_parallel_workers_per_gather` = 0; nearby feed and map p95 in the logs no worse over a day |
+
+Recommended order: 2a → 2b (the client benefit only shows once package 1 sheds with
+`SERVICE_BUSY`), 2c together with 2a once approved (otherwise 2a without it), 2d **not recommended**: at 10× data, parallel query off made the map
+p95 15.8 s instead of 5.8 s, with 7.3% errors (3.5).
+
+Not in either package (decisions first, section 7): the Redis rate-limit store with several
+workers, a tile provider or cache, the telemetry rate limit, `post_views` roll-up, dropping response
+models on hot paths, the start-up `Retry-After` change (backlog, 8.5).
+
+## 10. Not checked
+
+- **Real devices and networks:** browser and Android flows on slow or lossy mobile networks, and how
+  often real clients reconnect and redo the TLS handshake (Locust keeps one keep-alive session per
+  user).
+- **Real start-up clustering:** whether real start-ups bunch up like the harness's 10 sessions per
+  second (a push to everyone, a morning peak). It decides how much the cap value matters (3.2).
+- **The 300-user tail as a phone sees it:** at 300 users the side probe saw 7–17 s while the server
+  shed in ~1 ms; the wait outside the app (nginx/TLS on the throttled core, the accept queue, or the
+  workstation) was not located (3.2).
+- **The new client under load:** the harness models the current client (8.5). The new client's
+  30 s view batches and shared `users/me` lower the load a little; not measured.
+- **Per-fix gains under load:** fixes were load-tested together (section 4).
+- **Notification backlog drain** (FIX-8) under load, and push delivery at volume (FCM is mocked).
+- **Tile load:** basemap tiles come from a third-party tile server and were not part of the load
+  (section 7).
+- **Production row counts and data shape** vs the seed: capacity is measured on the seeded 1× and
+  10× sets; production is far smaller today.
+- **Option (b) CPU classes** are an estimate from public benchmarks (section 6), not measured.
+- **Options (d) and (e)** are not measured (section 6).
+- **Single-request query timings (`cost_probe`)** ran with the harness artefact in the background
+  and were not re-measured (last section).
+- **Old-client 503 path on a device:** the "session unavailable" and retry behaviour is read from the
+  code, not exercised on a device.
 
 ## Superseded measurements
 
