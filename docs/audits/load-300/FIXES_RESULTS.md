@@ -1,8 +1,7 @@
-# Load-audit fixes: results (DRAFT, in progress)
+# Load-audit fixes: results
 
-Branch `perf/fixes`. Status: capacity method and per-variant slopes measured (sections 2 and 3);
-scenario re-runs, per-fix entries, capacity options, decision memos and deploy packages are still to
-be written (verdict pending the stress ladder). Nothing here was deployed.
+Branch `perf/fixes`. Status: complete (2026-11-16). All scenario runs of task 5 are done, or
+replaced as noted in 3.4. Nothing here was deployed.
 
 Evidence labels: **Verified** = measured here; **From code** = read, not reproduced;
 **Not checked** = not done, with the reason. Hardware details stay in the private production notes;
@@ -32,7 +31,27 @@ sheds ~55% of requests during the first ~20 s of a 35–40-session start-up burs
 absorbs (slowly) without a 503. Of caps 16/24/32/48 and a 2 s wait queue, **cap 32** is the
 best setup with zero refusals in the burst (section 3.2).
 
-Still pending: uploads, CGNAT, spike, target 300, 10× data, soak (5c–5g).
+**The other scenarios on package 1** (**Verified**, section 3):
+- 1 h soak at 30 users: no drift, 0 errors (3.7).
+- Spike to 300 users with expired tokens: all 195 sessions refreshed, **0 signed out**, 0 × 429.
+  At 10× capacity, 2.5% of requests got 503/504; recovery 21 s (3.6).
+- 40 users behind one IP: 0% 429 on reads with public read at 360/min (3.3).
+- 10 concurrent max-size uploads: all published, no OOM (3.3).
+
+**Not within targets:**
+- **300 users.** The box sheds and recovers instead of going down (3.2, 3.6), but the latency
+  targets are far off. 300 users need about 3.9 production cores of CPU: four faster dedicated
+  cores, Redis and several workers (section 6, **Estimate**).
+- **10× data.** The box does not hold 30 users: Feed / map p95 6 s, because the database no
+  longer fits in memory (3.5). Production is far below 1× today.
+
+**Next step up, measured:** 2 cores with one worker carried 60 users within the targets in the
+steady window (section 6). On that box, though, both cap 32 and cap 48 shed part of a 40–60-session
+start-up burst. The start-up session check honouring `Retry-After` (backlog), or a short wait
+queue, has to come with that move.
+
+**FIX-10 (parallel query off) is not recommended:** it made 10× data worse (3.5). It was optional
+and is not in package 1, so package 1 is unchanged.
 
 ## 2. Capacity method: marginal cost, not average
 
@@ -312,35 +331,6 @@ normal ones. Tokens were re-minted (`seed --tokens-only`) before the valid uploa
 then, test tokens live 7 days, and `run.sh` refuses to start when they expire within 3 h
 (`tools/token_check.py`). `LT_EXPIRED_TOKENS=1` still sends genuinely expired tokens.
 
-### 3.5 10× data at 30 users (task 5f)
-
-Package-1 configuration (image `bf7b7ff`, cap 32, public read 360), the seeded 10× dataset
-(10× posts, users and comments; 12M view rows; database 4.6 GB, of which `post_views` 2.7 GB),
-30 users, 300 s steady window. One run each. (**Verified**)
-
-| Parallel query | Box CPU | Feed / map p95 | Errors | req/s |
-|---|---|---|---|---|
-| on (production setting) | saturated (0.997 core; db 0.57, backend 0.32) | 6.0 / 5.8 s | 0% | 6.9 |
-| off (FIX-10) | saturated (0.997 core) | 6.4 / **15.8 s** | **7.3%** | 5.6 |
-
-- **At 10× data the box does not hold 30 users.** The database's working set no longer fits in the
-  box's memory: the 10× database is several times the memory the whole box has.
-- The map pins query is the limit. Per `pg_stat_statements` in the parallel-on run, the two `/cats`
-  bbox variants averaged **1.9–2.3 s per call**, reading 55k–92k blocks from disk and spilling
-  167k–208k temp blocks. The `post_views` batch insert averaged 0.8 s (its unique index no longer
-  fits in memory).
-- Parallel query off is worse here, not better (the plans were not captured, so why is **Not
-  checked**). **FIX-10 is therefore not recommended** in its current form (8.4).
-- The capacity at 10× data was not located below 30 users (**Not checked**); the levers are the
-  map-pin denormalisation and bbox caching (7.6), `post_views` retention (7.5), and more memory
-  (section 6).
-
-Index build times for the package-1 migrations at 10× data, `CREATE INDEX CONCURRENTLY` on the
-box's one-core budget with the API stopped: knn posts 7.2 s, knn lost pets 0.6 s, cat latest post
-2.3 s, popular 2.5 s, visible comments 3.3 s; no invalid index left (**Verified**). At production
-data sizes (smaller than 1×) step 5 of 8.3 takes seconds.
-
-
 ### 3.4 Before / after per scenario and per key endpoint
 
 **Per endpoint** (client side through nginx/TLS, 200s only, 300 s steady window; before = image
@@ -374,16 +364,95 @@ original audit's figures carry the healthcheck artefact (last section) and are m
 | Knee (5a) | Feed p95 984 ms at 10 users; saturated at 20 | 30 users meet the targets in 3/3 runs, 35 in 2/4 (3.1) | yes, at 30 |
 | CPU per request | 148 ms of a production core | 55.9 ms, 2.6× less (3) | n/a |
 | 300 users, overload (5b; replaces 5e) | audit: 48.7% of requests failed for users, 1,660 × 504 (artefact-affected) | cap 32: server p95 of 200s 2.9 s; 1% shed in ~1 ms with 503 + `Retry-After`; 0 × 504 or timeouts; recovery 18 s (3.2) | shedding and recovery yes; latency no (10× the capacity) |
-| Spike with expired tokens (5d) | audit: the refresh storm spilled into reads | PENDING_5D | PENDING_5D |
+| Spike with expired tokens (5d) | audit: the refresh storm spilled into reads | 0 → 300 in 60 s, 3 min hold: 195/195 refreshes 200, 0 × 429/503 on refresh, **0 signed out**; server refresh p95 2.7 s; 1.4% shed (503), 1.1% × 504 at the end of the hold; recovery 21 s (3.6) | refresh storm and recovery yes; 5xx < 0.5% no (10× the capacity) |
 | CGNAT, 40 users / 1 IP (5c) | 15.5% 429 (guests 36–57%) | reads 0%; guest view telemetry 3.5–4.5%, invisible (3.3) | yes (owner's reading of the gate) |
 | Uploads, 10 × 5 max-size photos (5c) | 2 at once OOM-killed the backend | 10/10 published, box memory peak 78%, no OOM (3.3) | yes |
 | 10× data at 30 users (5f) | audit: saturated at 40 users (artefact-affected) | box saturated: Feed / map p95 6.0 / 5.8 s, 0 errors (parallel query on); 6.4 / 15.8 s, 7.3% errors with it off (3.5) | **no**: capacity at 10× data is below 30 users |
-| Soak, 1 h at 30 users (5g) | not run before | PENDING_5G | PENDING_5G |
+| Soak, 1 h at 30 users (5g) | not run before | 25,507 requests, 0 errors; Feed p95 350–490 ms per 10 min with no trend; memory and connections flat (3.7) | yes |
 
 **5e (target 300, short) was replaced** by the traced 300-user runs of 5b and the cap follow-up
 (owner decision, 2026-11-16). Those runs already show the overload shedding and recovery that 5e
 was meant to confirm. With one Locust process, a full 300-user target run measures the load
 generator more than the server (3.2).
+
+### 3.5 10× data at 30 users (task 5f)
+
+Package-1 configuration (image `bf7b7ff`, cap 32, public read 360), the seeded 10× dataset
+(10× posts, users and comments; 12M view rows; database 4.6 GB, of which `post_views` 2.7 GB),
+30 users, 300 s steady window. One run each. (**Verified**)
+
+| Parallel query | Box CPU | Feed / map p95 | Errors | req/s |
+|---|---|---|---|---|
+| on (production setting) | saturated (0.997 core; db 0.57, backend 0.32) | 6.0 / 5.8 s | 0% | 6.9 |
+| off (FIX-10) | saturated (0.997 core) | 6.4 / **15.8 s** | **7.3%** | 5.6 |
+
+- **At 10× data the box does not hold 30 users.** The database's working set no longer fits in the
+  box's memory: the 10× database is several times the memory the whole box has.
+- The map pins query is the limit. Per `pg_stat_statements` in the parallel-on run, the two `/cats`
+  bbox variants averaged **1.9–2.3 s per call**, reading 55k–92k blocks from disk and spilling
+  167k–208k temp blocks. The `post_views` batch insert averaged 0.8 s (its unique index no longer
+  fits in memory).
+- Parallel query off is worse here, not better (the plans were not captured, so why is **Not
+  checked**). **FIX-10 is therefore not recommended** in its current form (8.4).
+- The capacity at 10× data was not located below 30 users (**Not checked**); the levers are the
+  map-pin denormalisation and bbox caching (7.6), `post_views` retention (7.5), and more memory
+  (section 6).
+
+Index build times for the package-1 migrations at 10× data, `CREATE INDEX CONCURRENTLY` on the
+box's one-core budget with the API stopped: knn posts 7.2 s, knn lost pets 0.6 s, cat latest post
+2.3 s, popular 2.5 s, visible comments 3.3 s; no invalid index left (**Verified**). At production
+data sizes (smaller than 1×) step 5 of 8.3 takes seconds.
+
+### 3.6 Spike with expired tokens (task 5d)
+
+Package 1 (image `bf7b7ff`, cap 32, public read 360, parallel query on), 1× data. 0 → 300 users
+in 60 s, then a 3-minute hold, then the recovery probe. Every signed-in session starts with a
+genuinely expired access token (`LT_EXPIRED_TOKENS=1`), so all of them hit `/auth/refresh` inside
+the ramp. Traced, with the side probe. One run. (**Verified**)
+
+| Measure | Result |
+|---|---|
+| Signed-in sessions that refreshed | 195 of 195 (the other 105 users are guests) |
+| `/auth/refresh` status | 195 × 200; **0 × 429, 0 × 503** |
+| Users signed out (refresh 401/403) | **0** |
+| Refresh time, server side, p50 / p95 | 1.3 / 2.7 s (database p95 1.0 s, pool wait p95 0.4 s) |
+| Refresh time, Locust side, p50 / p95 | 12.5 / 20.9 s (inflated: Locust was CPU-bound, 3.2) |
+| 429s, all requests | 0 |
+| 503 sheds | 43 (1.4%), from t = 60 s on |
+| 504 (nginx upstream timeout, 30 s) | 34 (1.1%), all at t = 232–238 s, the end of the hold |
+| Recovery after the load stops | 21 s |
+| Backend / database restarts or OOM | none |
+
+- **The refresh storm is handled.** Every expired session refreshed, nobody was signed out, and
+  refresh was never rate-limited or shed. Before FIX-7, the storm spilled into the read limits
+  (3.3).
+- **New at the 3-minute hold: 34 × 504.** The 5b runs (2-minute hold) had none. Server-side times
+  stayed at p95 2.9 s for served requests, and the side probe's health check reached p95 21.5 s. So
+  the backlog grew in front of the app (nginx → uvicorn, before the in-flight cap counts a
+  request). After ~2.5 minutes at 10× capacity it passed nginx's 30 s upstream timeout. The cap
+  bounds work inside the app, not that backlog. Where it sits exactly is **Not checked**. A
+  candidate is uvicorn's own `--limit-concurrency`, which answers 503 before the app (memo 7.6).
+  It is not measured and not in either package.
+- Pass criteria: refresh storm yes (0 sign-outs, 0 × 429); recovery ≤ 60 s yes; 5xx < 0.5% no.
+  The run is at 10× the box's capacity.
+
+### 3.7 Soak, 1 h at 30 users (task 5g)
+
+Package 1, 1× data, 30 users for 3,600 s after a 300 s warm-up. One run. (**Verified**)
+
+| 10-minute window | 0–10 (warm-up included) | 10–20 | 20–30 | 30–40 | 40–50 | 50–60 | 60–65 |
+|---|---|---|---|---|---|---|---|
+| Feed p95 ms | 640 | 404 | 464 | 487 | 398 | 490 | 350 |
+| Map p95 ms | 485 | 344 | 328 | 388 | 342 | 290 | 308 |
+| Backend memory MiB (mean) | 158 | 169 | 179 | 181 | 180 | 178 | 177 |
+| Postgres memory MiB (mean) | 311 | 349 | 370 | 397 | 411 | 427 | 430 |
+
+- 25,507 requests in the steady window; **0 errors, 0 × 429, 0 × 5xx**; 7.1 req/s throughout.
+- **No drift.** Latency has no upward trend. Backend memory levels off at ~178 MiB after 20
+  minutes. Postgres memory rises as its cache fills and flattens by the end. Postgres connections
+  stay flat at 7 (pool max 8 checked out). No restart or OOM.
+- Two windows come within ~10 ms of the 500 ms Feed target. That matches 30 users as the planning
+  figure with no headroom above it (3.1).
 
 ## 4. Per-fix entries
 
@@ -423,7 +492,8 @@ All **From code** unless marked. None changes data or permissions.
   "busy, retrying in N s" on the feed and map and retries by itself (`Retry-After`, back-off up
   to 60 s). At start-up, either app shows "session unavailable" and reconnects after 3–48 s,
   without signing the user out (8.5). With cap 32, no start-up 503 occurred in a 40-session burst
-  (**Verified**).
+  on today's box (**Verified**). On a 2-core box, cap 32 does shed the start-up burst; the cap must
+  be raised with the move (section 6).
 - **Slow requests end at 15 s** with a 503 instead of running on; the app already gives up at 15 s.
 - **Nearby feed** is ordered nearest-first by sphere distance (about 0.3% different from the old
   spheroid distance), so items at almost the same distance can swap places. The set of items is
@@ -447,11 +517,194 @@ All **From code** unless marked. None changes data or permissions.
 
 ## 6. Capacity options
 
-PENDING_6
+"Users" means concurrent active users within the targets (Feed p95 < 500 ms, map p95 < 700 ms),
+1× data, package 1. Cost is a multiple of today's monthly server cost; plan names and list prices
+are in the private notes (the provider is not confirmed in this repository). A "production core"
+is the measured core of today's box.
+
+| Option | Users within targets | How we know | Monthly cost | Notes |
+|---|---|---|---|---|
+| (a) current box, 1 shared core | **30** (35 is the edge) | **Verified** (3.1); 1 h soak clean (3.7) | 1× | queueing on one core, not CPU, is the limit |
+| (b) faster CPU class, 1 core | **~40–50** | **Estimate**: public single-thread benchmarks put the faster classes at 1.3–1.7× today's core; knee scaled linearly | not confirmed (price not shown on the provider's page) | resize = short downtime; to be measured before relying on it |
+| (c) 2 cores, 1 uvicorn worker | **60** in the steady window (2 runs, cap 32); knee not reached | **Verified** on 2 production cores (below) | 2× (shared class); ~3.5× (dedicated class) | backend worker is the bottleneck; the start-up burst of 40–60 sessions is partly shed (503), at cap 32 and at cap 48 |
+| (d) 4 cores, Redis rate limiter, 3 workers | **~130–210** (current class); ~200–300 on a 1.5× faster class | **Estimate** from the measured costs (below); not run: the Redis store does not exist yet | 4× (shared); ~7× (dedicated) + engineering (7.2) | the only listed layout with CPU for 300 users, and only on a faster class |
+| (e) app box + separate/managed Postgres | ~60 with 1 app core + 1 database core (like (c), same start-up caveat) | **Estimate**, structurally close to (c); network hop not measured | 1× + 1.3× (1 vCPU / 1 GB) to 2.5× (1 vCPU / 2 GB) | the lever for 10× data: the database's memory becomes its own (3.5); PostGIS on the managed plans is **Not checked** |
+
+**(c) measured** (2026-11-16; box quota 2 production cores, backend container capped at 1
+production core to model one worker; package 1 (cap 32) unless noted; 330 s hold, steady window
+90–390 s; **Verified**):
+
+| Users | Feed / map p95 | Errors (steady window) | Backend CPU, mean / p90 | Box CPU, mean |
+|---|---|---|---|---|
+| 40 | 167 / 189 ms | 0 | 35% / 65% of its core | 28% of 2 cores |
+| 50 | 356 / 289 ms | 0 | 42% / 79% | 34% |
+| 60 | 434 / 320 ms | 0 | 49% / 93% | 39% |
+| 60, repeat (CPU quota period 10 ms) | 401 / 324 ms | 0 | 49% | 39% |
+| 60, cap 48 (period 10 ms) | **762** / 593 ms | 0 | 56% | 44% |
+
+- 60 users still meet the targets; the Feed p95 (434 ms) is close to 500 ms, so the knee is
+  probably not far above 60. It was not located.
+- The backend worker, not the box, is the limit: its CPU reaches its one-core cap in bursts at 60
+  users (p90 93%) while the box as a whole is at 39%. More workers (option (d)) are what turn the
+  second core into capacity.
+- **Start-up burst on 2 cores (the cap needs a new answer).** The harness starts 10 sessions per
+  second. On today's box, cap 32 shed nothing in a 40-session burst (3.2). On 2 cores the burst
+  reaches the backend faster: 779 requests in the first 60 s against 586 at 40 users. Cap 32 shed 66
+  requests at 40 users (within 3 s), 197 at 50, and 248–362 at 60 (within ~10–25 s; two runs). Cap
+  48 at 60 users shed 100, and its steady-window Feed / map p95 was 762 / 593 ms (one run), outside
+  the targets. Each shed is a "session unavailable" screen with automatic reconnect after 3 s,
+  without sign-out (8.5). Raising the cap is therefore not the fix on this box. The candidates are
+  the start-up session check honouring `Retry-After` (backlog, 8.5) or a short wait queue
+  (`perf/cap-queue`, 3.2), and either must be measured before a move to (c). A run with the CPU
+  quota period at 10 ms instead of Docker's 100 ms changed the counts (248 vs 362) but not the
+  finding.
+- Box memory peaked at 800 MiB at 60 users, within a 4 GB plan.
+- A dedicated core is faster than today's shared core (estimate 1.3–1.5×) and has no noisy
+  neighbours, so this is a lower bound for the dedicated variant of (c).
+
+**(d) estimate.** CPU bound = (0.7 × cores − floor) / slope = (2.8 − 0.06) / 13.05 ms ≈ 210 users
+on four production cores. On one and two cores the measured latency knee was at 0.6× of the CPU
+bound or above (30 of 48; ≥ 60 of 103), so ~130–210 on four cores of today's class, and ~200–300 on
+a class 1.5× faster. Redis adds a hop per limited request (sub-millisecond, local network) that is
+not in these numbers.
+
+**What 300 users need.** 300 × 13.05 ms ≈ 3.9 production cores of CPU, ~5.6 cores of today's
+class at 70% (**Verified** costs, the core count is arithmetic). In practice: option (d) on a
+dedicated, faster class (4 cores), Redis and 3 workers, then a load test on the harness to confirm
+(**Estimate**). 300 users at 10× data also need the database's working set in memory (3.5), which
+points to (d) + (e) or a larger-memory plan. Today's box carries 30.
 
 ## 7. Decision memos
 
-PENDING_7
+Each memo gives the options, cost and risk, a recommendation and the data behind it. Cost is given
+as a multiple of today's monthly server cost; the plan names and prices are in the private notes.
+
+### 7.1 Hosting and CPU class
+
+**Data.** The current box serves 30 concurrent active users within the targets (3.1). The limit is
+queueing on one core at about 45% CPU, not CPU exhaustion. Production traffic today is far below
+that (pre-launch; the exact figures stay private). 300 users need about 3.9 production cores of
+CPU (300 × 13.05 ms), i.e. ~6 cores of today's class at 70% (section 6).
+
+| Option | Users within targets | Monthly cost | Risk |
+|---|---|---|---|
+| Stay on (a) | 30 (**Verified**) | 1× | no headroom for a launch spike; overload now degrades safely (503 + `Retry-After`) |
+| (b) Faster CPU class, same size | ~40–50 (**estimate**) | not confirmed (price not on the provider's page) | resize needs a short downtime; gain not measured |
+| (c) 2 cores, 1 worker | ≥ 60 (**Verified**; knee not reached, Feed p95 434 ms at 60) | 2× shared, ~3.5× dedicated | the single worker is the limit (its core hits the cap in bursts while the box is at 39%); the start-up burst of 40–60 sessions is partly shed at cap 32 and cap 48 (section 6): needs the start-up `Retry-After` change or a queue first |
+| (d) 4 cores + Redis + 3 workers | not measured; the only listed layout with CPU for ~200–300 | 4× shared, ~7× dedicated, + engineering (7.2) | new moving part (Redis), multi-process state |
+| (e) app box + separate/managed Postgres | see section 6 | +1.3× to +5× for the database | network hop per query; managed plans may lack PostGIS versions or extensions (check before choosing) |
+
+**Recommendation.** Ship package 1 on the current box; no hosting change is needed for today's
+traffic. Set a trigger instead of a date: when the daily peak of concurrent active users reaches
+~15 (half the measured knee), or the peak-hour backend+db CPU p95 exceeds 40% of the core, move to
+(b) if its price is close to today's, otherwise to (c), the cheapest measured step (2×, ≥ 60
+users). Plan (d) on a faster class for a 300-user target, and load-test it on the harness before
+calling it done. (e) is the step for data growth rather than users (3.5).
+
+### 7.2 Redis rate-limit store and several uvicorn workers
+
+**Data.** One uvicorn worker uses at most one core (the GIL). On today's single core, more workers
+add no CPU: the core is already shared with Postgres and nginx. Workers only help from 2 cores up.
+The in-memory limiter is per process; `prod_preflight.py` fails a multi-worker image with
+`RATE_LIMIT_BACKEND=memory`, and `RATE_LIMIT_BACKEND=redis` is a reserved setting with no store
+yet (**From code**).
+
+**Recommendation: approve the design now and build it together with the move to ≥ 2 cores**
+(option (c) or later); it buys nothing on one core.
+
+**Minimal implementation plan** (effort M, one backend release plus a Compose change):
+1. `RedisRateLimitStore` behind the existing `RateLimitStore` protocol. One Lua script per hit
+   (sliding window on a sorted set, or a fixed window with `INCR` + `EXPIRE`) so a hit is atomic;
+   key = bucket + identity; TTL = window.
+2. Make the store call async (`redis.asyncio`): the limiter is plain ASGI now, and a blocking call
+   on the event loop would stall every request.
+3. **Failure policy:** fail open on a Redis error (allow, log once per interval, count it), with a
+   short circuit breaker. Rate limits are abuse protection, not correctness; failing closed would
+   turn a Redis outage into an API outage. Owner decision if login/register should fail closed
+   instead.
+4. Move the other per-process state: the upload single-flight guard (one publication per user in
+   flight) becomes `SET key NX EX 300` in Redis, released on completion. The in-flight cap stays per
+   worker; its value must be re-measured on the new box with the start-up burst (on 2 cores, cap 32
+   already shed it with one worker; section 6).
+5. Compose: `redis:7-alpine`, no persistence, `maxmemory 64mb`, `allkeys-lru`, internal network
+   only, no published port. Infrastructure change, needs owner approval.
+6. Workers: `uvicorn --workers 3` (or gunicorn with uvicorn workers). DB pool per worker (5 + 10
+   overflow) × 3 = 45 connections plus the notification worker: within Postgres' default 100.
+   Memory: ~150 MB per worker; check the box's memory budget (today's box has ~1.4 GB for all
+   services).
+7. Preflight: `RATE_LIMIT_BACKEND=redis` with `--workers` passes; check that the Redis URL is set
+   and reachable.
+8. Tests: the store contract tests run against both stores (a Redis service in CI); a multi-worker
+   test shows one limit enforced across workers; the existing 429 byte-for-byte tests stay.
+9. Load test on the harness with the new core count before any deploy (the slope and knee method,
+   sections 2–3).
+
+### 7.3 Map tiles (OSM tile server or a cache)
+
+**Data (From code).** The map and both location pickers load tiles straight from the public OSM
+tile server (`tile.openstreetmap.org`), with an identifying user agent. That server is a donated
+service with a usage policy (no heavy use, no SLA, it may block apps). Tile traffic was not part
+of the load test (**Not checked**). At the modelled map behaviour (a settled pan every ~8 s), 300
+map users would fetch tiles continuously; the app's own server is not on that path.
+
+| Option | Cost | Risk |
+|---|---|---|
+| Keep the public OSM server | 0 | blocking or throttling without notice under growth; policy risk |
+| Commercial raster/vector tile provider with a key | free tier, then usage-based | a key in the client (restrict by app/referrer); vendor lock-in is low (URL template change) |
+| Cache proxy in front of OSM (Cloudflare or nginx) | small | still subject to OSM policy; cache rules and invalidation to own |
+| Self-hosted vector tiles (a single PMTiles file on object storage) | storage + egress | client needs a vector renderer; style work |
+
+**Recommendation:** switch to a provider with a key before any marketing push or a jump in map
+users; it is a URL-template and attribution change in three places. Measure tile requests per map
+session on a device first (it decides the tier).
+
+### 7.4 Per-IP rate-limit ceilings for carrier NAT
+
+**Data (Verified, 3.3).** 40 users behind one IP: 15.5% 429s before FIX-7; 0% on reads with
+public read at 360/min; the remaining guest 429s are view telemetry (invisible).
+
+**Recommendation:** package 1 with `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=360` (decided). Keep the
+anonymous 30/min for auth flows. Set `RATE_LIMIT_TELEMETRY_PER_MINUTE=120` only if production shows
+guest 429s on view telemetry (log 429s by bucket after the deploy to see it). Keying guests by IP +
+install id is the next step if real CGNAT pools are larger than 40 users; the install id is
+untrusted, so only to raise the per-IP ceiling, never alone.
+
+### 7.5 `post_views` retention or roll-up
+
+**Data.** `post_views` is a write-only de-duplication table: one row per (viewer, post), and the
+unique index turns repeats into no-ops; it is read only to delete a user's rows (**From code**).
+In the seeded 1× dataset it is 312 MB of a 533 MB database (59%); at 10×, 2.7 GB of 4.6 GB. At
+10× its unique index no longer fits in memory and the batch insert averages 0.8 s (3.5). Production
+is far smaller today (private notes). There is no index on `created_at`.
+
+**Options.** (1) Keep every (viewer, post) row: exact "one view per viewer", grows with users ×
+posts seen. (2) Retention: delete rows older than N days; `posts.view_count` is already a stored
+counter, so counts stay, but a viewer can be counted again after N days. (3) Roll-up into daily
+per-post counts: same behaviour change, more code.
+
+**Recommendation:** no change now; it is not a limit at today's size. Add the table's size to the
+monthly checks, and when it reaches about a quarter of the database box's memory, adopt (2). The
+owner picks N (e.g. 90 days), because a returning viewer is then counted again after N days. (2)
+needs a BRIN index on `created_at` (one small migration) and a nightly batched delete.
+
+### 7.6 Remaining behaviour-changing optimisations
+
+**Data.** Profile shares at 10 users (backend Python): Pydantic `dump_json` 8.7%, the FastAPI
+telemetry wrapper 1.4%. A+B+C removed work worth ~20% of samples and gave **no measurable gain**
+(3): on this box the time goes to queueing on the shared core, and Postgres is ~36% of the
+marginal cost.
+
+| Option | Expected gain | Risk |
+|---|---|---|
+| Drop response models on hot paths (return pre-serialised JSON) | ≤ 5% of backend CPU (estimate from the profile share; likely within noise, as A+B+C was) | response shape changes (aliases, exclusions, datetime and float formats); needs snapshot tests like D's |
+| Remove the FastAPI telemetry wrapper | ~1% | loses request telemetry |
+| Map pins: store "latest public post" on the cat (FIX-4 follow-up) | `/cats` is the slowest tail at 20 users (3.1); a pure bbox index scan | write-path maintenance on post create/delete/moderation |
+| Quantise the map bbox to a tile grid and cache 15–30 s | repeated pans hit the cache | stale pins for up to 30 s |
+| uvicorn `--limit-concurrency` (503 before the app) | bounds the backlog in front of the app that gave 34 × 504 after 2.5 min at 300 users (3.6) | a too-low value refuses normal bursts; needs the burst and 300-user runs again |
+
+**Recommendation:** do not do the first two now. If more single-box capacity is needed before a
+hosting change, the map-pin denormalisation and bbox caching are the larger levers; each needs its
+own measurement.
 
 ## 8. Deploy package 1: "no outage" + query fixes + A+B+C
 
@@ -610,7 +863,8 @@ auth code is the same on `main` and `perf/fixes`.
 - It does not read `Retry-After` there. The new client's `Retry-After` handling (`6a5a3db`,
   busy countdown with 2–60 s backoff, no manual retry while busy) covers the feed and map
   screens only.
-- With cap 32 no start-up 503 occurred in the 40-session burst, so this path is a fallback.
+- With cap 32 no start-up 503 occurred in the 40-session burst on today's box, so this path is a
+  fallback there. On a 2-core box with cap 32 it is not (section 6).
 - Backlog (owner, 2026-11-16; not implemented): the start-up session check should honour
   `Retry-After` on 503/429 (section 9).
 
@@ -680,7 +934,12 @@ models on hot paths, the start-up `Retry-After` change (backlog, 8.5).
 - **Production row counts and data shape** vs the seed: capacity is measured on the seeded 1× and
   10× sets; production is far smaller today.
 - **Option (b) CPU classes** are an estimate from public benchmarks (section 6), not measured.
-- **Options (d) and (e)** are not measured (section 6).
+- **Options (d) and (e)** are not measured (section 6). The option (c) knee above 60 users was not
+  located.
+- **Where the 504 backlog sits** at 300 users after ~2.5 min (nginx, uvicorn's accept queue or the
+  event loop; 3.6).
+- **Why a 2-core box delivers the start-up burst faster** than the 1-core box (section 6); the
+  shed counts are measured, the cause is not.
 - **Single-request query timings (`cost_probe`)** ran with the harness artefact in the background
   and were not re-measured (last section).
 - **Old-client 503 path on a device:** the "session unavailable" and retry behaviour is read from the
@@ -708,11 +967,11 @@ place, unedited, for the record.
 
 | Source | Statement | Why superseded | Replacement |
 |---|---|---|---|
-| REPORT.md §1, §3 | Single core saturates at 60–80 users; targets missed at 20 users | Box was a full workstation core (≈3–4 production cores), minus ~13% artefact | Section 3 above; stress ladder (pending) |
+| REPORT.md §1, §3 | Single core saturates at 60–80 users; targets missed at 20 users | Box was a full workstation core (≈3–4 production cores), minus ~13% artefact | Sections 3 and 3.1–3.7 |
 | REPORT.md §1 | "~11 ms of CPU per user-second", "one core 100% busy at ~90 users" | Bottom-up estimate from idle single-request timings; never measured | Slope: 13.1 ms (after), 34.9 ms (before) of a production core |
-| REPORT.md §3.4 | 10× dataset saturates at 40 users | Same box and artefact as above | 10× run at the new knee (pending) |
-| REPORT.md §3 (upload OOM) | Two max-size uploads OOM-kill the backend | Functional finding stands (FIX-6), but each shim healthcheck also loaded the app in the backend's memory; the margin is re-measured in the upload stress (pending) | Upload stress (pending) |
-| Prod-sized runs 2026-11-13/14 (before-stress, baseline-after, stress-after, cap16, recovery runs) | Before: knee 10–15 users, Feed p95 > 1.4 s at 5 users; recovery 198 s → 31.6 s; 1,660 × 504 at 300 users with cap 48 | The artefact took ~30–45% of the emulated production core in every run | Re-runs (pending, task 5) |
+| REPORT.md §3.4 | 10× dataset saturates at 40 users | Same box and artefact as above | Section 3.5: at 10× data the box does not hold 30 users |
+| REPORT.md §3 (upload OOM) | Two max-size uploads OOM-kill the backend | Functional finding stands (FIX-6), but each shim healthcheck also loaded the app in the backend's memory; the margin was re-measured in 5c | Section 3.3: 10/10 published, box memory peak 78%, no OOM |
+| Prod-sized runs 2026-11-13/14 (before-stress, baseline-after, stress-after, cap16, recovery runs) | Before: knee 10–15 users, Feed p95 > 1.4 s at 5 users; recovery 198 s → 31.6 s; 1,660 × 504 at 300 users with cap 48 | The artefact took ~30–45% of the emulated production core in every run | Sections 3.1–3.7 |
 | CPU-per-user measurements 2026-11-14 | 73.3 → 51.4 ms per user-second; ~13.6 users per core | Averages at 10 users that include the idle floor, with the artefact (~0.3 core) in the floor | Section 3 (floor 0.06 core, slope 13.1 ms) |
 | Profile reading 2026-11-14 | "Postgres only ~14% of box CPU, the rest per-request Python" | Share of a box CPU inflated by the artefact | Slopes: Postgres ~36% of marginal cost |
 | CPU runs 13:34:35 and 13:34:49 (2026-11-14) | Full-core CPU check | The two runs overlapped (driver edited while running); fixed in `008c72a` | Not needed (section 3) |
