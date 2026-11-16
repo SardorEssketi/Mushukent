@@ -66,6 +66,8 @@ case "$cmd" in
     env | grep '^LT_' > "$out/env.txt" || true
     "$PY" tools/monitor.py "$out" --interval 5 &
     mon=$!
+    # LT_SIDE_PROBE=1: 1/s health + feed timings outside Locust (for when Locust is CPU-bound)
+    [ "${LT_SIDE_PROBE:-0}" = "1" ] && { "$PY" tools/side_probe.py "$out" & }
     LT_OUT="$out" LT_SHAPE="$name" "$PY" -m locust -f locustfile.py --headless \
       --csv "$out/locust" --csv-full-history --html "$out/report.html" \
       --only-summary --loglevel WARNING ${LT_EXTRA:-} 2> "$out/locust.log" &
