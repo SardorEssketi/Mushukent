@@ -23,8 +23,9 @@ carry ~48 users at 70% (section 3).
 Repeats at the knee (5b) show ±150 ms of run-to-run spread: 35 users meets the targets in 2 of
 3 runs, so 35 is the knee with no margin and 30 users is the figure with margin. At 300 users an
 in-flight cap of 16 sheds the excess in ~1 ms with 503 + `Retry-After`. It cuts the server p95
-for served requests from 2.9 to 1.8 s and halves recovery (11–13 s vs 21–23 s), with no cost
-below the knee: **ship cap 16** (section 3.2).
+for served requests from 2.9 to 1.8 s and halves recovery (11–13 s vs 21–23 s). **But it also
+sheds ~55% of requests during the first ~20 s of a 35–40-session start-up burst**, which cap 48
+absorbs (slowly) without a 503. The cap value is open (section 3.2).
 
 Still pending: uploads, CGNAT, spike, target 300, 10× data, soak (5c–5g).
 
@@ -129,8 +130,9 @@ Feed < 500 / map < 700 ms (**Verified**):
 | 40 | cap 48 (three runs) | 542 / 503, 572 / 409, 631 / 450 ms | no |
 | 40 | cap 16 | 377 / 404 ms | yes |
 
-No run at 35 or 40 users shed a single request (0 × 503), so the cap value cannot explain these
-differences: the spread is run-to-run noise, about ±150 ms on the Feed p95 at this load.
+No run at 35 or 40 users shed a single request **in the steady window** (0 × 503), so the cap
+value cannot explain these differences: the spread is run-to-run noise, about ±150 ms on the Feed
+p95 at this load. (Cap 16 does shed during the start-up burst before that window; section 3.2.)
 Reading: **35 users meets the targets in 2 of 3 runs and 40 users in 1 of 4**. The knee is 35
 users, with no margin; 30 users is the figure with margin.
 
@@ -138,9 +140,25 @@ users, with no margin; 30 users is the figure with margin.
 
 Image `bf7b7ff`, 1× data, parallel query off unless stated otherwise.
 
-**Below and at the knee the cap costs nothing.** At 35 and 40 users, cap 16 shed 0 requests,
-the same as cap 48 (table above). With no sheds the cap is never reached, so it does not touch
-capacity below the knee. (**Verified**)
+**Correction (5c, 2026-11-16): below the knee, cap 16 does cost something, during start-up
+bursts.** The first version of this section said cap 16 shed 0 requests at 35 and 40 users. That
+count covered only the steady window, after the 90 s warm-up. Over the whole run (**Verified**):
+
+| Run | 503 sheds | When |
+|---|---|---|
+| cap 16, 35 users | 256 (14.7% of the first 180 s) | all within t = 10–30 s |
+| cap 16, 40 users | 292 (14.7% of the first 180 s); 277 of 494 requests (56%) in t = 10–30 s | all within t = 10–30 s |
+| cap 16, 40 users behind one IP (5c) | 121 | all within t = 10–30 s |
+| cap 48, 40 users | 0 (first-180 s p95 4.2 s instead) | n/a |
+
+The harness starts users at 10 per second. So 35–40 sessions open the app within ~4 s, and each
+cold start fires three `users/me`, unread count, two follow-up checks, then the first feed or map
+page. That burst puts more than 16 requests in flight. Cap 48 queues it (p95 4.2 s for ~20 s);
+cap 16 refuses about half of it. For the current app, a 503 on `users/me` at start-up is a
+retryable session-restore failure (an error with retry, no sign-out; section 8.5).
+
+Whether real start-ups cluster like this (a push notification to everyone, a morning peak) is
+**Not checked**. The cap value is therefore **open** (see the note at the end of this section).
 
 **At 300 users (60 s ramp, 120 s hold, then the recovery probe):**
 
@@ -175,7 +193,57 @@ Reading (**Verified**):
   latency, as a real phone would see it, is therefore not measured. The relative comparison of
   the caps holds.
 
-**Recommendation: ship `MAX_IN_FLIGHT_REQUESTS=16`.**
+**Cap value: open.**
+- Cap 16 is clearly better under sustained overload (300 users).
+- Cap 48 absorbs a 35–40-session start-up burst without refusals.
+- An intermediate cap (24 or 32) has not been measured yet. The measurements that would settle
+  it are the 40-user burst and the traced 300-user run, at cap 24 and cap 32, about 25 min.
+- Until then, package 1 ships the code default, 48: the measured "no surprise" setting.
+
+### 3.3 CGNAT, uploads (task 5c)
+
+Package-1 configuration: image `bf7b7ff`, cap 16, parallel query **on** (no FIX-10), 1× data.
+
+**40 users behind one IP (the FIX-7 gate).** Steady-window 429 share, by persona
+(**Verified**):
+
+| Run | guest feed | guest map | user feed | user map | user poster | all requests, whole run |
+|---|---|---|---|---|---|---|
+| before FIX-7 (2026-11-13) | 54.9% | 36.2% | 0% | 6.8% | 0% | 15.5% |
+| before FIX-7, expired tokens | 56.7% | 42.6% | 8.9% | 10.4% | 16.1% | 21.4% |
+| package 1 | 0.8% | 2.0% | 0% | 0.1% | 0% | 0.54% |
+| package 1, expired tokens (refresh storm) | 3.0% | 2.4% | 0% | 0.1% | 0% | 0.80% |
+
+- **Gate result: not met as written** ("0 × 429 for a normal profile behind a shared IP").
+  - Signed-in users are at 0–0.1%.
+  - Guests still see 1–3% 429s. They share one per-IP public-read bucket of 180/min, together
+    with the token-less marker taps and places calls of signed-in users on that IP.
+  - FIX-7 cuts the 429 share ~30× (15.5% → 0.54%), and the refresh storm no longer spills into
+    signed-in reads.
+- 429s on `users/me` (2 in the expired-token run) come from the per-user bucket during the
+  start-up burst.
+- 503 sheds: all in the first 30 s (start-up burst, cap 16; section 3.2). After that, 0 × 5xx.
+
+**Uploads: 10 concurrent publications × 5 max-size photos (7.8 MB, ~24.6 MP each)**
+(**Verified**):
+
+| | before FIX-6 (audit) | package 1 |
+|---|---|---|
+| Result | 2 at once: backend OOM-killed (exit 137) | 10 / 10 published (201), 33–109 s each |
+| Backend memory peak | over its limit | 773 MiB |
+| Box memory peak (docker stats) | n/a | 1,093 MiB, 78% of the box's memory limit, no OOM event |
+| Feed / like probe during the burst, p95 | n/a | 751 / 610 ms (before: 213 / 114 ms) |
+
+The earlier "after" upload run (2026-11-14, `upload-cap8-10-after`) ended in connection errors
+and is not evidence. The first 5c attempt got 401s from expired tokens (below).
+
+**Harness caveat: expired access tokens since 2026-11-14 13:21.** Test tokens live 60 min. Runs
+after that time started every signed-in session with one 401 + refresh, the client's normal
+recovery. Affected runs: the 5a repeats, 5b, the compatibility check and 5c CGNAT. The cost is one
+extra refresh per signed-in session (mean session 8 min). That is small next to the session's
+other requests, but it is not zero, and it makes the "expired tokens" runs nearly identical to the
+normal ones. Tokens were re-minted (`seed --tokens-only`) before the valid upload run. The rest of
+task 5 re-mints tokens before every run.
 
 ## 8. Deploy package 1: "no outage" + query fixes + A+B+C
 
@@ -216,9 +284,9 @@ Index names: `idx_posts_location_geography_knn`, `idx_lost_pets_location_geograp
 `idx_posts_cat_public_latest` (0033), `idx_posts_popular` (0034), `idx_comments_post_visible`
 (0035).
 
-**In-flight cap: ship 16** (section 3.2). The code default is 48, so step 4 sets
-`MAX_IN_FLIGHT_REQUESTS=16` in the production `.env`. The value can be changed later without a
-new image.
+**In-flight cap: open** (section 3.2). Until it is decided, ship the code default 48 (no `.env`
+line). Step 4 sets `MAX_IN_FLIGHT_REQUESTS` only if a lower value is chosen. The value can be
+changed later without a new image.
 
 ### 8.2 Why one package, and the one deviation from the requested list
 
@@ -238,6 +306,12 @@ new image.
   gets its own bucket, and refresh is limited per refresh session with a per-IP backstop. Login
   and registration limits are unchanged. Its gate is the CGNAT run in 5c: 0 × 429 for a normal
   profile behind a shared IP.
+- **5c result: not met for guests** (1–3% 429; signed-in 0–0.1%; whole run 0.54%, down from
+  15.5% before FIX-7; section 3.3). Owner decision pending.
+  - Dropping FIX-7 now would bring back the 15.5%, so keeping it is better than dropping it even
+    though it misses the gate.
+  - A higher `RATE_LIMIT_PUBLIC_READ_PER_MINUTE` (an `.env` value, no new image) would likely
+    close the remaining gap. Not measured.
 - **If 5c fails, or you do not want FIX-7 now:** drop both FIX-7 and A+B+C from the package.
   A+B+C has no measured capacity gain (section 3), so nothing measured is lost. Rebasing A+B+C
   without FIX-7 would produce a new, untested tree and is not recommended.
@@ -259,7 +333,7 @@ Assumptions (re-check at step 1): production runs backend image `8939818` at Ale
 | 1 | Read-only inspection (G1): `remote-inspect.sh`, plus `health` | `alembic current` = `20261110_0031`; running image = overlay image; free disk for the indexes; no INVALID index: `select indexrelid::regclass from pg_index where not indisvalid` returns nothing; `.env` key **names** contain none of `DB_POOL_TIMEOUT_SECONDS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `SERVICE_BUSY_RETRY_AFTER_SECONDS`, `MAX_IN_FLIGHT_REQUESTS`, `RATE_LIMIT_TELEMETRY_PER_MINUTE`, `RATE_LIMIT_REFRESH_PER_MINUTE`, `RATE_LIMIT_REFRESH_IP_PER_MINUTE` (or their values are reviewed) | none needed |
 | 2 | Build locally, `build-backend-image.sh` from the merge commit (G0); stage the release directory and `docker load` (G2) | exactly one Alembic head (`20261114_0035`); image checksum; overlay: only the two image tags changed; `config --quiet` passes | delete the staged directory; the image tag is unused |
 | 3 | Backup (G3): `backup-db.sh --execute`, copied off the server | `pg_restore --list` passes | none needed |
-| 4 | Add `MAX_IN_FLIGHT_REQUESTS=16` to the new release's `.env` (owner edits; key names compared only) | the key is absent before (step 1) | remove the line (back to the default 48) |
+| 4 | Only if a cap below 48 is chosen (section 3.2): add `MAX_IN_FLIGHT_REQUESTS=<value>` to the new release's `.env` (owner edits; key names compared only) | the key is absent before (step 1) | remove the line (back to the default 48) |
 | 5 | **Indexes first** (G5), while the old backend serves: `$DC run --rm --no-deps -T backend alembic upgrade head` (new image) | low-traffic window; step 1 checks done | a build that fails or is cancelled leaves an INVALID index: `DROP INDEX CONCURRENTLY <name>`, then re-run. A finished index is kept (old code ignores it; no `alembic downgrade`, per runbook) |
 | 6 | Check the indexes | `alembic current` = `20261114_0035`; all five indexes exist; the INVALID query returns nothing; the API stays healthy during the build | as step 5 |
 | 7 | Swap (G4): stop the worker, wait until no push job is `sending`, recreate the backend, wait for healthy, recreate the worker, **immediately** `nginx -t && nginx -s reload` | backup < 12 h old; step 6 passed | runbook "Backend failed, schema additive": Compose from the previous release directory (previous image), worker stop → backend → healthy → worker → Nginx reload. Keep the indexes |
