@@ -42,6 +42,7 @@ _chrome-*.png
 /.data/
 /.codex/
 /screens/
+/docs/qa/
 /.release-build-*
 
 # Local research inputs, evidence, generated outputs, and release workspaces
