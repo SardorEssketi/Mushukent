@@ -20,8 +20,13 @@ latency targets (Feed p95 338 ms, map p95 249 ms) and 40 users miss them in both
 section). The limit is latency from queueing on one core, not CPU. By CPU alone the box would
 carry ~48 users at 70% (section 3).
 
-Still pending: the rest of task 5 (in-flight cap, uploads, CGNAT, spike, 300 users, 10× data,
-soak).
+Repeats at the knee (5b) show ±150 ms of run-to-run spread: 35 users meets the targets in 2 of
+3 runs, so 35 is the knee with no margin and 30 users is the figure with margin. At 300 users an
+in-flight cap of 16 sheds the excess in ~1 ms with 503 + `Retry-After`. It cuts the server p95
+for served requests from 2.9 to 1.8 s and halves recovery (11–13 s vs 21–23 s), with no cost
+below the knee: **ship cap 16** (section 3.2).
+
+Still pending: uploads, CGNAT, spike, target 300, 10× data, soak (5c–5g).
 
 ## 2. Capacity method: marginal cost, not average
 
@@ -113,6 +118,65 @@ Where the time goes (traced; the slow tail of the slowest endpoints is in
   125 ms waiting for the core) and `/views/seen`. At 35–40 users, post detail and comments join
   them.
 
+**Run-to-run spread at the knee (5b repeats).** Every repeat at 35–40 users, plain runs, targets
+Feed < 500 / map < 700 ms (**Verified**):
+
+| Users | Run | Feed / map p95 | Meets targets |
+|---|---|---|---|
+| 35 | cap 48, parallel query off | 338 / 249 ms | yes |
+| 35 | cap 16, parallel query off | 548 / 458 ms | **no** (Feed) |
+| 35 | cap 48, parallel query **on** | 389 / 358 ms | yes |
+| 40 | cap 48 (three runs) | 542 / 503, 572 / 409, 631 / 450 ms | no |
+| 40 | cap 16 | 377 / 404 ms | yes |
+
+No run at 35 or 40 users shed a single request (0 × 503), so the cap value cannot explain these
+differences: the spread is run-to-run noise, about ±150 ms on the Feed p95 at this load.
+Reading: **35 users meets the targets in 2 of 3 runs and 40 users in 1 of 4**. The knee is 35
+users, with no margin; 30 users is the figure with margin.
+
+### 3.2 In-flight cap 16 vs 48 (task 5b)
+
+Image `bf7b7ff`, 1× data, parallel query off unless stated otherwise.
+
+**Below and at the knee the cap costs nothing.** At 35 and 40 users, cap 16 shed 0 requests,
+the same as cap 48 (table above). With no sheds the cap is never reached, so it does not touch
+capacity below the knee. (**Verified**)
+
+**At 300 users (60 s ramp, 120 s hold, then the recovery probe):**
+
+**Caveat: Locust (one process) was CPU-bound in all four 300-user runs** ("CPU usage above 90%"
+from the first seconds). Its timings include its own queueing: it saw sheds take 13.6 s, while the
+server answered them in 1.1 ms. The runs were therefore repeated with the per-request tracer and an
+independent probe (`LT_SIDE_PROBE=1`: one health and one feed request per second outside Locust),
+and the comparison below uses **server-side** times (`tools/overload_split.py`). The box itself
+was at its CPU quota in all four runs. (**Verified**)
+
+| At 300 users | cap 16 | cap 48 |
+|---|---|---|
+| Server time, 200s, p50 / p95 | **0.94 / 1.84 s** | 1.29 / 2.88 s |
+| Server time, 503 sheds, p50 / p95 | 1.1 / 90 ms | none shed |
+| Sheds (503 `SERVICE_BUSY` + `Retry-After`) | 21–27% of requests | 0 |
+| 504s, timeouts, connection errors | 0 | 0 |
+| Requests answered 200 (traced run) | 2,443 | 2,578 (+5%) |
+| Pool wait p95 / thread-pool wait p95 (200s) | 362 / 710 ms | 618 / 1,034 ms |
+| Event-loop lag, median of per-second p95 | 179 ms | 232 ms |
+| Recovery to normal after the load stops (two runs each) | **10.7 s, 13.2 s** | 20.5 s, 22.9 s |
+| Locust-side p95 (inflated by the generator) | 16.7–18.0 s | 22.3–23.2 s |
+
+Reading (**Verified**):
+- Cap 16 turns overload into fast 503s. Server latency for the requests it serves drops by about
+  a third (p95 1.8 vs 2.9 s), and recovery takes half as long (11–13 s vs 21–23 s).
+- The cost at 300 users is ~5% fewer requests answered 200. Below the knee there is no cost.
+- Neither cap produced a 504 or a timeout. With cap 48 the server-side latency was still growing
+  at the end of the hold; with cap 16 it was flat.
+- **Not checked:** the independent probe's own tail (health p95 7–9 s, both caps) while the
+  server-side shed time was ~1 ms. Requests waited somewhere outside the app's timed section
+  (nginx/TLS on the throttled core, the accept queue, or the workstation). The 300-user client
+  latency, as a real phone would see it, is therefore not measured. The relative comparison of
+  the caps holds.
+
+**Recommendation: ship `MAX_IN_FLIGHT_REQUESTS=16`.**
+
 ## 8. Deploy package 1: "no outage" + query fixes + A+B+C
 
 **Measured capacity of the current box: ~35 concurrent active users after the fixes, against
@@ -152,9 +216,9 @@ Index names: `idx_posts_location_geography_knn`, `idx_lost_pets_location_geograp
 `idx_posts_cat_public_latest` (0033), `idx_posts_popular` (0034), `idx_comments_post_visible`
 (0035).
 
-**The in-flight cap value to ship is pending 5b** (cap 16 vs 48 at the knee and at 300 users). The
-code default is 48. It is set with `MAX_IN_FLIGHT_REQUESTS` in the production `.env`, so the value
-can be changed later without a new image.
+**In-flight cap: ship 16** (section 3.2). The code default is 48, so step 4 sets
+`MAX_IN_FLIGHT_REQUESTS=16` in the production `.env`. The value can be changed later without a
+new image.
 
 ### 8.2 Why one package, and the one deviation from the requested list
 
@@ -181,8 +245,8 @@ can be changed later without a new image.
 **Not in this package:**
 - The client changes (`6a5a3db` busy-retry UI and shared start-up requests; `6921c99` view
   batches every 30 s) are a web release (procedure A) plus an Android build.
-- The old clients keep working: under overload they show the generic error instead of "busy,
-  retrying". Recommended right after package 1.
+- The old clients keep working with the new backend (section 8.5). Rollout order and gates are in
+  section 8.6.
 
 ### 8.3 Order, pre-checks and rollback per step
 
@@ -195,7 +259,7 @@ Assumptions (re-check at step 1): production runs backend image `8939818` at Ale
 | 1 | Read-only inspection (G1): `remote-inspect.sh`, plus `health` | `alembic current` = `20261110_0031`; running image = overlay image; free disk for the indexes; no INVALID index: `select indexrelid::regclass from pg_index where not indisvalid` returns nothing; `.env` key **names** contain none of `DB_POOL_TIMEOUT_SECONDS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `SERVICE_BUSY_RETRY_AFTER_SECONDS`, `MAX_IN_FLIGHT_REQUESTS`, `RATE_LIMIT_TELEMETRY_PER_MINUTE`, `RATE_LIMIT_REFRESH_PER_MINUTE`, `RATE_LIMIT_REFRESH_IP_PER_MINUTE` (or their values are reviewed) | none needed |
 | 2 | Build locally, `build-backend-image.sh` from the merge commit (G0); stage the release directory and `docker load` (G2) | exactly one Alembic head (`20261114_0035`); image checksum; overlay: only the two image tags changed; `config --quiet` passes | delete the staged directory; the image tag is unused |
 | 3 | Backup (G3): `backup-db.sh --execute`, copied off the server | `pg_restore --list` passes | none needed |
-| 4 | Set the in-flight cap in the new release's `.env` if 5b recommends a value other than 48 (owner edits; key names compared only) | value from 5b | revert the line |
+| 4 | Add `MAX_IN_FLIGHT_REQUESTS=16` to the new release's `.env` (owner edits; key names compared only) | the key is absent before (step 1) | remove the line (back to the default 48) |
 | 5 | **Indexes first** (G5), while the old backend serves: `$DC run --rm --no-deps -T backend alembic upgrade head` (new image) | low-traffic window; step 1 checks done | a build that fails or is cancelled leaves an INVALID index: `DROP INDEX CONCURRENTLY <name>`, then re-run. A finished index is kept (old code ignores it; no `alembic downgrade`, per runbook) |
 | 6 | Check the indexes | `alembic current` = `20261114_0035`; all five indexes exist; the INVALID query returns nothing; the API stays healthy during the build | as step 5 |
 | 7 | Swap (G4): stop the worker, wait until no push job is `sending`, recreate the backend, wait for healthy, recreate the worker, **immediately** `nginx -t && nginx -s reload` | backup < 12 h old; step 6 passed | runbook "Backend failed, schema additive": Compose from the previous release directory (previous image), worker stop → backend → healthy → worker → Nginx reload. Keep the indexes |
@@ -229,9 +293,65 @@ Nginx or Compose configuration and needs its own approval and procedure.
 |---|---|---|---|
 | Nginx API read timeout (FIX-1, LT-02) | `526628c` | cut non-upload API requests after 30 s | web/Nginx release unit (procedure A); not required for package 1: the API's own 15 s statement timeout and 3 s pool timeout already bound requests |
 | Nginx resolver (FIX-9, LT-11) | `522fb40` | re-resolve the backend address at request time | removes the manual `nginx -s reload` after a backend swap; until then, step 7's reload is mandatory |
-| Parallel query off (FIX-10, LT-17) | `903497f` | `docker-compose.prod.yml`: no parallel workers for the single-core database | **Every "after" measurement ran with parallel query off.** Package 1 without FIX-10 is therefore not the measured combination; it will be measured at the knee with parallel query on (queued with 5b). Applying it through Compose recreates the database container. `ALTER SYSTEM` + reload would avoid a restart, but it is also a production configuration change. Either way it needs approval |
+| Parallel query off (FIX-10, LT-17) | `903497f` | `docker-compose.prod.yml`: no parallel workers for the single-core database | **Optional for package 1.** Package 1 without FIX-10 (parallel query on, the production setting) was measured at the knee: 35 users, Feed / map p95 389 / 358 ms, 0 errors, box CPU 0.510 vs 0.494 core with it off (+3%, within noise). It meets the targets (**Verified**, 1× data; the 10× data run in 5f will repeat it). Applying it through Compose recreates the database container. `ALTER SYSTEM` + reload would avoid a restart, but it is also a production configuration change. Either way it needs approval |
+
+### 8.5 Backward compatibility: un-updated clients on the new backend
+
+**Live check (Verified).** The harness models the client as it is on `main` today, the build
+users have. It makes three `GET /users/me` at start-up, sends `POST /views/seen` every 10 s,
+sends map marker taps and places without a token, and polls unread count and follow-ups once a
+minute. The check ran 20 users for 5 min on the package backend (`bf7b7ff`), one IP per user,
+cap 48:
+- 1,887 requests: **0 × 429, 0 × 5xx, 0 × 503**.
+- Token-less marker taps and places: all 200. `views/seen`: all 200.
+- 13 × 401 on `users/me` (expired access tokens), each followed by a successful refresh and
+  retry.
+- 9 × 409 on like (post already liked) and 1 × 422 on save (`CANNOT_SAVE_OWN_POST`, the harness
+  picked the user's own post). Both are existing behaviour; neither route changes in the package.
+- Feed and map p95 ~150–260 ms after the first 40 s (the cold start of 20 sessions at once is
+  slower: p95 2.7 s in the first 20 s).
+
+Behind one shared IP (CGNAT) the gate is the 5c run.
+
+**Behaviour on 503 `SERVICE_BUSY` (From code).**
+- The old client maps any 5xx to a retryable server error, shows its generic error with a retry
+  button, and keeps the session. A 503 during session restore, or on `POST /auth/refresh`, does
+  not delete the token or sign the user out. Only 401/403/404 do that, and the package does not
+  change those.
+- What changes for old clients: under overload, a user sees "request failed, retry" sooner,
+  instead of a long spinner. A user can tap retry at once; each refused request costs the server
+  ~1 ms (section 3.2).
+
+### 8.6 Rollout order and gates: backend → web → Android
+
+| # | Step | Depends on | Gate | Can ship independently? |
+|---|---|---|---|---|
+| 1 | Backend package 1 (section 8.3) | merge to `main`, CI green | G0–G6, post-deploy checks | yes; old clients work with it (8.5) |
+| 2 | Web build with `6a5a3db` + `6921c99` (procedure A) | nothing on the server; recommended after 1 so "busy, retrying" has a 503 `SERVICE_BUSY` to react to | web release gates; smoke on the live site | yes (below) |
+| 3 | Android release (same two commits, new build number) | nothing on the server | Play internal track, then production | yes (below) |
+
+The new client also works with the old backend (From code):
+- It sends `views/seen` batches of at most 20 items, the limit the backend already enforces; only
+  the interval changes (30 s instead of 10 s).
+- Concurrent `users/me` requests are shared on the client.
+- "Busy" handling triggers on 429 (which the old backend already sends, with `Retry-After`) or on
+  503 with code `SERVICE_BUSY`; otherwise the old error handling applies.
+
+So the three steps can ship in any order. The recommended order is backend → web → Android, for
+two reasons:
+- The backend carries the capacity gain.
+- The client change only shows its benefit once the backend sheds with `SERVICE_BUSY`.
+
+Android users update slowly, so the old-client behaviour in 8.5 is what most users will see for
+weeks.
 
 ## Superseded measurements
+
+**300-user runs measured with one Locust process (all dates).** Locust was CPU-bound from the
+start ("CPU usage above 90%"), so its latencies at 300 users include generator queueing: up to
+~10 s at the median (section 3.2). The original audit's 300-user latency figures carry the same
+artefact. The pass/fail verdict at 300 users stands, because the box was at its CPU quota and
+server-side latency was 1–3 s. The absolute client-side seconds do not stand.
 
 The load-test harness ran the backend healthcheck **every 10 s with the load-test shim on
 `PYTHONPATH`**, so each check imported application modules: **1.28 s of workstation CPU per check
