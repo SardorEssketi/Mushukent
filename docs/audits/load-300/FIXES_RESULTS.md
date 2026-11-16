@@ -12,16 +12,20 @@ this file uses only derived factors.
 
 ## 1. Verdict
 
-**Measured capacity of the current box (one production core): ~35 concurrent active users after
-the fixes, against fewer than 10 before** (**Verified**). After the fixes, 35 users meet the
-latency targets (Feed p95 338 ms, map p95 249 ms) and 40 users miss them in both runs (Feed p95
-542 and 572 ms). Before the fixes, the Feed p95 was already 984 ms at 10 users. The earlier
+**Measured capacity of the current box (one production core): 30 concurrent active users after
+the fixes, against fewer than 10 before** (**Verified**). Targets: Feed p95 < 500 ms, map p95
+< 700 ms.
+- 30 users met the targets in 3 of 3 runs (Feed p95 263–420 ms).
+- 35 users met them in 2 of 4 runs; 40 users in 1 of 5. 35 is the edge, not a planning figure.
+- Before the fixes, the Feed p95 was already 984 ms at 10 users.
+
+The first version of this verdict said ~35, from a single run at 35 users. Repeats with fresh test
+tokens moved it to 30 (section 3.1). The earlier
 "10–15 users before" figure came from artefact-affected runs and is superseded (see the last
 section). The limit is latency from queueing on one core, not CPU. By CPU alone the box would
 carry ~48 users at 70% (section 3).
 
-Repeats at the knee (5b) show ±150 ms of run-to-run spread: 35 users meets the targets in 2 of
-3 runs, so 35 is the knee with no margin and 30 users is the figure with margin. At 300 users an
+Repeats at the knee show ±150 ms of run-to-run spread on the Feed p95. At 300 users an
 in-flight cap of 16 sheds the excess in ~1 ms with 503 + `Retry-After`. It cuts the server p95
 for served requests from 2.9 to 1.8 s and halves recovery (11–13 s vs 21–23 s). **But it also
 sheds ~55% of requests during the first ~20 s of a 35–40-session start-up burst**, which cap 48
@@ -88,7 +92,7 @@ Feed p95 < 500 ms, map p95 < 700 ms (client side, through nginx/TLS). (**Verifie
 | 35 | 0.49 | **338 / 249 ms** | 582 / 521 ms | 137 ms |
 | 40 | 0.60–0.67 | 542 / 503 and 572 / 409 ms (two runs) | 2,019 / 1,729 ms | 338 ms |
 
-**Capacity by latency: 35 active users**, the highest step that meets both targets without the
+**Capacity by latency: 35 active users in the first ladder** (superseded by the repeats below: **30**), the highest step that met both targets without the
 tracer. For reference, the CPU-based figure is ~48 users at 70% (section 3). No errors and no 503
 sheds at any step.
 
@@ -120,22 +124,30 @@ Where the time goes (traced; the slow tail of the slowest endpoints is in
   125 ms waiting for the core) and `/views/seen`. At 35–40 users, post detail and comments join
   them.
 
-**Run-to-run spread at the knee (5b repeats).** Every repeat at 35–40 users, plain runs, targets
-Feed < 500 / map < 700 ms (**Verified**):
+**Run-to-run spread at the knee (5b repeats and fresh-token repeats).** Every plain run at 30–40
+users, targets Feed < 500 / map < 700 ms (**Verified**). Runs marked "fresh" used valid test
+tokens; the others started each signed-in session with one 401 + refresh (section 3.3).
 
 | Users | Run | Feed / map p95 | Meets targets |
 |---|---|---|---|
+| 30 | cap 48, parallel query off | 344 / 260 ms | yes |
+| 30 | cap 48, parallel query off, fresh (two runs) | 420 / 280, 263 / 273 ms | yes, yes |
 | 35 | cap 48, parallel query off | 338 / 249 ms | yes |
 | 35 | cap 16, parallel query off | 548 / 458 ms | **no** (Feed) |
 | 35 | cap 48, parallel query **on** | 389 / 358 ms | yes |
+| 35 | cap 48, parallel query off, fresh | 588 / 313 ms | **no** (Feed) |
 | 40 | cap 48 (three runs) | 542 / 503, 572 / 409, 631 / 450 ms | no |
 | 40 | cap 16 | 377 / 404 ms | yes |
+| 40 | cap 48, parallel query off, fresh | 528 / 420 ms | no |
+
+Data drift over the test days is small: ~9% more posts and ~10% more view rows than seeded. It
+does not explain the spread.
 
 No run at 35 or 40 users shed a single request **in the steady window** (0 × 503), so the cap
 value cannot explain these differences: the spread is run-to-run noise, about ±150 ms on the Feed
 p95 at this load. (Cap 16 does shed during the start-up burst before that window; section 3.2.)
-Reading: **35 users meets the targets in 2 of 3 runs and 40 users in 1 of 4**. The knee is 35
-users, with no margin; 30 users is the figure with margin.
+Reading: **30 users meets the targets in 3 of 3 runs, 35 users in 2 of 4, 40 users in 1 of 5.**
+Capacity for planning: **30 active users**. 35 is the edge.
 
 ### 3.2 In-flight cap 16 vs 48 (task 5b)
 
@@ -252,6 +264,24 @@ Package-1 configuration: image `bf7b7ff`, cap 16, parallel query **on** (no FIX-
     signed-in reads.
 - 429s on `users/me` (2 in the expired-token run) come from the per-user bucket during the
   start-up burst.
+
+**Follow-up: `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=360`** (cap 32, parallel query on, fresh tokens;
+**Verified**):
+
+| Run | guest feed | guest map | signed-in (all) | 429s by endpoint |
+|---|---|---|---|---|
+| 40 users / 1 IP | 3.5% | **0%** | **0%** | 12 × `POST /views/seen` |
+| same, expired tokens | 4.5% | **0%** | **0%** | 16 × `views/seen`, 3 × `POST /posts/{id}/views` |
+
+- **Every 429 left is view telemetry, none is a read.** Guest reads are at 0%. The telemetry
+  bucket for guests defaults to the anonymous limit, 30/min per IP
+  (`RATE_LIMIT_TELEMETRY_PER_MINUTE` unset), and all guests behind the IP share it.
+- **No visible error (From code):** a failed `views/seen` batch is dropped silently; the cards
+  can be reported again later. The cost is lost view counts for guests behind a shared IP.
+- **Gate (guests ≤ 0.5% 429): not met as worded** (3.5–4.5% of guest-feed requests). Met if the
+  gate is read as "no user-visible 429".
+- **Next option (not applied, needs the owner):** `RATE_LIMIT_TELEMETRY_PER_MINUTE`, e.g. 120.
+  It raises only the view-telemetry bucket, but it applies per user as well as per IP.
 - 503 sheds: all in the first 30 s (start-up burst, cap 16; section 3.2). After that, 0 × 5xx.
 
 **Uploads: 10 concurrent publications × 5 max-size photos (7.8 MB, ~24.6 MP each)**
@@ -278,7 +308,7 @@ then, test tokens live 7 days, and `run.sh` refuses to start when they expire wi
 
 ## 8. Deploy package 1: "no outage" + query fixes + A+B+C
 
-**Measured capacity of the current box: ~35 concurrent active users after the fixes, against
+**Measured capacity of the current box: 30 concurrent active users after the fixes (35 is the edge), against
 fewer than 10 before** (section 3.1). Most of the gain comes from the query fixes (FIX-2..5, 11);
 the "no outage" fixes (FIX-1, 6, 8) make overload fail fast instead of turning into an outage.
 Nothing here has been deployed. Every production step below needs the owner's approval for that
