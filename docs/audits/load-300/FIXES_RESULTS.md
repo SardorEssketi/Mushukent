@@ -25,7 +25,8 @@ Repeats at the knee (5b) show ±150 ms of run-to-run spread: 35 users meets the 
 in-flight cap of 16 sheds the excess in ~1 ms with 503 + `Retry-After`. It cuts the server p95
 for served requests from 2.9 to 1.8 s and halves recovery (11–13 s vs 21–23 s). **But it also
 sheds ~55% of requests during the first ~20 s of a 35–40-session start-up burst**, which cap 48
-absorbs (slowly) without a 503. The cap value is open (section 3.2).
+absorbs (slowly) without a 503. Of caps 16/24/32/48 and a 2 s wait queue, **cap 32** is the
+best setup with zero refusals in the burst (section 3.2).
 
 Still pending: uploads, CGNAT, spike, target 300, 10× data, soak (5c–5g).
 
@@ -193,12 +194,41 @@ Reading (**Verified**):
   latency, as a real phone would see it, is therefore not measured. The relative comparison of
   the caps holds.
 
-**Cap value: open.**
-- Cap 16 is clearly better under sustained overload (300 users).
-- Cap 48 absorbs a 35–40-session start-up burst without refusals.
-- An intermediate cap (24 or 32) has not been measured yet. The measurements that would settle
-  it are the 40-user burst and the traced 300-user run, at cap 24 and cap 32, about 25 min.
-- Until then, package 1 ships the code default, 48: the measured "no surprise" setting.
+**Cap 24 and 32, and a short wait queue (follow-up, 2026-11-16).**
+
+Same image, 1× data, parallel query off, fresh tokens. One run per cell. Queue variants use
+image `cq-86f4a6e`, a prototype on the local branch `perf/cap-queue`, not in any package:
+requests over the cap wait first-in, first-out up to 2 s for a slot (at most 64 waiting), then
+503. (**Verified**)
+
+| Setup | 40-user start-up burst: 503s | 300 users: server p95 of 200s | 300 users: shed share, server time of a shed | Recovery |
+|---|---|---|---|---|
+| cap 16 | 292 | **1.84 s** | 21–27%, 1 ms | 10.7 s, 13.2 s |
+| cap 24 | 66 | 2.59 s | 8%, 0.6 ms | 13.9 s |
+| **cap 32** | **0** | 2.92 s | 1%, 0.7 ms | **18.3 s** |
+| cap 48 | 0 | 2.88 s | 0 | 20.5 s, 22.9 s |
+| cap 16 + 2 s queue | 20 | 3.83 s (includes the wait) | 38%, **2.1 s** | 6.3 s |
+| cap 24 + 2 s queue | 1 | 4.37 s (includes the wait) | 14%, **2.2 s** | 13.2 s |
+
+Reading:
+- Only cap 32 and cap 48 refused nothing in the burst. Cap 24 + queue came close (1 refusal).
+- **The wait queue absorbs bursts but hurts sustained overload.** At 300 users the queue is
+  always full, so every request over the cap waits the full 2 s and then a third of them are
+  shed anyway. Served requests get ~1.5 s slower (p95 3.8–4.4 s vs 1.8–2.9 s), and a shed costs
+  the client 2 s instead of 1 ms. Its only gain is faster recovery with cap 16 (6 s). A queue
+  that helps both cases would need a much shorter wait or a smaller queue, and is not worth
+  shipping on this evidence.
+- **Among the setups with zero burst refusals, cap 32 is the best measured.** At 300 users it
+  has the same p95 as cap 48 (2.9 s, within noise) and recovers in 18 s vs 21–23 s. Its
+  overload benefit over 48 is small: it sheds only ~1% at 300 users. Its real advantage over
+  48 is a hard upper bound on queued work.
+- Single runs per cell; differences under ~10% are within noise.
+
+**Recommendation: `MAX_IN_FLIGHT_REQUESTS=32`, no queue.**
+- Zero refusals in a 40-session start-up burst, and overload behaviour no worse than 48.
+- Cap 16's better overload numbers cost refusals at the knee, which the brief rules out.
+- The queue prototype (`perf/cap-queue`, `86f4a6e`, ~45 lines of middleware logic with 4 tests;
+  the backend suite passes, 758 passed) stays unmerged.
 
 ### 3.3 CGNAT, uploads (task 5c)
 
@@ -285,9 +315,8 @@ Index names: `idx_posts_location_geography_knn`, `idx_lost_pets_location_geograp
 `idx_posts_cat_public_latest` (0033), `idx_posts_popular` (0034), `idx_comments_post_visible`
 (0035).
 
-**In-flight cap: open** (section 3.2). Until it is decided, ship the code default 48 (no `.env`
-line). Step 4 sets `MAX_IN_FLIGHT_REQUESTS` only if a lower value is chosen. The value can be
-changed later without a new image.
+**In-flight cap: 32** (section 3.2), set in the production `.env` at step 4. The code default
+stays 48. The value can be changed later without a new image.
 
 ### 8.2 Why one package, and the one deviation from the requested list
 
@@ -334,7 +363,7 @@ Assumptions (re-check at step 1): production runs backend image `8939818` at Ale
 | 1 | Read-only inspection (G1): `remote-inspect.sh`, plus `health` | `alembic current` = `20261110_0031`; running image = overlay image; free disk for the indexes; no INVALID index: `select indexrelid::regclass from pg_index where not indisvalid` returns nothing; `.env` key **names** contain none of `DB_POOL_TIMEOUT_SECONDS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_LOCK_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `SERVICE_BUSY_RETRY_AFTER_SECONDS`, `MAX_IN_FLIGHT_REQUESTS`, `RATE_LIMIT_TELEMETRY_PER_MINUTE`, `RATE_LIMIT_REFRESH_PER_MINUTE`, `RATE_LIMIT_REFRESH_IP_PER_MINUTE` (or their values are reviewed) | none needed |
 | 2 | Build locally, `build-backend-image.sh` from the merge commit (G0); stage the release directory and `docker load` (G2) | exactly one Alembic head (`20261114_0035`); image checksum; overlay: only the two image tags changed; `config --quiet` passes | delete the staged directory; the image tag is unused |
 | 3 | Backup (G3): `backup-db.sh --execute`, copied off the server | `pg_restore --list` passes | none needed |
-| 4 | Only if a cap below 48 is chosen (section 3.2): add `MAX_IN_FLIGHT_REQUESTS=<value>` to the new release's `.env` (owner edits; key names compared only) | the key is absent before (step 1) | remove the line (back to the default 48) |
+| 4 | `.env` changes for the new release (owner edits; key names compared only): `MAX_IN_FLIGHT_REQUESTS=32`; `RATE_LIMIT_PUBLIC_READ_PER_MINUTE=<value from 3.3>` (approval-flagged config item) | both keys absent before (step 1) | remove the lines (back to the code defaults, 48 and 180) |
 | 5 | **Indexes first** (G5), while the old backend serves: `$DC run --rm --no-deps -T backend alembic upgrade head` (new image) | low-traffic window; step 1 checks done | a build that fails or is cancelled leaves an INVALID index: `DROP INDEX CONCURRENTLY <name>`, then re-run. A finished index is kept (old code ignores it; no `alembic downgrade`, per runbook) |
 | 6 | Check the indexes | `alembic current` = `20261114_0035`; all five indexes exist; the INVALID query returns nothing; the API stays healthy during the build | as step 5 |
 | 7 | Swap (G4): stop the worker, wait until no push job is `sending`, recreate the backend, wait for healthy, recreate the worker, **immediately** `nginx -t && nginx -s reload` | backup < 12 h old; step 6 passed | runbook "Backend failed, schema additive": Compose from the previous release directory (previous image), worker stop → backend → healthy → worker → Nginx reload. Keep the indexes |
@@ -396,6 +425,16 @@ Behind one shared IP (CGNAT) the gate is the 5c run.
 - What changes for old clients: under overload, a user sees "request failed, retry" sooner,
   instead of a long spinner. A user can tap retry at once; each refused request costs the server
   ~1 ms (section 3.2).
+
+**Start-up 503 (`users/me` during session restore), old and new client alike (From code).** The
+auth code is the same on `main` and `perf/fixes`.
+- A 503 makes session restore a retryable failure. The app shows its "session unavailable"
+  screen, keeps the session, and reconnects automatically after 3, 6, 12, 24 and 48 s. There is
+  also a retry button, and the app re-checks when resumed.
+- It does not read `Retry-After` there. The new client's `Retry-After` handling (`6a5a3db`,
+  busy countdown with 2–60 s backoff, no manual retry while busy) covers the feed and map
+  screens only.
+- With cap 32 no start-up 503 occurred in the 40-session burst, so this path is a fallback.
 
 ### 8.6 Rollout order and gates: backend → web → Android
 
