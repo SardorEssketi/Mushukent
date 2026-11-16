@@ -300,9 +300,10 @@ def mint_tokens(conn, count: int) -> list[dict[str, str]]:
     issuer = os.getenv("JWT_ISSUER", "mushukistan-api")
     audience = os.getenv("JWT_AUDIENCE", "mushukistan-mobile")
     now = datetime.now(UTC)
-    # Long-lived on purpose: the load generator also models refresh separately. Production
-    # access tokens live 60 minutes (JWT_ACCESS_TOKEN_EXP_MINUTES).
-    exp = now + timedelta(hours=12)
+    # Long-lived on purpose (7 days by default, SEED_TOKEN_TTL_HOURS): the load generator models
+    # refresh separately (LT_EXPIRED_TOKENS), and run.sh refuses to start with tokens that would
+    # expire during a run. Production access tokens live 60 minutes (JWT_ACCESS_TOKEN_EXP_MINUTES).
+    exp = now + timedelta(hours=int(os.getenv("SEED_TOKEN_TTL_HOURS", "168")))
     rows = conn.execute(
         text("SELECT id::text, email FROM users WHERE NOT is_moderator ORDER BY email LIMIT :n"),
         {"n": count},

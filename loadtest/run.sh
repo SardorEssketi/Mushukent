@@ -55,6 +55,7 @@ case "$cmd" in
     guard_acquire run "$@"
     guard_no_active_load
     guard_memory
+    "$PY" tools/token_check.py "${LT_TOKEN_MIN_HOURS:-3}" || exit 5
     name=${1:?scenario}; shift
     for kv in "$@"; do export "$kv"; done
     out="results/$(date +%Y%m%d-%H%M%S)-${name}${LT_TAG:+-$LT_TAG}"
