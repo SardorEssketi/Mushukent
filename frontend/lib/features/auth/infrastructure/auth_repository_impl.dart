@@ -165,21 +165,26 @@ class MushukistanAuthRepository implements AuthRepository {
                 message: _restoreInvalidMessage(refreshError),
               );
             }
-            return SessionRestoreFailure(
-              message: refreshError.userMessage,
-              retryable: refreshError.isRetryable,
-            );
+            return _restoreFailure(refreshError);
           }
         } else {
           await _deleteIfRevision(revision);
           return SessionRestoreInvalid(message: _restoreInvalidMessage(error));
         }
       }
-      return SessionRestoreFailure(
-        message: error.userMessage,
-        retryable: error.isRetryable,
-      );
+      return _restoreFailure(error);
     }
+  }
+
+  /// A busy answer (429, 503 SERVICE_BUSY) is temporary by definition: it stays retryable and
+  /// carries the server's `Retry-After`, so the reconnect waits at least that long.
+  static SessionRestoreFailure _restoreFailure(MushukistanApiException error) {
+    return SessionRestoreFailure(
+      message: error.userMessage,
+      retryable: error.isRetryable || error.isBusy,
+      busy: error.isBusy,
+      retryAfter: error.isBusy ? error.retryAfter : null,
+    );
   }
 
   @override
