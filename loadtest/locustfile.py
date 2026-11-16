@@ -450,7 +450,12 @@ if SHAPE:
         "baseline": [(300, 10, 2)],
         "target": [(600, 300, 0.5), (1500, 300, 1)],          # ramp 10 min, hold 15 min
         # 0 -> 300 in 1 min, hold 5 min, then drop to 30 users for 5 min to see if it recovers
-        "spike": [(60, 300, 5), (360, 300, 5), (660, 30, 50)],
+        # (LT_SPIKE_HOLD_S / LT_SPIKE_TAIL_S shorten it; tail 0 ends at the hold, e.g. for
+        # LT_RECOVERY=1)
+        "spike": [(60, 300, 5), (60 + int(os.getenv("LT_SPIKE_HOLD_S", "300")), 300, 5)]
+                 + ([(60 + int(os.getenv("LT_SPIKE_HOLD_S", "300"))
+                      + int(os.getenv("LT_SPIKE_TAIL_S", "300")), 30, 50)]
+                    if int(os.getenv("LT_SPIKE_TAIL_S", "300")) > 0 else []),
         # 3-minute steps of 20 users to locate the knee (target already fails at ~110)
         # LT_STEP_USERS per 3-minute step, LT_STEPS steps (defaults: 20 x 8)
         "stress": [(int(os.getenv("LT_STEP_S", "180")) * (i + 1),
