@@ -237,13 +237,14 @@ Package-1 configuration: image `bf7b7ff`, cap 16, parallel query **on** (no FIX-
 The earlier "after" upload run (2026-11-14, `upload-cap8-10-after`) ended in connection errors
 and is not evidence. The first 5c attempt got 401s from expired tokens (below).
 
-**Harness caveat: expired access tokens since 2026-11-14 13:21.** Test tokens live 60 min. Runs
-after that time started every signed-in session with one 401 + refresh, the client's normal
-recovery. Affected runs: the 5a repeats, 5b, the compatibility check and 5c CGNAT. The cost is one
+**Harness caveat: expired access tokens from 2026-11-15 00:21.** The test tokens were minted on
+2026-11-14 with a 12 h lifetime. Runs after they expired started every signed-in session with one
+401 + refresh, the client's normal recovery. Affected runs: the 5a repeats, 5b, the compatibility check and 5c CGNAT. The cost is one
 extra refresh per signed-in session (mean session 8 min). That is small next to the session's
 other requests, but it is not zero, and it makes the "expired tokens" runs nearly identical to the
-normal ones. Tokens were re-minted (`seed --tokens-only`) before the valid upload run. The rest of
-task 5 re-mints tokens before every run.
+normal ones. Tokens were re-minted (`seed --tokens-only`) before the valid upload run. Since
+then, test tokens live 7 days, and `run.sh` refuses to start when they expire within 3 h
+(`tools/token_check.py`). `LT_EXPIRED_TOKENS=1` still sends genuinely expired tokens.
 
 ## 8. Deploy package 1: "no outage" + query fixes + A+B+C
 

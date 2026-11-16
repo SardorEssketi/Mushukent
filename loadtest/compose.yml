@@ -76,6 +76,8 @@ services:
       LOADTEST_POOL_LOG: /loadtest-out/pool.jsonl
       LOADTEST_TRACE: ${LOADTEST_TRACE:+/loadtest-out/trace.jsonl}  # LOADTEST_TRACE=1: per-request time breakdown
       MAX_IN_FLIGHT_REQUESTS: ${MAX_IN_FLIGHT_REQUESTS:-48}
+      IN_FLIGHT_QUEUE_SECONDS: ${IN_FLIGHT_QUEUE_SECONDS:-0}  # perf/cap-queue images only
+      RATE_LIMIT_PUBLIC_READ_PER_MINUTE: ${RATE_LIMIT_PUBLIC_READ_PER_MINUTE:-180}
     volumes:
       - ./shim:/loadtest-shim:ro
       - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
