@@ -50,8 +50,8 @@ steady window (section 6). On that box, though, both cap 32 and cap 48 shed part
 start-up burst. The start-up session check honouring `Retry-After` (backlog), or a short wait
 queue, has to come with that move.
 
-**FIX-10 (parallel query off) is not recommended:** it made 10× data worse (3.5). It was optional
-and is not in package 1, so package 1 is unchanged.
+**FIX-10 (parallel query off) is dropped** (owner, 2026-11-16): it made 10× data worse (3.5). It
+was never in package 1 and is in no package.
 
 ## 2. Capacity method: marginal cost, not average
 
@@ -393,7 +393,7 @@ Package-1 configuration (image `bf7b7ff`, cap 32, public read 360), the seeded 1
   167k–208k temp blocks. The `post_views` batch insert averaged 0.8 s (its unique index no longer
   fits in memory).
 - Parallel query off is worse here, not better (the plans were not captured, so why is **Not
-  checked**). **FIX-10 is therefore not recommended** in its current form (8.4).
+  checked**). **FIX-10 is therefore dropped** (owner decision, 2026-11-16).
 - The capacity at 10× data was not located below 30 users (**Not checked**); the levers are the
   map-pin denormalisation and bbox caching (7.6), `post_views` retention (7.5), and more memory
   (section 6).
@@ -474,7 +474,7 @@ behind the fix, plus where it shows in the endpoint table. Backend suite on the 
 | FIX-7 `eaa3c6f` | read-only public GETs → public-read bucket; own view-telemetry bucket; refresh per refresh session with a per-IP backstop | `test_rate_limit_buckets.py` | CGNAT 40 users / 1 IP: 15.5% → 0.54% 429s at 180/min; reads 0% at 360/min (3.3) (**Verified**) | Non-policy parts only: per-IP ceilings unchanged in code (360 comes from the `.env`); no install-id keying. The client part (token on marker taps and places, busy/`Retry-After` UX) shares commit `6a5a3db` with LT-21 (one `users/me` at start-up), because both change the same start-up and map request code |
 | FIX-8 `3fae54a` | worker: a bad job fails alone (data errors terminal, transport errors retried); keeps claiming while batches come back full | `test_notification_worker_resilience.py` | removes the ~100 pushes/min ceiling (From code; backlog drain not load-tested) | As proposed |
 | FIX-9 `522fb40` | nginx re-resolves the backend through Docker DNS (10 s) | manual: backend recreated, the 502s stopped without a reload (**Verified**) | removes the 22,378 × 502 failure mode | As proposed. Infrastructure, needs owner approval (package 2) |
-| FIX-10 `903497f` | `max_parallel_workers_per_gather=0` in the prod Compose file | n/a | 1×: none measurable (+3%, within noise; 8.4); 10×: **worse** with it off (map p95 15.8 vs 5.8 s, 7.3% vs 0% errors; 3.5) | Optional (owner decision); package 2 |
+| FIX-10 `903497f` | `max_parallel_workers_per_gather=0` in the prod Compose file | n/a | 1×: none measurable (35 users, box CPU 0.494 vs 0.510 core with it on, +3%, within noise); 10×: **worse** with it off (map p95 15.8 vs 5.8 s, 7.3% vs 0% errors; 3.5) | **Dropped** by the owner (2026-11-16); in no package |
 | FIX-11 `7455510` | popular feed order index | backend suite | the popular page reads its rows from the index instead of scan + sort (plan) | Predicate `deleted_at IS NULL` only (the proposal also had `is_public`): a slightly larger index that also serves non-public rows |
 | LT-02 nginx `526628c` | 30 s read timeout for non-upload API requests | n/a | not load-tested alone; the 15 s statement and 3 s pool timeouts already bound requests | Infrastructure, package 2 |
 | A+B+C `bf7b7ff` | async no-I/O dependencies; one JWT decode per request; rate limiter as plain ASGI | `test_request_overhead.py` (3 → 1 decodes), `test_rate_limit_asgi.py`, `test_auth.py` | **none measurable** (slope 13.05 vs 13.10 ms) (3) | Kept: behaviour-neutral and tested, and FIX-7 sits on its limiter rewrite |
@@ -575,6 +575,13 @@ dedicated, faster class (4 cores), Redis and 3 workers, then a load test on the 
 points to (d) + (e) or a larger-memory plan. Today's box carries 30.
 
 ## 7. Decision memos
+
+**Owner decisions (2026-11-16):** package 1 approved, with `MAX_IN_FLIGHT_REQUESTS=32` and
+`RATE_LIMIT_PUBLIC_READ_PER_MINUTE=360` (7.4); FIX-10 dropped; stay on the current box (7.1), with
+production observability and the start-up `Retry-After` change as the next work; Redis and several
+workers approved as a design, built with a move to ≥ 2 cores (7.2); the owner chooses a tile
+provider from a comparison (7.3); `post_views` unchanged for now, retention later from a 90-day
+starting point (7.5); the optimisations in 7.6 not now, `--limit-concurrency` kept in the memo.
 
 Each memo gives the options, cost and risk, a recommendation and the data behind it. Cost is given
 as a multiple of today's monthly server cost; the plan names and prices are in the private notes.
@@ -826,7 +833,9 @@ Nginx or Compose configuration and needs its own approval and procedure.
 |---|---|---|---|
 | Nginx API read timeout (FIX-1, LT-02) | `526628c` | cut non-upload API requests after 30 s | web/Nginx release unit (procedure A); not required for package 1: the API's own 15 s statement timeout and 3 s pool timeout already bound requests |
 | Nginx resolver (FIX-9, LT-11) | `522fb40` | re-resolve the backend address at request time | removes the manual `nginx -s reload` after a backend swap; until then, step 7's reload is mandatory |
-| Parallel query off (FIX-10, LT-17) | `903497f` | `docker-compose.prod.yml`: no parallel workers for the single-core database | **Optional for package 1.** Package 1 without FIX-10 (parallel query on, the production setting) was measured at the knee: 35 users, Feed / map p95 389 / 358 ms, 0 errors, box CPU 0.510 vs 0.494 core with it off (+3%, within noise). It meets the targets (**Verified**, 1× data). **At 10× data, turning it off made things worse** (map p95 15.8 vs 5.8 s, 7.3% vs 0% errors; section 3.5), so FIX-10 is not recommended as it stands. Applying it through Compose recreates the database container. `ALTER SYSTEM` + reload would avoid a restart, but it is also a production configuration change. Either way it needs approval |
+
+FIX-10 (`903497f`, parallel query off) is **dropped** (owner, 2026-11-16) and is in no package. The
+commit stays on the reference branch `perf/fixes` only; that branch is not to be merged as a whole.
 
 ### 8.5 Backward compatibility: un-updated clients on the new backend
 
@@ -894,7 +903,7 @@ weeks.
 ## 9. Deploy package 2: everything else (plan only)
 
 Package 1 already carries every migration (0032–0035, all `CONCURRENTLY` index builds, applied
-before the backend swap; 8.3). **Package 2 has no migration.** It is four units, each with its own
+before the backend swap; 8.3). **Package 2 has no migration.** It is three units, each with its own
 approval. None is needed for package 1 to work. **2a and 2c are one release unit:** the web build and
 the nginx config ship together (procedure A), so whatever nginx config is on `main` goes out with
 the next web release. To ship the client without the nginx changes, keep `522fb40` and `526628c` off
@@ -905,11 +914,9 @@ the next web release. To ship the client without the nginx changes, keep `522fb4
 | 2a | Web build with the client changes | `6a5a3db`, `6921c99` | web release, procedure A (`release-web`: prepare, owner `approve`, deploy) | package 1 live (so `SERVICE_BUSY` exists); Flutter suite and analyze green on the merge commit | `release-web rollback` to the previous web release (owner-signed approval) | sign-in, feed, map with marker tap and places, a like, a publication; views counted once; on a forced 429 the busy countdown shows |
 | 2b | Android release | same two commits, new build number | Play internal track, then production (owner) | as 2a; device QA on a slow network (section 10) | halt the staged rollout; the old build keeps working (8.5) | as 2a on a device; crash-free rate in the Play console |
 | 2c | nginx: re-resolve the backend (FIX-9) and the 30 s API read timeout (LT-02) | `522fb40`, `526628c` | `infrastructure/` change, **needs owner approval before deploy**; ships with a web release (same unit as 2a) | `nginx -t` in the staged release; upload routes keep 180 s | previous `default.conf` from the previous release directory, `nginx -t && nginx -s reload` | `/api/v1/health` 200; a photo publication succeeds (180 s route); recreate the backend once in a quiet window and confirm the API answers **without** an nginx reload |
-| 2d | Parallel query off (FIX-10): **not recommended** (3.5) | `903497f` | prod Compose change, **needs owner approval before deploy**; recreates the db container (seconds of downtime) or `ALTER SYSTEM` + reload (no restart, still a config change) | backup < 12 h old (G3); package 1 live (FIX-2 must be in first: with parallel query off, the old nearby plan goes from ~1 s to 6–9 s) | set it back to 2 (Compose) or `ALTER SYSTEM RESET` + reload | `show max_parallel_workers_per_gather` = 0; nearby feed and map p95 in the logs no worse over a day |
 
 Recommended order: 2a → 2b (the client benefit only shows once package 1 sheds with
-`SERVICE_BUSY`), 2c together with 2a once approved (otherwise 2a without it), 2d **not recommended**: at 10× data, parallel query off made the map
-p95 15.8 s instead of 5.8 s, with 7.3% errors (3.5).
+`SERVICE_BUSY`), 2c together with 2a once approved (otherwise 2a without it). FIX-10 is dropped (8.4).
 
 Not in either package (decisions first, section 7): the Redis rate-limit store with several
 workers, a tile provider or cache, the telemetry rate limit, `post_views` roll-up, dropping response
