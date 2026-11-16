@@ -66,6 +66,7 @@ def _service_busy(request: Request, reason: str) -> JSONResponse:
         settings, "service_busy_retry_after_seconds", _DEFAULT_RETRY_AFTER_SECONDS
     )
     logger.warning("service_busy", reason=reason, method=request.method, path=request.url.path)
+    request.state.service_busy_reason = reason  # read by the ops metrics middleware
     response = _build_error_response(
         503,
         "SERVICE_BUSY",

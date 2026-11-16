@@ -40,6 +40,7 @@ class LoadSheddingMiddleware:
             if admitted:
                 self._in_flight += 1
         if not admitted:
+            scope.setdefault("state", {})["service_busy_reason"] = "in_flight_cap"  # ops metrics
             response = JSONResponse(
                 status_code=503,
                 headers={"Retry-After": str(self.retry_after)},
