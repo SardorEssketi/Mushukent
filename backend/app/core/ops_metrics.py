@@ -22,7 +22,6 @@ import math
 import os
 import random
 import secrets
-import threading
 import time
 from collections import deque
 from collections.abc import Callable, Iterable
@@ -93,11 +92,20 @@ class _RouteStats:
 
 
 class OpsMetrics:
-    """Thread-safe counters for one interval. ``snapshot_and_reset`` closes the interval."""
+    """Counters for one interval. ``snapshot_and_reset`` closes the interval.
+
+    Lock-free by design. A lock shared by the event loop and the 40 database worker threads cost
+    ~4 ms of CPU per request on the one-core box (measured, plan section 5): a worker preempted
+    while holding it stalls the event loop. So:
+
+    * request counters are touched only on the event loop (the middleware and the reporter run
+      there), which is one thread;
+    * pool waits arrive from worker threads as a plain ``list.append``, atomic under the GIL, and
+      the snapshot swaps the list for a new one instead of locking.
+    """
 
     def __init__(self, *, clock: Callable[[], float] = time.monotonic, seed: int | None = None):
         self._clock = clock
-        self._lock = threading.Lock()
         self._rng = random.Random(seed)
         self._salt = secrets.token_bytes(16)
         self._started = clock()
@@ -123,34 +131,33 @@ class OpsMetrics:
         )
         self._requests = 0
         self._in_flight_max = self._in_flight
-        self._pool_waits: list[float] = []
-        self._pool_timeouts = 0
+        # Swapped, never cleared: a worker thread may still append to the old list.
+        self._pool_waits: list[tuple[float, bool]] = []
 
     # -- recording ------------------------------------------------------------------------------
 
-    def request_started(self) -> None:
-        with self._lock:
-            self._in_flight += 1
-            self._in_flight_max = max(self._in_flight_max, self._in_flight)
+    def request_started(self) -> None:  # event loop only
+        self._in_flight += 1
+        if self._in_flight > self._in_flight_max:
+            self._in_flight_max = self._in_flight
 
     def request_finished(
         self, *, key: str, status: int, elapsed_ms: float, actor: str | None, busy: str | None
-    ) -> None:
-        now = self._clock()
-        with self._lock:
-            self._in_flight -= 1
-            self._requests += 1
-            self._routes.setdefault(key, _RouteStats()).add(elapsed_ms, self._rng)
-            self._status[_status_bucket(status, busy)] += 1
-            if actor is not None:
-                self._last_seen[actor] = now
+    ) -> None:  # event loop only
+        self._in_flight -= 1
+        self._requests += 1
+        stats = self._routes.get(key)
+        if stats is None:
+            stats = self._routes[key] = _RouteStats()
+        stats.add(elapsed_ms, self._rng)
+        self._status[_status_bucket(status, busy)] += 1
+        if actor is not None:
+            self._last_seen[actor] = self._clock()
 
-    def record_pool_wait(self, wait_ms: float, timed_out: bool) -> None:
-        with self._lock:
-            if len(self._pool_waits) < _MAX_SAMPLES_PER_ROUTE:
-                self._pool_waits.append(wait_ms)
-            if timed_out:
-                self._pool_timeouts += 1
+    def record_pool_wait(self, wait_ms: float, timed_out: bool) -> None:  # any thread
+        waits = self._pool_waits  # one read, then one atomic append: no lock
+        if len(waits) < _MAX_SAMPLES_PER_ROUTE or timed_out:
+            waits.append((wait_ms, timed_out))
 
     def actor_key(self, user_id: str | None, address: str | None, user_agent: str) -> str | None:
         if user_id:
@@ -164,20 +171,21 @@ class OpsMetrics:
 
     # -- reporting ------------------------------------------------------------------------------
 
-    def snapshot_and_reset(self) -> dict[str, Any]:
+    def snapshot_and_reset(self) -> dict[str, Any]:  # event loop only
         now = self._clock()
-        with self._lock:
-            routes, status = self._routes, self._status
-            requests, in_flight_max = self._requests, self._in_flight_max
-            pool_waits, pool_timeouts = self._pool_waits, self._pool_timeouts
-            duration = max(now - self._interval_start, 1e-9)
-            horizon = now - max(_ACTIVE_WINDOWS.values())
-            self._last_seen = {k: t for k, t in self._last_seen.items() if t >= horizon}
-            active = {
-                name: sum(1 for t in self._last_seen.values() if t >= now - window)
-                for name, window in _ACTIVE_WINDOWS.items()
-            }
-            self._reset(now)
+        routes, status = self._routes, self._status
+        requests, in_flight_max = self._requests, self._in_flight_max
+        recorded = self._pool_waits
+        duration = max(now - self._interval_start, 1e-9)
+        horizon = now - max(_ACTIVE_WINDOWS.values())
+        self._last_seen = {k: t for k, t in self._last_seen.items() if t >= horizon}
+        active = {
+            name: sum(1 for t in self._last_seen.values() if t >= now - window)
+            for name, window in _ACTIVE_WINDOWS.items()
+        }
+        self._reset(now)
+        pool_waits = [ms for ms, _ in recorded]
+        pool_timeouts = sum(1 for _, timed_out in recorded if timed_out)
 
         snapshot: dict[str, Any] = {
             "interval_s": round(duration, 1),
@@ -417,7 +425,10 @@ class OpsReporter:
         self._task: asyncio.Task | None = None
 
     def flush(self) -> dict[str, Any]:
-        snapshot = self.metrics.snapshot_and_reset()
+        """Snapshot and send in one call (tests). The loop uses the two halves separately."""
+        return self._send(self.metrics.snapshot_and_reset())
+
+    def _send(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         public = {k: v for k, v in snapshot.items() if not k.startswith("_")}
         public.update(release=self.release, worker_pid=os.getpid())
         logger.info("api_health_minute", **public)
@@ -433,8 +444,10 @@ class OpsReporter:
         while True:
             await asyncio.sleep(self.interval)
             try:
-                # Telegram is a blocking HTTP call; keep it off the event loop.
-                await asyncio.to_thread(self.flush)
+                # Snapshot on the loop (the counters are loop-only); Telegram is a blocking HTTP
+                # call, so the sending runs in a thread.
+                snapshot = self.metrics.snapshot_and_reset()
+                await asyncio.to_thread(self._send, snapshot)
             except Exception as exc:  # noqa: BLE001 - reporting must never stop the API
                 logger.warning("ops_metrics_flush_failed", error_type=type(exc).__name__)
 
