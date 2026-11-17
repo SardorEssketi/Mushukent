@@ -78,6 +78,7 @@ services:
       MAX_IN_FLIGHT_REQUESTS: ${MAX_IN_FLIGHT_REQUESTS:-48}
       IN_FLIGHT_QUEUE_SECONDS: ${IN_FLIGHT_QUEUE_SECONDS:-0}  # perf/cap-queue images only
       RATE_LIMIT_PUBLIC_READ_PER_MINUTE: ${RATE_LIMIT_PUBLIC_READ_PER_MINUTE:-180}
+      OPS_METRICS_ENABLED: ${OPS_METRICS_ENABLED:-true}  # ops/observability images only
     volumes:
       - ./shim:/loadtest-shim:ro
       - ./.secrets/firebase-admin.json:/run/secrets/firebase-admin.json:ro
