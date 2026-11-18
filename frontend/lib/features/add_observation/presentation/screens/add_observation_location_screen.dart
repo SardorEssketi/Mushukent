@@ -9,6 +9,7 @@ import '../../../../core/location/location_service.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../../core/widgets/osm_attribution.dart';
 import '../../application/add_observation_controller.dart';
 
 class AddObservationLocationScreen extends ConsumerStatefulWidget {
@@ -224,6 +225,7 @@ class _LocationPickerMap extends StatelessWidget {
                   userAgentPackageName: 'mushukistan_frontend',
                 ),
                 MarkerLayer(markers: markers),
+                const OsmAttribution(),
               ],
             ),
           ],
