@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import time
+import signal
+import threading
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -94,6 +95,19 @@ class NotificationWorker:
         self.settings = settings
         self.sender = sender
         self.cipher = Fernet(settings.push_token_encryption_key.encode())
+        # Set by SIGTERM/SIGINT (`docker stop`). The worker finishes the job it is sending, puts
+        # the claimed jobs it has not started back to pending, and exits within seconds instead of
+        # being killed at the stop timeout (as PID 1 it would ignore SIGTERM without a handler).
+        self.stop_event = threading.Event()
+
+    def request_stop(self, signum: int | None = None, _frame: object = None) -> None:
+        if not self.stop_event.is_set():
+            logger.info("notification_worker_stop_requested", signal=signum)
+        self.stop_event.set()
+
+    def install_signal_handlers(self) -> None:
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(sig, self.request_stop)
 
     def enqueue_due_followups(self, now: datetime) -> int:
         count = 0
@@ -352,6 +366,8 @@ class NotificationWorker:
         larger than one claim drains in one pass instead of 50 jobs per poll (LT-13)."""
         delivered = 0
         for _ in range(max_batches):
+            if self.stop_event.is_set():
+                break
             claimed, sent = self._deliver_batch(now)
             delivered += sent
             if claimed < CLAIM_BATCH_SIZE:
@@ -362,7 +378,10 @@ class NotificationWorker:
     def _deliver_batch(self, now: datetime) -> tuple[int, int]:
         job_ids = self._claim(now, CLAIM_BATCH_SIZE)
         delivered = 0
-        for job_id in job_ids:
+        for index, job_id in enumerate(job_ids):
+            if self.stop_event.is_set():
+                self._release_unstarted(job_ids[index:])
+                break
             # One bad job (undecryptable token, missing row, transport error) must fail only
             # itself; before, the first exception aborted the pass and every other claimed job
             # ran out of attempts unsent (load audit LT-12).
@@ -430,6 +449,27 @@ class NotificationWorker:
                 job.last_error_code = result.error_code
         return 0
 
+    def _release_unstarted(self, job_ids: list[UUID]) -> None:
+        """On stop: claimed jobs that were not started go back to pending, due now, and the claim's
+        attempt is refunded, so a deploy never costs a retry or delays a push by the lease time."""
+        if not job_ids:
+            return
+        with self.manager.session_scope() as session:
+            result = session.execute(
+                update(schema.NotificationPushJob)
+                .where(
+                    schema.NotificationPushJob.id.in_(job_ids),
+                    schema.NotificationPushJob.status == "sending",
+                )
+                .values(
+                    status="pending",
+                    lease_until=None,
+                    next_attempt_at=datetime.now(UTC),
+                    attempts=func.greatest(schema.NotificationPushJob.attempts - 1, 0),
+                )
+            )
+        logger.info("notification_jobs_released_on_stop", count=result.rowcount)
+
     def _fail_job(self, job_id: UUID, error_code: str, *, retry: bool) -> None:
         with self.manager.session_scope() as session:
             job = session.get(schema.NotificationPushJob, job_id)
@@ -447,7 +487,7 @@ class NotificationWorker:
 
     def run_forever(self) -> None:
         last_scheduled = datetime.min.replace(tzinfo=UTC)
-        while True:
+        while not self.stop_event.is_set():
             now = datetime.now(UTC)
             try:
                 if now - last_scheduled >= timedelta(minutes=1):
@@ -457,7 +497,8 @@ class NotificationWorker:
                 self.drain(now)
             except Exception:
                 logger.exception("notification_worker_pass_failed")
-            time.sleep(POLL_SECONDS)
+            self.stop_event.wait(POLL_SECONDS)  # wakes at once on SIGTERM
+        logger.info("notification_worker_stopped")
 
 
 def main() -> None:
@@ -466,7 +507,9 @@ def main() -> None:
         raise RuntimeError("PUSH_TOKEN_ENCRYPTION_KEY is required for notification worker")
     sender = FcmSender(settings.firebase_credentials_file, settings.firebase_project_id)
     manager = DatabaseSessionManager(settings.database_url)
-    NotificationWorker(manager, settings, sender).run_forever()
+    worker = NotificationWorker(manager, settings, sender)
+    worker.install_signal_handlers()
+    worker.run_forever()
 
 
 if __name__ == "__main__":

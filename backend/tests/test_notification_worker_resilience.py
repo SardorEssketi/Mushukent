@@ -122,3 +122,44 @@ def test_drain_delivers_a_backlog_larger_than_one_claim(db_session_manager) -> N
 
     assert worker.drain(datetime.now(UTC)) == 120
     assert _statuses(db_session_manager) == {"sent": 120}
+
+
+# -- graceful stop (SIGTERM from `docker stop`) -------------------------------------------------
+
+
+class _StoppingSender(_Sender):
+    """Sends normally and requests a stop while sending the first job, like a SIGTERM mid-pass."""
+
+    def __init__(self, worker_ref: list) -> None:
+        super().__init__()
+        self.worker_ref = worker_ref
+
+    def send(self, token, title, body, data) -> PushResult:
+        result = super().send(token, title, body, data)
+        self.worker_ref[0].request_stop()
+        return result
+
+
+def test_stop_finishes_the_current_job_and_releases_the_rest(db_session_manager) -> None:
+    key = Fernet.generate_key().decode()
+    _backlog(db_session_manager, key, 5)
+    holder: list = []
+    sender = _StoppingSender(holder)
+    worker = NotificationWorker(db_session_manager, Settings(push_token_encryption_key=key), sender)
+    holder.append(worker)
+
+    delivered = worker.drain(datetime.now(UTC))
+
+    assert delivered == 1 and len(sender.sent) == 1  # the job in hand was finished
+    assert _statuses(db_session_manager) == {"sent": 1, "pending": 4}
+    with db_session_manager.session_scope() as session:
+        released = session.scalars(
+            select(schema.NotificationPushJob).where(schema.NotificationPushJob.status == "pending")
+        ).all()
+        assert all(job.attempts == 0 and job.lease_until is None for job in released)
+    # The next worker sends the released jobs at once (due now, no lease to wait out).
+    fresh = NotificationWorker(
+        db_session_manager, Settings(push_token_encryption_key=key), _Sender()
+    )
+    assert fresh.drain(datetime.now(UTC)) == 4
+    assert _statuses(db_session_manager) == {"sent": 5}
