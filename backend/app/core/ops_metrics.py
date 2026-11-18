@@ -55,10 +55,22 @@ FEED_KEYS = tuple(f"feed_{name}" for name in sorted(_FEED_FILTERS))
 MAP_KEYS = ("map_cats", "map_lost_pets")
 
 
+# `app.include_router(api_v1_router, prefix="/api/v1")` (app/main.py): with the FastAPI version in
+# use, the matched route's `path` is relative to that prefix ("/feed", "/cats/{cat_id}/posts"), so
+# the outer middleware would never see "/api/v1/feed". Templates are normalised to the full path.
+API_PREFIX = "/api/v1"
+
+
+def _full_template(template: str | None) -> str | None:
+    if template is None or template == API_PREFIX or template.startswith(API_PREFIX + "/"):
+        return template
+    return API_PREFIX + template
+
+
 def route_key(scope: Scope) -> str:
     """A fixed, low-cardinality name for the request: never a raw path, so no ids leak."""
     method = scope.get("method", "")
-    template = getattr(scope.get("route"), "path", None)
+    template = _full_template(getattr(scope.get("route"), "path", None))
     if method == "POST" and is_upload_request(scope):
         return "upload"
     if template == "/api/v1/feed" and method == "GET":
