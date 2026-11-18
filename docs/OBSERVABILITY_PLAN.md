@@ -374,6 +374,44 @@ Logged 2026-11-18. **Nothing is changed now.**
 | D. Drop location from query strings (client sends `lat`/`lon` in a header or body) | no location in any nginx log | API and client change, both releases; the address is still logged |
 | E. Mention operational logs and their retention in the privacy policy | transparency | legal text change, owner's call |
 
+**Location data in today's logs (owner addition, 2026-11-18):**
+- The nearby feed sends `lat`/`lon` in the URL, so today's logs hold users' approximate locations:
+  - the **nginx access log** (default `combined` format), next to the visitor's address and user
+    agent;
+  - the **nginx error log**, for upstream errors;
+  - possibly the **backend's uvicorn access log**. The production command decides whether it is
+    on (uvicorn's default is on). It would show nginx's container address, not the visitor's.
+- **How long they are kept today: Not checked; read-only check at G1.**
+  - Expected: Docker's `json-file` driver without rotation keeps a container's log for the
+    container's whole life, and deletes it when the container is removed.
+  - Each release recreates its containers. From `release-web status` (2026-11-18): nginx since
+    2026-11-13 (web release 9904ed5), backend and worker since 2026-11-12.
+  - A `log-opts` default in `/etc/docker/daemon.json` would change this.
+  - The read-only script `release/g1-log-retention.sh` (local, not committed) prints, for each
+    container: log driver and options, created date, log size, the first entry's date, and the
+    number of lines with `lat=`/`lon=` or a client address. It never prints a log line.
+
+**Purge and rotation once step 2 is live (plan; owner decides):**
+1. **Nginx.** Step 2's web release recreates the nginx container (`--force-recreate`). Docker
+   then deletes the old container and its whole log, which is every line with addresses, user
+   agents and `lat`/`lon`. The new container writes the JSON log (no address, user agent or
+   query string) with rotation (10 MB × 5).
+   - **Check:** the old log path is gone; `grep -c 'lat='` on the new log is 0.
+   - Nothing is copied off the server before that. Old logs are not archived.
+2. **Backend and worker.** They get rotation at their next backend release, which also deletes
+   their old logs. If G1 shows uvicorn's access log is on and holds `lat=`, add `--no-access-log`
+   to the production command in that release. Request metrics are covered by the minute summary
+   and nginx's JSON log.
+3. **Error log:** option B (`crit`), in the same web release as step 2 or right after it.
+4. **To purge sooner, without waiting for step 2:** truncate the current nginx log in place
+   (`truncate -s 0 $(docker inspect -f '{{.LogPath}}' mushukistan-nginx)`). It is a root command
+   on the host. Docker tolerates it, but it is not an official API, and the lines are gone
+   immediately. Alternatively, recreate nginx from the live release; that is a G4-type step.
+   Either is a separate owner decision.
+5. **Retention afterwards (Estimate):** the JSON access line is ~200 bytes, so 50 MB holds
+   ~250k requests, i.e. weeks at today's traffic. To state retention in the privacy policy
+   (option E), measure it a week after step 2.
+
 **Recommendation:** A + B once step 2 is live: the JSON access log then carries what the error
 log was needed for. Add E when the privacy policy is next revised. C and D only if a legal
 review asks for them.
