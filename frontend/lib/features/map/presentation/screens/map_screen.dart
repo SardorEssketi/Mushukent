@@ -15,6 +15,7 @@ import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/marker_detail_actions.dart';
+import '../../../../core/widgets/osm_attribution.dart';
 import '../../../feed/presentation/widgets/feed_card_parts.dart';
 import '../../../posts/application/post_view_recorder.dart';
 import '../../application/map_marker_selection.dart';
@@ -853,14 +854,7 @@ class _MapScreenState extends ConsumerState<MapScreen>
                 groups: placeGroups,
                 onClusterTap: _zoomIntoCluster,
               ),
-              RichAttributionWidget(
-                attributions: [
-                  TextSourceAttribution(
-                    'OpenStreetMap contributors',
-                    onTap: () => _openOsmCopyright(),
-                  ),
-                ],
-              ),
+              const OsmAttribution(),
             ],
           ),
           Positioned(
@@ -952,13 +946,6 @@ bool _placeSupportsRoute(String category) {
 
 MapMarkerVisualKind _placeClusterKind(String category) {
   return mapPlaceMarkerKind(category);
-}
-
-Future<void> _openOsmCopyright() async {
-  await launchUrl(
-    Uri.parse('https://www.openstreetmap.org/copyright'),
-    mode: LaunchMode.externalApplication,
-  );
 }
 
 Future<void> _launchPlaceUri(Uri? uri) async {

@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
@@ -20,6 +19,7 @@ import '../../../../core/storage/token_store_provider.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/form_icon_buttons.dart';
+import '../../../../core/widgets/osm_attribution.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 final _tashkentBounds = LatLngBounds(
@@ -498,14 +498,7 @@ class _LostPetLocationPickerState extends State<LostPetLocationPicker> {
                       ),
                     ],
                   ),
-                RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution(
-                      'OpenStreetMap contributors',
-                      onTap: () => _openOsmCopyright(),
-                    ),
-                  ],
-                ),
+                const OsmAttribution(),
               ],
             ),
           ),
@@ -549,11 +542,4 @@ class _LostPetLocationPickerState extends State<LostPetLocationPicker> {
       ],
     );
   }
-}
-
-Future<void> _openOsmCopyright() async {
-  await launchUrl(
-    Uri.parse('https://www.openstreetmap.org/copyright'),
-    mode: LaunchMode.externalApplication,
-  );
 }
