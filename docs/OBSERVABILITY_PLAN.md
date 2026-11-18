@@ -248,7 +248,8 @@ docker inspect -f '{{json .HostConfig.LogConfig}}' mushukistan-nginx  # json-fil
 REL=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' mushukistan-nginx)
 ls "$REL/infrastructure/ops/host_health.py"
 sha256sum "$REL/infrastructure/ops/host_health.py"
-#    compare locally:  git show origin/main:infrastructure/ops/host_health.py | sha256sum
+#    compare locally with the PACKAGED file (packages built on Windows have CRLF endings):
+#    tar -xzOf release/<web-release>.tar.gz <web-release>/infrastructure/ops/host_health.py | sha256sum
 
 # 1. Script
 install -d -m 755 /usr/local/lib/mushukistan-ops
