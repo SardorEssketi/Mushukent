@@ -408,6 +408,29 @@ class Post(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         CheckConstraint("comment_count >= 0", name="comment_count_non_negative"),
         CheckConstraint("view_count >= 0", name="view_count_non_negative"),
         Index("posts_location_gist", "location", postgresql_using="gist"),
+        # Map pins: newest public post per cat (migration 20261114_0033).
+        Index(
+            "idx_posts_cat_public_latest",
+            "cat_id",
+            text("created_at DESC"),
+            text("id DESC"),
+            postgresql_where=text("deleted_at IS NULL AND is_public IS true"),
+        ),
+        # Popular feed order (migration 20261114_0034).
+        Index(
+            "idx_posts_popular",
+            text("like_count DESC"),
+            text("created_at DESC"),
+            text("id DESC"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        # Nearest-first `nearby` feed (KNN on geography; migration 20261114_0032).
+        Index(
+            "idx_posts_location_geography_knn",
+            text("geography(location)"),
+            postgresql_using="gist",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("idx_posts_created_at", "created_at"),
         Index(
             "idx_posts_active_created_at",
@@ -528,6 +551,13 @@ class Comment(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
             name="comments_exactly_one_target",
         ),
         Index("idx_comments_post_id", "post_id"),
+        # Visible comment counts as index-only scans (migration 20261114_0035).
+        Index(
+            "idx_comments_post_visible",
+            "post_id",
+            "user_id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("idx_comments_lost_pet_id", "lost_pet_id"),
         Index("idx_comments_adoption_post_id", "adoption_post_id"),
         Index("idx_comments_parent_comment_id", "parent_comment_id"),
@@ -825,6 +855,12 @@ class LostPet(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         CheckConstraint("comment_count >= 0", name="lost_pets_comment_count_non_negative"),
         CheckConstraint("view_count >= 0", name="lost_pets_view_count_non_negative"),
         Index("lost_pets_last_seen_location_gist", "last_seen_location", postgresql_using="gist"),
+        Index(
+            "idx_lost_pets_location_geography_knn",
+            text("geography(last_seen_location)"),
+            postgresql_using="gist",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         Index("idx_lost_pets_created_at", "created_at"),
         Index(
             "idx_lost_pets_active_created_at",

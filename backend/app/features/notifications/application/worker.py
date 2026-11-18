@@ -26,6 +26,7 @@ MAX_ATTEMPTS = 4
 RETRY_DELAYS = (60, 300, 1800)
 LEASE_TIME = timedelta(minutes=2)
 POLL_SECONDS = 30
+CLAIM_BATCH_SIZE = 50
 
 PUSH_COPY = {
     "en": {
@@ -211,7 +212,7 @@ class NotificationWorker:
                 preference.last_inactivity_cycle_at = last_active_at
         return count
 
-    def _claim(self, now: datetime, batch_size: int = 50) -> list[UUID]:
+    def _claim(self, now: datetime, batch_size: int = CLAIM_BATCH_SIZE) -> list[UUID]:
         with self.manager.session_scope() as session:
             session.execute(
                 update(schema.NotificationPushJob)
@@ -343,55 +344,106 @@ class NotificationWorker:
         )
 
     def deliver(self, now: datetime) -> int:
+        """Deliver one claimed batch; returns the number of pushes sent."""
+        return self._deliver_batch(now)[1]
+
+    def drain(self, now: datetime, *, max_batches: int = 40) -> int:
+        """Deliver claimed batches until a batch comes back short (backlog empty), so a backlog
+        larger than one claim drains in one pass instead of 50 jobs per poll (LT-13)."""
         delivered = 0
-        for job_id in self._claim(now):
-            with self.manager.session_scope() as session:
-                job = session.get(schema.NotificationPushJob, job_id)
-                if job is None or job.status != "sending":
-                    continue
-                if not self._eligible(session, job, now):
-                    job.status = "cancelled"
-                    job.lease_until = None
-                    continue
-                user = session.get(schema.User, job.recipient_id)
-                device = session.get(schema.NotificationDevice, job.device_id)
-                token = self.cipher.decrypt(device.token_encrypted.encode()).decode()
-                title, body = PUSH_COPY.get(user.preferred_language, PUSH_COPY["en"])[job.kind]
-                data = {"kind": job.kind}
-                if job.notification_id:
-                    data["notification_id"] = str(job.notification_id)
-                if job.target_kind and job.target_id:
-                    data["target_kind"] = job.target_kind
-                    data["target_id"] = str(job.target_id)
-            result: PushResult = self.sender.send(token, title, body, data)
-            with self.manager.session_scope() as session:
-                job = session.get(schema.NotificationPushJob, job_id)
-                if job is None:
-                    continue
-                job.lease_until = None
-                if result.success:
-                    job.status = "sent"
-                    job.sent_at = datetime.now(UTC)
-                    delivered += 1
-                elif result.invalid_token:
-                    device_id = job.device_id
-                    session.expunge(job)
-                    session.execute(
-                        delete(schema.NotificationDevice).where(
-                            schema.NotificationDevice.id == device_id
-                        )
-                    )
-                    logger.info("notification_token_retired", device_id=str(device_id))
-                elif job.attempts >= MAX_ATTEMPTS:
-                    job.status = "failed"
-                    job.last_error_code = result.error_code
-                else:
-                    job.status = "pending"
-                    job.next_attempt_at = datetime.now(UTC) + timedelta(
-                        seconds=RETRY_DELAYS[job.attempts - 1]
-                    )
-                    job.last_error_code = result.error_code
+        for _ in range(max_batches):
+            claimed, sent = self._deliver_batch(now)
+            delivered += sent
+            if claimed < CLAIM_BATCH_SIZE:
+                break
+            now = datetime.now(UTC)
         return delivered
+
+    def _deliver_batch(self, now: datetime) -> tuple[int, int]:
+        job_ids = self._claim(now, CLAIM_BATCH_SIZE)
+        delivered = 0
+        for job_id in job_ids:
+            # One bad job (undecryptable token, missing row, transport error) must fail only
+            # itself; before, the first exception aborted the pass and every other claimed job
+            # ran out of attempts unsent (load audit LT-12).
+            try:
+                delivered += self._deliver_one(job_id, now)
+            except Exception as exc:
+                logger.warning(
+                    "notification_job_failed", job_id=str(job_id), error_type=type(exc).__name__
+                )
+                try:
+                    self._fail_job(job_id, type(exc).__name__, retry=False)
+                except Exception:
+                    logger.exception("notification_job_fail_record_failed", job_id=str(job_id))
+        return len(job_ids), delivered
+
+    def _deliver_one(self, job_id: UUID, now: datetime) -> int:
+        with self.manager.session_scope() as session:
+            job = session.get(schema.NotificationPushJob, job_id)
+            if job is None or job.status != "sending":
+                return 0
+            if not self._eligible(session, job, now):
+                job.status = "cancelled"
+                job.lease_until = None
+                return 0
+            user = session.get(schema.User, job.recipient_id)
+            device = session.get(schema.NotificationDevice, job.device_id)
+            token = self.cipher.decrypt(device.token_encrypted.encode()).decode()
+            title, body = PUSH_COPY.get(user.preferred_language, PUSH_COPY["en"])[job.kind]
+            data = {"kind": job.kind}
+            if job.notification_id:
+                data["notification_id"] = str(job.notification_id)
+            if job.target_kind and job.target_id:
+                data["target_kind"] = job.target_kind
+                data["target_id"] = str(job.target_id)
+        try:
+            result: PushResult = self.sender.send(token, title, body, data)
+        except Exception as exc:  # transport failure: retry with backoff like a failed send
+            result = PushResult(success=False, error_code=type(exc).__name__)
+        with self.manager.session_scope() as session:
+            job = session.get(schema.NotificationPushJob, job_id)
+            if job is None:
+                return 0
+            job.lease_until = None
+            if result.success:
+                job.status = "sent"
+                job.sent_at = datetime.now(UTC)
+                return 1
+            if result.invalid_token:
+                device_id = job.device_id
+                session.expunge(job)
+                session.execute(
+                    delete(schema.NotificationDevice).where(
+                        schema.NotificationDevice.id == device_id
+                    )
+                )
+                logger.info("notification_token_retired", device_id=str(device_id))
+            elif job.attempts >= MAX_ATTEMPTS:
+                job.status = "failed"
+                job.last_error_code = result.error_code
+            else:
+                job.status = "pending"
+                job.next_attempt_at = datetime.now(UTC) + timedelta(
+                    seconds=RETRY_DELAYS[job.attempts - 1]
+                )
+                job.last_error_code = result.error_code
+        return 0
+
+    def _fail_job(self, job_id: UUID, error_code: str, *, retry: bool) -> None:
+        with self.manager.session_scope() as session:
+            job = session.get(schema.NotificationPushJob, job_id)
+            if job is None:
+                return
+            job.lease_until = None
+            job.last_error_code = error_code
+            if retry and job.attempts < MAX_ATTEMPTS:
+                job.status = "pending"
+                job.next_attempt_at = datetime.now(UTC) + timedelta(
+                    seconds=RETRY_DELAYS[job.attempts - 1]
+                )
+            else:
+                job.status = "failed"
 
     def run_forever(self) -> None:
         last_scheduled = datetime.min.replace(tzinfo=UTC)
@@ -402,7 +454,7 @@ class NotificationWorker:
                     self.enqueue_due_followups(now)
                     self.enqueue_inactivity(now)
                     last_scheduled = now
-                self.deliver(now)
+                self.drain(now)
             except Exception:
                 logger.exception("notification_worker_pass_failed")
             time.sleep(POLL_SECONDS)

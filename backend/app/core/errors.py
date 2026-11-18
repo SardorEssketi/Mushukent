@@ -1,8 +1,11 @@
 import json
 
+import psycopg
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from structlog import get_logger
 
 logger = get_logger(__name__)
@@ -47,7 +50,43 @@ def _build_error_response(
     return JSONResponse(status_code=status_code, content=payload)
 
 
+_BUSY_ERRORS = (
+    psycopg.errors.QueryCanceled,  # statement_timeout
+    psycopg.errors.LockNotAvailable,  # lock_timeout
+    psycopg.errors.IdleInTransactionSessionTimeout,
+)
+_DEFAULT_RETRY_AFTER_SECONDS = 5
+
+
+def _service_busy(request: Request, reason: str) -> JSONResponse:
+    """Overload, not a bug: a short 503 the client can retry after ``Retry-After`` seconds."""
+    container = getattr(request.app.state, "container", None)
+    settings = getattr(container, "settings", None)
+    retry_after = getattr(
+        settings, "service_busy_retry_after_seconds", _DEFAULT_RETRY_AFTER_SECONDS
+    )
+    logger.warning("service_busy", reason=reason, method=request.method, path=request.url.path)
+    response = _build_error_response(
+        503,
+        "SERVICE_BUSY",
+        "The service is busy. Please try again shortly.",
+    )
+    response.headers["Retry-After"] = str(retry_after)
+    return response
+
+
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(PoolTimeoutError)
+    async def pool_timeout_handler(request: Request, _: PoolTimeoutError) -> JSONResponse:
+        return _service_busy(request, "pool_timeout")
+
+    @app.exception_handler(DBAPIError)
+    async def database_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+        if isinstance(exc.orig, _BUSY_ERRORS):
+            return _service_busy(request, type(exc.orig).__name__)
+        # Anything else is a real failure: log it like every other unhandled exception.
+        return await unhandled_exception_handler(request, exc)
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
         if isinstance(exc.detail, dict) and "success" in exc.detail:

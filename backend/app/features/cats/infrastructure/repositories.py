@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -253,9 +254,16 @@ class SqlAlchemyCatRepository(CatRepository):
             if kind is not None:
                 statement = statement.where(latest_public_post.c.kind == kind)
             reference_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+            # Box in degrees around the point. A degree of longitude shrinks with latitude
+            # (about 84 km in Tashkent), so the east-west half-width must be scaled; a single
+            # radius/111_320 dropped cats 3.8-5 km east or west of a 5 km search (LT-14).
             statement = statement.where(
                 schema.Cat.canonical_location.op("&&")(
-                    func.ST_Expand(reference_geom, radius_meters / 111_320.0)
+                    func.ST_Expand(
+                        reference_geom,
+                        radius_meters / (111_320.0 * max(math.cos(math.radians(latitude)), 0.01)),
+                        radius_meters / 110_574.0,
+                    )
                 )
             )
             statement = statement.where(

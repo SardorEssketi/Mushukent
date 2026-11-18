@@ -94,23 +94,54 @@ class ViewsService:
         Posts that are missing or hidden from this viewer are skipped instead of failing the
         whole batch, because a feed can go stale while the batch waits on the device.
 
-        Visibility is checked first, without locks. The writes then run in (kind, id) order, so
-        concurrent batches lock post rows in the same order (no deadlocks) and hold the locks
-        only for the short write phase.
+        Set-based (load audit FIX-3): one visibility read per kind, one insert for all new views,
+        one ordered lock-and-increment per kind. Locks are taken in (kind, id) order, as before,
+        so concurrent batches cannot deadlock.
         """
         unique: dict[tuple[str, UUID], None] = dict.fromkeys((item.kind, item.id) for item in items)
+        viewer_user_id = user.id if user is not None else None
+        viewer_is_moderator = bool(user is not None and user.is_moderator)
         outcomes: dict[tuple[str, UUID], PostViewResponse] = {}
         with self.db_session_manager.session_scope() as session:
-            targets = {}
-            for kind, post_id in unique:
-                target = self._visible_target(session, kind, post_id, user)
-                if target is not None:
-                    targets[(kind, post_id)] = target
-            for kind, post_id in sorted(targets, key=lambda key: (key[0], str(key[1]))):
-                owner_id, view_count = targets[(kind, post_id)]
-                outcomes[(kind, post_id)] = self._record(
-                    session, kind, post_id, owner_id, view_count, user, guest_id
+            repository = self.repository_factory(session)
+            visible: dict[tuple[str, UUID], tuple[UUID | None, int]] = {}
+            for kind in sorted({kind for kind, _ in unique}):
+                ids = [post_id for item_kind, post_id in unique if item_kind == kind]
+                targets = repository.visible_targets(
+                    kind,
+                    ids,
+                    viewer_user_id=viewer_user_id,
+                    viewer_is_moderator=viewer_is_moderator,
                 )
+                for post_id, target in targets.items():
+                    visible[(kind, post_id)] = target
+
+            countable = [
+                key
+                for key, (owner_id, _) in visible.items()
+                if not (user is not None and user.id == owner_id)
+                and not (user is None and guest_id is None)
+            ]
+            created = repository.record_many(
+                countable,
+                user_id=viewer_user_id,
+                guest_key=(
+                    self.guest_key(guest_id) if user is None and guest_id is not None else None
+                ),
+            )
+            new_counts: dict[tuple[str, UUID], int] = {}
+            for kind in sorted({kind for kind, _ in created}):
+                ids = sorted(
+                    (post_id for item_kind, post_id in created if item_kind == kind), key=str
+                )
+                for post_id, count in repository.increment_view_counts(kind, ids).items():
+                    new_counts[(kind, post_id)] = count
+            for key, (_, view_count) in visible.items():
+                if key in new_counts:
+                    logger.info("post_viewed", post_kind=key[0], post_id=str(key[1]))
+                    outcomes[key] = PostViewResponse(view_count=new_counts[key], counted=True)
+                else:
+                    outcomes[key] = PostViewResponse(view_count=view_count, counted=False)
         return PostViewBatchResponse(
             items=[
                 PostViewBatchItem(

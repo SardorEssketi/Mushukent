@@ -10,9 +10,12 @@ from app.api.v1.router import api_v1_router
 from app.core.analytics import Analytics
 from app.core.container import build_container
 from app.core.errors import register_error_handlers
+from app.core.load_shedding import LoadSheddingMiddleware
 from app.core.logging import configure_logging
 from app.core.publication_diagnostics import PublicationDiagnosticsMiddleware
 from app.core.rate_limit import add_rate_limit_middleware
+from app.core.request_auth import decode_access_token_once
+from app.core.upload_guard import UploadSingleFlightMiddleware, verified_user_identifier
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
 
 logger = get_logger(__name__)
@@ -23,6 +26,7 @@ class PostHogContextMiddleware:
 
     def __init__(self, app) -> None:
         self.app = app
+        self._token_service: JoseAccessTokenService | None = None
 
     async def __call__(self, scope, receive, send) -> None:
         if scope["type"] != "http":
@@ -37,9 +41,11 @@ class PostHogContextMiddleware:
 
         authorization = dict(scope.get("headers", [])).get(b"authorization", b"").decode("latin-1")
         _, _, token = authorization.partition(" ")
+        if self._token_service is None:
+            self._token_service = JoseAccessTokenService(app.state.container.settings)
         try:
             principal = (
-                JoseAccessTokenService(app.state.container.settings).decode_access_token(token)
+                decode_access_token_once(scope, self._token_service, token)
                 if authorization.lower().startswith("bearer ") and token
                 else None
             )
@@ -111,6 +117,18 @@ def create_app() -> FastAPI:
                 r"(:\d+)?$"
             )
         }
+    # Added before CORS so its 409 carries CORS headers for the web app.
+    app.add_middleware(
+        UploadSingleFlightMiddleware,
+        identify=verified_user_identifier(JoseAccessTokenService(settings)),
+    )
+    # In-flight cap: added after the upload guard (so it wraps it) and before CORS (so its 503
+    # carries CORS headers).
+    app.add_middleware(
+        LoadSheddingMiddleware,
+        max_in_flight=settings.max_in_flight_requests,
+        retry_after=settings.service_busy_retry_after_seconds,
+    )
     app.add_middleware(
         CORSMiddleware,
         **cors_kwargs,
