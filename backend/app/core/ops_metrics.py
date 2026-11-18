@@ -322,6 +322,9 @@ class AlertThresholds:
     min_samples: int = 50
     window_minutes: int = 10
     repeat_minutes: int = 30
+    # A rule must stay clear this many minutes in a row before RESOLVED is sent; a re-fire in
+    # between continues the same incident silently (no CRITICAL/RESOLVED flapping).
+    resolve_after_minutes: int = 5
 
 
 def evaluate_alerts(window: list[dict[str, Any]], t: AlertThresholds) -> dict[str, str]:
@@ -417,20 +420,24 @@ class OpsAlerter:
         self.notifier, self.thresholds, self.label, self._clock = notifier, thresholds, label, clock
         self._window: deque[dict[str, Any]] = deque(maxlen=thresholds.window_minutes)
         self._last_sent: dict[str, float] = {}
+        self._clear_minutes: dict[str, int] = {}
 
     def observe(self, snapshot: dict[str, Any]) -> list[str]:
         self._window.append(snapshot)
         firing = evaluate_alerts(list(self._window), self.thresholds)
         now, messages = self._clock(), []
         for rule, value in firing.items():
+            self._clear_minutes.pop(rule, None)
             last = self._last_sent.get(rule)
             if last is None or now - last >= self.thresholds.repeat_minutes * 60:
                 prefix = "CRITICAL" if last is None else "STILL CRITICAL"
                 messages.append(f"{prefix} {self.label}: {rule} = {value}")
                 self._last_sent[rule] = now
         for rule in [r for r in self._last_sent if r not in firing]:
-            messages.append(f"RESOLVED {self.label}: {rule}")
-            del self._last_sent[rule]
+            self._clear_minutes[rule] = self._clear_minutes.get(rule, 0) + 1
+            if self._clear_minutes[rule] >= self.thresholds.resolve_after_minutes:
+                messages.append(f"RESOLVED {self.label}: {rule}")
+                del self._last_sent[rule], self._clear_minutes[rule]
         for message in messages:
             self.notifier.send(message)
         return messages
@@ -469,6 +476,7 @@ class OpsReporter:
         return public
 
     async def _run(self) -> None:
+        announced = False
         while True:
             await asyncio.sleep(self.interval)
             try:
@@ -476,6 +484,13 @@ class OpsReporter:
                 # call, so the sending runs in a thread.
                 snapshot = self.metrics.snapshot_and_reset()
                 await asyncio.to_thread(self._send, snapshot)
+                if not announced and self.alerter is not None:
+                    # Announced after one full interval of uptime, not at start: a container in a
+                    # crash loop never gets here, so it cannot flood the chat (the host timer
+                    # reports restarts, rate-limited). A start without a deploy is a restart.
+                    text = f"INFO {self.alerter.label}: API started, release {self.release}"
+                    await asyncio.to_thread(self.alerter.notifier.send, text)
+                announced = True
             except Exception as exc:  # noqa: BLE001 - reporting must never stop the API
                 logger.warning("ops_metrics_flush_failed", error_type=type(exc).__name__)
 
@@ -487,12 +502,7 @@ class OpsReporter:
                 properties={"release": self.release, "worker_pid": os.getpid()},
             )
         logger.info("api_started", release=self.release, worker_pid=os.getpid())
-        loop = asyncio.get_running_loop()
-        if self.alerter is not None:
-            # A start without a deploy is a restart (crash or OOM): say so where alerts go.
-            text = f"INFO {self.alerter.label}: API started, release {self.release}"
-            loop.run_in_executor(None, self.alerter.notifier.send, text)
-        self._task = loop.create_task(self._run())
+        self._task = asyncio.get_running_loop().create_task(self._run())
 
     async def stop(self) -> None:
         if self._task is not None:

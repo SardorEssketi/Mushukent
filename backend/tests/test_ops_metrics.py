@@ -262,8 +262,24 @@ def test_alerter_fires_repeats_and_resolves() -> None:
     alerter.observe(busy)
     assert notifier.sent[-1].startswith("STILL CRITICAL")
     quiet = _snap(requests_per_s=1)
-    for _ in range(10):  # the busy minutes leave the 10-minute window
+    for _ in range(15):  # the busy minutes leave the window, then 5 clear minutes in a row
         alerter.observe(quiet)
+    assert notifier.sent[-1] == "RESOLVED test: service_busy_503"
+    assert len(notifier.sent) == 3  # CRITICAL, STILL CRITICAL, RESOLVED
+
+
+def test_a_flapping_rule_does_not_spam() -> None:
+    clock, notifier = Clock(), FakeNotifier()
+    alerter = OpsAlerter(notifier, AlertThresholds(window_minutes=1), label="test", clock=clock)
+    busy, quiet = _snap(status_503_cap=50, requests_per_s=1), _snap(requests_per_s=1)
+    for minute in range(60):  # one hour flipping every minute across the threshold
+        alerter.observe(busy if minute % 2 == 0 else quiet)
+        clock.now += 60
+    # one incident: CRITICAL once, STILL CRITICAL after 30 min; never RESOLVED while it flaps
+    assert [m.split(" test")[0] for m in notifier.sent] == ["CRITICAL", "STILL CRITICAL"]
+    for _ in range(5):
+        alerter.observe(quiet)
+        clock.now += 60
     assert notifier.sent[-1] == "RESOLVED test: service_busy_503"
 
 
@@ -333,4 +349,23 @@ def test_reporter_start_announces_and_stop_cancels() -> None:
 
     asyncio.run(run())
     assert captured[0]["event"] == "api_started"
+    assert notifier.sent == []  # Telegram hears about a start only after a full interval
+
+
+def test_start_notice_is_sent_once_after_the_first_interval() -> None:
+    notifier = FakeNotifier()
+    reporter = OpsReporter(
+        OpsMetrics(),
+        interval_seconds=0.02,
+        analytics_client=None,
+        alerter=OpsAlerter(notifier, AlertThresholds(), label="t"),
+        release="r1",
+    )
+
+    async def run() -> None:
+        reporter.start()
+        await asyncio.sleep(0.15)  # several intervals
+        await reporter.stop()
+
+    asyncio.run(run())
     assert notifier.sent == ["INFO t: API started, release r1"]
