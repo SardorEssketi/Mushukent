@@ -140,11 +140,7 @@ def test_parses_json_and_default_format_lines() -> None:
     minute = hh.parse_nginx_lines(lines)
     assert minute.requests == 8
     assert minute.api_requests == 5  # 4 JSON API lines + the default-format /api/ line
-    assert (
-        minute.status_502 == 2
-        and minute.status_504 == 1
-        and minute.status_5xx_other == 1
-    )
+    assert minute.status_502 == 2 and minute.status_504 == 1 and minute.status_5xx_other == 1
     assert minute.gateway_errors == 3
     assert minute.unparsed == 1
     assert sorted(minute.api_times_ms) == [100.0, 120.0, 30000.0, 30000.0]
@@ -164,18 +160,14 @@ def test_one_run_sends_one_event_and_only_reads_from_docker(cfg) -> None:
     assert sent == []  # first run: baseline only
     assert {call[0] for call in docker.calls} == {"logs", "ps", "inspect", "events"}
     ps = next(call for call in docker.calls if call[0] == "ps")
-    assert (
-        "label=com.docker.compose.oneoff=False" in ps
-    )  # migrations (compose run) left out
+    assert "label=com.docker.compose.oneoff=False" in ps  # migrations (compose run) left out
 
 
 def test_log_window_continues_from_the_last_run_and_is_capped(cfg) -> None:
     docker = FakeDocker()
     _run(cfg, docker, now=10_000.0)
     _run(cfg, docker, now=10_060.0)
-    since = [
-        call[call.index("--since") + 1] for call in docker.calls if call[0] == "logs"
-    ]
+    since = [call[call.index("--since") + 1] for call in docker.calls if call[0] == "logs"]
     assert since == ["9940.000", "10000.000"]
     _run(cfg, docker, now=20_000.0)  # after a long gap: at most 10 minutes back
     assert [c for c in docker.calls if c[0] == "logs"][-1][2] == "19400.000"
@@ -188,21 +180,13 @@ def test_gateway_errors_fire_repeat_and_resolve(cfg) -> None:
     _, sent, _ = _run(cfg, docker, now=1_000.0)
     assert sent == []  # 3 < 5
     _, sent, _ = _run(cfg, docker, now=1_060.0)
-    assert (
-        len(sent) == 1
-        and sent[0].startswith("🔴 CRITICAL")
-        and "6 Nginx 502/504" in sent[0]
-    )
+    assert len(sent) == 1 and sent[0].startswith("🔴 CRITICAL") and "6 Nginx 502/504" in sent[0]
     docker.logs = []
     _, sent, _ = _run(cfg, docker, now=1_120.0)
     assert sent == []  # still 6 in the window, already reported
     # the errors have left the 10-minute window: RESOLVED only after 5 clear runs in a row
     sent = _clear_runs(cfg, docker, start=1_000.0 + 30 * 60 + 60)
-    assert (
-        len(sent) == 1
-        and sent[0].startswith("✅ RESOLVED")
-        and "nginx_502_504" in sent[0]
-    )
+    assert len(sent) == 1 and sent[0].startswith("✅ RESOLVED") and "nginx_502_504" in sent[0]
 
 
 def test_still_critical_is_repeated_every_30_minutes(cfg) -> None:
@@ -228,9 +212,7 @@ def test_restart_and_oom_are_critical_but_a_recreate_is_only_a_notice(cfg) -> No
     docker.container("mushukistan-db", cid="db", restarts=0)
     _run(cfg, docker, now=1_000.0)
 
-    docker.container(
-        "mushukistan-backend", cid="one", restarts=1, exit_code=137, oom=True
-    )
+    docker.container("mushukistan-backend", cid="one", restarts=1, exit_code=137, oom=True)
     docker.oom = ["mushukistan-backend"]
     props, sent, _ = _run(cfg, docker, now=1_060.0)
     assert props["restarts"] == 1 and props["oom_kills"] == 1
@@ -239,9 +221,7 @@ def test_restart_and_oom_are_critical_but_a_recreate_is_only_a_notice(cfg) -> No
     assert all(s.startswith("🔴 CRITICAL") for s in sent)
 
     docker.oom = []
-    docker.container(
-        "mushukistan-backend", cid="two", restarts=0
-    )  # recreated by a deploy
+    docker.container("mushukistan-backend", cid="two", restarts=0)  # recreated by a deploy
     props, sent, _ = _run(cfg, docker, now=1_120.0)
     assert props["restarts"] == 0
     assert sent == [
@@ -261,9 +241,7 @@ def test_docker_failure_is_reported_after_two_runs_and_keeps_the_baseline(cfg) -
     assert len(sent) == 1 and "Docker did not answer" in sent[0]
     docker.fail = False
     sent = _clear_runs(cfg, docker, start=1_180.0)
-    assert len(sent) == 1 and sent[0].startswith(
-        "✅ RESOLVED"
-    )  # no false "recreated" notice
+    assert len(sent) == 1 and sent[0].startswith("✅ RESOLVED")  # no false "recreated" notice
 
 
 def test_dry_run_sends_nothing_and_keeps_no_state(cfg, capsys) -> None:
@@ -311,9 +289,7 @@ def test_without_credentials_nothing_is_sent() -> None:
 
 
 def test_chat_falls_back_to_the_feedback_chat_like_the_backend() -> None:
-    cfg = hh.Config.from_env(
-        {"TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_FEEDBACK_CHAT_ID": "7"}
-    )
+    cfg = hh.Config.from_env({"TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_FEEDBACK_CHAT_ID": "7"})
     assert cfg.telegram_chat_id == "7"
     cfg = hh.Config.from_env(
         {
@@ -356,14 +332,9 @@ def test_nginx_ops_log_is_on_every_server_and_carries_no_personal_data() -> None
 
 def test_systemd_units_point_at_the_installed_script() -> None:
     ops = REPO_ROOT / "infrastructure" / "ops"
-    service = (ops / "mushukistan-host-health.service.example").read_text(
-        encoding="utf-8"
-    )
+    service = (ops / "mushukistan-host-health.service.example").read_text(encoding="utf-8")
     timer = (ops / "mushukistan-host-health.timer.example").read_text(encoding="utf-8")
-    assert (
-        "ExecStart=/usr/bin/python3 /usr/local/lib/mushukistan-ops/host_health.py"
-        in service
-    )
+    assert "ExecStart=/usr/bin/python3 /usr/local/lib/mushukistan-ops/host_health.py" in service
     assert "EnvironmentFile=/etc/mushukistan-ops/host-health.env" in service
     assert "ReadWritePaths=/var/lib/mushukistan-ops" in service
     assert "OnCalendar=*-*-* *:*:00" in timer
@@ -373,9 +344,7 @@ def test_telegram_install_check_sends_one_message(monkeypatch, capsys) -> None:
     sent: list[str] = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_OPS_CHAT_ID", "9")
-    monkeypatch.setattr(
-        hh, "send_telegram", lambda cfg, text: sent.append(text) or True
-    )
+    monkeypatch.setattr(hh, "send_telegram", lambda cfg, text: sent.append(text) or True)
     assert hh.main(["--test-telegram"]) == 0
     assert len(sent) == 1 and "test message" in sent[0]
     monkeypatch.setattr(hh, "send_telegram", lambda cfg, text: False)
@@ -416,9 +385,7 @@ def test_one_deploy_gives_one_notice(cfg) -> None:
 def test_a_flapping_gateway_rule_is_one_incident(cfg) -> None:
     docker = FakeDocker()
     sent_all: list[str] = []
-    for minute in range(
-        30
-    ):  # 6 gateway errors every other minute: above, then below, ...
+    for minute in range(30):  # 6 gateway errors every other minute: above, then below, ...
         docker.logs = [_json_line(502)] * (6 if minute % 2 == 0 else 0)
         _, sent, _ = _run(cfg, docker, now=1_000.0 + 60 * minute)
         sent_all += sent
@@ -427,9 +394,6 @@ def test_a_flapping_gateway_rule_is_one_incident(cfg) -> None:
 
 def test_every_telegram_message_carries_the_ops_prefix(cfg) -> None:
     seen: list[bytes] = []
-    assert (
-        hh.send_telegram(cfg, "🔴 CRITICAL · x", post=lambda u, d, c: seen.append(d))
-        is True
-    )
+    assert hh.send_telegram(cfg, "🔴 CRITICAL · x", post=lambda u, d, c: seen.append(d)) is True
     text = hh.urllib.parse.parse_qs(seen[0].decode())["text"][0]
     assert text == "🚨 OPS · 🔴 CRITICAL · x"
