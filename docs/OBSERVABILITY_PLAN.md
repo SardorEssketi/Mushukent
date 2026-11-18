@@ -1,8 +1,10 @@
 # Minimal production observability (LT-20): plan
 
-Status: **steps 1 and 2 implemented** on `ops/observability` (owner approvals 2026-11-16 and
-2026-11-18), not deployed. Step 2 is infrastructure: **needs owner approval before deploy**
-(section 6). Builds on
+Status: **steps 1 and 2 implemented** (owner approvals 2026-11-16 and 2026-11-18), not deployed.
+Step 1 is on `main` and ships with the package-1 backend release. **Step 2 (nginx log format,
+Docker log rotation, host timer) is held out of `main`** and lives on branch
+`ops/observability-step2`. It is infrastructure and **needs owner approval before deploy**: a
+separate step, after the backend has been stable for 24 h (section 6). Builds on
 package 1 (in-flight cap, pool timeout → 503 `SERVICE_BUSY`). Capacity figures come from
 `docs/audits/load-300/FIXES_RESULTS.md` on `perf/fixes`: the current box carries **30 concurrent
 active users** within Feed p95 < 500 ms and map p95 < 700 ms, and 30 users make ~7 requests per
@@ -64,7 +66,7 @@ Implemented (approved 2026-11-18); deploy steps and rollback in section 6.
     this.
   - **Not changed:** nginx's error log still prints the request line (with query string) and the
     client address for upstream errors (Verified in the local check below). That is existing
-    behaviour; changing it is a separate decision.
+    behaviour; it is backlog item P-1 (section 8).
   - **Verified locally (2026-11-18):** `nginx:1.27-alpine` with this file passes `nginx -t`. Test
     requests produce one JSON line each, and a token in the query string and the user agent do
     not appear in the access log.
@@ -246,7 +248,8 @@ docker inspect -f '{{json .HostConfig.LogConfig}}' mushukistan-nginx  # json-fil
 REL=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' mushukistan-nginx)
 ls "$REL/infrastructure/ops/host_health.py"
 sha256sum "$REL/infrastructure/ops/host_health.py"
-#    compare locally:  git show origin/main:infrastructure/ops/host_health.py | sha256sum
+#    compare locally with the PACKAGED file (packages built on Windows have CRLF endings):
+#    tar -xzOf release/<web-release>.tar.gz <web-release>/infrastructure/ops/host_health.py | sha256sum
 
 # 1. Script
 install -d -m 755 /usr/local/lib/mushukistan-ops
@@ -340,3 +343,76 @@ host.
   metrics stopped). It does not fit in 5. The host timer's container-down and restart alerts cover
   the same failure.
 - **Thresholds** follow the warn column in section 3. Change them in the alert, not in code.
+
+## 8. Backlog: privacy (not scheduled; owner decision)
+
+### P-1. Nginx's error log holds client addresses and full request lines
+
+Logged 2026-11-18. **Nothing is changed now.**
+
+**What (Verified locally 2026-11-18, nginx 1.27 with our configuration; From code for production):**
+- For upstream errors (502/504, connect failures, timeouts), nginx's error log line contains:
+  - the visitor's address. It is the real one: `real_ip_header CF-Connecting-IP` resolves it
+    behind Cloudflare;
+  - the full request line with the query string;
+  - the host, and the referrer when sent.
+- Query strings can carry personal data. The nearby feed sends `lat`/`lon`, so an address and an
+  approximate location end up in one line. Tokens travel in the `Authorization` header, which is
+  not logged.
+- The error log goes to the nginx container's stderr, into Docker's log on the host.
+- Today the logs are not rotated. Docker log rotation is part of step 2, not yet live.
+- The same applies today to the **access log** (default `combined` format: address, user agent,
+  full URI) until step 2's JSON access log replaces it.
+
+**Options:**
+
+| Option | Effect | Cost |
+|---|---|---|
+| A. Bounded retention only: step 2's rotation (10 MB × 5 per container) | old lines disappear after days, not never | nothing new; lines still contain the data |
+| B. `error_log /dev/stderr crit;` in our server blocks | upstream errors (logged at `error`) are no longer written, so no address or request line | lose nginx's own error text. Step 2's JSON access log still shows each 502/504 with `ust`/`urt`. For debugging, raise the level temporarily (a reviewed config change) |
+| C. Error log to a file with daily `logrotate`, kept 7 days | short, predictable retention | a new mount and host logrotate config; still contains the data |
+| D. Drop location from query strings (client sends `lat`/`lon` in a header or body) | no location in any nginx log | API and client change, both releases; the address is still logged |
+| E. Mention operational logs and their retention in the privacy policy | transparency | legal text change, owner's call |
+
+**Location data in today's logs (owner addition, 2026-11-18):**
+- The nearby feed sends `lat`/`lon` in the URL, so today's logs hold users' approximate locations:
+  - the **nginx access log** (default `combined` format), next to the visitor's address and user
+    agent;
+  - the **nginx error log**, for upstream errors;
+  - possibly the **backend's uvicorn access log**. The production command decides whether it is
+    on (uvicorn's default is on). It would show nginx's container address, not the visitor's.
+- **How long they are kept today: Not checked; read-only check at G1.**
+  - Expected: Docker's `json-file` driver without rotation keeps a container's log for the
+    container's whole life, and deletes it when the container is removed.
+  - Each release recreates its containers. From `release-web status` (2026-11-18): nginx since
+    2026-11-13 (web release 9904ed5), backend and worker since 2026-11-12.
+  - A `log-opts` default in `/etc/docker/daemon.json` would change this.
+  - The read-only script `release/g1-log-retention.sh` (local, not committed) prints, for each
+    container: log driver and options, created date, log size, the first entry's date, and the
+    number of lines with `lat=`/`lon=` or a client address. It never prints a log line.
+
+**Purge and rotation once step 2 is live (plan; owner decides):**
+1. **Nginx.** Step 2's web release recreates the nginx container (`--force-recreate`). Docker
+   then deletes the old container and its whole log, which is every line with addresses, user
+   agents and `lat`/`lon`. The new container writes the JSON log (no address, user agent or
+   query string) with rotation (10 MB × 5).
+   - **Check:** the old log path is gone; `grep -c 'lat='` on the new log is 0.
+   - Nothing is copied off the server before that. Old logs are not archived.
+2. **Backend and worker.** They get rotation at their next backend release, which also deletes
+   their old logs. If G1 shows uvicorn's access log is on and holds `lat=`, add `--no-access-log`
+   to the production command in that release. Request metrics are covered by the minute summary
+   and nginx's JSON log.
+3. **Error log:** option B (`crit`), in the same web release as step 2 or right after it.
+4. **To purge sooner, without waiting for step 2:** truncate the current nginx log in place
+   (`truncate -s 0 $(docker inspect -f '{{.LogPath}}' mushukistan-nginx)`). It is a root command
+   on the host. Docker tolerates it, but it is not an official API, and the lines are gone
+   immediately. Alternatively, recreate nginx from the live release; that is a G4-type step.
+   Either is a separate owner decision.
+5. **Retention afterwards (Estimate):** the JSON access line is ~200 bytes, so 50 MB holds
+   ~250k requests, i.e. weeks at today's traffic. To state retention in the privacy policy
+   (option E), measure it a week after step 2.
+
+**Recommendation:** A + B once step 2 is live: the JSON access log then carries what the error
+log was needed for. Add E when the privacy policy is next revised. C and D only if a legal
+review asks for them.
+
