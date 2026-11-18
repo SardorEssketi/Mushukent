@@ -363,6 +363,9 @@ def evaluate_alerts(window: list[dict[str, Any]], t: AlertThresholds) -> dict[st
     return firing
 
 
+OPS_PREFIX = "🚨 OPS · "
+
+
 class TelegramOpsNotifier:
     """Sends plain-text operational alerts through the existing feedback bot. Never raises."""
 
@@ -385,7 +388,12 @@ class TelegramOpsNotifier:
         if not self.enabled:
             return False
         url = f"https://api.telegram.org/bot{self._bot_token}/sendMessage"
-        payload = {"chat_id": self._chat_id, "text": text[:4000], "disable_web_page_preview": True}
+        # Prefixed so an ops alert can never be mistaken for user feedback in a shared chat.
+        payload = {
+            "chat_id": self._chat_id,
+            "text": f"{OPS_PREFIX}{text}"[:4000],
+            "disable_web_page_preview": True,
+        }
         try:
             post = self._client.post if self._client is not None else httpx.post
             post(url, json=payload, timeout=self._timeout).raise_for_status()

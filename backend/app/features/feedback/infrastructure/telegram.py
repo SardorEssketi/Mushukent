@@ -28,7 +28,7 @@ def format_feedback_message(notification: FeedbackNotification) -> str:
     if notification.app_version:
         platform = f"{platform} {notification.app_version}"
     header = (
-        "<b>New Mushukistan Feedback</b>\n\n"
+        "💬 <b>Feedback</b> · <b>New Mushukistan Feedback</b>\n\n"
         f"Category: {_CATEGORY_LABELS[notification.category]}\n"
         f"User: {escape(notification.user_label)}\n"
         f"Platform: {escape(platform)}\n"

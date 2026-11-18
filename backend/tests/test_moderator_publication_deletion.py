@@ -435,9 +435,9 @@ def test_concurrent_removals_by_two_moderators_create_one_notice(client, runtime
         with ThreadPoolExecutor(max_workers=3) as pool:
             codes = list(
                 pool.map(
-                    lambda mod, url=f"{API}{path}/{target}": client.delete(
-                        url, headers=mod.h
-                    ).status_code,
+                    lambda mod, url=f"{API}{path}/{target}": (
+                        client.delete(url, headers=mod.h).status_code
+                    ),
                     moderators,
                 )
             )

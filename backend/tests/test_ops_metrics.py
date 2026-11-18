@@ -7,6 +7,7 @@ import threading
 from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.testclient import TestClient
@@ -274,6 +275,22 @@ def test_telegram_notifier_never_raises_and_hides_the_token() -> None:
     notifier = TelegramOpsNotifier(bot_token="123:secret", chat_id="42", client=Failing())
     assert notifier.send("x") is False
     assert TelegramOpsNotifier(bot_token="", chat_id="42").enabled is False
+
+
+def test_ops_messages_are_prefixed_so_they_differ_from_feedback() -> None:
+    class Recording:
+        def __init__(self) -> None:
+            self.payloads: list[dict] = []
+
+        def post(self, url, *, json, timeout):
+            self.payloads.append(json)
+            return httpx.Response(200, request=httpx.Request("POST", "https://t.invalid"))
+
+    client = Recording()
+    notifier = TelegramOpsNotifier(bot_token="123:secret", chat_id="42", client=client)
+    assert notifier.send("CRITICAL x: feed_p95") is True
+    assert client.payloads[0]["text"] == "🚨 OPS · CRITICAL x: feed_p95"
+    assert client.payloads[0]["chat_id"] == "42"
 
 
 def test_reporter_sends_one_summary_without_internal_fields() -> None:
