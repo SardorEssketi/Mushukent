@@ -7,8 +7,9 @@ import threading
 from types import SimpleNamespace
 from uuid import uuid4
 
+import httpx
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy import exc as sa_exc
@@ -35,33 +36,41 @@ class Clock:
 
 
 def _app(metrics: OpsMetrics, *, cap: int = 10) -> FastAPI:
+    # Mounted like production (app/main.py): one router included with the "/api/v1" prefix, so
+    # the matched route's path is relative ("/feed"). A test app with full paths hid that once.
     app = FastAPI()
+    router = APIRouter()
 
-    @app.get("/api/v1/feed")
+    @router.get("/feed")
     def feed() -> dict:
         return {"ok": True}
 
-    @app.get("/api/v1/cats/{cat_id}/posts")
+    @router.get("/cats")
+    def cats() -> dict:
+        return {"ok": True}
+
+    @router.get("/cats/{cat_id}/posts")
     def cat_posts(cat_id: int) -> dict:
         return {"ok": cat_id}
 
-    @app.get("/api/v1/limited")
+    @router.get("/limited")
     def limited():
         from fastapi.responses import JSONResponse
 
         return JSONResponse({"error": "rate"}, status_code=429)
 
-    @app.get("/api/v1/pool-busy")
+    @router.get("/pool-busy")
     def pool_busy(request: Request):
         from fastapi.responses import JSONResponse
 
         request.state.service_busy_reason = "pool_timeout"
         return JSONResponse({"error": "busy"}, status_code=503)
 
-    @app.get("/api/v1/boom")
+    @router.get("/boom")
     def boom():
         raise RuntimeError("boom")
 
+    app.include_router(router, prefix="/api/v1")
     app.add_middleware(LoadSheddingMiddleware, max_in_flight=cap, retry_after=5)
     app.add_middleware(
         OpsMetricsMiddleware,
@@ -78,6 +87,7 @@ def test_requests_are_counted_by_route_template_and_status() -> None:
         assert client.get("/api/v1/feed?filter=nearby").status_code == 200
     client.get("/api/v1/feed?filter=../../etc")  # unknown filter: no free-form key
     client.get("/api/v1/cats/987654/posts")
+    client.get("/api/v1/cats?bbox=69.2,41.2,69.3,41.3")
     client.get("/api/v1/limited")
     client.get("/api/v1/pool-busy")
     client.get("/api/v1/boom")
@@ -89,15 +99,16 @@ def test_requests_are_counted_by_route_template_and_status() -> None:
     assert snap["feed_nearby_p95_ms"] is not None
     assert snap["other_count"] == 4  # cat posts, limited, pool-busy, boom
     assert snap["unmatched_count"] == 1
-    assert snap["status_2xx"] == 5 and snap["status_4xx"] == 1
+    assert snap["status_2xx"] == 6 and snap["status_4xx"] == 1
     assert snap["status_429"] == 1
     assert snap["status_503_pool"] == 1
     assert snap["status_5xx_other"] == 1
-    assert snap["requests"] == 9
+    assert snap["requests"] == 10
     # pooled series for the hourly PostHog warnings
     assert snap["feed_count"] == 3  # the four known feeds only; feed_other is not pooled
     assert snap["feed_p95_ms"] is not None
-    assert snap["map_count"] == 0 and snap["map_p95_ms"] is None
+    assert snap["map_cats_count"] == 1
+    assert snap["map_count"] == 1 and snap["map_p95_ms"] is not None
     assert snap["status_503_busy"] == 1
     assert not any("987654" in str(item) for item in snap.items())  # templates only
     assert metrics.snapshot_and_reset()["requests"] == 0  # the interval was reset
@@ -251,8 +262,24 @@ def test_alerter_fires_repeats_and_resolves() -> None:
     alerter.observe(busy)
     assert notifier.sent[-1].startswith("STILL CRITICAL")
     quiet = _snap(requests_per_s=1)
-    for _ in range(10):  # the busy minutes leave the 10-minute window
+    for _ in range(15):  # the busy minutes leave the window, then 5 clear minutes in a row
         alerter.observe(quiet)
+    assert notifier.sent[-1] == "RESOLVED test: service_busy_503"
+    assert len(notifier.sent) == 3  # CRITICAL, STILL CRITICAL, RESOLVED
+
+
+def test_a_flapping_rule_does_not_spam() -> None:
+    clock, notifier = Clock(), FakeNotifier()
+    alerter = OpsAlerter(notifier, AlertThresholds(window_minutes=1), label="test", clock=clock)
+    busy, quiet = _snap(status_503_cap=50, requests_per_s=1), _snap(requests_per_s=1)
+    for minute in range(60):  # one hour flipping every minute across the threshold
+        alerter.observe(busy if minute % 2 == 0 else quiet)
+        clock.now += 60
+    # one incident: CRITICAL once, STILL CRITICAL after 30 min; never RESOLVED while it flaps
+    assert [m.split(" test")[0] for m in notifier.sent] == ["CRITICAL", "STILL CRITICAL"]
+    for _ in range(5):
+        alerter.observe(quiet)
+        clock.now += 60
     assert notifier.sent[-1] == "RESOLVED test: service_busy_503"
 
 
@@ -264,6 +291,22 @@ def test_telegram_notifier_never_raises_and_hides_the_token() -> None:
     notifier = TelegramOpsNotifier(bot_token="123:secret", chat_id="42", client=Failing())
     assert notifier.send("x") is False
     assert TelegramOpsNotifier(bot_token="", chat_id="42").enabled is False
+
+
+def test_ops_messages_are_prefixed_so_they_differ_from_feedback() -> None:
+    class Recording:
+        def __init__(self) -> None:
+            self.payloads: list[dict] = []
+
+        def post(self, url, *, json, timeout):
+            self.payloads.append(json)
+            return httpx.Response(200, request=httpx.Request("POST", "https://t.invalid"))
+
+    client = Recording()
+    notifier = TelegramOpsNotifier(bot_token="123:secret", chat_id="42", client=client)
+    assert notifier.send("CRITICAL x: feed_p95") is True
+    assert client.payloads[0]["text"] == "🚨 OPS · CRITICAL x: feed_p95"
+    assert client.payloads[0]["chat_id"] == "42"
 
 
 def test_reporter_sends_one_summary_without_internal_fields() -> None:
@@ -306,4 +349,23 @@ def test_reporter_start_announces_and_stop_cancels() -> None:
 
     asyncio.run(run())
     assert captured[0]["event"] == "api_started"
+    assert notifier.sent == []  # Telegram hears about a start only after a full interval
+
+
+def test_start_notice_is_sent_once_after_the_first_interval() -> None:
+    notifier = FakeNotifier()
+    reporter = OpsReporter(
+        OpsMetrics(),
+        interval_seconds=0.02,
+        analytics_client=None,
+        alerter=OpsAlerter(notifier, AlertThresholds(), label="t"),
+        release="r1",
+    )
+
+    async def run() -> None:
+        reporter.start()
+        await asyncio.sleep(0.15)  # several intervals
+        await reporter.stop()
+
+    asyncio.run(run())
     assert notifier.sent == ["INFO t: API started, release r1"]

@@ -216,6 +216,7 @@ def make_notification(
 
 def test_message_format_contains_expected_fields() -> None:
     text = format_feedback_message(make_notification())
+    assert text.startswith("💬 <b>Feedback</b>")  # never confused with an ops alert
     assert "<b>New Mushukistan Feedback</b>" in text
     assert "Category: Bug Report" in text
     assert "User: Sardor" in text
