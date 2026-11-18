@@ -66,7 +66,7 @@ Implemented (approved 2026-11-18); deploy steps and rollback in section 6.
     this.
   - **Not changed:** nginx's error log still prints the request line (with query string) and the
     client address for upstream errors (Verified in the local check below). That is existing
-    behaviour; changing it is a separate decision.
+    behaviour; it is backlog item P-1 (section 8).
   - **Verified locally (2026-11-18):** `nginx:1.27-alpine` with this file passes `nginx -t`. Test
     requests produce one JSON line each, and a token in the query string and the user agent do
     not appear in the access log.
@@ -342,3 +342,38 @@ host.
   metrics stopped). It does not fit in 5. The host timer's container-down and restart alerts cover
   the same failure.
 - **Thresholds** follow the warn column in section 3. Change them in the alert, not in code.
+
+## 8. Backlog: privacy (not scheduled; owner decision)
+
+### P-1. Nginx's error log holds client addresses and full request lines
+
+Logged 2026-11-18. **Nothing is changed now.**
+
+**What (Verified locally 2026-11-18, nginx 1.27 with our configuration; From code for production):**
+- For upstream errors (502/504, connect failures, timeouts), nginx's error log line contains:
+  - the visitor's address. It is the real one: `real_ip_header CF-Connecting-IP` resolves it
+    behind Cloudflare;
+  - the full request line with the query string;
+  - the host, and the referrer when sent.
+- Query strings can carry personal data. The nearby feed sends `lat`/`lon`, so an address and an
+  approximate location end up in one line. Tokens travel in the `Authorization` header, which is
+  not logged.
+- The error log goes to the nginx container's stderr, into Docker's log on the host.
+- Today the logs are not rotated. Docker log rotation is part of step 2, not yet live.
+- The same applies today to the **access log** (default `combined` format: address, user agent,
+  full URI) until step 2's JSON access log replaces it.
+
+**Options:**
+
+| Option | Effect | Cost |
+|---|---|---|
+| A. Bounded retention only: step 2's rotation (10 MB × 5 per container) | old lines disappear after days, not never | nothing new; lines still contain the data |
+| B. `error_log /dev/stderr crit;` in our server blocks | upstream errors (logged at `error`) are no longer written, so no address or request line | lose nginx's own error text. Step 2's JSON access log still shows each 502/504 with `ust`/`urt`. For debugging, raise the level temporarily (a reviewed config change) |
+| C. Error log to a file with daily `logrotate`, kept 7 days | short, predictable retention | a new mount and host logrotate config; still contains the data |
+| D. Drop location from query strings (client sends `lat`/`lon` in a header or body) | no location in any nginx log | API and client change, both releases; the address is still logged |
+| E. Mention operational logs and their retention in the privacy policy | transparency | legal text change, owner's call |
+
+**Recommendation:** A + B once step 2 is live: the JSON access log then carries what the error
+log was needed for. Add E when the privacy policy is next revised. C and D only if a legal
+review asks for them.
+
