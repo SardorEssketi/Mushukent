@@ -1,0 +1,11 @@
+# EXAMPLE - install only with the owner's approval; see docs/OBSERVABILITY_PLAN.md, section 6.
+[Unit]
+Description=Run the Mushukistan host health check every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target
