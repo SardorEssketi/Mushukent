@@ -12,8 +12,15 @@ from app.core.container import build_container
 from app.core.errors import register_error_handlers
 from app.core.load_shedding import LoadSheddingMiddleware
 from app.core.logging import configure_logging
+from app.core.ops_metrics import (
+    AlertThresholds,
+    OpsAlerter,
+    OpsMetricsMiddleware,
+    OpsReporter,
+    TelegramOpsNotifier,
+)
 from app.core.publication_diagnostics import PublicationDiagnosticsMiddleware
-from app.core.rate_limit import add_rate_limit_middleware
+from app.core.rate_limit import add_rate_limit_middleware, client_address
 from app.core.request_auth import decode_access_token_once
 from app.core.upload_guard import UploadSingleFlightMiddleware, verified_user_identifier
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
@@ -73,6 +80,34 @@ class PostHogContextMiddleware:
                     logger.warning("analytics_context_failed", error_type=type(exc).__name__)
 
 
+def _build_ops_reporter(settings, metrics, analytics_client) -> OpsReporter | None:
+    if metrics is None:
+        return None
+    alerter = None
+    if settings.ops_alerts_enabled:
+        notifier = TelegramOpsNotifier(
+            bot_token=settings.telegram_bot_token,
+            chat_id=settings.telegram_ops_chat_id or settings.telegram_feedback_chat_id,
+        )
+        if notifier.enabled:
+            thresholds = AlertThresholds(
+                feed_p95_ms=settings.ops_alert_feed_p95_ms,
+                map_p95_ms=settings.ops_alert_map_p95_ms,
+                active_users=settings.ops_alert_active_users,
+                requests_per_s=settings.ops_alert_requests_per_second,
+            )
+            alerter = OpsAlerter(notifier, thresholds, label=f"Mushukistan {settings.app_env}")
+        else:
+            logger.info("ops_alerts_disabled", reason="telegram_not_configured")
+    return OpsReporter(
+        metrics,
+        interval_seconds=settings.ops_metrics_interval_seconds,
+        analytics_client=analytics_client,
+        alerter=alerter,
+        release=settings.app_release or "unknown",
+    )
+
+
 def create_app() -> FastAPI:
     configure_logging()
     container = build_container()
@@ -82,9 +117,14 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         analytics = Analytics()
         app.state.posthog_client = analytics.start(settings)
+        reporter = _build_ops_reporter(settings, container.ops_metrics, app.state.posthog_client)
+        if reporter is not None:
+            reporter.start()
         try:
             yield
         finally:
+            if reporter is not None:
+                await reporter.stop()
             analytics.stop()
 
     app = FastAPI(
@@ -138,6 +178,14 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(PostHogContextMiddleware)
     app.add_middleware(PublicationDiagnosticsMiddleware)
+    if container.ops_metrics is not None:
+        # Added last, so it is the outermost layer: it also times shed (503) and limited (429)
+        # requests and everything the inner middleware does.
+        app.add_middleware(
+            OpsMetricsMiddleware,
+            metrics=container.ops_metrics,
+            client_address=lambda request: client_address(request, settings),
+        )
     app.include_router(api_v1_router, prefix="/api/v1")
 
     return app

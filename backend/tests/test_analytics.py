@@ -182,7 +182,11 @@ def test_correctly_configured_analytics_collects_events(configure, fake_posthog)
     (instance,) = fake_posthog.instances
     assert instance.kwargs["project_api_key"] == "phc_token"
     assert instance.kwargs["host"] == "https://eu.i.posthog.com"
-    assert instance.events == [(("post_created",), {"properties": {"photo_count": 1}})]
+    # The ops metrics (LT-20) announce each start with one server-side event, without a person.
+    ops = [e for e in instance.events if e[1].get("distinct_id") == "mushukistan-api"]
+    assert [e[1]["event"] for e in ops] == ["api_started"]
+    product = [e for e in instance.events if e not in ops]
+    assert product == [(("post_created",), {"properties": {"photo_count": 1}})]
     assert instance.flushed == 1 and instance.shut_down == 1
 
 

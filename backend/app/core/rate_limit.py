@@ -352,6 +352,11 @@ def _rate_limit_key_and_limit(
     return f"anon:ip:{_client_ip(request, settings)}", settings.rate_limit_anon_per_minute
 
 
+def client_address(request: Request, settings: Settings) -> str:
+    """Public alias of the trusted client address (used by the ops metrics' active-user count)."""
+    return _client_ip(request, settings)
+
+
 def _client_ip(request: Request, settings: Settings) -> str:
     """Trusted client address used as the rate-limit identity of unauthenticated callers.
 

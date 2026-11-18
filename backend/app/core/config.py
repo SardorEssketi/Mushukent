@@ -80,6 +80,23 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
     telegram_feedback_chat_id: str = Field(default="", alias="TELEGRAM_FEEDBACK_CHAT_ID")
+
+    # Production observability (LT-20, docs/OBSERVABILITY_PLAN.md). One summary per interval to
+    # PostHog and the log; critical alerts to Telegram (the feedback bot; its chat unless
+    # TELEGRAM_OPS_CHAT_ID is set). Thresholds come from the measured 30-user capacity.
+    ops_metrics_enabled: bool = Field(default=True, alias="OPS_METRICS_ENABLED")
+    ops_metrics_interval_seconds: float = Field(
+        default=60, ge=5, alias="OPS_METRICS_INTERVAL_SECONDS"
+    )
+    ops_alerts_enabled: bool = Field(default=True, alias="OPS_ALERTS_ENABLED")
+    telegram_ops_chat_id: str = Field(default="", alias="TELEGRAM_OPS_CHAT_ID")
+    app_release: str = Field(default="", alias="APP_RELEASE")
+    ops_alert_feed_p95_ms: float = Field(default=500, gt=0, alias="OPS_ALERT_FEED_P95_MS")
+    ops_alert_map_p95_ms: float = Field(default=700, gt=0, alias="OPS_ALERT_MAP_P95_MS")
+    ops_alert_active_users: int = Field(default=28, ge=1, alias="OPS_ALERT_ACTIVE_USERS")
+    ops_alert_requests_per_second: float = Field(
+        default=6.5, gt=0, alias="OPS_ALERT_REQUESTS_PER_SECOND"
+    )
     feedback_rate_limit_per_hour: int = Field(default=3, alias="FEEDBACK_RATE_LIMIT_PER_HOUR")
 
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
