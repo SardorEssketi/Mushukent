@@ -20,10 +20,18 @@ final class SessionRestoreFailure extends SessionRestoreResult {
   const SessionRestoreFailure({
     required this.message,
     this.retryable = true,
+    this.busy = false,
+    this.retryAfter,
   });
 
   final String message;
   final bool retryable;
+
+  /// The server answered 429 or 503 SERVICE_BUSY: it is up but asked the client to wait.
+  final bool busy;
+
+  /// The server's `Retry-After`, when it sent one.
+  final Duration? retryAfter;
 }
 
 final class SessionRestoreSuccess extends SessionRestoreResult {

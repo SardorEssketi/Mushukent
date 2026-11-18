@@ -48,6 +48,7 @@ class AuthState {
     this.pendingVerificationEmail,
     this.devVerificationToken,
     this.reconnecting = false,
+    this.busyUntil,
   });
 
   final AuthPhase phase;
@@ -58,6 +59,10 @@ class AuthState {
   final bool messageIsError;
   final String? pendingVerificationEmail;
   final String? devVerificationToken;
+
+  /// Set while the server has asked the app to wait (429 / 503 SERVICE_BUSY with `Retry-After`)
+  /// before the next automatic session check; manual retries are held back until then.
+  final DateTime? busyUntil;
 
   /// Only for [AuthPhase.sessionUnavailable]: a re-check is in flight right now.
   final bool reconnecting;
@@ -119,12 +124,14 @@ class AuthState {
     required String message,
     bool retryable = true,
     bool reconnecting = false,
+    DateTime? busyUntil,
   }) {
     return AuthState._(
       phase: AuthPhase.sessionUnavailable,
       message: message,
       retryable: retryable,
       reconnecting: reconnecting,
+      busyUntil: busyUntil,
     );
   }
 
@@ -184,8 +191,12 @@ class AuthController extends StateNotifier<AuthState> {
     Duration restoreTimeout = const Duration(seconds: 20),
     AuthTokenStore? tokenStore,
     List<Duration> reconnectBackoff = defaultReconnectBackoff,
+    Duration maxBusyWait = const Duration(seconds: 60),
+    DateTime Function() clock = DateTime.now,
   })  : _restoreTimeout = restoreTimeout,
         _reconnectBackoff = reconnectBackoff,
+        _maxBusyWait = maxBusyWait,
+        _clock = clock,
         _tokenStore = tokenStore,
         super(AuthState.restoring()) {
     if (tokenStore is GuardedAuthTokenStore) {
@@ -204,7 +215,10 @@ class AuthController extends StateNotifier<AuthState> {
   final Duration _restoreTimeout;
   final Set<Timer> _restoreTimeoutTimers = <Timer>{};
   final List<Duration> _reconnectBackoff;
+  final Duration _maxBusyWait;
+  final DateTime Function() _clock;
   final AuthTokenStore? _tokenStore;
+  DateTime? _busyUntil;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
   Future<void>? _restoreInFlight;
@@ -280,8 +294,13 @@ class AuthController extends StateNotifier<AuthState> {
   /// User-initiated (Retry button) or lifecycle-initiated (app resumed) re-check of a stored
   /// session that could not be confirmed. Starts a fresh automatic-retry round. No-op in every
   /// other phase, so it is safe to call from a lifecycle observer.
+  ///
+  /// While the server's busy wait (`Retry-After`) runs, this does nothing: the scheduled check
+  /// runs when the wait ends, so neither the button nor an app resume can hammer a busy server.
   Future<void> retrySession() async {
     if (state.phase != AuthPhase.sessionUnavailable) return;
+    final busyUntil = _busyUntil;
+    if (busyUntil != null && _clock().isBefore(busyUntil)) return;
     _reconnectAttempts = 0;
     _reconnectTimer?.cancel();
     await restoreSession();
@@ -291,23 +310,47 @@ class AuthController extends StateNotifier<AuthState> {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _reconnectAttempts = 0;
+    _busyUntil = null;
   }
 
-  void _scheduleReconnect() {
+  /// Schedules the next automatic check. After a busy answer the delay is the longer of the
+  /// backoff step and the server's `Retry-After` (capped at [_maxBusyWait]).
+  void _scheduleReconnect({bool busy = false, Duration? retryAfter}) {
     _reconnectTimer?.cancel();
+    _busyUntil = null;
     if (_reconnectAttempts >= _reconnectBackoff.length) return;
-    final delay = _reconnectBackoff[_reconnectAttempts++];
+    var delay = _reconnectBackoff[_reconnectAttempts++];
+    if (busy) {
+      final asked = retryAfter == null
+          ? Duration.zero
+          : (retryAfter > _maxBusyWait ? _maxBusyWait : retryAfter);
+      if (asked > delay) delay = asked;
+      _busyUntil = _clock().add(delay);
+    }
     _reconnectTimer = Timer(delay, () {
       _reconnectTimer = null;
+      _busyUntil = null;
       if (!mounted || state.phase != AuthPhase.sessionUnavailable) return;
       unawaited(restoreSession());
     });
   }
 
-  void _enterSessionUnavailable(String message, bool retryable) {
-    state =
-        AuthState.sessionUnavailable(message: message, retryable: retryable);
-    if (retryable) _scheduleReconnect();
+  void _enterSessionUnavailable(
+    String message,
+    bool retryable, {
+    bool busy = false,
+    Duration? retryAfter,
+  }) {
+    if (retryable) {
+      _scheduleReconnect(busy: busy, retryAfter: retryAfter);
+    } else {
+      _busyUntil = null;
+    }
+    state = AuthState.sessionUnavailable(
+      message: message,
+      retryable: retryable,
+      busyUntil: _busyUntil,
+    );
   }
 
   Future<void> _performRestoreSession() async {
@@ -368,9 +411,21 @@ class AuthController extends StateNotifier<AuthState> {
         _cancelReconnect();
         state = AuthState.unauthenticated(message: message);
         break;
-      case SessionRestoreFailure(:final message, :final retryable):
-        logStartupStage('Authentication restore unavailable; session kept');
-        _enterSessionUnavailable(message, retryable);
+      case SessionRestoreFailure(
+          :final message,
+          :final retryable,
+          :final busy,
+          :final retryAfter,
+        ):
+        logStartupStage(busy
+            ? 'Authentication restore: server busy; session kept'
+            : 'Authentication restore unavailable; session kept');
+        _enterSessionUnavailable(
+          message,
+          retryable,
+          busy: busy,
+          retryAfter: retryAfter,
+        );
         break;
       case SessionRestoreSuccess(:final session):
         logStartupStage('Authentication restore completed: authenticated');

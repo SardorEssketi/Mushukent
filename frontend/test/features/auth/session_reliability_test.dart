@@ -54,6 +54,7 @@ class _Harness {
       Duration(milliseconds: 5),
       Duration(milliseconds: 5),
     ],
+    Duration maxBusyWait = const Duration(seconds: 60),
   }) : tokens = FakeAuthTokenStore(access, refresh) {
     api.setHandler('GET', 'users/me', (_) => _usersMe(this));
     api.setHandler('POST', 'auth/refresh', (_) => _refresh(this));
@@ -66,6 +67,7 @@ class _Harness {
       repository,
       FakeGoogleIdentityTokenProvider(),
       reconnectBackoff: backoff,
+      maxBusyWait: maxBusyWait,
     );
   }
 
@@ -100,7 +102,100 @@ class _Harness {
   void dispose() => controller.dispose();
 }
 
+MushukistanApiException _busy(int status, Duration? retryAfter) =>
+    MushukistanApiException(
+      kind: status >= 500 ? ApiFailureKind.server : ApiFailureKind.unknown,
+      code: status == 429 ? 'RATE_LIMITED' : 'SERVICE_BUSY',
+      message: 'Busy.',
+      statusCode: status,
+      retryAfter: retryAfter,
+    );
+
 void main() {
+  group('busy server at startup (Retry-After)', () {
+    test('503 SERVICE_BUSY waits for Retry-After and holds back manual retries',
+        () async {
+      final h = _Harness();
+      await h.pump();
+      h.meError = _busy(503, const Duration(seconds: 30));
+      final before = DateTime.now();
+      await h.controller.restoreSession(force: true);
+
+      final state = h.controller.state;
+      expect(state.phase, AuthPhase.sessionUnavailable);
+      expect(state.retryable, isTrue);
+      expect(state.busyUntil, isNotNull);
+      expect(
+        state.busyUntil!.difference(before).inSeconds,
+        inInclusiveRange(29, 31),
+      );
+      expect(await h.tokens.readRefreshToken(), 'refresh-1'); // never a logout
+
+      final calls = h.meCalls;
+      await h.controller.retrySession(); // button or app resume during the wait
+      await h.pump();
+      expect(h.meCalls, calls); // nothing sent before the server's wait ends
+      h.dispose();
+    });
+
+    test('429 at startup is retried automatically after the wait', () async {
+      final h = _Harness();
+      await h.pump();
+      h.meError = _busy(429, const Duration(milliseconds: 150));
+      await h.controller.restoreSession(force: true);
+      expect(h.controller.state.phase, AuthPhase.sessionUnavailable);
+      expect(h.controller.state.retryable, isTrue); // was a dead end before
+      final calls = h.meCalls;
+
+      h.meError = null;
+      await h
+          .pump(60); // longer than the 5 ms backoff, shorter than Retry-After
+      expect(h.meCalls, calls);
+      await h.pump(250);
+      expect(h.meCalls, greaterThan(calls));
+      expect(h.controller.state.phase, AuthPhase.authenticated);
+      expect(h.controller.state.busyUntil, isNull);
+      h.dispose();
+    });
+
+    test('Retry-After is capped by the longest busy wait', () async {
+      final h = _Harness(maxBusyWait: const Duration(seconds: 2));
+      await h.pump();
+      h.meError = _busy(503, const Duration(seconds: 300));
+      final before = DateTime.now();
+      await h.controller.restoreSession(force: true);
+      expect(
+        h.controller.state.busyUntil!.difference(before).inMilliseconds,
+        lessThanOrEqualTo(2100),
+      );
+      h.dispose();
+    });
+
+    test('busy refresh of an expired session also waits, keeping credentials',
+        () async {
+      final h = _Harness();
+      await h.pump();
+      h.meError = _unauthorized;
+      h.refreshError = _busy(429, const Duration(seconds: 10));
+      await h.controller.restoreSession(force: true);
+      expect(h.controller.state.phase, AuthPhase.sessionUnavailable);
+      expect(h.controller.state.busyUntil, isNotNull);
+      expect(await h.tokens.readRefreshToken(), 'refresh-1');
+      h.dispose();
+    });
+
+    test('an ordinary outage keeps the old schedule and the Retry button',
+        () async {
+      final h = _Harness();
+      await h.pump();
+      h.meError = _unavailable;
+      await h.controller.restoreSession(force: true);
+      expect(h.controller.state.phase, AuthPhase.sessionUnavailable);
+      expect(h.controller.state.busyUntil, isNull);
+      h.dispose();
+    });
+  });
+
   group('startup', () {
     test('valid session restores and stays authenticated', () async {
       final h = _Harness();

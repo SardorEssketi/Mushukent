@@ -20,6 +20,7 @@ class SessionUnavailableScreen extends ConsumerWidget {
     final strings = ref.watch(appStringsProvider);
     final authState = ref.watch(authControllerProvider);
     final reconnecting = authState.reconnecting;
+    final busyUntil = authState.busyUntil;
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.sessionUnavailableTitle)),
@@ -65,14 +66,20 @@ class SessionUnavailableScreen extends ConsumerWidget {
                       ],
                     )
                   else ...[
-                    FilledButton(
-                      onPressed: () => unawaited(
-                        ref
-                            .read(authControllerProvider.notifier)
-                            .retrySession(),
+                    if (busyUntil != null)
+                      _BusyCountdown(
+                        until: busyUntil,
+                        label: strings.busyRetryingIn,
+                      )
+                    else
+                      FilledButton(
+                        onPressed: () => unawaited(
+                          ref
+                              .read(authControllerProvider.notifier)
+                              .retrySession(),
+                        ),
+                        child: Text(strings.retry),
                       ),
-                      child: Text(strings.retry),
-                    ),
                     const SizedBox(height: AppSpacing.sm),
                     TextButton(
                       onPressed: () => context.go('/feed'),
@@ -85,6 +92,48 @@ class SessionUnavailableScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "Busy right now. Retrying in N s" while the server's `Retry-After` runs. The controller
+/// retries by itself when the wait ends, so there is no button to press in the meantime.
+class _BusyCountdown extends StatefulWidget {
+  const _BusyCountdown({required this.until, required this.label});
+
+  final DateTime until;
+  final String Function(int seconds) label;
+
+  @override
+  State<_BusyCountdown> createState() => _BusyCountdownState();
+}
+
+class _BusyCountdownState extends State<_BusyCountdown> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining = widget.until.difference(DateTime.now());
+    final seconds =
+        remaining.isNegative ? 0 : (remaining.inMilliseconds / 1000).ceil();
+    return Text(
+      widget.label(seconds),
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.bodyMedium,
     );
   }
 }
