@@ -34,10 +34,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 STATE_VERSION = 1
+OPS_PREFIX = "🚨 OPS · "
 MAX_LOOKBACK_S = 600  # after downtime, look back at most 10 minutes
 GATEWAY_STATUSES = (502, 504)
 # Fallback for Nginx's default "combined" format: addr - user [time] "request" status bytes ...
-_COMBINED = re.compile(r'^\S+ \S+ \S+ \[[^\]]+\] "(?:[A-Z]+ (\S+)[^"]*|[^"]*)" (\d{3}) ')
+_COMBINED = re.compile(
+    r'^\S+ \S+ \S+ \[[^\]]+\] "(?:[A-Z]+ (\S+)[^"]*|[^"]*)" (\d{3}) '
+)
 
 
 @dataclass(frozen=True)
@@ -52,8 +55,13 @@ class Config:
     posthog_host: str = ""
     gateway_errors_10m: int = 5
     window_minutes: int = 10
-    down_runs: int = 2  # consecutive runs before "not running / unhealthy" fires (deploy swaps)
+    down_runs: int = (
+        2  # consecutive runs before "not running / unhealthy" fires (deploy swaps)
+    )
     repeat_minutes: int = 30
+    resolve_after_runs: int = (
+        5  # one run a minute: RESOLVED after 5 clear minutes in a row
+    )
 
     @classmethod
     def from_env(cls, env: dict[str, str]) -> Config:
@@ -73,7 +81,9 @@ class Config:
             ),
             posthog_token=env.get("POSTHOG_PROJECT_TOKEN", "").strip(),
             posthog_host=env.get("POSTHOG_HOST", "").strip().rstrip("/"),
-            gateway_errors_10m=num("OPS_HOST_GATEWAY_ERRORS_10M", cls.gateway_errors_10m),
+            gateway_errors_10m=num(
+                "OPS_HOST_GATEWAY_ERRORS_10M", cls.gateway_errors_10m
+            ),
             repeat_minutes=num("OPS_HOST_REPEAT_MINUTES", cls.repeat_minutes),
         )
 
@@ -98,7 +108,8 @@ class NginxMinute:
 
 def parse_nginx_lines(lines: Iterable[str]) -> NginxMinute:
     """Counts access-log lines. JSON (``ops_json``) first; the default format as a fallback, so the
-    timer also works before the Nginx log format change is deployed. Error-log lines are ignored."""
+    timer also works before the Nginx log format change is deployed. Error-log lines are ignored.
+    """
     out = NginxMinute()
     for line in lines:
         line = line.strip()
@@ -150,7 +161,9 @@ Runner = Callable[[list[str]], str]
 
 
 def run_docker(args: list[str]) -> str:
-    done = subprocess.run(["docker", *args], capture_output=True, text=True, timeout=20, check=True)
+    done = subprocess.run(
+        ["docker", *args], capture_output=True, text=True, timeout=20, check=True
+    )
     return done.stdout + done.stderr  # Nginx writes access to stdout, errors to stderr
 
 
@@ -233,7 +246,7 @@ def read_oom_events(run: Runner, project: str, since: float, until: float) -> li
 @dataclass
 class Findings:
     sustained: dict[str, str]  # rule -> description, while firing
-    events: list[str]  # one-off critical messages
+    events: list[tuple[str, str]]  # (cooldown key, message): one-off critical events
     notices: list[str]  # informational messages
     restarts: int = 0
 
@@ -250,7 +263,9 @@ def evaluate(
     events: list[str] = []
     notices: list[str] = []
 
-    history = [h for h in state.get("gateway", []) if h["t"] > now - cfg.window_minutes * 60]
+    history = [
+        h for h in state.get("gateway", []) if h["t"] > now - cfg.window_minutes * 60
+    ]
     history.append({"t": now, "n": nginx.gateway_errors})
     state["gateway"] = history
     gateway = sum(h["n"] for h in history)
@@ -269,8 +284,11 @@ def evaluate(
         if before and before["id"] == c.id and c.restarts > before["restarts"]:
             restarts += c.restarts - before["restarts"]
             events.append(
-                f"{c.name} restarted ({c.restarts - before['restarts']}x; exit code {c.exit_code}, "
-                f"OOMKilled={str(c.oom_killed).lower()})"
+                (
+                    f"restart:{c.name}",
+                    f"{c.name} restarted ({c.restarts - before['restarts']}x; "
+                    f"exit code {c.exit_code}, OOMKilled={str(c.oom_killed).lower()})",
+                )
             )
         elif before and before["id"] != c.id:
             notices.append(f"{c.name} was recreated (a deploy or a manual change)")
@@ -279,24 +297,54 @@ def evaluate(
         bad = c.status != "running" or c.health == "unhealthy"
         down_counts[c.name] = down_counts.get(c.name, 0) + 1 if bad else 0
         if down_counts[c.name] >= cfg.down_runs:
-            sustained[f"container_{c.name}"] = f"{c.name} is {c.status} (health: {c.health})"
+            sustained[f"container_{c.name}"] = (
+                f"{c.name} is {c.status} (health: {c.health})"
+            )
     for name in set(previous) - set(seen):
         notices.append(f"{name} is gone (removed)")
     state["containers"] = seen
     state["down"] = {k: v for k, v in down_counts.items() if k in seen}
 
     for name in sorted(set(oom_names)):
-        events.append(f"{name}: out-of-memory kill (Docker oom event)")
-    return Findings(sustained=sustained, events=events, notices=notices, restarts=restarts)
+        events.append((f"oom:{name}", f"{name}: out-of-memory kill (Docker oom event)"))
+    return Findings(
+        sustained=sustained, events=events, notices=notices, restarts=restarts
+    )
 
 
-def alert_messages(cfg: Config, state: dict[str, Any], findings: Findings, now: float) -> list[str]:
-    """CRITICAL / STILL CRITICAL / RESOLVED transitions, plus one-off events and notices."""
+def alert_messages(
+    cfg: Config, state: dict[str, Any], findings: Findings, now: float
+) -> list[str]:
+    """CRITICAL / STILL CRITICAL / RESOLVED transitions, plus one-off events and notices.
+
+    Anti-spam: a one-off event (restart, OOM) of the same container is sent at most once per
+    `repeat_minutes`, with the number suppressed since; a sustained rule is RESOLVED only after
+    `resolve_after_runs` clear runs in a row (a re-fire in between continues the incident); all
+    notices of one run share one message.
+    """
     label = cfg.label
-    messages = [f"🔴 CRITICAL · {label}\n{text}" for text in findings.events]
-    messages += [f"ℹ️ {label}\n{text}" for text in findings.notices]
+    messages: list[str] = []
+    cooldown = state.get("cooldown", {})
+    for key, text in findings.events:
+        info = cooldown.get(key)
+        if info is not None and now - info["sent"] < cfg.repeat_minutes * 60:
+            info["suppressed"] += 1
+            continue
+        more = info["suppressed"] if info else 0
+        extra = f" (+{more} more since the last alert)" if more else ""
+        messages.append(f"🔴 CRITICAL · {label}\n{text}{extra}")
+        cooldown[key] = {"sent": now, "suppressed": 0}
+    state["cooldown"] = {
+        k: v
+        for k, v in cooldown.items()
+        if now - v["sent"] < 24 * 3600 or v["suppressed"]
+    }
+    if findings.notices:
+        messages.append(f"ℹ️ {label}\n" + "\n".join(findings.notices))
     active = state.get("alerts", {})
+    clear = state.get("clear", {})
     for rule, text in findings.sustained.items():
+        clear.pop(rule, None)
         info = active.get(rule)
         if info is None:
             messages.append(f"🔴 CRITICAL · {label}\n{text}")
@@ -306,9 +354,12 @@ def alert_messages(cfg: Config, state: dict[str, Any], findings: Findings, now: 
             messages.append(f"🔴 STILL CRITICAL ({minutes} min) · {label}\n{text}")
             info["sent"] = now
     for rule in [r for r in active if r not in findings.sustained]:
-        minutes = round((now - active.pop(rule)["since"]) / 60)
-        messages.append(f"✅ RESOLVED after {minutes} min · {label}\n{rule}")
-    state["alerts"] = active
+        clear[rule] = clear.get(rule, 0) + 1
+        if clear[rule] >= cfg.resolve_after_runs:
+            minutes = round((now - active.pop(rule)["since"]) / 60)
+            del clear[rule]
+            messages.append(f"✅ RESOLVED after {minutes} min · {label}\n{rule}")
+    state["alerts"], state["clear"] = active, clear
     return messages
 
 
@@ -316,20 +367,32 @@ def alert_messages(cfg: Config, state: dict[str, Any], findings: Findings, now: 
 
 
 def _post(url: str, data: bytes, content_type: str) -> None:
-    request = urllib.request.Request(url, data=data, headers={"Content-Type": content_type})
-    with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 (fixed https URLs)
+    request = urllib.request.Request(
+        url, data=data, headers={"Content-Type": content_type}
+    )
+    with urllib.request.urlopen(
+        request, timeout=10
+    ) as response:  # noqa: S310 (fixed https URLs)
         response.read()
 
 
-def send_telegram(cfg: Config, text: str, post: Callable[[str, bytes, str], None] = _post) -> bool:
+def send_telegram(
+    cfg: Config, text: str, post: Callable[[str, bytes, str], None] = _post
+) -> bool:
     if not (cfg.telegram_token and cfg.telegram_chat_id):
         return False
     url = f"https://api.telegram.org/bot{cfg.telegram_token}/sendMessage"
-    body = urllib.parse.urlencode({"chat_id": cfg.telegram_chat_id, "text": text}).encode()
+    # Same prefix as the backend's ops alerts: feedback and ops share the owner's DM.
+    text = OPS_PREFIX + text
+    body = urllib.parse.urlencode(
+        {"chat_id": cfg.telegram_chat_id, "text": text}
+    ).encode()
     try:
         post(url, body, "application/x-www-form-urlencoded")
         return True
-    except Exception as error:  # never let a send failure stop the check; never print the URL
+    except (
+        Exception
+    ) as error:  # never let a send failure stop the check; never print the URL
         print(f"telegram send failed: {type(error).__name__}", file=sys.stderr)
         return False
 
@@ -350,7 +413,11 @@ def send_posthog(
         "properties": {**properties, "$process_person_profile": False},
     }
     try:
-        post(f"{cfg.posthog_host}/i/v0/e/", json.dumps(payload).encode(), "application/json")
+        post(
+            f"{cfg.posthog_host}/i/v0/e/",
+            json.dumps(payload).encode(),
+            "application/json",
+        )
         return True
     except Exception as error:
         print(f"posthog send failed: {type(error).__name__}", file=sys.stderr)
@@ -364,7 +431,11 @@ def load_state(path: str) -> dict[str, Any]:
     try:
         with open(path, encoding="utf-8") as handle:
             state = json.load(handle)
-        return state if state.get("version") == STATE_VERSION else {"version": STATE_VERSION}
+        return (
+            state
+            if state.get("version") == STATE_VERSION
+            else {"version": STATE_VERSION}
+        )
     except (OSError, ValueError):
         return {"version": STATE_VERSION}
 
@@ -391,7 +462,14 @@ def run_once(
     docker_ok = True
     try:
         logs = run(
-            ["logs", "--since", f"{since:.3f}", "--until", f"{now:.3f}", cfg.nginx_container]
+            [
+                "logs",
+                "--since",
+                f"{since:.3f}",
+                "--until",
+                f"{now:.3f}",
+                cfg.nginx_container,
+            ]
         )
         nginx = parse_nginx_lines(logs.splitlines())
         containers = read_containers(run, cfg.compose_project)
@@ -405,7 +483,11 @@ def run_once(
     else:  # keep the container baseline; report the check itself as failing
         failures = state.get("docker_failures", 0) + 1
         state["docker_failures"] = failures
-        sustained = {"docker": "Docker did not answer the health check"} if failures >= 2 else {}
+        sustained = (
+            {"docker": "Docker did not answer the health check"}
+            if failures >= 2
+            else {}
+        )
         findings = Findings(sustained=sustained, events=[], notices=[])
     if docker_ok:
         state["docker_failures"] = 0
@@ -432,7 +514,11 @@ def run_once(
     messages = alert_messages(cfg, state, findings, now)
     state["until"] = now
     if dry_run:
-        print(json.dumps({"event": "host_health_minute", "properties": properties}, indent=2))
+        print(
+            json.dumps(
+                {"event": "host_health_minute", "properties": properties}, indent=2
+            )
+        )
         for message in messages:
             print("---\n" + message)
         return properties, messages
@@ -455,8 +541,14 @@ def _round(value: float | None) -> float | None:
 def main(argv: list[str]) -> int:
     cfg = Config.from_env(dict(os.environ))
     if "--test-telegram" in argv:
-        sent = send_telegram(cfg, f"ℹ️ {cfg.label}\nHost health check installed (test message).")
-        print("telegram test: sent" if sent else "telegram test: NOT sent (token, chat or network)")
+        sent = send_telegram(
+            cfg, f"ℹ️ {cfg.label}\nHost health check installed (test message)."
+        )
+        print(
+            "telegram test: sent"
+            if sent
+            else "telegram test: NOT sent (token, chat or network)"
+        )
         return 0 if sent else 1
     run_once(cfg, dry_run="--dry-run" in argv)
     return 0
