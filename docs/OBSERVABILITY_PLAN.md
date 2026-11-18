@@ -1,8 +1,10 @@
 # Minimal production observability (LT-20): plan
 
-Status: **steps 1 and 2 implemented** on `ops/observability` (owner approvals 2026-11-16 and
-2026-11-18), not deployed. Step 2 is infrastructure: **needs owner approval before deploy**
-(section 6). Builds on
+Status: **steps 1 and 2 implemented** (owner approvals 2026-11-16 and 2026-11-18), not deployed.
+Step 1 is on `main` and ships with the package-1 backend release. **Step 2 (nginx log format,
+Docker log rotation, host timer) is held out of `main`** and lives on branch
+`ops/observability-step2`. It is infrastructure and **needs owner approval before deploy**: a
+separate step, after the backend has been stable for 24 h (section 6). Builds on
 package 1 (in-flight cap, pool timeout → 503 `SERVICE_BUSY`). Capacity figures come from
 `docs/audits/load-300/FIXES_RESULTS.md` on `perf/fixes`: the current box carries **30 concurrent
 active users** within Feed p95 < 500 ms and map p95 < 700 ms, and 30 users make ~7 requests per
