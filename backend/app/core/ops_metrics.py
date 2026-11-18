@@ -206,6 +206,14 @@ class OpsMetrics:
             snapshot[f"{key}_p95_ms"] = _round(percentile(stats.samples, 0.95))
             if key in FEED_KEYS or key in MAP_KEYS:
                 samples[key] = stats.samples
+        # Pooled figures, so each hourly PostHog warning is one series rather than a formula.
+        for name, keys in (("feed", FEED_KEYS), ("map", MAP_KEYS)):
+            pooled = [v for k in keys for v in samples.get(k, [])]
+            snapshot[f"{name}_count"] = sum(routes[k].count for k in keys if k in routes)
+            snapshot[f"{name}_p95_ms"] = _round(percentile(pooled, 0.95))
+        snapshot["status_503_busy"] = (
+            status["status_503_cap"] + status["status_503_pool"] + status["status_503_db"]
+        )
         snapshot["_samples"] = samples  # for the alert window only; never sent
         return snapshot
 

@@ -94,6 +94,11 @@ def test_requests_are_counted_by_route_template_and_status() -> None:
     assert snap["status_503_pool"] == 1
     assert snap["status_5xx_other"] == 1
     assert snap["requests"] == 9
+    # pooled series for the hourly PostHog warnings
+    assert snap["feed_count"] == 3  # the four known feeds only; feed_other is not pooled
+    assert snap["feed_p95_ms"] is not None
+    assert snap["map_count"] == 0 and snap["map_p95_ms"] is None
+    assert snap["status_503_busy"] == 1
     assert not any("987654" in str(item) for item in snap.items())  # templates only
     assert metrics.snapshot_and_reset()["requests"] == 0  # the interval was reset
 
@@ -119,6 +124,7 @@ def test_requests_shed_by_the_in_flight_cap_are_counted_as_cap_503() -> None:
 
     snap = metrics.snapshot_and_reset()
     assert snap["status_503_cap"] == 1
+    assert snap["status_503_busy"] == 1
     assert snap["in_flight_max"] == 2
 
 
