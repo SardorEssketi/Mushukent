@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/app_strings.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/widgets/app_remote_image.dart';
+import '../../../notifications/application/notification_push.dart';
 
 class MyLostPetsScreen extends ConsumerStatefulWidget {
   const MyLostPetsScreen({super.key});
@@ -26,7 +27,11 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load(reset: true));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load(reset: true);
+      // Natural moment for the deferred, one-time notification prompt.
+      if (mounted) unawaited(askForNotificationsOnce(context, ref));
+    });
   }
 
   Future<void> _load({bool reset = false}) async {
