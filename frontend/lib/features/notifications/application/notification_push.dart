@@ -88,6 +88,70 @@ class DevicePushAccess {
   }
 }
 
+/// Bumped after the user grants push permission so the lifecycle registers
+/// the device token right away.
+final pushPermissionGrantsProvider = StateProvider<int>((ref) => 0);
+
+/// The deferred notification prompts, shown at a natural moment (Lost Pets,
+/// notification settings) instead of after registration or launch.
+/// Each prompt appears at most once per account; a dismissal is remembered
+/// and the settings screens stay available. Returns true if the push prompt
+/// was shown (so callers can skip their own fallback).
+Future<bool> askForNotificationsOnce(BuildContext context, WidgetRef ref,
+    {bool includeNearby = true}) async {
+  try {
+    final user = ref.read(currentUserProvider)?.id;
+    if (user == null) return false;
+    final consent = ref.read(nearbyConsentStoreProvider);
+    final copy = ref.read(notificationStringsProvider);
+    // context.mounted first: ref must not be read after the widget is gone.
+    bool stillCurrent() =>
+        context.mounted && ref.read(currentUserProvider)?.id == user;
+
+    if (includeNearby &&
+        ref.read(nearbyAlertsAndroidProvider) &&
+        await consent.read(user) == null) {
+      if (!context.mounted || !stillCurrent()) return false;
+      final granted = await discloseNearbyAlerts(context, copy) ?? false;
+      if (!stillCurrent()) return false;
+      await ref.read(nearbyAlertsProvider).setConsent(user, granted);
+    }
+
+    if (!AndroidPushConfiguration.ready || !stillCurrent()) return false;
+    final access = ref.read(devicePushAccessProvider);
+    if (!DevicePushAccess.shouldExplainPermission(await access.status(),
+        alreadyAsked: await consent.pushAsked(user))) {
+      return false;
+    }
+    if (!stillCurrent()) return false;
+    await consent.markPushAsked(user);
+    if (!context.mounted || !stillCurrent()) return false;
+    final allowed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              content: Text(copy.get('permission_context')),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: Text(copy.get('cancel'))),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: Text(copy.get('allow'))),
+              ],
+            ));
+    if (allowed == true && stillCurrent()) {
+      // The grant notifier is app-wide; read it before the system dialog so a
+      // disposed screen cannot break token registration.
+      final grants = ref.read(pushPermissionGrantsProvider.notifier);
+      if (await access.requestPermission()) grants.state++;
+    }
+    return true;
+  } catch (_) {
+    // Prompts are advisory; storage/channel failures must not break screens.
+    return false;
+  }
+}
+
 class AndroidPushService {
   static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'registered_android_push_token';
@@ -204,6 +268,11 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
     _nearby.foreground(initialLifecycle == null ||
         initialLifecycle == AppLifecycleState.resumed);
     WidgetsBinding.instance.addObserver(this);
+    ref.listenManual<int>(pushPermissionGrantsProvider, (previous, next) {
+      if (_activeUser != null) {
+        unawaited(_sync(_activeUser!, forceRegistration: true));
+      }
+    });
     unawaited(AndroidPushService.retryPendingRevocation().catchError((_) {}));
     _unreadTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (_activeUser != null) ref.invalidate(unreadNotificationCountProvider);
@@ -287,48 +356,15 @@ class _NotificationLifecycleState extends ConsumerState<NotificationLifecycle>
       // Activity reporting is advisory; do not block the app.
     }
     if (!forceRegistration && mounted && _activeUser == userId) {
-      await _nearby.sync(userId, disclose: () async {
-        final dialogContext =
-            widget.router.routerDelegate.navigatorKey.currentContext;
-        if (dialogContext == null || !mounted || _activeUser != userId) {
-          return false;
-        }
-        return await discloseNearbyAlerts(
-                dialogContext, ref.read(notificationStringsProvider)) ??
-            false;
-      });
+      // No disclosure here: login/launch must not prompt. The one-time prompts
+      // live in askForNotificationsOnce (Lost Pets, notification settings).
+      await _nearby.sync(userId);
     }
     if (!mounted || _activeUser != userId) return;
     if (!AndroidPushConfiguration.ready) {
       return;
     }
     try {
-      final access = ref.read(devicePushAccessProvider);
-      if (DevicePushAccess.shouldExplainPermission(await access.status(),
-          alreadyAsked:
-              await ref.read(nearbyConsentStoreProvider).pushAsked(userId))) {
-        final dialogContext =
-            widget.router.routerDelegate.navigatorKey.currentContext;
-        if (dialogContext == null || !mounted || _activeUser != userId) return;
-        await ref.read(nearbyConsentStoreProvider).markPushAsked(userId);
-        if (!dialogContext.mounted || !mounted || _activeUser != userId) return;
-        final copy = ref.read(notificationStringsProvider);
-        final allowed = await showDialog<bool>(
-            context: dialogContext,
-            builder: (context) => AlertDialog(
-                  content: Text(copy.get('permission_context')),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: Text(copy.get('cancel'))),
-                    FilledButton(
-                        onPressed: () => Navigator.pop(context, true),
-                        child: Text(copy.get('allow'))),
-                  ],
-                ));
-        if (!mounted || _activeUser != userId) return;
-        if (allowed == true) await access.requestPermission();
-      }
       if (!await AndroidPushService.authorized()) {
         await AndroidPushService.revokeIfPermissionDenied(
           ref.read(notificationApiProvider),
