@@ -18,6 +18,7 @@ import '../../../../core/storage/token_store.dart';
 import '../../../../core/storage/token_store_provider.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
+import '../../../notifications/application/notification_push.dart';
 import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../../../core/widgets/osm_attribution.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
@@ -76,6 +77,10 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
         });
       });
     }
+    // Natural moment for the deferred, one-time notification prompt.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(askForNotificationsOnce(context, ref));
+    });
   }
 
   @override

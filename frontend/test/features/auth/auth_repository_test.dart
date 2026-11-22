@@ -72,6 +72,7 @@ void main() {
         expect(call.body, <String, Object?>{
           'id_token': 'google-id-token',
           if (password != null) 'password': password,
+          'preferred_language': 'ru',
           'accept_terms': true,
           'accept_privacy': true,
         });
@@ -89,7 +90,7 @@ void main() {
         tokenStore: tokenStore,
       );
       final session = await repository.loginWithGoogleIdToken('google-id-token',
-          password: password);
+          password: password, preferredLanguage: 'ru');
 
       expect(session.user.email, 'google-user@example.com');
       expect(await tokenStore.read(), 'token-123');

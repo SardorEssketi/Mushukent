@@ -12,11 +12,80 @@ RESEND_EMAILS_API_URL = "https://api.resend.com/emails"
 RESEND_USER_AGENT = "mushukistan-backend/1.0"
 
 
+def _hours_en(hours: int) -> str:
+    return f"{hours} hour" if hours == 1 else f"{hours} hours"
+
+
+def _hours_ru(hours: int) -> str:
+    if hours % 10 == 1 and hours % 100 != 11:
+        word = "час"
+    elif hours % 10 in (2, 3, 4) and hours % 100 not in (12, 13, 14):
+        word = "часа"
+    else:
+        word = "часов"
+    return f"{hours} {word}"
+
+
+# Verification email copy per account language. Unknown values fall back to Russian.
+VERIFICATION_EMAIL_COPY: dict[str, dict[str, str]] = {
+    "en": {
+        "subject": "Verify your Mushukistan account",
+        "title": "Verify your Mushukistan email",
+        "heading": "Verify your email",
+        "intro": "Thanks for creating a Mushukistan account. Please verify your email "
+        "address to finish setting up your account.",
+        "button": "Verify email address",
+        "expires": "This link expires in {hours}.",
+        "ignore_text": "If you did not create this account, ignore this email.",
+        "ignore_html": "If you didn't create this account, you can ignore this email.",
+        "fallback": "Button not working? Copy and paste this link:",
+        "footer": "This is an automated account email from Mushukistan.",
+    },
+    "ru": {
+        "subject": "Подтвердите аккаунт Mushukistan",
+        "title": "Подтвердите email в Mushukistan",
+        "heading": "Подтвердите email",
+        "intro": "Спасибо за регистрацию в Mushukistan. Подтвердите адрес электронной "
+        "почты, чтобы завершить создание аккаунта.",
+        "button": "Подтвердить email",
+        "expires": "Ссылка действительна {hours}.",
+        "ignore_text": "Если вы не создавали этот аккаунт, просто проигнорируйте это письмо.",
+        "ignore_html": "Если вы не создавали этот аккаунт, просто проигнорируйте это письмо.",
+        "fallback": "Кнопка не работает? Скопируйте и вставьте эту ссылку:",
+        "footer": "Это автоматическое письмо от Mushukistan.",
+    },
+    "uz": {
+        "subject": "Mushukistan hisobingizni tasdiqlang",
+        "title": "Mushukistan uchun emailni tasdiqlang",
+        "heading": "Emailingizni tasdiqlang",
+        "intro": "Mushukistan’da hisob ochganingiz uchun rahmat. Hisobni sozlashni "
+        "yakunlash uchun email manzilingizni tasdiqlang.",
+        "button": "Emailni tasdiqlash",
+        "expires": "Havola {hours} davomida amal qiladi.",
+        "ignore_text": "Agar bu hisobni siz ochmagan bo‘lsangiz, ushbu xatni e’tiborsiz qoldiring.",
+        "ignore_html": "Agar bu hisobni siz ochmagan bo‘lsangiz, ushbu xatni e’tiborsiz qoldiring.",
+        "fallback": "Tugma ishlamayaptimi? Ushbu havolani nusxalab, brauzerga qo‘ying:",
+        "footer": "Bu Mushukistan’dan avtomatik yuborilgan xat.",
+    },
+}
+DEFAULT_EMAIL_LANGUAGE = "ru"
+
+
+def _hours_label(language: str, hours: int) -> str:
+    if language == "ru":
+        return _hours_ru(hours)
+    if language == "uz":
+        return f"{hours} soat"
+    return _hours_en(hours)
+
+
 class EmailVerificationSender:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def send_verification_email(self, *, email: str, token: str) -> None:
+    def send_verification_email(
+        self, *, email: str, token: str, language: str | None = None
+    ) -> None:
         if self.settings.allows_dev_diagnostics:
             return
         if (
@@ -36,26 +105,26 @@ class EmailVerificationSender:
         )
         escaped_verify_url = html_escape(verify_url, quote=True)
         expiration_hours = self.settings.email_verification_token_exp_hours
-        hour_label = "hour" if expiration_hours == 1 else "hours"
-        expiration_note = f"This link expires in {expiration_hours} {hour_label}."
+        lang = language if language in VERIFICATION_EMAIL_COPY else DEFAULT_EMAIL_LANGUAGE
+        copy = VERIFICATION_EMAIL_COPY[lang]
+        expiration_note = copy["expires"].format(hours=_hours_label(lang, expiration_hours))
 
         text = (
             "Mushukistan\n\n"
-            "Verify your email\n\n"
-            "Thanks for creating a Mushukistan account. Please verify your email address "
-            "to finish setting up your account.\n\n"
-            "Verify email address:\n"
+            f"{copy['heading']}\n\n"
+            f"{copy['intro']}\n\n"
+            f"{copy['button']}:\n"
             f"{verify_url}\n\n"
             f"{expiration_note}\n\n"
-            "If you did not create this account, ignore this email."
+            f"{copy['ignore_text']}"
         )
         html = f"""<!doctype html>
-<html lang="en">
+<html lang="{lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="x-apple-disable-message-reformatting">
-  <title>Verify your Mushukistan email</title>
+  <title>{copy["title"]}</title>
   <style>
     @media only screen and (max-width: 600px) {{
       .email-shell {{ padding: 20px 12px !important; }}
@@ -87,10 +156,9 @@ class EmailVerificationSender:
                         line-height:26px; font-weight:700;">Mushukistan</p>
               <h1 class="email-title"
                   style="margin:0 0 16px; color:#2C2724; font-size:30px;
-                         line-height:1.2; font-weight:700;">Verify your email</h1>
+                         line-height:1.2; font-weight:700;">{copy["heading"]}</h1>
               <p style="margin:0 0 26px; color:#716861; font-size:16px;
-                        line-height:25px;">Thanks for creating a Mushukistan account.
-                Please verify your email address to finish setting up your account.</p>
+                        line-height:25px;">{copy["intro"]}</p>
               <table role="presentation" border="0" cellpadding="0" cellspacing="0"
                      style="margin:0 0 22px;">
                 <tr>
@@ -100,14 +168,14 @@ class EmailVerificationSender:
                        style="display:inline-block; padding:15px 24px;
                               border:1px solid #9D3F2D; border-radius:8px;
                               color:#FFFFFF; font-size:16px; line-height:20px;
-                              font-weight:700; text-decoration:none;">Verify email address</a>
+                              font-weight:700; text-decoration:none;">{copy["button"]}</a>
                   </td>
                 </tr>
               </table>
               <p style="margin:0 0 12px; color:#716861; font-size:14px;
                         line-height:22px;">{expiration_note}</p>
               <p style="margin:0; color:#716861; font-size:14px; line-height:22px;">
-                If you didn't create this account, you can ignore this email.</p>
+                {copy["ignore_html"]}</p>
               <table role="presentation" width="100%" border="0"
                      cellpadding="0" cellspacing="0"
                      style="width:100%; margin-top:28px;
@@ -115,7 +183,7 @@ class EmailVerificationSender:
                 <tr>
                   <td style="padding-top:20px;">
                     <p style="margin:0 0 8px; color:#716861; font-size:13px;
-                              line-height:19px;">Button not working? Copy and paste this link:</p>
+                              line-height:19px;">{copy["fallback"]}</p>
                     <p style="margin:0; color:#9D3F2D; font-size:13px;
                               line-height:20px; word-break:break-all;
                               word-wrap:break-word;">
@@ -131,7 +199,7 @@ class EmailVerificationSender:
           </tr>
         </table>
         <p style="margin:18px 0 0; color:#716861; font-size:12px;
-                  line-height:18px;">This is an automated account email from Mushukistan.</p>
+                  line-height:18px;">{copy["footer"]}</p>
       </td>
     </tr>
   </table>
@@ -140,7 +208,7 @@ class EmailVerificationSender:
         payload = {
             "from": self.settings.resend_from_email,
             "to": [email],
-            "subject": "Verify your Mushukistan account",
+            "subject": copy["subject"],
             "text": text,
             "html": html,
         }

@@ -125,7 +125,7 @@ void main() {
   });
 
   testWidgets(
-      'first launch shows localized consent before uploading a location',
+      'first launch does not prompt; Lost Pets asks once before uploading a location',
       (tester) async {
     final location = AuthorizedLocationFake();
     final api = NearbyApiFake();
@@ -141,7 +141,11 @@ void main() {
     final router = GoRouter(routes: [
       GoRoute(
           path: '/',
-          builder: (_, __) => const Scaffold(body: Text('Application')))
+          builder: (_, __) => Scaffold(
+              body: Consumer(
+                  builder: (context, ref, _) => TextButton(
+                      onPressed: () => askForNotificationsOnce(context, ref),
+                      child: const Text('Lost Pets')))))
     ]);
     addTearDown(router.dispose);
     final container = ProviderContainer(overrides: [
@@ -154,6 +158,8 @@ void main() {
       googleIdentityTokenProvider
           .overrideWithValue(FakeGoogleIdentityTokenProvider()),
       appLanguageProvider.overrideWith((ref) => AppLanguage.russian),
+      nearbyConsentStoreProvider.overrideWithValue(consent),
+      nearbyAlertsAndroidProvider.overrideWithValue(true),
       notificationApiProvider.overrideWithValue(NotificationApi(client)),
       nearbyAlertsProvider.overrideWith((ref) => nearby),
     ]);
@@ -162,6 +168,11 @@ void main() {
         container: container,
         child: NotificationLifecycle(
             router: router, child: MaterialApp.router(routerConfig: router))));
+    await tester.pumpAndSettle();
+    // Registration/launch must not show any notification prompt.
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(consent.choices, isEmpty);
+    await tester.tap(find.text('Lost Pets'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsOneWidget);
     expect(find.textContaining('500 м'), findsOneWidget);
@@ -173,6 +184,10 @@ void main() {
     expect(consent.choices['owner'], true);
     expect(location.fixes, 1);
     expect(api.patches.last['nearby_consent'], true);
+    // Shown at most once.
+    await tester.tap(find.text('Lost Pets'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

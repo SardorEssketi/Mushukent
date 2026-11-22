@@ -64,6 +64,16 @@ class _NotificationSettingsScreenState
     }
   }
 
+  /// First tap asks in-app (once per account); afterwards, or once Android
+  /// blocks the prompt, it opens the system notification settings.
+  Future<void> _enableNotifications() async {
+    if (await askForNotificationsOnce(context, ref, includeNearby: false)) {
+      await _load();
+      return;
+    }
+    await _openSettings();
+  }
+
   Future<void> _openSettings({bool location = false}) async {
     try {
       if (location) {
@@ -127,7 +137,7 @@ class _NotificationSettingsScreenState
                                               : 'permission_denied')),
                                   if (android && !permitted)
                                     TextButton(
-                                        onPressed: _openSettings,
+                                        onPressed: _enableNotifications,
                                         child: Text(
                                             copy.get('open_android_settings'))),
                                   const Divider(),

@@ -4,6 +4,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'app.dart';
 import 'core/config/app_environment.dart';
+import 'core/localization/language_controller.dart';
 import 'core/startup/startup_log.dart';
 import 'features/notifications/application/notification_push.dart';
 
@@ -19,6 +20,9 @@ Future<void> main() async {
       ProviderScope(
         overrides: [
           appEnvironmentProvider.overrideWithValue(environment),
+          // Russian until the user picks a language (saved choice or account
+          // language replaces it in MushukistanApp). Widget tests keep English.
+          appLanguageProvider.overrideWith((ref) => defaultAppLanguage),
         ],
         child: const MushukistanApp(),
       ),

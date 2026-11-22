@@ -25,6 +25,10 @@ enum AppLanguage {
   }
 }
 
+/// Language shown before the user has chosen one. main.dart applies it; the
+/// provider's own fallback stays English so existing widget tests are stable.
+const defaultAppLanguage = AppLanguage.russian;
+
 final appLanguageProvider = StateProvider<AppLanguage>((ref) {
   return AppLanguage.english;
 });
