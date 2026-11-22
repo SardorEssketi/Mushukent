@@ -80,7 +80,7 @@ class AuthService(AuthenticationService):
         email: str,
         password: str,
         name: str,
-        preferred_language: str = "en",
+        preferred_language: str = "ru",
         accept_terms: bool = False,
         accept_privacy: bool = False,
     ) -> RegistrationResult:
@@ -117,7 +117,7 @@ class AuthService(AuthenticationService):
                     user_id=user.id,
                     email=user.email,
                 )
-                self._emit_verification_link(user.email, token)
+                self._emit_verification_link(user.email, token, user.preferred_language)
                 return RegistrationResult(
                     user=user,
                     email=user.email,
@@ -192,7 +192,7 @@ class AuthService(AuthenticationService):
                 user_id=user.id,
                 email=user.email,
             )
-            self._emit_verification_link(user.email, token)
+            self._emit_verification_link(user.email, token, user.preferred_language)
             return token if self._is_dev_verification_flow else None
 
     def verify_email(self, token: str) -> AuthUser:
@@ -222,8 +222,12 @@ class AuthService(AuthenticationService):
         accept_terms: bool = False,
         accept_privacy: bool = False,
         password: str | None = None,
+        preferred_language: str | None = None,
     ) -> AuthSessionResult:
         claims = self.google_token_verifier.verify(id_token)
+        # Used only when this sign-in creates the account; existing accounts keep theirs.
+        new_account_language = preferred_language or "ru"
+        self._validate_preferred_language(new_account_language)
         self._validate_google_identity_claims(claims)
         assert claims.email is not None and claims.sub is not None
 
@@ -231,13 +235,23 @@ class AuthService(AuthenticationService):
 
         try:
             return self._authenticate_verified_google(
-                normalized_email, claims, accept_terms, accept_privacy, password
+                normalized_email,
+                claims,
+                accept_terms,
+                accept_privacy,
+                password,
+                new_account_language,
             )
         except IntegrityError:
             # Re-read after a concurrent create/link and apply the same safe matching rules.
             try:
                 return self._authenticate_verified_google(
-                    normalized_email, claims, accept_terms, accept_privacy, password
+                    normalized_email,
+                    claims,
+                    accept_terms,
+                    accept_privacy,
+                    password,
+                    new_account_language,
                 )
             except IntegrityError as retry_exc:
                 raise api_error(
@@ -251,6 +265,7 @@ class AuthService(AuthenticationService):
         accept_terms: bool,
         accept_privacy: bool,
         password: str | None,
+        new_account_language: str = "ru",
     ) -> AuthSessionResult:
         assert claims.sub is not None
         subject = claims.sub
@@ -331,7 +346,7 @@ class AuthService(AuthenticationService):
                     password_hash=None,
                     google_subject=subject,
                     name=claims.name,
-                    preferred_language="en",
+                    preferred_language=new_account_language,
                     email_verified=self._is_google_email_authoritative(claims),
                     is_moderator=False,
                     accepted_terms_version=CURRENT_TERMS_VERSION,
@@ -667,8 +682,10 @@ class AuthService(AuthenticationService):
     def _is_dev_verification_flow(self) -> bool:
         return self.settings.allows_dev_diagnostics
 
-    def _emit_verification_link(self, email: str, token: str) -> None:
-        self.email_verification_sender.send_verification_email(email=email, token=token)
+    def _emit_verification_link(self, email: str, token: str, language: str | None) -> None:
+        self.email_verification_sender.send_verification_email(
+            email=email, token=token, language=language
+        )
         logger.info(
             "email_verification_issued",
             email_domain=email.rsplit("@", 1)[-1],

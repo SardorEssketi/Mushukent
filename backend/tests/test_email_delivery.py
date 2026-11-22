@@ -90,6 +90,7 @@ def test_verification_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch
     EmailVerificationSender(settings).send_verification_email(
         email="user@example.com",
         token=token,
+        language="en",
     )
 
     assert captured["url"] == "https://api.resend.com/emails"
@@ -127,6 +128,52 @@ def test_verification_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch
     assert "This link expires in 24 hours." in html
     assert "If you didn't create this account, you can ignore this email." in html
     assert "<script" not in html.casefold()
+
+
+@pytest.mark.parametrize("language", [None, "ru", "xx"])
+def test_verification_email_defaults_to_russian(
+    monkeypatch: pytest.MonkeyPatch, language: str | None
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(resend_request, timeout: int):
+        captured["payload"] = json.loads(resend_request.data.decode("utf-8"))
+        return StubResponse()
+
+    monkeypatch.setattr(email_module.request, "urlopen", fake_urlopen)
+    EmailVerificationSender(_production_settings()).send_verification_email(
+        email="user@example.com", token="verification-token", language=language
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["subject"] == "Подтвердите аккаунт Mushukistan"
+    assert "Подтвердите email" in payload["text"]
+    assert "Ссылка действительна 24 часа." in payload["text"]
+    html = payload["html"]
+    assert '<html lang="ru">' in html
+    anchors = AnchorCollector()
+    anchors.feed(html)
+    assert [label for _, label in anchors.anchors][0] == "Подтвердить email"
+
+
+def test_verification_email_uses_uzbek_copy(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(resend_request, timeout: int):
+        captured["payload"] = json.loads(resend_request.data.decode("utf-8"))
+        return StubResponse()
+
+    monkeypatch.setattr(email_module.request, "urlopen", fake_urlopen)
+    EmailVerificationSender(_production_settings()).send_verification_email(
+        email="user@example.com", token="verification-token", language="uz"
+    )
+
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["subject"] == "Mushukistan hisobingizni tasdiqlang"
+    assert "Havola 24 soat davomida amal qiladi." in payload["text"]
+    assert '<html lang="uz">' in payload["html"]
 
 
 def test_account_deletion_email_uses_resend_http_api(monkeypatch: pytest.MonkeyPatch) -> None:

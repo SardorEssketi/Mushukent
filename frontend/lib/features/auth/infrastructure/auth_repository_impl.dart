@@ -30,7 +30,7 @@ class MushukistanAuthRepository implements AuthRepository {
 
   @override
   Future<AuthSession> loginWithGoogleIdToken(String idToken,
-      {String? password}) async {
+      {String? password, String? preferredLanguage}) async {
     final revision = _sessionRevision;
     final session = await _apiClient.postJson<AuthSession>(
       'auth/google',
@@ -38,6 +38,7 @@ class MushukistanAuthRepository implements AuthRepository {
       body: <String, Object?>{
         'id_token': idToken,
         if (password != null) 'password': password,
+        if (preferredLanguage != null) 'preferred_language': preferredLanguage,
         // The linked agreement is shown immediately beside the Google CTA.
         // The server still records only the current legal document versions.
         'accept_terms': true,

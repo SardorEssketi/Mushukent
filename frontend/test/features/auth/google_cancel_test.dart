@@ -78,6 +78,15 @@ void main() {
       return (container, repository);
     }
 
+    test('sends the language on screen so a new account gets it', () async {
+      final (container, repository) =
+          await controller(_ScriptedGoogle(['id-token']));
+      container.read(appLanguageProvider.notifier).state = AppLanguage.uzbek;
+      await container.read(authControllerProvider.notifier).loginWithGoogle();
+      expect(repository.lastGoogleIdToken, 'id-token');
+      expect(repository.lastGooglePreferredLanguage, 'uz');
+    });
+
     test('cancellation: no error, no message, no session, no backend call',
         () async {
       final google = _ScriptedGoogle([_flow(GoogleSignInFailure.cancelled)]);

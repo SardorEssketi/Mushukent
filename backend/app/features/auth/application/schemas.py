@@ -24,7 +24,7 @@ class AuthRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     name: str = Field(min_length=1, max_length=100)
-    preferred_language: str = Field(default="en", pattern="^(en|uz|ru)$")
+    preferred_language: str = Field(default="ru", pattern="^(en|uz|ru)$")
     accept_terms: bool = Field(default=False)
     accept_privacy: bool = Field(default=False)
 
@@ -45,6 +45,8 @@ class AuthLoginRequest(BaseModel):
 class GoogleLoginRequest(BaseModel):
     id_token: str = Field(min_length=1)
     password: str | None = Field(default=None, min_length=1, max_length=128)
+    # Language picked before sign-in; applied only when a new account is created.
+    preferred_language: str | None = Field(default=None, pattern="^(en|uz|ru)$")
     accept_terms: bool = Field(default=False)
     accept_privacy: bool = Field(default=False)
 
