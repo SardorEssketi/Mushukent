@@ -100,6 +100,9 @@ final pushPermissionGrantsProvider = StateProvider<int>((ref) => 0);
 Future<bool> askForNotificationsOnce(BuildContext context, WidgetRef ref,
     {bool includeNearby = true}) async {
   try {
+    // The app always has a session controller by now. Reading the user must
+    // not create one (and its restore timers) for a screen shown on its own.
+    if (!ref.exists(authControllerProvider)) return false;
     final user = ref.read(currentUserProvider)?.id;
     if (user == null) return false;
     final consent = ref.read(nearbyConsentStoreProvider);
