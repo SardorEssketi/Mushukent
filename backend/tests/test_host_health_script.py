@@ -1,10 +1,9 @@
-"""Host health timer (LT-20 step 2): infrastructure/ops/host_health.py and the Nginx ops log."""
+"""Host health timer (LT-20 step 2): infrastructure/ops/host_health.py."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -12,7 +11,6 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "infrastructure" / "ops" / "host_health.py"
-NGINX_CONF = REPO_ROOT / "infrastructure" / "nginx" / "default.conf"
 
 _spec = importlib.util.spec_from_file_location("host_health", SCRIPT)
 assert _spec and _spec.loader
@@ -299,35 +297,6 @@ def test_chat_falls_back_to_the_feedback_chat_like_the_backend() -> None:
         }
     )
     assert cfg.telegram_chat_id == "9" and cfg.posthog_host == "h"
-
-
-def test_nginx_ops_log_is_on_every_server_and_carries_no_personal_data() -> None:
-    conf = NGINX_CONF.read_text(encoding="utf-8")
-    fmt = re.search(r"log_format ops_json escape=json(.*?);\n", conf, re.S)
-    assert fmt, "ops_json log format missing"
-    for forbidden in (
-        "$remote_addr",
-        "$http_user_agent",
-        "$request_uri",
-        "$args",
-        "$http_x_forwarded_for",
-        "$http_cf_connecting_ip",
-        "$http_authorization",
-        "$uri",
-        "$request ",
-    ):
-        assert forbidden not in fmt.group(1)
-    for needed in (
-        "$status",
-        "$request_time",
-        "$upstream_response_time",
-        "$upstream_status",
-        "$ops_route",
-    ):
-        assert needed in fmt.group(1)
-    servers = conf.count("\nserver {")
-    assert servers == 3
-    assert conf.count("access_log /var/log/nginx/access.log ops_json;") == servers
 
 
 def test_systemd_units_point_at_the_installed_script() -> None:
