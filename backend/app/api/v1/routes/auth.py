@@ -175,6 +175,7 @@ def login_with_google(
             accept_terms=payload.accept_terms,
             accept_privacy=payload.accept_privacy,
             password=payload.password,
+            preferred_language=payload.preferred_language,
         )
     except HTTPException as exc:
         detail = exc.detail if isinstance(exc.detail, dict) else {}

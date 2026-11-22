@@ -35,8 +35,10 @@ final class SessionRestoreSuccess extends SessionRestoreResult {
 abstract interface class AuthRepository {
   Future<VerificationRequirement> register(RegisterCredentials credentials);
   Future<AuthSession> login(AuthCredentials credentials);
+  /// [preferredLanguage] is the language shown at sign-in; the server applies
+  /// it only when this sign-in creates a new account.
   Future<AuthSession> loginWithGoogleIdToken(String idToken,
-      {String? password});
+      {String? password, String? preferredLanguage});
   Future<VerificationRequirement> resendVerification(String email);
   Future<void> verifyEmail(String token);
   Future<MushukistanUser> fetchCurrentUser();

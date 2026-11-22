@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/localization/language_controller.dart';
 import '../../../core/network/api_error.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/token_store_provider.dart';
@@ -159,6 +160,8 @@ final authControllerProvider =
     ref.watch(authRepositoryProvider),
     ref.watch(googleIdentityTokenProvider),
     tokenStore: ref.watch(tokenStoreProvider),
+    // Read at sign-in time so a new Google account gets the language on screen.
+    preferredLanguage: () => ref.read(appLanguageProvider).code,
   );
 });
 
@@ -184,7 +187,9 @@ class AuthController extends StateNotifier<AuthState> {
     Duration restoreTimeout = const Duration(seconds: 20),
     AuthTokenStore? tokenStore,
     List<Duration> reconnectBackoff = defaultReconnectBackoff,
+    String? Function()? preferredLanguage,
   })  : _restoreTimeout = restoreTimeout,
+        _preferredLanguage = preferredLanguage,
         _reconnectBackoff = reconnectBackoff,
         _tokenStore = tokenStore,
         super(AuthState.restoring()) {
@@ -201,6 +206,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   final AuthRepository _repository;
   final GoogleIdentityTokenProvider _googleIdentityTokens;
+  final String? Function()? _preferredLanguage;
   final Duration _restoreTimeout;
   final Set<Timer> _restoreTimeoutTimers = <Timer>{};
   final List<Duration> _reconnectBackoff;
@@ -516,8 +522,8 @@ class AuthController extends StateNotifier<AuthState> {
     final epoch = _authEpoch;
     state = AuthState.authenticating();
     try {
-      final session =
-          await _repository.loginWithGoogleIdToken(idToken, password: password);
+      final session = await _repository.loginWithGoogleIdToken(idToken,
+          password: password, preferredLanguage: _preferredLanguage?.call());
       if (epoch != _authEpoch) return;
       state = AuthState.authenticated(session.user);
     } on MushukistanApiException catch (error) {

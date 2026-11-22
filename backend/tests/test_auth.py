@@ -299,6 +299,31 @@ def test_new_google_identity_reuses_the_same_user_on_repeated_login(
     assert first.user.password_hash is None
 
 
+def test_new_google_account_uses_the_language_chosen_before_sign_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = InMemoryAuthUserRepository()
+    service = _auth_service_with_repository(monkeypatch, repository)
+
+    created = service.authenticate_with_google_id_token(
+        "google-id-token",
+        accept_terms=True,
+        accept_privacy=True,
+        preferred_language="en",
+    )
+    assert created.user.preferred_language == "en"
+
+    # An existing account keeps its language whatever the sign-in screen shows.
+    again = service.authenticate_with_google_id_token("google-id-token", preferred_language="uz")
+    assert again.user.preferred_language == "en"
+
+    fresh_service = _auth_service_with_repository(monkeypatch, InMemoryAuthUserRepository())
+    other = fresh_service.authenticate_with_google_id_token(
+        "google-id-token", accept_terms=True, accept_privacy=True
+    )
+    assert other.user.preferred_language == "ru"
+
+
 def test_known_google_subject_does_not_move_when_claim_email_matches_another_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
