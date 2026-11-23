@@ -1,0 +1,11 @@
+# EXAMPLE - install only with the owner's approval; see docs/UPTIME_MONITORING.md.
+[Unit]
+Description=Run the Mushukistan uptime check every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:30
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target
