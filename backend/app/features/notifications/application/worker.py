@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import signal
 import threading
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,9 @@ from sqlalchemy import and_, cast, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from structlog import get_logger
 
+from app.core.analytics import SafeAnalyticsClient
 from app.core.config import Settings, get_settings
+from app.core.ops_metrics import TelegramOpsNotifier
 from app.features.notifications.infrastructure.fcm import FcmSender, PushResult
 from app.features.notifications.infrastructure.repository import (
     INACTIVITY_THRESHOLD,
@@ -21,6 +24,8 @@ from app.features.notifications.infrastructure.repository import (
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
 from app.infrastructure.repositories.blocking import users_are_blocked
+from app.infrastructure.storage.deletion_jobs import R2_CLIENT_CONFIG, MediaDeletionProcessor
+from app.infrastructure.storage.r2 import build_object_storage
 
 logger = get_logger(__name__)
 MAX_ATTEMPTS = 4
@@ -89,11 +94,17 @@ PUSH_COPY = {
 
 class NotificationWorker:
     def __init__(
-        self, manager: DatabaseSessionManager, settings: Settings, sender: FcmSender
+        self,
+        manager: DatabaseSessionManager,
+        settings: Settings,
+        sender: FcmSender,
+        media_deletions: MediaDeletionProcessor | None = None,
     ) -> None:
         self.manager = manager
         self.settings = settings
         self.sender = sender
+        # Deletes R2 objects recorded by account deletion (ADR-0025), on the same loop.
+        self.media_deletions = media_deletions
         self.cipher = Fernet(settings.push_token_encryption_key.encode())
         # Set by SIGTERM/SIGINT (`docker stop`). The worker finishes the job it is sending, puts
         # the claimed jobs it has not started back to pending, and exits within seconds instead of
@@ -497,8 +508,50 @@ class NotificationWorker:
                 self.drain(now)
             except Exception:
                 logger.exception("notification_worker_pass_failed")
+            if self.media_deletions is not None and not self.stop_event.is_set():
+                try:
+                    self.media_deletions.process(datetime.now(UTC), self.stop_event)
+                except Exception:
+                    logger.exception("media_deletion_pass_failed")
             self.stop_event.wait(POLL_SECONDS)  # wakes at once on SIGTERM
         logger.info("notification_worker_stopped")
+
+
+def _build_ops_alert(settings: Settings):
+    """The ops Telegram sender, by the same rule as the API's alerts (OPS_ALERTS_ENABLED, the ops
+    chat, else the feedback chat), or None."""
+    if not settings.ops_alerts_enabled:
+        return None
+    notifier = TelegramOpsNotifier(
+        bot_token=settings.telegram_bot_token,
+        chat_id=settings.telegram_ops_chat_id or settings.telegram_feedback_chat_id,
+    )
+    return notifier.send if notifier.enabled else None
+
+
+def _build_capture(settings: Settings):
+    """A PostHog capture for worker events, or None when analytics is not configured."""
+    if not (settings.posthog_project_token and settings.posthog_host):
+        return None
+    try:
+        from posthog import Posthog
+
+        raw = Posthog(
+            project_api_key=settings.posthog_project_token,
+            host=settings.posthog_host,
+            enable_exception_autocapture=False,
+            disable_geoip=True,
+        )
+    except Exception as exc:
+        logger.warning("worker_analytics_init_failed", error_type=type(exc).__name__)
+        return None
+    atexit.register(raw.shutdown)
+    client = SafeAnalyticsClient(raw)
+
+    def capture(event: str, properties: dict) -> None:
+        client.capture(distinct_id="mushukistan-worker", event=event, properties=properties)
+
+    return capture
 
 
 def main() -> None:
@@ -507,7 +560,18 @@ def main() -> None:
         raise RuntimeError("PUSH_TOKEN_ENCRYPTION_KEY is required for notification worker")
     sender = FcmSender(settings.firebase_credentials_file, settings.firebase_project_id)
     manager = DatabaseSessionManager(settings.database_url)
-    worker = NotificationWorker(manager, settings, sender)
+    storage = build_object_storage(settings, client_config=R2_CLIENT_CONFIG)
+    media_deletions = (
+        MediaDeletionProcessor(
+            manager,
+            storage,
+            capture=_build_capture(settings),
+            alert=_build_ops_alert(settings),
+        )
+        if storage is not None
+        else None
+    )
+    worker = NotificationWorker(manager, settings, sender, media_deletions)
     worker.install_signal_handlers()
     worker.run_forever()
 

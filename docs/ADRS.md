@@ -285,3 +285,48 @@ transaction. Account deletion removes the user's rows and keeps the totals.
 Migration `20261029_0028` adds the table and columns without rewriting rows.
 The privacy and cookie policies disclose the guest identifier.
 
+
+## ADR-0025: Delete account media from R2 through durable jobs, not inside the request
+
+- Status: Accepted
+- Date: 2026-11-23
+
+Account deletion anonymises the account in one database transaction and then
+used to delete every photo from R2 inside the request: about two R2 calls per
+photo (full size and thumbnail), one after another. A large account took
+longer than the app's 15 s request timeout (the user saw an error although the
+account was deleted), and a restart or an R2 error during the loop left photos
+in R2 that nothing referenced any more; the failure was only logged.
+
+The request now records the storage keys of the account's media in
+`media_deletion_jobs`, in the same transaction as the anonymisation, and
+returns. It makes no R2 call, so it takes well under a second at any account
+size. The response contract is unchanged (`DELETE /users/me` → 204,
+`POST /users/account-deletion-confirmations` → the same body), so every app
+version keeps working.
+
+The notification worker processes the jobs on each pass (every 30 s): it
+claims due jobs with a 5-minute lease, deletes each object (a missing object
+counts as deleted), and marks the job `done`. Because the pass shares the loop
+with push notifications it is bounded: at most 100 deletions and 15 s per pass,
+and the worker's R2 client uses a 3 s connect and 5 s read timeout with a
+single try, so a pass delays the next notification drain by about 23 s at
+worst. A large account is spread over several passes. A failed delete is retried after
+1 min, 5 min, 30 min, 2 h and 6 h; after 6 attempts the job becomes `failed`
+and one `media_deletion_failed` event is logged and sent to PostHog (reason,
+attempts, error code; no key). Like the API's critical alerts, give-ups are
+also summarised to the ops Telegram chat (`OPS_ALERTS_ENABLED`, the ops chat,
+else the feedback chat), at most once an hour, with counts per error code and
+no keys. A worker killed mid-job leaves a lease that
+expires, so another pass picks the job up again. On SIGTERM the worker puts
+claimed jobs it has not started back without spending an attempt. `done` rows
+are purged after 30 days; `failed` rows keep their key for a manual retry
+(set `status = 'pending'`, `attempts = 0`).
+
+Rejected: an in-process background task after the response, because a deploy
+or crash kills it with the same loss as before; a new worker container,
+because the existing worker already runs a durable job loop. The table holds
+storage keys only (no user id or URL). Migration `20261123_0036` is additive:
+rolling the application back leaves pending rows waiting until the new code
+runs again. Without the notification worker (local development without the
+`notifications` profile) jobs stay pending and nothing is deleted from storage.

@@ -178,6 +178,10 @@ class MediaStorageService:
         """True when ``url`` points at this platform's own media storage."""
         return self._key_from_public_url(url) is not None
 
+    def key_for_url(self, url: str | None) -> str | None:
+        """The validated storage key of one of our media URLs, or None for anything else."""
+        return self._key_from_public_url(url)
+
     def delete_media_url(self, url: str | None) -> None:
         key = self._key_from_public_url(url)
         if key is None:

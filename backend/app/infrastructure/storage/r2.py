@@ -51,7 +51,9 @@ class R2StorageConfig:
 
 
 class R2ObjectStorage(ObjectStorage):
-    def __init__(self, config: R2StorageConfig, *, client=None) -> None:
+    def __init__(
+        self, config: R2StorageConfig, *, client=None, client_config: Config | None = None
+    ) -> None:
         self.config = config
         self.bucket_name = config.bucket
         self._client = client or boto3.client(
@@ -60,7 +62,8 @@ class R2ObjectStorage(ObjectStorage):
             endpoint_url=config.endpoint_url,
             aws_access_key_id=config.access_key_id,
             aws_secret_access_key=config.secret_access_key,
-            config=Config(
+            config=client_config
+            or Config(
                 connect_timeout=10,
                 read_timeout=30,
                 retries={"mode": "standard", "max_attempts": 3},
@@ -69,8 +72,12 @@ class R2ObjectStorage(ObjectStorage):
         )
 
     @classmethod
-    def from_settings(cls, settings: Settings, *, client=None) -> R2ObjectStorage:
-        return cls(R2StorageConfig.from_settings(settings), client=client)
+    def from_settings(
+        cls, settings: Settings, *, client=None, client_config: Config | None = None
+    ) -> R2ObjectStorage:
+        return cls(
+            R2StorageConfig.from_settings(settings), client=client, client_config=client_config
+        )
 
     def upload(
         self,
@@ -131,7 +138,10 @@ class R2ObjectStorage(ObjectStorage):
         return f"{base_url.rstrip('/')}/{quote(key, safe='/')}"
 
 
-def build_object_storage(settings: Settings) -> ObjectStorage | None:
+def build_object_storage(
+    settings: Settings, *, client_config: Config | None = None
+) -> ObjectStorage | None:
+    """``client_config`` replaces the R2 client's timeouts and retries (the worker uses shorter)."""
     configured_values = [
         settings.r2_account_id,
         settings.r2_access_key_id,
@@ -151,4 +161,4 @@ def build_object_storage(settings: Settings) -> ObjectStorage | None:
             settings.media_storage_root,
             bucket_name=settings.r2_bucket,
         )
-    return R2ObjectStorage.from_settings(settings)
+    return R2ObjectStorage.from_settings(settings, client_config=client_config)
