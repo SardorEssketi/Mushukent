@@ -42,6 +42,7 @@ def test_metadata_discovers_application_tables() -> None:
         "notification_devices",
         "notification_push_jobs",
         "feedback",
+        "media_deletion_jobs",
     }
     assert Base.metadata.naming_convention == NAMING_CONVENTION
 

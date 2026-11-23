@@ -154,7 +154,7 @@ Only URLs are stored in PostgreSQL. Binary image bytes are not stored in DB.
 
 10.3 Deletion
 - Standard post soft-delete does not guarantee immediate media removal.
-- Account deletion attempts best-effort cleanup for profile, post, lost-pet, and adoption/rehoming media URLs associated with the deleted account.
+- Account deletion records the storage keys of the account's profile, post, lost-pet and adoption/rehoming media in `media_deletion_jobs` in the same transaction, and the notification worker deletes them from R2 with retries (ADR-0025). The request itself makes no R2 call.
 - Best-effort cleanup may skip a URL if object storage is not configured, if the URL cannot be mapped to a known storage key, or if the storage provider rejects the delete request.
 - Cleanup accepts absolute URLs only when their origin matches the configured storage public base URL. Encoded traversal and foreign origins are never converted to object keys.
 - Database URL references for hidden/anonymized account-owned content are cleared or replaced with deleted placeholders where required by response contracts.
@@ -223,4 +223,26 @@ AI is out of scope for MVP, but storage choices should remain compatible:
 Change Log
 ----------
 - 2026-07-23: Initial MVP image storage architecture document.
+
+## Media deletion jobs (operations)
+
+Account deletion queues its R2 objects in `media_deletion_jobs`; the notification worker deletes
+them (ADR-0025). Per pass: at most 100 objects and 15 s; R2 calls time out after 3 s (connect) and
+5 s (read). Retries at 1 min, 5 min, 30 min, 2 h, 6 h; then `failed`, a `media_deletion_failed`
+event (log and PostHog) and an hourly-at-most ops Telegram summary.
+
+Status (production host, read-only):
+
+```sh
+echo "SELECT status, count(*), max(attempts), string_agg(DISTINCT last_error_code, ',') FROM media_deletion_jobs GROUP BY status;" | docker exec -i mushukistan-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+Requeue every failed job (after the cause, e.g. an R2 outage, is fixed; the next pass picks them up):
+
+```sh
+echo "UPDATE media_deletion_jobs SET status='pending', attempts=0, next_attempt_at=now(), lease_until=NULL, last_error_code=NULL WHERE status='failed';" | docker exec -i mushukistan-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+Never run the `20261123_0036` downgrade on a database with pending or failed jobs: it drops the
+table and the keys of photos still in R2 with it.
 

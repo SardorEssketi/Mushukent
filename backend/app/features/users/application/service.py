@@ -41,6 +41,7 @@ from app.features.users.application.schemas import BlockedUser, UserProfile, Use
 from app.features.users.domain.repositories import UserProfileRepository
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
+from app.infrastructure.storage.deletion_jobs import enqueue_media_deletions
 from app.infrastructure.storage.service import MediaStorageService, UploadPurpose
 
 logger = get_logger(__name__)
@@ -374,9 +375,16 @@ class UsersService:
             user_model.last_active_at = None
 
             current.is_active = False
+            # The photos are deleted from R2 by the worker, not here (ADR-0025): recording the keys
+            # in this transaction means a restart or an R2 error cannot leave them behind, and the
+            # request returns without waiting for hundreds of sequential R2 calls.
+            if self.media_storage_service is not None:
+                enqueue_media_deletions(
+                    session,
+                    (self.media_storage_service.key_for_url(url) for url in media_urls),
+                    reason="account_deletion",
+                )
             session.flush()
-
-        self._delete_media_urls(media_urls, actor_id=user.id)
 
     def request_external_account_deletion(self, email: str) -> None:
         normalized_email = email.strip().casefold()
@@ -435,15 +443,6 @@ class UsersService:
                 )
 
         self.delete_me(user)
-
-    def _delete_media_urls(self, urls: list[str | None], *, actor_id: UUID) -> None:
-        if self.media_storage_service is None:
-            return
-        for url in set(urls):
-            try:
-                self.media_storage_service.delete_media_url(url)
-            except Exception:  # pragma: no cover
-                logger.warning("account_delete_media_cleanup_failed", actor_id=str(actor_id))
 
     @staticmethod
     def _history_photo_urls(snapshot: dict[str, object]) -> list[str]:

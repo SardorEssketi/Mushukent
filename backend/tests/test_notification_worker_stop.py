@@ -66,3 +66,42 @@ def test_sigterm_stops_the_worker(monkeypatch) -> None:
         assert w.stop_event.is_set()
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+class _MediaDeletions:
+    def __init__(self, fail: bool = False) -> None:
+        self.fail = fail
+        self.calls: list[object] = []
+
+    def process(self, now, stop_event) -> int:
+        self.calls.append(stop_event)
+        if self.fail:
+            raise RuntimeError("r2 down")
+        return 0
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_each_pass_also_runs_media_deletions(monkeypatch, fail) -> None:
+    w = _worker(monkeypatch)
+    media = _MediaDeletions(fail=fail)
+    w.media_deletions = media
+    drains: list[int] = []
+
+    def drain(now):
+        drains.append(1)
+        if len(drains) == 2:
+            w.request_stop()
+        return 0
+
+    monkeypatch.setattr(worker_module, "POLL_SECONDS", 0)
+    monkeypatch.setattr(w, "drain", drain)
+    w.run_forever()
+    assert drains == [1, 1]  # a failing media pass does not stop the notification loop
+    assert media.calls == [w.stop_event]  # the second pass skipped it: stop was requested
+
+
+def test_ops_alert_follows_the_api_rule() -> None:
+    base = {"telegram_bot_token": "t", "telegram_feedback_chat_id": "1"}
+    assert worker_module._build_ops_alert(Settings(ops_alerts_enabled=False, **base)) is None
+    assert worker_module._build_ops_alert(Settings(ops_alerts_enabled=True)) is None
+    assert callable(worker_module._build_ops_alert(Settings(ops_alerts_enabled=True, **base)))

@@ -1316,3 +1316,38 @@ class Feedback(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         ),
         Index("idx_feedback_user_created", "user_id", "created_at"),
     )
+
+
+class MediaDeletionJob(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    """One R2 object to delete after its database rows were removed (ADR-0025).
+
+    Written in the same transaction as the deletion that made the object unreferenced, then
+    deleted by the notification worker with retries. Holds the storage key only.
+    """
+
+    __tablename__ = "media_deletion_jobs"
+
+    object_key: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("'pending'"))
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    next_attempt_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("object_key", name="uq_media_deletion_jobs_object_key"),
+        CheckConstraint(
+            "status IN ('pending', 'deleting', 'done', 'failed')",
+            name="media_deletion_jobs_status_valid",
+        ),
+        CheckConstraint("attempts >= 0", name="media_deletion_jobs_attempts_valid"),
+        Index(
+            "idx_media_deletion_jobs_due",
+            "next_attempt_at",
+            postgresql_where=text("status IN ('pending', 'deleting')"),
+        ),
+    )
