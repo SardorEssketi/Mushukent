@@ -1,0 +1,23 @@
+# EXAMPLE - install only with the owner's approval; see docs/UPTIME_MONITORING.md.
+# One uptime check of the public URLs; alerts go to the ops Telegram chat. Touches no container.
+[Unit]
+Description=Mushukistan uptime check (one run)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Telegram bot token and ops chat: the same file the host health timer uses.
+EnvironmentFile=/etc/mushukistan-ops/host-health.env
+# Optional: HEALTHCHECK_PING_URL and OPS_UPTIME_* overrides.
+EnvironmentFile=-/etc/mushukistan-ops/uptime.env
+ExecStart=/usr/bin/python3 /usr/local/lib/mushukistan-ops/uptime_check.py
+StateDirectory=mushukistan-ops
+LogsDirectory=mushukistan-ops
+TimeoutStartSec=50
+Nice=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/mushukistan-ops /var/log/mushukistan-ops
