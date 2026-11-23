@@ -1,4 +1,7 @@
-"""Uptime check timer: infrastructure/ops/uptime_check.py (alert once after N failures, recover once)."""
+"""Uptime check timer: infrastructure/ops/uptime_check.py.
+
+Alert once after N consecutive failures, recover once, no repeats while down.
+"""
 
 from __future__ import annotations
 
@@ -108,9 +111,7 @@ def test_telegram_uses_ops_chat_and_never_raises():
         raise OSError("network")
 
     assert uc.send_telegram(cfg, "DOWN x", boom) is False
-    uc.ping_healthcheck(
-        uc.Config.from_env({"HEALTHCHECK_PING_URL": "https://hc.example/x"}), boom
-    )
+    uc.ping_healthcheck(uc.Config.from_env({"HEALTHCHECK_PING_URL": "https://hc.example/x"}), boom)
 
 
 def test_run_writes_log_and_state(tmp_path, monkeypatch):
@@ -127,9 +128,7 @@ def test_run_writes_log_and_state(tmp_path, monkeypatch):
     assert len(lines) == 2 and lines[0].split()[1:3] == ["t", "dns"]
     state = json.loads((tmp_path / "s.json").read_text())
     assert state["targets"]["t"]["fails"] == 2
-    assert (
-        "alerted" not in state["targets"]["t"]
-    )  # Telegram not configured: retried next run
+    assert "alerted" not in state["targets"]["t"]  # Telegram not configured: retried next run
 
 
 def test_fetch_reports_errors_not_exceptions():
