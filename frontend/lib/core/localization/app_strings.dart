@@ -1470,6 +1470,44 @@ class AppStrings {
     };
   }
 
+  String get deleteLostPetDraftMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Bu qoralamadagi tanlangan rasmlar, oxirgi koʻrilgan joy, jonivor nomi va qoʻshimcha maʼlumotni olib tashlaydi.',
+      _RussianStrings() =>
+        'Это удалит из черновика выбранные фото, место, где питомца видели последний раз, кличку и дополнительную информацию.',
+      _ =>
+        'This removes the selected photos, last-seen location, pet name, and additional information from this draft.',
+    };
+  }
+
+  String get deleteRehomingDraftMessage {
+    return switch (this) {
+      _UzbekStrings() =>
+        'Bu qoralamadagi tanlangan rasmlar, jonivor nomi va qoʻshimcha maʼlumotni olib tashlaydi.',
+      _RussianStrings() =>
+        'Это удалит из черновика выбранные фото, кличку и дополнительную информацию.',
+      _ =>
+        'This removes the selected photos, pet name, and additional information from this draft.',
+    };
+  }
+
+  String get lostPetDraftLabel {
+    return switch (this) {
+      _UzbekStrings() => 'Yo‘qolgan jonivor qoralamasi',
+      _RussianStrings() => 'Черновик: потерянный питомец',
+      _ => 'Lost Pet draft',
+    };
+  }
+
+  String get rehomingDraftLabel {
+    return switch (this) {
+      _UzbekStrings() => 'Uy topish qoralamasi',
+      _RussianStrings() => 'Черновик: пристройство',
+      _ => 'Rehoming draft',
+    };
+  }
+
   String get delete {
     return switch (this) {
       _UzbekStrings() => 'Oʻchirish',
