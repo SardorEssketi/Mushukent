@@ -3561,12 +3561,9 @@ class AppStrings {
       };
 
   String get optionalCatPostLocationHelp => switch (this) {
-        _UzbekStrings() =>
-          'Joylashuvsiz ham post qilish mumkin. Post xaritada chiqishi uchun joylashuv qo‘shing.',
-        _RussianStrings() =>
-          'Можно опубликовать и без места. Добавьте место, чтобы пост появился на карте.',
-        _ =>
-          'You can post without a location. Add one to show this post on the Map.',
+        _UzbekStrings() => 'Post xaritada chiqishi uchun joylashuv qo‘shing.',
+        _RussianStrings() => 'Добавьте место, чтобы пост появился на карте.',
+        _ => 'Add a location to show this post on the Map.',
       };
 
   String get myCatPosts => switch (this) {

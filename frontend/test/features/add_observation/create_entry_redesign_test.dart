@@ -330,11 +330,9 @@ void main() {
     router.go('/add/details');
     await tester.pumpAndSettle();
     expect(find.text('Add a note (optional)'), findsOneWidget);
-    // A Cat post can be published without a location, and the form says so.
+    // A Cat post can be published without a location; the card marks it optional.
     expect(find.text('Location (optional)'), findsOneWidget);
-    expect(
-        find.text(
-            'You can post without a location. Add one to show this post on the Map.'),
+    expect(find.text('Add a location to show this post on the Map.'),
         findsOneWidget);
     // The longer optional-location helper pushes the button below the fold.
     await tester.drag(find.byType(ListView).first, const Offset(0, -300));
