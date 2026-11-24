@@ -53,13 +53,13 @@ class AddObservationState {
 
   bool get hasPhoto => photos.isNotEmpty;
   bool get hasLocation => location != null;
+  /// Only content the user added makes a draft. The post kind and settings
+  /// such as visibility are chosen while opening the form and are not a draft.
   bool get hasDraft =>
       photos.isNotEmpty ||
       location != null ||
-      kind != 'observation' ||
       catName.trim().isNotEmpty ||
-      description.trim().isNotEmpty ||
-      !isPublic;
+      description.trim().isNotEmpty;
 
   AddObservationState copyWith({
     String? publicationId,

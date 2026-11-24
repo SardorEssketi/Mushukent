@@ -264,6 +264,55 @@ void main() {
     expect(find.text('Continue draft'), findsNothing);
   });
 
+  for (final (card, kind) in [
+    ('Cat post', 'observation'),
+    ('Cat needs help', 'needs_help'),
+  ]) {
+    testWidgets('$card: opening and leaving without input leaves no draft',
+        (tester) async {
+      _size(tester, 800);
+      final (container, router) = await _mount(tester, FakeApiClient());
+      await tester.tap(find.text(card));
+      await tester.pumpAndSettle();
+      expect(container.read(addObservationControllerProvider).kind, kind);
+      router.go('/add');
+      await tester.pumpAndSettle();
+      expect(
+          container.read(addObservationControllerProvider).hasDraft, isFalse);
+      expect(find.text('Continue draft'), findsNothing);
+    });
+
+    testWidgets('$card: a description entered before leaving is a draft',
+        (tester) async {
+      _size(tester, 800);
+      final (container, router) = await _mount(tester, FakeApiClient());
+      await tester.tap(find.text(card));
+      await tester.pumpAndSettle();
+      final id = container.read(addObservationControllerProvider).publicationId;
+      await tester.enterText(
+          find.byKey(ValueKey('$id:description')), 'Sleeps by the door');
+      router.go('/add');
+      await tester.pumpAndSettle();
+      final state = container.read(addObservationControllerProvider);
+      expect(state.hasDraft, isTrue);
+      expect(state.kind, kind);
+      expect(state.description, 'Sleeps by the door');
+      expect(find.text('Continue draft'), findsOneWidget);
+    });
+  }
+
+  test('post kind and visibility alone are not a draft', () {
+    expect(AddObservationState(kind: 'needs_help').hasDraft, isFalse);
+    expect(AddObservationState(isPublic: false).hasDraft, isFalse);
+    expect(AddObservationState(description: '   ').hasDraft, isFalse);
+    expect(AddObservationState(catName: 'Mimi').hasDraft, isTrue);
+    expect(
+        AddObservationState(
+                location: const GeoPoint(latitude: 41.3, longitude: 69.2))
+            .hasDraft,
+        isTrue);
+  });
+
   testWidgets('draft without a photo opens the form for completion',
       (tester) async {
     _size(tester, 800);
