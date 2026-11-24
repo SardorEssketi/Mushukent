@@ -11,7 +11,17 @@ import '../../../../core/network/api_error.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_remote_image.dart';
+import '../../../adoption_posts/presentation/screens/adoption_post_detail_screen.dart';
+import '../../../auth/application/auth_controller.dart';
+import '../../../comments/presentation/screens/comments_screen.dart';
+import '../../../feed/presentation/screens/feed_screen.dart';
+import '../../../leaderboards/presentation/screens/leaderboard_screen.dart';
+import '../../../lost_pets/presentation/screens/lost_pet_detail_screen.dart';
+import '../../../posts/application/saved_posts.dart';
+import '../../../posts/presentation/screens/post_detail_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/public_profile_screen.dart';
+import '../screens/user_activity_screen.dart';
 import 'avatar_crop_editor.dart';
 
 enum ProfileAvatarAction { open, gallery, camera, delete }
@@ -101,6 +111,32 @@ Future<ProfileAvatarAction?> showProfileAvatarActions(
   );
 }
 
+/// After my photo changed: update the signed-in user and reload every cached
+/// server result that embeds my avatar (author of my posts and comments,
+/// leaderboard rows, my public profile), so no screen shows the old photo.
+void refreshAfterOwnAvatarChange(WidgetRef ref, String? avatarUrl) {
+  ref.read(authControllerProvider.notifier).updateCurrentUserAvatar(avatarUrl);
+  for (final provider in <ProviderOrFamily>[
+    profileMeProvider,
+    publicProfileProvider,
+    feedPostsProvider,
+    savedPostsProvider,
+    leaderboardProvider,
+    postDetailProvider,
+    lostPetDetailProvider,
+    adoptionPostDetailProvider,
+    commentsProvider,
+    lostPetCommentsProvider,
+    adoptionPostCommentsProvider,
+    userPostsProvider,
+    userCommentsProvider,
+  ]) {
+    ref.invalidate(provider);
+  }
+  // Lists that reload on post changes (my posts, Lost Pet, Rehoming).
+  ref.read(postMutationRevisionProvider.notifier).state++;
+}
+
 /// The avatar tap on the profile screen: sheet, then view, replace or remove.
 Future<void> handleProfileAvatarTap(
   BuildContext context,
@@ -180,12 +216,12 @@ Future<void> _replaceAvatar(
       }
       return;
     }
-    await ref.read(mushukistanApiProvider).updateAvatar(
+    final profile = await ref.read(mushukistanApiProvider).updateAvatar(
           avatarBytes: avatar.bytes,
           avatarFilename: avatar.filename,
           avatarContentType: avatar.contentType,
         );
-    ref.invalidate(profileMeProvider);
+    refreshAfterOwnAvatarChange(ref, profile.avatarUrl);
     if (context.mounted) _snack(context, strings.photoUpdated);
   } catch (error) {
     if (context.mounted) {
@@ -220,7 +256,7 @@ Future<void> _removeAvatar(BuildContext context, WidgetRef ref) async {
   busy.state = true;
   try {
     await ref.read(mushukistanApiProvider).deleteAvatar();
-    ref.invalidate(profileMeProvider);
+    refreshAfterOwnAvatarChange(ref, null);
     if (context.mounted) _snack(context, strings.photoRemoved);
   } catch (error) {
     if (context.mounted) {

@@ -99,6 +99,25 @@ class MushukistanUser {
 
   bool get hasAvatar => avatarUrl != null && avatarUrl!.isNotEmpty;
 
+  /// The same user with a new profile photo; null removes it.
+  MushukistanUser withAvatarUrl(String? avatarUrl) => MushukistanUser(
+        id: id,
+        registeredAt: registeredAt,
+        email: email,
+        name: name,
+        avatarUrl: avatarUrl,
+        preferredLanguage: preferredLanguage,
+        allowPublicActivityView: allowPublicActivityView,
+        bio: bio,
+        observationCount: observationCount,
+        totalLikesReceived: totalLikesReceived,
+        commentCount: commentCount,
+        isModerator: isModerator,
+        legalAcceptanceRequired: legalAcceptanceRequired,
+        currentTermsVersion: currentTermsVersion,
+        currentPrivacyVersion: currentPrivacyVersion,
+      );
+
   factory MushukistanUser.fromJson(Object? json) {
     final map = _readMap(json);
     return MushukistanUser(

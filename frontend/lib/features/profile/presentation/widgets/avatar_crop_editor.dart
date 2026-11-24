@@ -137,6 +137,40 @@ class AvatarCropView {
   int get outputSide => (diameter / scale).round().clamp(256, 1024);
 }
 
+/// Longest side the editor decodes a photo at. A 2048 px RGBA image is at
+/// most 16 MB (2048 x 1536 x 4 = 12.6 MB for 4:3) of GPU/heap memory, safe on
+/// low-end phones and mobile browsers. The export is at most 1024 px, so even
+/// a 2x zoom still has a source pixel per output pixel.
+const int avatarEditorMaxSide = 2048;
+
+/// Decodes [bytes] for the editor, downscaled so its longest side is at most
+/// [maxSide]. The engine decodes straight to the target size (it never holds
+/// the full-resolution bitmap), on Android and on the web.
+Future<ui.Image> decodeAvatarSource(
+  Uint8List bytes, {
+  int maxSide = avatarEditorMaxSide,
+}) async {
+  final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  final codec = await ui.instantiateImageCodecWithSize(
+    buffer,
+    getTargetSize: (width, height) {
+      final longest = math.max(width, height);
+      if (longest <= maxSide) return ui.TargetImageSize(width: width);
+      final factor = maxSide / longest;
+      return ui.TargetImageSize(
+        width: math.max(1, (width * factor).round()),
+        height: math.max(1, (height * factor).round()),
+      );
+    },
+  );
+  try {
+    final frame = await codec.getNextFrame();
+    return frame.image;
+  } finally {
+    codec.dispose();
+  }
+}
+
 /// Renders the circle's bounding square of [view] to PNG bytes.
 Future<Uint8List> renderAvatarCrop(AvatarCropView view, ui.Image image) async {
   final side = view.outputSide;
@@ -184,14 +218,12 @@ class _AvatarCropEditorState extends ConsumerState<AvatarCropEditor> {
 
   Future<void> _decode() async {
     try {
-      final codec = await ui.instantiateImageCodec(widget.source);
-      final frame = await codec.getNextFrame();
-      codec.dispose();
+      final image = await decodeAvatarSource(widget.source);
       if (!mounted) {
-        frame.image.dispose();
+        image.dispose();
         return;
       }
-      setState(() => _image = frame.image);
+      setState(() => _image = image);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
