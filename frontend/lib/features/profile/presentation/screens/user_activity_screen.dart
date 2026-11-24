@@ -50,10 +50,15 @@ class UserPostsScreen extends ConsumerStatefulWidget {
     required this.userId,
     required this.isCurrentUser,
     this.kind,
+    this.embedded = false,
   });
 
   final String userId;
   final bool isCurrentUser;
+
+  /// Inside the Your activity tabs: only the list, the tab screen owns the
+  /// app bar.
+  final bool embedded;
 
   /// Backend post kind to list (`observation` or `needs_help`); null lists
   /// every kind.
@@ -138,20 +143,36 @@ class _UserPostsScreenState extends ConsumerState<UserPostsScreen> {
     final strings = ref.watch(appStringsProvider);
     final postsAsync = ref.watch(userPostsProvider(_query));
 
-    return Scaffold(
-      appBar: AppBar(title: Text(_title(strings))),
-      body: postsAsync.when(
-        data: (page) {
-          _syncWithFirstPage(page);
-          final posts = [...page.items, ..._morePosts];
-          if (posts.isEmpty) {
-            return Center(child: Text(_emptyMessage(strings)));
-          }
-          final hasFooter = _nextCursor != null;
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
+    Future<void> refresh() =>
+        ref.refresh(userPostsProvider(_query).future).then((_) {});
+    final body = postsAsync.when(
+      data: (page) {
+        _syncWithFirstPage(page);
+        final posts = [...page.items, ..._morePosts];
+        if (posts.isEmpty) {
+          // Still scrollable so pull-to-refresh works on the empty list.
+          return RefreshIndicator(
+            onRefresh: refresh,
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text(_emptyMessage(strings))),
+                ),
+              ],
+            ),
+          );
+        }
+        final hasFooter = _nextCursor != null;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: RefreshIndicator(
+              onRefresh: refresh,
               child: ListView.separated(
+                key: PageStorageKey('user-posts-${widget.kind ?? 'all'}'),
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.only(bottom: 12),
                 itemCount: posts.length + (hasFooter ? 1 : 0),
                 separatorBuilder: (_, __) => const Divider(height: 1),
@@ -179,15 +200,20 @@ class _UserPostsScreenState extends ConsumerState<UserPostsScreen> {
                 },
               ),
             ),
-          );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => _ActivityError(
-          error: error,
-          fallbackMessage: strings.couldNotLoadSection,
-          onRetry: () => ref.invalidate(userPostsProvider(_query)),
-        ),
+          ),
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, stackTrace) => _ActivityError(
+        error: error,
+        fallbackMessage: strings.couldNotLoadSection,
+        onRetry: () => ref.invalidate(userPostsProvider(_query)),
       ),
+    );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: Text(_title(strings))),
+      body: body,
     );
   }
 }

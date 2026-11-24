@@ -111,31 +111,12 @@ class ProfileScreen extends ConsumerWidget {
               ProfileSectionHeading(title: strings.yourActivity),
               AppCard(
                 padding: EdgeInsets.zero,
-                child: Column(children: [
-                  ProfileActionRow(
-                    icon: Icons.add_a_photo_outlined,
-                    title: strings.myCatPosts,
-                    onTap: () => context.push('/profile/cat-posts'),
-                  ),
-                  const Divider(height: 1),
-                  ProfileActionRow(
-                    icon: Icons.volunteer_activism_outlined,
-                    title: strings.myNeedsHelpPosts,
-                    onTap: () => context.push('/profile/needs-help-posts'),
-                  ),
-                  const Divider(height: 1),
-                  ProfileActionRow(
-                    icon: Icons.search_outlined,
-                    title: strings.myLostPets,
-                    onTap: () => context.push('/profile/lost-pets'),
-                  ),
-                  const Divider(height: 1),
-                  ProfileActionRow(
-                    icon: Icons.home_outlined,
-                    title: strings.myAdoptionPosts,
-                    onTap: () => context.push('/profile/adoption-posts'),
-                  ),
-                ]),
+                child: ProfileActionRow(
+                  key: const ValueKey('profile-my-activity-row'),
+                  icon: Icons.dynamic_feed_outlined,
+                  title: strings.yourActivities,
+                  onTap: () => context.push('/profile/activity'),
+                ),
               ),
               // Saved posts are other people's posts, so they get their own
               // card instead of sitting in the list of the user's own posts.

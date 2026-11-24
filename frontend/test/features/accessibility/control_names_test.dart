@@ -356,7 +356,7 @@ void main() {
       expect(card, findsOneWidget);
       expect(find.descendant(of: card, matching: find.text('Saved posts')),
           findsOneWidget);
-      expect(find.descendant(of: card, matching: find.text('My cat posts')),
+      expect(find.descendant(of: card, matching: find.text('Your activities')),
           findsNothing);
       expect(find.text('Saved posts'), findsOneWidget);
     });

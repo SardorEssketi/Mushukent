@@ -233,6 +233,36 @@ class AppStrings {
         _ => 'Your activity',
       };
 
+  String get yourActivities => switch (this) {
+        _UzbekStrings() => 'Faoliyatlaringiz',
+        _RussianStrings() => 'Ваши активности',
+        _ => 'Your activities',
+      };
+
+  String get activityTabCats => switch (this) {
+        _UzbekStrings() => 'Mushuklar',
+        _RussianStrings() => 'Кошки',
+        _ => 'Cats',
+      };
+
+  String get activityTabNeedsHelp => switch (this) {
+        _UzbekStrings() => 'Yordam kerak',
+        _RussianStrings() => 'Нужна помощь',
+        _ => 'Needs help',
+      };
+
+  String get activityTabLostPets => switch (this) {
+        _UzbekStrings() => 'Yo‘qolganlar',
+        _RussianStrings() => 'Потерянные',
+        _ => 'Lost',
+      };
+
+  String get activityTabRehoming => switch (this) {
+        _UzbekStrings() => 'Uy topish',
+        _RussianStrings() => 'Пристройство',
+        _ => 'Rehoming',
+      };
+
   String get resourcesAndAccount => switch (this) {
         _UzbekStrings() => 'Foydali ma’lumotlar va hisob',
         _RussianStrings() => 'Полезное и аккаунт',
