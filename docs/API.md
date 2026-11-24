@@ -286,6 +286,19 @@ Feature: Users
 - Pydantic model: UserUpdate
 - Notes: Avatar upload handled via image upload endpoint and provides URL.
 
+3a) POST /api/v1/users/me/avatar
+- Purpose: Replace the profile photo (multipart field `avatar`; same image rules as post photos). The previous avatar file is deleted after the change is saved.
+- Auth: Bearer required
+- Response: updated UserProfile
+- Errors: 401, 413, 422 INVALID_IMAGE, 502 IMAGE_UPLOAD_FAILED
+
+3b) DELETE /api/v1/users/me/avatar
+- Purpose: Remove the profile photo; clients show initials instead.
+- Auth: Bearer required
+- Response: updated UserProfile without `avatar_url`. Removing when there is no photo is a no-op that still returns 200.
+- Notes: `users.avatar_url` is set to NULL first; the file in object storage is deleted best-effort after commit (a failed delete only logs `removed_avatar_cleanup_failed`).
+- Errors: 401
+
 4) DELETE /api/v1/users/me
 - Purpose: Delete the authenticated user's own account.
 - Auth: Bearer required

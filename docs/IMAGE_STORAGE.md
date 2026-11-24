@@ -36,6 +36,10 @@ This document defines the canonical image upload and storage design for MVP. It 
 - Same validation and sanitation rules as observation upload.
 - Upload to dedicated avatar folder in R2.
 - Save final URL in `users.avatar_url`.
+- Clients crop to a 1:1 circle before upload (pan, zoom, rotate); only the
+  cropped square is sent, then prepared by the same client upload rules.
+- Removing the photo (`DELETE /api/v1/users/me/avatar`) clears
+  `users.avatar_url` and deletes the old object best-effort after commit.
 
 3. Cloudflare R2 Bucket Structure
 ---------------------------------

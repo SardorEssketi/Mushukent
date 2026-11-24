@@ -169,6 +169,18 @@ async def update_my_avatar(
     )
 
 
+@router.delete(
+    "/me/avatar",
+    response_model=ApiSuccess[UserProfile],
+    response_model_exclude_none=True,
+)
+def remove_my_avatar(
+    current_user: AuthUser = Depends(get_current_active_user),
+    users_service: UsersService = Depends(get_users_service),
+) -> ApiSuccess[UserProfile]:
+    return ApiSuccess(data=users_service.remove_avatar(current_user))
+
+
 @router.get(
     "/me/saved-posts",
     response_model=ApiSuccess[GenericListResponse[PostListItem]],

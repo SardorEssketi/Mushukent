@@ -518,6 +518,26 @@ class UsersService:
                 logger.warning("previous_avatar_cleanup_failed", user_id=str(user.id))
         return profile
 
+    def remove_avatar(self, user: AuthUser) -> UserProfile:
+        """Clear the avatar, then delete its file once the change is committed."""
+        with self.db_session_manager.session_scope() as session:
+            repository = self.repository_factory(session)
+            current = repository.get_by_id(user.id)
+            if current is None or not current.is_active:
+                raise api_error(401, "UNAUTHORIZED", "Missing or invalid Authorization header.")
+            previous_avatar_url = current.avatar_url
+            if previous_avatar_url is not None:
+                current.avatar_url = None
+                current = repository.save(current)
+            profile = self._build_self_profile(repository, current)
+
+        if previous_avatar_url and self.media_storage_service is not None:
+            try:
+                self.media_storage_service.delete_media_url(previous_avatar_url)
+            except Exception:  # pragma: no cover - best-effort cleanup
+                logger.warning("removed_avatar_cleanup_failed", user_id=str(user.id))
+        return profile
+
     def block_user(self, user: AuthUser, blocked_user_id: UUID) -> None:
         if user.id == blocked_user_id:
             raise api_error(422, "VALIDATION_ERROR", "You cannot block your own account.")

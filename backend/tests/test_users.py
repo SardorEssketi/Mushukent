@@ -374,6 +374,49 @@ def test_avatar_object_is_cleaned_when_database_save_fails(
     assert len(storage.deleted_keys) == 1
 
 
+def test_remove_avatar_clears_url_and_deletes_object(
+    client: TestClient,
+    users_runtime,
+) -> None:
+    user, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="avatar-remove@example.com",
+    )
+    storage = AvatarObjectStorage()
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+    headers = {"Authorization": f"Bearer {token}"}
+    uploaded = client.post(
+        "/api/v1/users/me/avatar",
+        headers=headers,
+        files={"avatar": ("avatar.jpg", _jpeg_bytes(), "image/jpeg")},
+    )
+    assert uploaded.status_code == 200
+    assert len(storage.objects) == 1
+
+    response = client.delete("/api/v1/users/me/avatar", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json()["data"].get("avatar_url") is None
+    assert storage.objects == {}
+    with users_runtime.db_session_manager.session_scope() as session:
+        persisted = session.get(schema.User, user.id)
+        assert persisted is not None
+        assert persisted.avatar_url is None
+
+    # Removing again is a no-op that still returns the profile.
+    again = client.delete("/api/v1/users/me/avatar", headers=headers)
+    assert again.status_code == 200
+    assert again.json()["data"].get("avatar_url") is None
+
+
+def test_remove_avatar_requires_authentication(client: TestClient) -> None:
+    response = client.delete("/api/v1/users/me/avatar")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+
+
 def test_delete_me_deactivates_account_and_rejects_token(
     client: TestClient,
     users_runtime,
