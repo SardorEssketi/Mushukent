@@ -354,7 +354,7 @@ def test_create_post_with_new_cat_workflow(client: TestClient, posts_runtime) ->
         "/api/v1/posts",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "photo_url": "https://storage.example/existing.jpg",
+            "photo_url": "https://storage.example/posts/existing.jpg",
             "new_cat": {
                 "name": "New Cat",
                 "status": "needs_help",
@@ -477,7 +477,7 @@ def test_named_new_cat_keeps_explicit_canonical_location(
         "/api/v1/posts",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "photo_url": "https://storage.example/explicit.jpg",
+            "photo_url": "https://storage.example/posts/explicit.jpg",
             "new_cat": {
                 "name": "Explicit",
                 "canonical_location": {"latitude": 41.2, "longitude": 69.1},
@@ -505,7 +505,7 @@ def test_named_new_cat_without_any_location_stays_unlocated(
         "/api/v1/posts",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "photo_url": "https://storage.example/no-location.jpg",
+            "photo_url": "https://storage.example/posts/no-location.jpg",
             "new_cat": {"name": "Nowhere"},
         },
     )
@@ -528,7 +528,7 @@ def test_create_observation_without_cat_creates_unknown_cat(
         "/api/v1/posts",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "photo_url": "https://storage.example/automatic-cat.jpg",
+            "photo_url": "https://storage.example/posts/automatic-cat.jpg",
             "description": "Observation without cat matching",
             "location": {"latitude": 41.32, "longitude": 69.27},
         },
@@ -628,7 +628,7 @@ def test_invalid_description_and_coordinates(client: TestClient, posts_runtime) 
         "/api/v1/posts",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "photo_url": "https://storage.example/valid.jpg",
+            "photo_url": "https://storage.example/posts/valid.jpg",
             "cat_id": str(cat.id),
             "description": "x" * 2001,
             "location": {"latitude": 200, "longitude": 69.25},
@@ -713,7 +713,7 @@ def test_cat_association_validation(
             "/api/v1/posts",
             headers={"Authorization": f"Bearer {token}"},
             json={
-                "photo_url": "https://storage.example/valid.jpg",
+                "photo_url": "https://storage.example/posts/valid.jpg",
                 "cat_id": str(cat_id),
                 "description": "Association check",
                 "location": {"latitude": 41.3, "longitude": 69.25},
@@ -738,7 +738,7 @@ def test_private_post_visibility_and_soft_delete_behavior(
         "/api/v1/posts",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "photo_url": "https://storage.example/private.jpg",
+            "photo_url": "https://storage.example/posts/private.jpg",
             "cat_id": str(cat.id),
             "description": "Private observation",
             "location": {"latitude": 41.31, "longitude": 69.26},
@@ -1582,3 +1582,37 @@ def test_edit_failure_rolls_back_post_and_cat_location(
         assert post.location is None
         assert post.kind == schema.PostKind.OBSERVATION
     assert _counts(posts_runtime, cat_id) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    "photo_url",
+    [
+        "https://tracker.example/pixel.jpg",
+        "https://tracker.example/posts/original/pixel.jpg",
+        "https://storage.example/not-a-media-path.jpg",
+    ],
+)
+def test_json_post_rejects_a_photo_url_outside_our_storage(
+    client: TestClient, posts_runtime, photo_url: str
+) -> None:
+    _, token = _create_user_with_token(
+        posts_runtime.db_session_manager,
+        posts_runtime.token_service,
+        email="external-photo-url@example.com",
+    )
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"photo_url": photo_url, "description": "External photo"},
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "VALIDATION_ERROR"
+    assert error["details"] == {"photo_url": ["must_be_platform_media_url"]}
+    with posts_runtime.db_session_manager.session_scope() as session:
+        assert (
+            session.scalar(select(schema.Post).where(schema.Post.description == "External photo"))
+            is None
+        )

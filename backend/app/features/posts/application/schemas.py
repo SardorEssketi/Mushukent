@@ -16,6 +16,7 @@ from app.features.posts.domain.models import (
     PostSortOrder,
 )
 from app.infrastructure.db.enums import PostKind
+from app.infrastructure.storage.public_media import PublicMediaUrl
 
 T = TypeVar("T")
 
@@ -33,7 +34,7 @@ class PostAuthor(BaseModel):
 
     id: UUID | None = None
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
 
 
 class PostCat(BaseModel):

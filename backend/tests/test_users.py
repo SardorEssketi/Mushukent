@@ -26,7 +26,8 @@ from app.features.users.application.service import UsersService
 from app.features.users.infrastructure.repositories import SqlAlchemyUserProfileRepository
 from app.infrastructure.db.models import schema
 from app.infrastructure.db.session import DatabaseSessionManager
-from app.infrastructure.storage.service import MediaStorageService
+from app.infrastructure.storage import public_media
+from app.infrastructure.storage.service import MediaStorageService, media_key_for_url
 from app.main import app
 
 
@@ -224,15 +225,34 @@ def test_unauthorized_access_rejected(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "UNAUTHORIZED"
 
 
-def test_valid_profile_update(client: TestClient, users_runtime) -> None:
+OWN_AVATAR = "https://media.example/users/avatars/2026/11/24/own.jpg"
+EXTERNAL_AVATAR = "https://tracker.example/pixel.jpg"
+
+
+def _use_avatar_storage(
+    monkeypatch: pytest.MonkeyPatch, users_runtime, storage: AvatarObjectStorage | None = None
+) -> AvatarObjectStorage:
+    """Upload to, and treat as ours, the fake avatar storage (https://media.example/...)."""
+    storage = storage or AvatarObjectStorage()
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+    monkeypatch.setattr(public_media, "_storage", storage)
+    return storage
+
+
+def test_valid_profile_update(
+    client: TestClient, users_runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_avatar_storage(monkeypatch, users_runtime)
     user, token = _create_user_with_token(
         users_runtime.db_session_manager,
         users_runtime.token_service,
         email="update-profile@example.com",
         name="Original",
         bio="Original bio",
+        avatar_url=OWN_AVATAR,
     )
 
+    # An older client may still send avatar_url: its other fields are saved, the photo is not.
     response = client.patch(
         "/api/v1/users/me",
         headers={"Authorization": f"Bearer {token}"},
@@ -240,7 +260,7 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
             "name": "Updated Name",
             "bio": "Updated bio",
             "phone_number": "+998 90 123 45 67",
-            "avatar_url": "https://example.com/new-avatar.jpg",
+            "avatar_url": EXTERNAL_AVATAR,
         },
     )
     assert response.status_code == 200
@@ -249,7 +269,7 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
     assert payload["name"] == "Updated Name"
     assert payload["bio"] == "Updated bio"
     assert payload["phone_number"] == "+998 90 123 4567"
-    assert payload["avatar_url"] == "https://example.com/new-avatar.jpg"
+    assert payload["avatar_url"] == OWN_AVATAR
 
     with users_runtime.db_session_manager.session_scope() as session:
         updated = session.scalar(select(schema.User).where(schema.User.id == user.id))
@@ -258,21 +278,158 @@ def test_valid_profile_update(client: TestClient, users_runtime) -> None:
         assert updated.name == "Updated Name"
         assert updated.bio == "Updated bio"
         assert updated.phone_number == "+998 90 123 4567"
-        assert updated.avatar_url == "https://example.com/new-avatar.jpg"
+        assert updated.avatar_url == OWN_AVATAR
         assert updated.is_active is True
+
+
+@pytest.mark.parametrize("avatar_url", [EXTERNAL_AVATAR, OWN_AVATAR, None, "not-a-url"])
+def test_patch_with_only_avatar_url_is_rejected(
+    client: TestClient, users_runtime, monkeypatch: pytest.MonkeyPatch, avatar_url
+) -> None:
+    _use_avatar_storage(monkeypatch, users_runtime)
+    user, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="patch-avatar-only@example.com",
+        avatar_url=OWN_AVATAR,
+    )
+
+    response = client.patch(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"avatar_url": avatar_url},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    with users_runtime.db_session_manager.session_scope() as session:
+        persisted = session.get(schema.User, user.id)
+        assert persisted is not None
+        assert persisted.avatar_url == OWN_AVATAR
+
+
+def test_read_paths_hide_an_external_avatar_url(
+    client: TestClient, users_runtime, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rows written before the PATCH rule may hold any URL: responses must not pass it on."""
+    _use_avatar_storage(monkeypatch, users_runtime)
+    external, external_token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="external-avatar@example.com",
+        avatar_url=EXTERNAL_AVATAR,
+    )
+    own, own_token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="own-avatar@example.com",
+        avatar_url=OWN_AVATAR,
+    )
+
+    me = client.get("/api/v1/users/me", headers={"Authorization": f"Bearer {external_token}"})
+    assert me.status_code == 200
+    assert me.json()["data"].get("avatar_url") is None
+
+    public = client.get(f"/api/v1/users/{external.id}")
+    assert public.status_code == 200
+    assert public.json()["data"].get("avatar_url") is None
+    own_public = client.get(f"/api/v1/users/{own.id}")
+    assert own_public.json()["data"]["avatar_url"] == OWN_AVATAR
+
+    blocked = client.post(
+        f"/api/v1/users/{external.id}/block",
+        headers={"Authorization": f"Bearer {own_token}"},
+    )
+    assert blocked.status_code in (200, 201, 204)
+    blocks = client.get("/api/v1/users/me/blocks", headers={"Authorization": f"Bearer {own_token}"})
+    assert blocks.status_code == 200
+    assert blocks.json()["data"]["items"][0].get("avatar_url") is None
+
+
+def test_every_avatar_url_response_field_is_filtered() -> None:
+    """Every response model exposing avatar_url goes through the own-media filter."""
+    import inspect
+
+    from pydantic import BaseModel
+
+    from app.features.auth.application import schemas as auth_schemas
+    from app.features.cats.application import schemas as cats_schemas
+    from app.features.comments.application import schemas as comments_schemas
+    from app.features.leaderboards.application import schemas as leaderboards_schemas
+    from app.features.posts.application import schemas as posts_schemas
+    from app.features.reports.application import schemas as reports_schemas
+    from app.features.users.application import schemas as users_schemas
+
+    checked = []
+    for module in (
+        auth_schemas,
+        cats_schemas,
+        comments_schemas,
+        leaderboards_schemas,
+        posts_schemas,
+        reports_schemas,
+        users_schemas,
+    ):
+        for name, model in inspect.getmembers(module, inspect.isclass):
+            if not issubclass(model, BaseModel) or model.__module__ != module.__name__:
+                continue
+            field = model.model_fields.get("avatar_url")
+            if field is None or model is users_schemas.UserUpdate:
+                continue
+            validators = [getattr(item, "func", None) for item in field.metadata]
+            assert public_media.public_media_url in validators, name
+            checked.append(name)
+    assert len(checked) >= 9, checked
+
+
+class _LocalLikeStorage:
+    bucket_name = "mushukistan-media"
+
+    def public_url(self, key: str) -> str:
+        return f"/media/{key}"
+
+
+@pytest.mark.parametrize(
+    ("storage", "url", "owned"),
+    [
+        (AvatarObjectStorage(), "https://media.example/users/avatars/a.jpg", True),
+        (AvatarObjectStorage(), "https://MEDIA.example/users/avatars/a.jpg", True),
+        (AvatarObjectStorage(), "http://media.example/users/avatars/a.jpg", False),
+        (AvatarObjectStorage(), "https://evil.example/users/avatars/a.jpg", False),
+        (AvatarObjectStorage(), "//evil.example/mushukistan-media/users/avatars/a.jpg", False),
+        (AvatarObjectStorage(), "https://media.example.evil.example/users/avatars/a.jpg", False),
+        (AvatarObjectStorage(), "https://media.example/somewhere/else.jpg", False),
+        (AvatarObjectStorage(), "https://media.example/users/avatars/../../x.jpg", False),
+        (_LocalLikeStorage(), "/media/users/avatars/a.jpg", True),
+        (_LocalLikeStorage(), "/media/other/a.jpg", False),
+        (_LocalLikeStorage(), "https://evil.example/media/users/avatars/a.jpg", False),
+    ],
+)
+def test_own_media_url_rules(storage, url: str, owned: bool) -> None:
+    assert (media_key_for_url(storage, url) is not None) is owned
+
+
+def test_public_media_filter_fails_closed_without_storage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(public_media, "_storage", None)
+    assert public_media.public_media_url(OWN_AVATAR) is None
+    monkeypatch.setattr(public_media, "_storage", AvatarObjectStorage())
+    assert public_media.public_media_url(OWN_AVATAR) == OWN_AVATAR
+    assert public_media.public_media_url(EXTERNAL_AVATAR) is None
 
 
 def test_avatar_upload_persists_generated_media_url(
     client: TestClient,
     users_runtime,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user, token = _create_user_with_token(
         users_runtime.db_session_manager,
         users_runtime.token_service,
         email="avatar-upload@example.com",
     )
-    storage = AvatarObjectStorage()
-    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+    storage = _use_avatar_storage(monkeypatch, users_runtime)
 
     response = client.post(
         "/api/v1/users/me/avatar",
@@ -377,14 +534,14 @@ def test_avatar_object_is_cleaned_when_database_save_fails(
 def test_remove_avatar_clears_url_and_deletes_object(
     client: TestClient,
     users_runtime,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user, token = _create_user_with_token(
         users_runtime.db_session_manager,
         users_runtime.token_service,
         email="avatar-remove@example.com",
     )
-    storage = AvatarObjectStorage()
-    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+    storage = _use_avatar_storage(monkeypatch, users_runtime)
     headers = {"Authorization": f"Bearer {token}"}
     uploaded = client.post(
         "/api/v1/users/me/avatar",

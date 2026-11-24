@@ -112,6 +112,26 @@ Analytics (PostHog)
 - Store files in Cloudflare R2 with an explicitly configured public/CDN URL suitable for app usage. Production requires `R2_PUBLIC_BASE_URL`; bucket accessibility must not be inferred.
 - Save only generated canonical URLs in DB.
 - Never trust user-provided path names.
+- Never accept or serve a user-supplied image URL on another host. An external URL makes every
+  viewer's client fetch it from a third party (leaks viewers' IP addresses, works as a tracking
+  pixel) and bypasses our upload validation and moderation. Rules:
+  - Images enter only as uploads. `avatar_url` is no longer applied by `PATCH /users/me`
+    (accepted and ignored for older clients); the photo changes via `POST`/`DELETE
+    /users/me/avatar`.
+  - Where a URL input still exists (post `photo_url`, cat `cover_photo_url`) it must be one of
+    our media URLs, else 422 `must_be_platform_media_url`.
+  - "Ours" is decided in one place, `media_key_for_url` in
+    `app/infrastructure/storage/service.py`: same scheme and host as the storage public URL (or
+    a relative URL), and a path under the bucket or a media key prefix (`posts/`,
+    `users/avatars/`, `cats/covers/`, `lost-pets/`, `adoption/`). Deletion of media by URL uses
+    the same check, so a foreign URL is never deleted.
+  - Responses pass every user `avatar_url` through `PublicMediaUrl`
+    (`app/infrastructure/storage/public_media.py`): a stored value that is not ours is returned
+    as null. This covers rows written before the rule without changing data. The filter fails
+    closed when no storage is configured.
+  - Known gap (2026-11-24): post `photo_url`/`photo_urls`/`thumb_url` and cat
+    `cover_photo_url` are not filtered on output. Rows written through the JSON `photo_url` path
+    before it was restricted, or cat covers before ab499f1, could still point elsewhere.
 - For local storage and cleanup, URL-decode and canonicalize object paths and verify that the resolved path remains inside the configured media root.
 
 7. Secrets Management

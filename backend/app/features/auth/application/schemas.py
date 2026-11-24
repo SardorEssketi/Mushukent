@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.features.auth.domain.models import AuthUser
+from app.infrastructure.storage.public_media import PublicMediaUrl
 
 T = TypeVar("T")
 # Must equal the "Version:" of docs/legal/TERMS_OF_SERVICE.md and PRIVACY_POLICY.md (guarded by
@@ -93,7 +94,7 @@ class UserPublic(BaseModel):
     id: UUID
     email: EmailStr
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
     telegram_username: str | None = None
     preferred_language: str = "en"
     allow_public_activity_view: bool = True

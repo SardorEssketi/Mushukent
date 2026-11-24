@@ -279,12 +279,13 @@ Feature: Users
 - Auth: Bearer required
 - Request model: UserUpdate
   Example:
-  {"name":"New Name","bio":"Updated bio","avatar_url":"https://.../avatar.jpg","preferred_language":"uz","allow_public_activity_view":true}
-- Validation: name max 100, bio max 1000, avatar_url valid URL, preferred_language in en|uz|ru, phone_number must be empty or an Uzbekistan phone number stored as `+998 XX XXX XXXX`, telegram_username must be empty or 5-32 letters/numbers/underscores.
+  {"name":"New Name","bio":"Updated bio","preferred_language":"uz","allow_public_activity_view":true}
+- Validation: name max 100, bio max 1000, preferred_language in en|uz|ru, phone_number must be empty or an Uzbekistan phone number stored as `+998 XX XXX XXXX`, telegram_username must be empty or 5-32 letters/numbers/underscores.
 - Response: updated UserProfile
 - Errors: 400, 401, 422 INVALID_PHONE_NUMBER when phone_number is not an Uzbekistan number
 - Pydantic model: UserUpdate
-- Notes: Avatar upload handled via image upload endpoint and provides URL.
+- avatar_url: no longer applied (2026-11-24). The profile photo changes only through `POST` / `DELETE /api/v1/users/me/avatar`, so it is always an image uploaded to our storage. For older clients the field is still accepted with any value and ignored when other fields are sent; a request whose only field is `avatar_url` returns 422 VALIDATION_ERROR. No released app version sends it.
+- Response `avatar_url` (here and everywhere a user appears: self and public profile, post/comment authors, leaderboards, blocked users, reports): returned only when it points at our media storage (same scheme and host as the storage public URL and a media key path); any other stored value is returned as null. Stored rows are not modified.
 
 3a) POST /api/v1/users/me/avatar
 - Purpose: Replace the profile photo (multipart field `avatar`; same image rules as post photos). The previous avatar file is deleted after the change is saved.
@@ -498,7 +499,7 @@ Feature: Posts (Observations)
      - status (cat_status, independent metadata when supplied)
      - location / latitude and longitude (optional; when supplied, both coordinates must be valid)
      - is_public boolean
-  b) application/json (if photo already hosted): same fields but photo_url required
+  b) application/json (if photo already hosted): same fields but photo_url required. `photo_url` (JSON or multipart) must point at our own media storage, like cat `cover_photo_url`; any other URL returns 422 VALIDATION_ERROR with `details.photo_url = ["must_be_platform_media_url"]`. The apps always upload files.
 - Validation rules:
   - At least one of photo file(s) or photo_url must be provided
   - observation uploads support up to 5 photos

@@ -136,8 +136,6 @@ class UsersService:
                 current.preferred_language = payload.preferred_language
             if payload.allow_public_activity_view is not None:
                 current.allow_public_activity_view = payload.allow_public_activity_view
-            if payload.avatar_url is not None:
-                current.avatar_url = str(payload.avatar_url)
 
             updated = repository.save(current)
             return self._build_self_profile(repository, updated)
