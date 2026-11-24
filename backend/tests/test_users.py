@@ -410,6 +410,44 @@ def test_remove_avatar_clears_url_and_deletes_object(
     assert again.json()["data"].get("avatar_url") is None
 
 
+@pytest.mark.parametrize(
+    "external_url",
+    [
+        "https://lh3.googleusercontent.com/a/ACg8ocL-google-account-photo=s96-c",
+        "https://other.example/users/avatars/2026/11/24/avatar.jpg",
+        "https://other.example/mushukistan-media/users/avatars/avatar.jpg",
+    ],
+)
+def test_remove_external_avatar_clears_url_without_touching_storage(
+    client: TestClient,
+    users_runtime,
+    external_url: str,
+) -> None:
+    user, token = _create_user_with_token(
+        users_runtime.db_session_manager,
+        users_runtime.token_service,
+        email="avatar-external@example.com",
+    )
+    storage = AvatarObjectStorage()
+    users_runtime.users_service.media_storage_service = MediaStorageService(storage=storage)
+    with users_runtime.db_session_manager.session_scope() as session:
+        persisted = session.get(schema.User, user.id)
+        assert persisted is not None
+        persisted.avatar_url = external_url
+
+    response = client.delete(
+        "/api/v1/users/me/avatar", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"].get("avatar_url") is None
+    assert storage.deleted_keys == []
+    with users_runtime.db_session_manager.session_scope() as session:
+        persisted = session.get(schema.User, user.id)
+        assert persisted is not None
+        assert persisted.avatar_url is None
+
+
 def test_remove_avatar_requires_authentication(client: TestClient) -> None:
     response = client.delete("/api/v1/users/me/avatar")
 
