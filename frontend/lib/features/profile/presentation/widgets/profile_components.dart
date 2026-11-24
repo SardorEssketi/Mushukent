@@ -20,6 +20,8 @@ class ProfileSummaryCard extends StatelessWidget {
     this.telegramUsername,
     this.onObservationsTap,
     this.onCommentsTap,
+    this.onAvatarTap,
+    this.avatarBusy = false,
   });
 
   final String name;
@@ -34,6 +36,10 @@ class ProfileSummaryCard extends StatelessWidget {
   final int commentCount;
   final VoidCallback? onObservationsTap;
   final VoidCallback? onCommentsTap;
+
+  /// Set on the user's own profile: the avatar opens the photo actions.
+  final VoidCallback? onAvatarTap;
+  final bool avatarBusy;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +63,14 @@ class ProfileSummaryCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ProfileAvatar(name: name, avatarUrl: avatarUrl),
+              onAvatarTap == null
+                  ? ProfileAvatar(name: name, avatarUrl: avatarUrl)
+                  : _EditableAvatar(
+                      label: strings.changePhoto,
+                      busy: avatarBusy,
+                      onTap: onAvatarTap!,
+                      child: ProfileAvatar(name: name, avatarUrl: avatarUrl),
+                    ),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Column(
@@ -126,6 +139,89 @@ class ProfileSummaryCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The own-profile avatar: tappable, with a small camera badge.
+class _EditableAvatar extends StatelessWidget {
+  const _EditableAvatar({
+    required this.label,
+    required this.busy,
+    required this.onTap,
+    required this.child,
+  });
+
+  final String label;
+  final bool busy;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: label,
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              child,
+              if (busy)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.45),
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned.fill(
+                child: Material(
+                  type: MaterialType.transparency,
+                  shape: const CircleBorder(),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: const ValueKey('profile-avatar-button'),
+                    onTap: busy ? null : onTap,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: colors.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.surface, width: 2),
+                    ),
+                    child: Icon(Icons.photo_camera,
+                        size: 14, color: colors.onPrimary),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

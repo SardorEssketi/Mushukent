@@ -1,13 +1,9 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image/image.dart' as image;
-import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:mushukistan_frontend/core/localization/language_controller.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/features/profile/presentation/screens/edit_profile_screen.dart';
@@ -75,12 +71,16 @@ Future<void> _save(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('readable form retains all populated fields and photo choices',
+  testWidgets(
+      'readable form retains all populated fields, without a photo control',
       (tester) async {
     _size(tester, 1700);
     final client = FakeApiClient();
     await _mount(tester, client, avatarUrl: 'invalid:');
-    expect(find.text('Profile photo'), findsOneWidget);
+    // The photo is changed from the profile screen now, not here.
+    expect(find.text('Profile photo'), findsNothing);
+    expect(find.text('Change photo'), findsNothing);
+    expect(find.byType(CircleAvatar), findsNothing);
     expect(find.text('Personal information'), findsOneWidget);
     final fields = tester
         .widgetList<TextFormField>(find.byType(TextFormField))
@@ -92,32 +92,8 @@ void main() {
     expect(fields[3].controller!.text, 'Helping neighborhood cats');
     expect(tester.getSize(find.byType(TextFormField).first).width,
         lessThanOrEqualTo(760));
-    expect(find.text('AC'), findsOneWidget);
-    await tester.tap(find.text('Change photo'));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose from gallery'), findsOneWidget);
-    expect(find.text('Take photo'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('gallery preview uses the selected transparent PNG',
-      (tester) async {
-    _size(tester, 800);
-    final originalPicker = ImagePickerPlatform.instance;
-    final picker = _AvatarPicker();
-    ImagePickerPlatform.instance = picker;
-    addTearDown(() => ImagePickerPlatform.instance = originalPicker);
-    await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Change photo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose from gallery'));
-    await tester.pumpAndSettle();
-    expect(picker.sources, [ImageSource.gallery]);
-    expect(
-        tester
-            .widgetList<Image>(find.byType(Image))
-            .any((widget) => widget.image is MemoryImage),
-        isTrue);
+    expect(find.text('AC'), findsNothing);
+    expect(find.text('Choose from gallery'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -146,47 +122,6 @@ void main() {
     expect(tester.widget<FilledButton>(save).onPressed, isNull);
     expect(client.calls, isEmpty);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('camera choice uses the existing picker path', (tester) async {
-    _size(tester, 360);
-    final originalPicker = ImagePickerPlatform.instance;
-    final picker = _AvatarPicker();
-    ImagePickerPlatform.instance = picker;
-    addTearDown(() => ImagePickerPlatform.instance = originalPicker);
-    await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Change photo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Take photo'));
-    await tester.pumpAndSettle();
-    expect(picker.sources, [ImageSource.camera]);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('selected avatar uploads before profile details and then returns',
-      (tester) async {
-    _size(tester, 800);
-    final originalPicker = ImagePickerPlatform.instance;
-    ImagePickerPlatform.instance = _AvatarPicker();
-    addTearDown(() => ImagePickerPlatform.instance = originalPicker);
-    final client = FakeApiClient();
-    client.setHandler('POST', 'users/me/avatar', (call) {
-      final upload = (call.body! as FormData).files.single.value;
-      expect(upload.filename, 'avatar.png');
-      expect(upload.contentType.toString(), 'image/png');
-      return _profile();
-    });
-    client.setHandler('PATCH', 'users/me', (_) => _profile());
-    await _mount(tester, client);
-    await tester.tap(find.text('Change photo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose from gallery'));
-    await tester.pumpAndSettle();
-    await _save(tester);
-    await tester.pumpAndSettle();
-    expect(client.calls.map((call) => call.path).toList(),
-        ['users/me/avatar', 'users/me']);
-    expect(find.text('Profile home'), findsOneWidget);
   });
 
   testWidgets('invalid Uzbekistan phone and Telegram values block saving',
@@ -308,36 +243,6 @@ void main() {
     expect(find.byType(EditProfileScreen), findsOneWidget);
   });
 
-  testWidgets('system back closes the photo source sheet first',
-      (tester) async {
-    _size(tester, 800);
-    await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Change photo'));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose from gallery'), findsOneWidget);
-    await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
-    expect(find.text('Choose from gallery'), findsNothing);
-    expect(find.byType(EditProfileScreen), findsOneWidget);
-  });
-
-  testWidgets('selected avatar alone triggers the unsaved-changes prompt',
-      (tester) async {
-    _size(tester, 800);
-    final originalPicker = ImagePickerPlatform.instance;
-    ImagePickerPlatform.instance = _AvatarPicker();
-    addTearDown(() => ImagePickerPlatform.instance = originalPicker);
-    await _mount(tester, FakeApiClient());
-    await tester.tap(find.text('Change photo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Choose from gallery'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Cancel'));
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.text('Unsaved changes'), findsOneWidget);
-  });
-
   testWidgets('compact translated forms stay within the viewport',
       (tester) async {
     _size(tester, 360);
@@ -386,24 +291,4 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
-}
-
-class _AvatarPicker extends ImagePickerPlatform {
-  final sources = <ImageSource>[];
-
-  @override
-  Future<XFile?> getImageFromSource({
-    required ImageSource source,
-    ImagePickerOptions options = const ImagePickerOptions(),
-  }) async {
-    sources.add(source);
-    final avatar = image.Image(width: 32, height: 32, numChannels: 4)
-      ..setPixelRgba(0, 0, 200, 100, 50, 120);
-    return XFile.fromData(
-      Uint8List.fromList(image.encodePng(avatar)),
-      path: 'avatar.png',
-      name: 'avatar.png',
-      mimeType: 'image/png',
-    );
-  }
 }

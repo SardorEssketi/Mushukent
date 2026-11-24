@@ -826,6 +826,11 @@ class MushukistanApi {
     );
   }
 
+  /// Removes the profile photo; the profile then shows initials.
+  Future<void> deleteAvatar() {
+    return _client.delete('users/me/avatar');
+  }
+
   Future<PostDetail> createObservation({
     required String publicationId,
     required List<ObservationPhotoUpload> photos,

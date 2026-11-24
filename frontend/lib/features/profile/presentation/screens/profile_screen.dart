@@ -10,6 +10,7 @@ import '../../../../core/localization/feedback_strings.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../auth/application/auth_controller.dart';
+import '../widgets/profile_avatar_actions.dart';
 import '../widgets/profile_components.dart';
 
 final profileMeProvider =
@@ -88,7 +89,9 @@ class ProfileScreen extends ConsumerWidget {
           final summary = ProfileSummaryCard(
             name: profile.name ?? currentUser?.name ?? strings.unnamedUser,
             strings: strings,
-            avatarUrl: profile.avatarUrl ?? currentUser?.avatarUrl,
+            // The profile is authoritative: after removing the photo the
+            // signed-in user's cached avatar must not show through.
+            avatarUrl: profile.avatarUrl,
             bio: profile.bio,
             email: profile.email,
             phoneNumber: profile.phoneNumber,
@@ -98,6 +101,9 @@ class ProfileScreen extends ConsumerWidget {
             commentCount: profile.commentCount,
             onObservationsTap: () => context.push('/profile/observations'),
             onCommentsTap: () => context.push('/profile/comments'),
+            onAvatarTap: () => handleProfileAvatarTap(context, ref,
+                avatarUrl: profile.avatarUrl),
+            avatarBusy: ref.watch(profileAvatarBusyProvider),
           );
           final actions = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

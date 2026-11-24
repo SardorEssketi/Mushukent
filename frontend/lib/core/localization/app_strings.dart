@@ -1330,16 +1330,6 @@ class AppStrings {
     };
   }
 
-  String get avatarSavedDetailsFailed {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Profil rasmi saqlandi, ammo boshqa o‘zgarishlar saqlanmadi. Qayta urinib ko‘ring.',
-      _RussianStrings() =>
-        'Фото профиля сохранено, но остальные изменения нет. Повторите попытку.',
-      _ => 'Profile photo was saved, but other changes were not. Try again.',
-    };
-  }
-
   String get invalidPhoto {
     return switch (this) {
       _UzbekStrings() =>
@@ -2250,6 +2240,78 @@ class AppStrings {
         _UzbekStrings() => 'Rasmni o‘zgartirish',
         _RussianStrings() => 'Изменить фото',
         _ => 'Change photo',
+      };
+
+  String get openPhoto => switch (this) {
+        _UzbekStrings() => 'Rasmni ochish',
+        _RussianStrings() => 'Открыть фото',
+        _ => 'Open photo',
+      };
+
+  String get deletePhoto => switch (this) {
+        _UzbekStrings() => 'Rasmni o‘chirish',
+        _RussianStrings() => 'Удалить фото',
+        _ => 'Remove photo',
+      };
+
+  String get deletePhotoTitle => switch (this) {
+        _UzbekStrings() => 'Profil rasmi o‘chirilsinmi?',
+        _RussianStrings() => 'Удалить фото профиля?',
+        _ => 'Remove profile photo?',
+      };
+
+  String get deletePhotoMessage => switch (this) {
+        _UzbekStrings() => 'Profilingizda ismingiz bosh harflari ko‘rinadi.',
+        _RussianStrings() => 'Вместо фото будут видны ваши инициалы.',
+        _ => 'Your initials will show instead.',
+      };
+
+  String get photoUpdated => switch (this) {
+        _UzbekStrings() => 'Rasm yangilandi.',
+        _RussianStrings() => 'Фото обновлено.',
+        _ => 'Photo updated.',
+      };
+
+  String get photoRemoved => switch (this) {
+        _UzbekStrings() => 'Rasm o‘chirildi.',
+        _RussianStrings() => 'Фото удалено.',
+        _ => 'Photo removed.',
+      };
+
+  String get couldNotRemovePhoto => switch (this) {
+        _UzbekStrings() => 'Rasmni o‘chirib bo‘lmadi. Qayta urinib ko‘ring.',
+        _RussianStrings() => 'Не удалось удалить фото. Попробуйте ещё раз.',
+        _ => 'Could not remove the photo. Try again.',
+      };
+
+  String get cropDone => switch (this) {
+        _UzbekStrings() => 'Tayyor',
+        _RussianStrings() => 'Готово',
+        _ => 'Done',
+      };
+
+  String get cropRotate => switch (this) {
+        _UzbekStrings() => 'Burish',
+        _RussianStrings() => 'Повернуть',
+        _ => 'Rotate',
+      };
+
+  String get cropZoom => switch (this) {
+        _UzbekStrings() => 'Kattalashtirish',
+        _RussianStrings() => 'Масштаб',
+        _ => 'Zoom',
+      };
+
+  String get cropReset => switch (this) {
+        _UzbekStrings() => 'Asl holiga',
+        _RussianStrings() => 'Сбросить',
+        _ => 'Reset',
+      };
+
+  String get cropHint => switch (this) {
+        _UzbekStrings() => 'Suring, kattalashtiring yoki ikki barmoq bilan buring',
+        _RussianStrings() => 'Двигайте, приближайте, вращайте двумя пальцами',
+        _ => 'Drag, zoom, or rotate with two fingers',
       };
 
   String get personalInformation => switch (this) {
