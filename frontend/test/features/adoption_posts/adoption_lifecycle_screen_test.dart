@@ -114,30 +114,45 @@ void main() {
         isNot(contains('adoption-1')));
   });
 
-  testWidgets('creation asks for explicit consent about who sees the contact',
-      (tester) async {
-    final container = _container(FakeApiClient());
-    addTearDown(container.dispose);
-    await tester.pumpWidget(UncontrolledProviderScope(
-      container: container,
-      child: const MaterialApp(home: AdoptionPostCreateScreen()),
-    ));
-    await tester.pumpAndSettle();
-    final consent = find.textContaining('signed-in Mushukistan users');
-    await tester.scrollUntilVisible(consent, 250,
-        scrollable: find.byType(Scrollable).first);
-    expect(consent, findsOneWidget);
-    expect(
-        find.textContaining('older app versions may show it'), findsOneWidget);
-    expect(
-        find.textContaining('limited number of contacts per day and per week'),
-        findsOneWidget);
-    expect(find.textContaining('never shown to visitors who are not signed in'),
-        findsOneWidget);
-    final checkbox = tester.widget<CheckboxListTile>(
-        find.ancestor(of: consent, matching: find.byType(CheckboxListTile)));
-    expect(checkbox.value, isFalse, reason: 'consent is never pre-checked');
-  });
+  for (final (telegram, notice) in [
+    (null, 'Only signed-in users will see your number +998 90 123 4567.'),
+    (
+      'mushuk_owner',
+      'Only signed-in users will see your number +998 90 123 4567 and Telegram.'
+    ),
+  ]) {
+    testWidgets(
+        'creation names the shared profile contact instead of a checkbox '
+        '(Telegram: ${telegram != null})', (tester) async {
+      final client = FakeApiClient()
+        ..setHandler(
+            'GET',
+            'users/me',
+            (_) => {
+                  'id': 'owner-1',
+                  'email': 'owner@example.com',
+                  'phone_number': '+998 90 123 4567',
+                  'telegram_username': telegram,
+                  'registered_at': '2026-01-01T00:00:00Z',
+                  'observation_count': 0,
+                  'total_likes_received': 0,
+                  'comment_count': 0,
+                });
+      final container = _container(client);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: AdoptionPostCreateScreen()),
+      ));
+      await tester.pumpAndSettle();
+      final line = find.text(notice);
+      await tester.scrollUntilVisible(line, 250,
+          scrollable: find.byType(Scrollable).first);
+      expect(line, findsOneWidget);
+      expect(find.byType(CheckboxListTile), findsNothing);
+      expect(find.textContaining('older app versions'), findsNothing);
+    });
+  }
 
   testWidgets('only owner sees edit and delete on a rehomed post',
       (tester) async {

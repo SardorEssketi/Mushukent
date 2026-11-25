@@ -1990,16 +1990,6 @@ class AppStrings {
     };
   }
 
-  String get confirmContactConsent {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Kontakt ma’lumotlaringizni tizimga kirgan foydalanuvchilar ko‘rishiga rozilik bering.',
-      _RussianStrings() =>
-        'Подтвердите согласие на показ ваших контактов вошедшим пользователям.',
-      _ => 'Confirm that signed-in users may see your contact details.',
-    };
-  }
-
   String get legalUpdateTitle {
     return switch (this) {
       _UzbekStrings() =>
@@ -3505,27 +3495,24 @@ class AppStrings {
     };
   }
 
-  String get contactConsentTitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Tizimga kirgan Mushukistan foydalanuvchilariga ushbu e’londa telefon raqamimni (va qo‘shsam, Telegramni) ko‘rishga ruxsat berish.',
-      _RussianStrings() =>
-        'Разрешить вошедшим в аккаунт пользователям Mushukistan видеть мой номер телефона (и Telegram, если я его добавлю) в этом объявлении.',
-      _ =>
-        'Allow signed-in Mushukistan users to see my phone number (and Telegram, if I add it) on this post.',
-    };
-  }
+  /// Above Publish on Lost Pet and Rehoming posts: the profile phone is the
+  /// consent, so the form names what signed-in users will see.
+  String contactNoticePhone(String phone) => switch (this) {
+        _UzbekStrings() =>
+          '$phone raqamingizni faqat tizimga kirganlar ko‘radi.',
+        _RussianStrings() =>
+          'Ваш номер $phone увидят только вошедшие пользователи.',
+        _ => 'Only signed-in users will see your number $phone.',
+      };
 
-  String get contactConsentSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Kontaktni faqat tizimga kirgan foydalanuvchilar ko‘ra oladi. Ilovaning joriy versiyasida u «Egasi bilan bog‘lanish» tugmasi bosilgandan keyin ko‘rinadi; eski versiyalarda e’lon ochilishi bilan darhol ko‘rinishi mumkin. Har bir foydalanuvchi kuniga va haftasiga cheklangan miqdordagi kontaktni ko‘ra oladi. Tizimga kirmagan tashrifchilarga, ro‘yxatlarda, lentada va xaritada kontakt ko‘rsatilmaydi.',
-      _RussianStrings() =>
-        'Контакты видны только вошедшим в аккаунт пользователям. В текущей версии приложения они появляются после нажатия «Связаться с владельцем»; в старых версиях приложения контакт может отображаться сразу при открытии объявления. Каждый пользователь может открыть лишь ограниченное число контактов в день и в неделю. Посетителям без входа, в списках, ленте и на карте контакты не показываются.',
-      _ =>
-        'Only signed-in users can see it. In the current app it appears after they tap Contact Owner; older app versions may show it as soon as the post is opened. Each user can view only a limited number of contacts per day and per week. It is never shown to visitors who are not signed in, or in lists, feeds or on the map.',
-    };
-  }
+  String contactNoticePhoneAndTelegram(String phone) => switch (this) {
+        _UzbekStrings() =>
+          '$phone raqamingiz va Telegramingizni faqat tizimga kirganlar ko‘radi.',
+        _RussianStrings() =>
+          'Ваш номер $phone и Telegram увидят только вошедшие пользователи.',
+        _ =>
+          'Only signed-in users will see your number $phone and Telegram.',
+      };
 
   String get tapMapForLastSeen {
     return switch (this) {

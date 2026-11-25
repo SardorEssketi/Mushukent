@@ -129,7 +129,6 @@ class PetPostDraftController extends StateNotifier<PetPostDraftState> {
   /// land in [PetPostDraftState.errorMessage]; the caller only learns success.
   Future<bool> submit({
     required AppStrings strings,
-    required bool contactConsent,
   }) async {
     if (state.submitting || state.completedUnavailable) return false;
     final attemptId = state.publicationId;
@@ -142,7 +141,6 @@ class PetPostDraftController extends StateNotifier<PetPostDraftState> {
             photos: state.photos,
             petName: state.petName,
             lastSeenLocation: state.location!,
-            ownerPhonePublicationConsent: contactConsent,
             additionalInfo: state.additionalInfo,
           );
         case PetPostType.adoption:
@@ -151,7 +149,6 @@ class PetPostDraftController extends StateNotifier<PetPostDraftState> {
             photos: state.photos,
             petName: state.petName,
             additionalInfo: state.additionalInfo,
-            ownerContactConsent: contactConsent,
           );
       }
       if (state.publicationId != attemptId) return false;

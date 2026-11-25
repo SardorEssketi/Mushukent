@@ -14,6 +14,7 @@ import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../../add_observation/application/pet_post_draft_controller.dart';
+import '../../../add_observation/presentation/widgets/contact_share_notice.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 class AdoptionPostCreateScreen extends ConsumerStatefulWidget {
@@ -28,7 +29,6 @@ class _AdoptionPostCreateScreenState
     extends ConsumerState<AdoptionPostCreateScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isPickingPhotos = false;
-  bool _contactConsent = false;
   String? _error;
   StreamSubscription<void>? _sessionChanges;
 
@@ -45,7 +45,6 @@ class _AdoptionPostCreateScreenState
         if (!mounted) return;
         setState(() {
           _isPickingPhotos = false;
-          _contactConsent = false;
           _error = null;
         });
       });
@@ -123,17 +122,8 @@ class _AdoptionPostCreateScreenState
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
-    if (!_contactConsent) {
-      setState(() {
-        _error = strings.confirmContactConsent;
-      });
-      return;
-    }
     setState(() => _error = null);
-    final published = await _draft.submit(
-      strings: strings,
-      contactConsent: _contactConsent,
-    );
+    final published = await _draft.submit(strings: strings);
     if (!published) return;
     ref.invalidate(feedPostsProvider);
     _draft.reset();
@@ -256,21 +246,8 @@ class _AdoptionPostCreateScreenState
                   alignLabelWithHint: true,
                 ),
               ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _contactConsent,
-                onChanged: draftLocked
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _contactConsent = value ?? false;
-                          _error = null;
-                        });
-                      },
-                title: Text(strings.contactConsentTitle),
-                subtitle: Text(strings.contactConsentSubtitle),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
+              // The profile phone is the consent: name what will be shared.
+              const ContactShareNotice(),
               if (error != null) ...[
                 const SizedBox(height: 12),
                 Text(

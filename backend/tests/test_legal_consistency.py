@@ -56,11 +56,12 @@ def test_contact_visibility_is_described_everywhere() -> None:
         assert "older app versions" in text, name
         assert "per day and per week" in text, name
     assert "older app versions" in WEB_PRIVACY
-    # The three consent languages state the same facts.
-    assert "signed-in users" in STRINGS
-    assert "older app versions" in STRINGS
-    assert "в старых версиях приложения" in STRINGS
-    assert "eski versiyalarda" in STRINGS
+    # The create forms have no consent checkbox any more (the profile phone is the consent);
+    # the one-line notice says, in all three languages, that only signed-in users see it.
+    assert "Only signed-in users will see your number" in STRINGS
+    assert "увидят только вошедшие пользователи" in STRINGS
+    assert "faqat tizimga kirganlar ko‘radi" in STRINGS
+    assert "contactConsentTitle" not in STRINGS
 
 
 def test_analytics_and_push_are_disclosed_without_claiming_analytics_are_off() -> None:

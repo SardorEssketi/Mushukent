@@ -116,8 +116,6 @@ void main() {
                     find.byType(LostPetLocationPicker))
                 .onSelected(const GeoPoint(latitude: 41.3, longitude: 69.25));
           }
-          await tester.tap(find.byType(CheckboxListTile));
-          await tester.pumpAndSettle();
         }
         final strings = AppStrings.forLanguage(AppLanguage.english);
         final publish = regular

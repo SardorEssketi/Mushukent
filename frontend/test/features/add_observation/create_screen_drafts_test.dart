@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -230,8 +231,12 @@ void main() {
       await tester.pumpAndSettle();
       await _fill(tester, t);
       final id = container.read(provider).publicationId;
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
+      // No consent checkbox: the form names the profile number instead.
+      expect(find.byType(CheckboxListTile), findsNothing);
+      expect(
+          find.text(
+              'Only signed-in users will see your number +998 90 123 4567.'),
+          findsOneWidget);
       final publish = find.widgetWithText(FilledButton,
           t.lost ? _english.publishLostPet : _english.publishAdoptionPost);
       await tester.ensureVisible(publish);
@@ -239,7 +244,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Feed destination'), findsOneWidget);
-      expect(client.calls.where((c) => c.method == 'POST'), hasLength(1));
+      final posts = client.calls.where((c) => c.method == 'POST').toList();
+      expect(posts, hasLength(1));
+      // The consent field is not sent at all.
+      final fields = (posts.single.body! as FormData)
+          .fields
+          .map((field) => field.key)
+          .toSet();
+      expect(fields, contains('pet_name'));
+      expect(fields, isNot(contains('owner_phone_publication_consent')));
+      expect(fields, isNot(contains('owner_contact_consent')));
       final draft = container.read(provider);
       expect(draft.hasDraft, isFalse);
       expect(draft.publicationId, isNot(id));
@@ -269,8 +283,7 @@ void main() {
             ..setPetName('Milo')
             ..setLocation(const GeoPoint(latitude: 41.3, longitude: 69.25));
       final id = controller.state.publicationId;
-      final published =
-          await controller.submit(strings: _english, contactConsent: true);
+      final published = await controller.submit(strings: _english);
       expect(published, isFalse);
       expect(controller.state.outcomeUnknown, isTrue);
       expect(controller.state.locked, isTrue);

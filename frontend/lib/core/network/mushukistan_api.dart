@@ -927,14 +927,14 @@ class MushukistanApi {
     required List<LostPetPhotoUpload> photos,
     required GeoPoint lastSeenLocation,
     required String petName,
-    required bool ownerPhonePublicationConsent,
     String? additionalInfo,
   }) {
     final formData = FormData.fromMap(
       <String, dynamic>{
         'last_seen_location': jsonEncode(lastSeenLocation.toJson()),
         'pet_name': petName.trim(),
-        'owner_phone_publication_consent': ownerPhonePublicationConsent,
+        // No consent field: the profile phone is the consent
+        // (docs/CONTACT_PRIVACY.md).
         if (additionalInfo != null && additionalInfo.trim().isNotEmpty)
           'additional_info': additionalInfo.trim(),
         'photos': photos
@@ -1019,14 +1019,12 @@ class MushukistanApi {
     required List<LostPetPhotoUpload> photos,
     required String petName,
     String? additionalInfo,
-    bool ownerContactConsent = false,
   }) {
     final formData = FormData.fromMap(
       <String, dynamic>{
         'pet_name': petName.trim(),
         if (additionalInfo != null && additionalInfo.trim().isNotEmpty)
           'additional_info': additionalInfo.trim(),
-        'owner_contact_consent': ownerContactConsent,
         'photos': photos
             .map(
               (photo) => MultipartFile.fromBytes(
