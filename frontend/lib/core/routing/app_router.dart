@@ -30,6 +30,7 @@ import '../../features/moderation/presentation/screens/moderation_report_detail_
 import '../../features/moderation/presentation/screens/moderation_reports_screen.dart';
 import '../../features/moderation/presentation/screens/post_history_screen.dart';
 import '../../features/notifications/presentation/notification_center_screen.dart';
+import '../../features/notifications/application/nearby_alerts.dart';
 import '../../features/notifications/presentation/notification_settings_screen.dart';
 import '../../features/moderation/presentation/screens/report_content_screen.dart';
 import '../../features/posts/presentation/screens/post_detail_screen.dart';
@@ -431,6 +432,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       ),
                       GoRoute(
                         path: 'notifications',
+                        // Android-only page; elsewhere back to Settings.
+                        redirect: (context, state) =>
+                            ref.read(nearbyAlertsAndroidProvider)
+                                ? null
+                                : '/profile/settings',
                         builder: (context, state) =>
                             const NotificationSettingsScreen(),
                       ),

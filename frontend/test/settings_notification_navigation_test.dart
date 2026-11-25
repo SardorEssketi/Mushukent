@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mushukistan_frontend/core/network/mushukistan_api.dart';
 import 'package:mushukistan_frontend/core/navigation/settings_changes_guard.dart';
+import 'package:mushukistan_frontend/features/notifications/application/nearby_alerts.dart';
 import 'package:mushukistan_frontend/features/profile/presentation/screens/profile_screen.dart';
 import 'package:mushukistan_frontend/features/profile/presentation/screens/settings_screen.dart';
 
@@ -71,4 +72,34 @@ void main() {
     expect(container.read(settingsHasUnsavedChangesProvider), isFalse);
     expect(find.text('Notification preferences'), findsOneWidget);
   });
+
+  for (final android in [true, false]) {
+    testWidgets(
+        'Settings shows Notifications only on Android and no separate '
+        'location privacy entry (android: $android)', (tester) async {
+      final container = ProviderContainer(overrides: [
+        nearbyAlertsAndroidProvider.overrideWithValue(android),
+        profileMeProvider.overrideWith((ref) async => UserProfileData(
+              id: '11111111-1111-4111-8111-111111111111',
+              email: 'test@example.com',
+              registeredAt: DateTime.utc(2026, 1, 1),
+              observationCount: 0,
+              totalLikesReceived: 0,
+              commentCount: 0,
+            )),
+      ]);
+      addTearDown(container.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SettingsScreen()),
+      ));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+          find.widgetWithText(ListTile, 'About account'), 180,
+          scrollable: find.byType(Scrollable).first);
+      expect(find.byKey(const ValueKey('settings-notifications')),
+          android ? findsOneWidget : findsNothing);
+      expect(find.text('Nearby alert privacy'), findsNothing);
+    });
+  }
 }

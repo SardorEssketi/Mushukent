@@ -13,7 +13,6 @@ import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../../notifications/presentation/notification_strings.dart';
-import '../../../notifications/presentation/nearby_alert_privacy.dart';
 import '../../../notifications/application/nearby_alerts.dart';
 import 'profile_screen.dart';
 
@@ -285,27 +284,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       },
               ),
               const SizedBox(height: AppSpacing.md),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.notifications_outlined),
-                title: Text(notificationStrings.get('title')),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _isSaving ? null : _openNotifications,
-              ),
+              // Notification settings are Android-only; the inbox works
+              // everywhere. Nearby-alert consent lives on that page too.
               if (ref.watch(nearbyAlertsAndroidProvider))
                 ListTile(
+                  key: const ValueKey('settings-notifications'),
                   contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.location_on_outlined),
-                  title: Text(notificationStrings.get('location_privacy')),
+                  leading: const Icon(Icons.notifications_outlined),
+                  title: Text(notificationStrings.get('title')),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: _isSaving
-                      ? null
-                      : () async {
-                          if (!await _confirmLeaving() || !mounted) return;
-                          if (context.mounted) {
-                            await manageNearbyPrivacy(context, ref);
-                          }
-                        },
+                  onTap: _isSaving ? null : _openNotifications,
                 ),
               const SizedBox(height: AppSpacing.md),
               ListTile(

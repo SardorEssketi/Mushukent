@@ -46,6 +46,19 @@ class LocationService {
     return AuthorizedLocationStatus.authorized;
   }
 
+  /// Asks Android for location permission. Only for an explicit user action
+  /// (turning on nearby alerts); automatic syncs use [authorizedStatus].
+  Future<AuthorizedLocationStatus> requestAuthorization() async {
+    if (!kIsWeb && !Platform.isAndroid && !Platform.isIOS) {
+      return AuthorizedLocationStatus.unsupported;
+    }
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      await Geolocator.requestPermission();
+    }
+    return authorizedStatus();
+  }
+
   Future<GeoPoint?> authorizedCurrentLocation() async {
     try {
       if (await authorizedStatus() != AuthorizedLocationStatus.authorized) {

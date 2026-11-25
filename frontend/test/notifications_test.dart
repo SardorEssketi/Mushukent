@@ -89,21 +89,18 @@ void main() {
       expect(copy.get('comment'), isNotEmpty);
       expect(copy.get('nearby_disclosure'), contains('500'));
       for (final key in [
-        'automatic_hint',
-        'permission_status',
-        'permission_allowed',
-        'permission_denied',
-        'android_only',
-        'push_status',
-        'push_available',
-        'push_unavailable',
+        'push_off_banner',
+        'enable',
+        'push_unavailable_warning',
+        'pref_comments',
+        'pref_replies',
+        'pref_followups',
+        'pref_followups_hint',
         'nearby',
-        'nearby_available',
-        'nearby_permission_missing',
-        'nearby_consent_missing',
-        'nearby_unavailable',
-        'inbox_hint',
-        'location_privacy',
+        'nearby_hint',
+        'pref_inactivity',
+        'save_failed',
+        'nearby_permission_denied',
         'consent_allow',
         'consent_decline',
         'open_location_settings',
@@ -113,6 +110,10 @@ void main() {
         'settings_failed',
       ]) {
         expect(copy.get(key), isNot(key));
+      }
+      // The status-screen rows and hints were removed with the settings page.
+      for (final key in ['automatic_hint', 'inbox_hint', 'push_status']) {
+        expect(copy.get(key), key);
       }
     }
   });
