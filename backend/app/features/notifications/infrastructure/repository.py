@@ -26,7 +26,9 @@ ACTIVITY_WRITE_INTERVAL = timedelta(minutes=15)
 # A throttled activity write can lag the real event by up to 15 minutes.
 # Grace ensures the reminder is never earlier than seven full inactive days.
 INACTIVITY_THRESHOLD = timedelta(days=7) + ACTIVITY_WRITE_INTERVAL
-AUTOMATIC_DEFAULTS = dict(
+# Category choices of a new preferences row. Users change them on the Android notification
+# settings page; nearby alerts stay off until the user consents (docs/PRD.md).
+DEFAULT_CATEGORIES = dict(
     push_comments=True, push_replies=True, push_followups=True, inactivity_enabled=True
 )
 
@@ -36,43 +38,31 @@ class NotificationRepository:
         self.session = session
 
     def preferences(self, user_id: UUID) -> schema.NotificationPreference:
+        """The user's row, created with the default categories on first use.
+
+        Stored choices are returned as they are: users can switch categories off.
+        """
         self.session.execute(
             insert(schema.NotificationPreference)
-            .values(user_id=user_id, **AUTOMATIC_DEFAULTS)
+            .values(user_id=user_id, **DEFAULT_CATEGORIES)
             .on_conflict_do_nothing(index_elements=["user_id"])
         )
-        preference = self.session.get(schema.NotificationPreference, user_id)
-        for field, value in AUTOMATIC_DEFAULTS.items():
-            setattr(preference, field, value)
-        return preference
+        return self.session.get(schema.NotificationPreference, user_id)
 
     def normalize_defaults(self) -> None:
-        """Upgrade legacy category choices, including users who have not reopened the app.
+        """Create default rows for active users who have none yet (never reopened the app).
 
-        Nearby consent and the private point are deliberately untouched. Explicit
-        insert values also override the historical database's inactivity default.
+        Existing rows are never changed: they hold the user's own choices.
         """
         self.session.execute(
             insert(schema.NotificationPreference)
             .from_select(
-                ["user_id", *AUTOMATIC_DEFAULTS],
-                select(schema.User.id, *[True for _ in AUTOMATIC_DEFAULTS]).where(
+                ["user_id", *DEFAULT_CATEGORIES],
+                select(schema.User.id, *[value for value in DEFAULT_CATEGORIES.values()]).where(
                     schema.User.is_active.is_(True)
                 ),
             )
             .on_conflict_do_nothing(index_elements=["user_id"])
-        )
-        self.session.execute(
-            update(schema.NotificationPreference)
-            .where(
-                or_(
-                    *[
-                        getattr(schema.NotificationPreference, field).is_(False)
-                        for field in AUTOMATIC_DEFAULTS
-                    ]
-                )
-            )
-            .values(**AUTOMATIC_DEFAULTS)
         )
 
     def create_event(

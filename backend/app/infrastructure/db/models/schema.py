@@ -1158,7 +1158,7 @@ class NotificationPreference(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     inactivity_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
+        Boolean, nullable=False, server_default=text("true")
     )
     alert_location: Mapped[object | None] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326, spatial_index=False), nullable=True

@@ -95,8 +95,11 @@ class NotificationService:
                     preference, patch.alert_location.latitude, patch.alert_location.longitude
                 )
                 session.flush()
-            # Legacy clients may still send category choices. Categories now use
-            # automatic defaults; those fields cannot silently disable delivery.
+            # Category switches of the notification settings page. Released clients before
+            # 2026-11-25 never sent them (docs/PRD.md, notification preferences).
+            for field in ("push_comments", "push_replies", "push_followups", "inactivity_enabled"):
+                if field in patch.model_fields_set:
+                    setattr(preference, field, bool(getattr(patch, field)))
             if "nearby_enabled" in patch.model_fields_set:
                 preference.nearby_enabled = bool(patch.nearby_enabled)
                 if not preference.nearby_enabled:
