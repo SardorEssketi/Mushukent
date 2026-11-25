@@ -32,14 +32,38 @@ The new web/Android client sends `X-Contact-Mode: reveal` on every request, so d
 Consequences of legacy mode: opening a detail page in an old app uses quota even if the user never calls; users therefore reach the daily limit sooner on old versions. Sunset: when the share of old versions is small, set `CONTACT_LEGACY_DETAIL_ENABLED=false` (old apps then lose Contact Owner, a deliberate end of support), optionally after showing a minimum-version prompt.
 
 ## Consent
-Both create forms have an unchecked checkbox. Wording (English; Russian and Uzbek in `app_strings.dart`, `contactConsentTitle` and `contactConsentSubtitle`):
-> Allow signed-in Mushukistan users to see my phone number (and Telegram, if I add it) on this post.
-> Only signed-in users can see it. In the current app it appears after they tap Contact Owner; older app versions may show it as soon as the post is opened. Each user can view only a limited number of contacts per day and per week. It is never shown to visitors who are not signed in, or in lists, feeds or on the map.
+Decision by the project owner on 2026-11-24: **the phone number in the profile is the consent.** The
+create forms have no checkbox and no long explanation. Instead one line above Publish names what
+will be shared (Russian, English and Uzbek in `app_strings.dart`, `contactNoticePhone` and
+`contactNoticePhoneAndTelegram`):
+> Only signed-in users will see your number +998 90 123 45 67.
 
-- New clients (reveal mode) must send consent: lost pets via the existing `owner_phone_publication_consent` (required), adoption via the new `owner_contact_consent`. A missing or false value is rejected (`CONTACT_CONSENT_REQUIRED` for adoption).
-- The server stores `contact_consent_version = 1` and `contact_consent_at` for posts created with the new wording; `NULL` means the original wording.
-- Older clients that send no adoption consent keep working (as before, implicitly); an explicit `false` is always refused.
-- Existing posts are not re-consented: the new policy is narrower than the "public" wording they accepted.
+(with "your number and Telegram" when the profile has a Telegram username).
+
+- **A phone in the profile is still required** for both post kinds (`403 PHONE_NUMBER_REQUIRED`); the
+  app asks the user to add one before opening the form. An empty profile phone is never consent.
+- **The phone and Telegram are copied into the post when it is published.** Changing or removing
+  them in the profile later does **not** change existing posts, in either direction: a post keeps
+  the number it was published with until the owner edits the post (lost pets), resolves it or
+  deletes it.
+- What the server records in `contact_consent_version` / `contact_consent_at`:
+
+  | Client sends | Result | Version |
+  |---|---|---|
+  | no consent field (current app, `X-Contact-Mode: reveal`) | created | `2` and the time |
+  | `true` (older app with the checkbox, reveal mode) | created | `1` and the time |
+  | `true` or nothing without the reveal header (oldest apps) | created | `NULL`, as before |
+  | explicit `false` (an unticked checkbox in an older app) | `422` (`PHONE_PUBLICATION_CONSENT_REQUIRED` / `CONTACT_CONSENT_REQUIRED`) | - |
+
+  Version 1 is the checkbox wording of 2026-10-15; `NULL` is the original wording.
+- The consent field is optional on both endpoints, so an absent field must reach the service as
+  `None`. That depends on the pinned FastAPI/Starlette (see the `DEPLOYMENT.md` note on dependency
+  drift); `test_contact_consent.py` posts forms with the field truly missing.
+- Existing posts are not re-consented.
+- Release order: the backend must be live before a client without the checkbox, because an older
+  server requires the lost-pet consent field.
+- The legal documents describe this behaviour; their versions were not bumped (owner decision,
+  2026-11-24), so nobody is asked to accept them again.
 
 ## Legal documents and acceptance versions
 The Terms are version `2026-10-15` and the Privacy Policy is version `2026-10-30` (bumped for the post-view guest identifier, ADR-0024; documents, in-app screen, `/privacy` page) and the backend constants `CURRENT_TERMS_VERSION` / `CURRENT_PRIVACY_VERSION` (`backend/app/features/auth/application/schemas.py`) now equal them; `tests/test_legal_consistency.py` fails if they drift.
@@ -59,6 +83,6 @@ Implication: after this deploy, every existing user with a new app will see the 
 `backend/tests/test_contact_privacy.py`, `test_contact_reveal.py` (reveal, idempotence, daily and weekly windows, parallel requests, account age, blocked/owner/resolved, legacy mode and its switch, leak scan over every parameterless GET route, no contact in logs or rows) and `test_contact_consent.py`; Flutter `contact_privacy_test.dart` and `adoption_lifecycle_screen_test.dart`.
 
 ## Still open
-- Native-speaker review of Russian/Uzbek consent text; legal review of the privacy policy and terms wording.
+- Native-speaker review of the Russian/Uzbek notice line; legal review of the privacy policy and terms wording.
 - Tuning of the limits after real usage data.
 - A per-account alert for repeated limit hits (log events `contact_reveal_limit_reached` exist).

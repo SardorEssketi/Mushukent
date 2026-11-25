@@ -16,8 +16,8 @@ class AdoptionPostCreateRequest(BaseModel):
 
     pet_name: str = Field(min_length=1, max_length=100)
     additional_info: str | None = Field(default=None, max_length=2000)
-    # Explicit agreement to the contact-visibility wording. None = an older client that has no
-    # checkbox.
+    # Sent only by clients with the consent checkbox. None = the current client (the profile
+    # phone is the consent) or an older client from before the checkbox. False is refused.
     owner_contact_consent: bool | None = None
 
 

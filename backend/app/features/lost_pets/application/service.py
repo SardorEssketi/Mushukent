@@ -20,6 +20,7 @@ from app.features.contact_reveal.service import (
     MODE_EXPLICIT,
     ContactRevealLimitExceeded,
     RevealRequest,
+    contact_consent_refused,
     limit_exceeded_error,
     record_reveal,
     resolve_detail_contact,
@@ -98,11 +99,12 @@ class LostPetsService:
             raise api_error(400, "INVALID_PAYLOAD", "At least one photo is required.")
         if len(photos) > 5:
             raise api_error(400, "INVALID_PAYLOAD", "Lost pet posts can include up to 5 photos.")
-        if not payload.owner_phone_publication_consent:
+        if contact_consent_refused(payload.owner_phone_publication_consent):
             raise api_error(
                 422,
                 "PHONE_PUBLICATION_CONSENT_REQUIRED",
-                "Confirm that your phone number may be shown publicly for this lost pet post.",
+                "A lost pet post shares your profile phone with signed-in users;"
+                " it cannot be posted with sharing refused.",
             )
 
         lost_pet_id = publication_context.target_id if publication_context else uuid4()

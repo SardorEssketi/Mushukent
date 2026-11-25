@@ -38,6 +38,8 @@ from app.features.contact_reveal.service import (
     MODE_EXPLICIT,
     ContactRevealLimitExceeded,
     RevealRequest,
+    contact_consent_refused,
+    contact_consent_version,
     limit_exceeded_error,
     record_reveal,
     resolve_detail_contact,
@@ -92,15 +94,15 @@ class AdoptionPostsService:
                 "INVALID_PHONE_NUMBER",
                 "Use Uzbekistan phone format: +998 XX XXX XXXX.",
             ) from exc
-        # Clients that show the contact-visibility checkbox (reveal mode) must send it checked;
-        # an explicit refusal is never overridden. Older clients send nothing and keep the
-        # previous implicit behaviour.
+        # The profile phone is the consent (the current client names the number above Publish).
+        # An explicit refusal from an older client's unticked checkbox is never overridden.
         consent = payload.owner_contact_consent
-        if consent is False or (reveal_mode and consent is not True):
+        if contact_consent_refused(consent):
             raise api_error(
                 422,
                 "CONTACT_CONSENT_REQUIRED",
-                "Confirm who may see your contact details for this adoption post.",
+                "An adoption post shares your profile phone with signed-in users;"
+                " it cannot be posted with sharing refused.",
             )
         if not photos:
             raise api_error(400, "INVALID_PAYLOAD", "At least one photo is required.")
@@ -142,7 +144,9 @@ class AdoptionPostsService:
                         owner_phone_number=phone,
                         owner_telegram_username=user.telegram_username,
                         owner_phone_publication_consent=True,
-                        contact_consent_version=1 if reveal_mode and consent is True else None,
+                        contact_consent_version=contact_consent_version(
+                            consent, reveal_mode=reveal_mode
+                        ),
                         additional_info=(
                             payload.additional_info.strip() if payload.additional_info else None
                         ),

@@ -35,6 +35,28 @@ def is_reveal_mode(request) -> bool:
     return request.headers.get(CONTACT_MODE_HEADER, "").strip().lower() == "reveal"
 
 
+# contact_consent_version on lost-pet and adoption posts: what the publishing client showed.
+# NULL: an old client with the original wording (or none).
+CONTACT_CONSENT_CHECKBOX = 1
+# The profile phone is the consent: the client shows one line naming the number that signed-in
+# users will see, and has no checkbox (docs/CONTACT_PRIVACY.md).
+CONTACT_CONSENT_PROFILE_PHONE = 2
+
+
+def contact_consent_refused(consent: bool | None) -> bool:
+    """Only an explicit ``false`` (an unticked checkbox in an older client) is a refusal."""
+    return consent is False
+
+
+def contact_consent_version(consent: bool | None, *, reveal_mode: bool) -> int | None:
+    """The consent wording to record for a new post (see the constants above)."""
+    if not reveal_mode:
+        return None
+    if consent is True:
+        return CONTACT_CONSENT_CHECKBOX
+    return CONTACT_CONSENT_PROFILE_PHONE
+
+
 def mark_private(response, *, authenticated: bool) -> None:
     """Contact-bearing responses must never be stored by a shared cache."""
     response.headers["Vary"] = "Authorization"
