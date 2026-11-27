@@ -1,6 +1,7 @@
 # Russian UI copy: proposed changes
 
-Status: **proposal, not applied** (2026-11-25). Follows `docs/RU_STYLE_GUIDE.md`. Only strings that
+Status: **applied** (2026-11-28) with the owner's decisions below; the tables keep the original
+proposal for reference (2026-11-25). Follows `docs/RU_STYLE_GUIDE.md`. Only strings that
 need a change are listed. Out of scope: legal documents and their in-app summaries
 (`privacyPolicySummary`, `termsOfServiceSummary`, `accountDeletionSummary`, `legalUpdateBody`), the
 contact notice from 731d594 (`contactNoticePhone`, `contactNoticePhoneAndTelegram`) and
@@ -238,6 +239,59 @@ use «обжалованный» ("appealed") where they mean "reported".
 | 8. Sign-in and account | 19 |
 | 9. Moderation and reports | 22 |
 | **Total** | **175** |
+
+## Owner decisions (2026-11-28)
+**Applied as proposed (95 keys):** every key in the tables above that is not named under
+"Replaced" or "Kept", with two exceptions:
+- `noActivityVisible` / `allowPublicActivityView`: the setting hides the user's cat posts
+  (including «Кошке нужна помощь») and comments **on the profile only**; the feed and map still
+  show them, and lost-pet and rehoming posts are never listed on a profile. Applied as
+  «Пользователь скрыл из профиля свои посты и комментарии.» and
+  «Показывать в профиле мои посты и комментарии».
+- Not applied because the key no longer exists after aabba81 (the notification settings page was
+  rewritten): `notif: automatic_hint`, `push_status`, `push_unavailable`, `nearby_available`,
+  `nearby_permission_missing`, `nearby_unavailable`, `inbox_hint`. `notif: open_location_settings`
+  already had the proposed text.
+
+**Replaced with the owner's text:**
+| Key | Applied text |
+|---|---|
+| checkPublicationStatus | Проверить, опубликован ли пост |
+| createLostPetAlertHelp (ru, en, uz) | Добавьте чёткие фото и отметьте, где питомца видели в последний раз, — так его быстрее узнают. |
+| deleteLostPetMessage, deleteAdoptionPostMessage | Объявление удалится навсегда. |
+| contactRevealLimit | Вы открыли максимум контактов. Попробуйте позже. |
+| help: vet[1] | Узнайте в госветслужбе по месту жительства, как поставить кошку на учёт. |
+| feedIntroAdoption | Пристройство — найдите питомцу дом или возьмите к себе |
+| signInRequiredMessage | Смотреть можно без входа. Чтобы сделать это, войдите. |
+| notif: consent_allow | Разрешить оповещения о пропавших питомцах рядом |
+| notif: sync_failed | Не удалось обновить оповещения о пропавших питомцах. Попробуем снова, когда появится интернет. |
+| notif: nearby_disclosure | simplified, same facts; path «Профиль → Настройки → Уведомления → Пропавшие питомцы рядом» |
+| telegramValidation | От 5 до 32 символов: латинские буквы, цифры и нижние подчёркивания. |
+| publicationOutcomeUnknown | Возможно, пост уже опубликован. Проверьте это, прежде чем отправлять снова. Черновик сохранён на этом экране. |
+| useCurrentLocationMessage | Мы добавим к посту ваше текущее местоположение. После публикации место кошки может быть видно другим пользователям. |
+| createRehomingPost | Объявление о поиске нового дома |
+| createRehomingPostHelp | Расскажите о питомце и о том, какой дом ему нужен. |
+| emptyFeedMessage | Здесь пока пусто. Поделитесь фоткой кошки, расскажите о пропавшем питомце или о том, кому нужен дом. |
+
+`notif: location_privacy` («Пропавшие питомцы рядом») and `notif: nearby_consent_missing` were also
+decided, but both keys were removed in aabba81.
+
+**Kept unchanged (61 keys):** postActions, recentObservations, keepEditing, editObservation,
+deletePost, blockUserMessage, confirmLogoutMessage, couldNotLoadProfile,
+confirmDeleteAccountMessage, preparingPhotoForUpload, photoUploadStorageError, invalidPhoto,
+photoTooLarge, draftStatus, lostPetDraftLabel, rehomingDraftLabel, deleteDraftMessage,
+deleteLostPetDraftMessage, deleteRehomingDraftMessage, publicationUnavailableTitle, petsName,
+enterPetsName, foundPostPrivateDetails, activeLostPet, reunitedLostPet, petName, petNameRequired,
+additionalInformation, markRehomed, vetPharmacies, sessionUnavailableMessage, restoringSession,
+signInRequiredTitle, couldNotSubmitReport, feedback: sessionExpired, verifyEmail, confirmYourEmail,
+resendVerification, security: passwordSet, security: emailNeedsVerification,
+security: currentPasswordIncorrect, security: required, moderationReports,
+saveModerationDecision, historyDeletedMessage, reportFilterResolved, reportStatusResolved,
+noResolvedReports, decisionResolveKeep, decisionRemove, decisionSuspend, decisionResolveKeepHint,
+decisionRemovePublicationHint, decisionRemoveCommentHint, decisionSuspendHint,
+removalUnavailableHint, confirmRemovalBody, confirmSuspendBody, moderatorAccessRequired,
+reportContent, reasonRequired.
+
 
 ## Unused strings (not proposed)
 These keys are defined in `app_strings.dart` but no screen or test uses them, so they are left out

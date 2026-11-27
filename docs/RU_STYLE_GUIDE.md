@@ -27,13 +27,17 @@ their own wording.
 - Empty states say what will appear here and, if useful, how: «Пока нет сохранённых постов.»
 
 ## Glossary
+Pick «пост», «объявление» or «публикация» by where the string is shown, not by the key name: a
+string reused across post types needs the generic word, or a separate string per type.
+
 | Use | Not | Meaning |
 |---|---|---|
-| **пост** | публикация, материал | anything posted in the feed about a cat (including «Кошке нужна помощь»); also the generic word for all content types |
+| **пост** | публикация, материал | a cat post or a «Кошке нужна помощь» post |
 | **объявление** | пост, публикация | a lost-pet or rehoming post («объявление о пропаже», «объявление о пристройстве») |
+| **публикация** | пост, материал | only the generic word, where the text can refer to any type: «Публикация недоступна», a list or menu shared by all types (owner decision, 2026-11-28) |
 | **кошка** | животное, питомец | cat posts and «Кошке нужна помощь» |
 | **питомец** | животное, кошка | lost-pet and rehoming posts (may be any pet) |
-| **кличка** | имя питомца | a pet's name in lost-pet and rehoming posts; «имя кошки» stays for cat posts |
+| **имя питомца** | — | the name field in lost-pet and rehoming posts: the owner kept «Имя питомца» (2026-11-28); «кличка» may appear in running text; «имя кошки» stays for cat posts |
 | **пристройство** / «найти дом» | усыновление, передача | rehoming |
 | **пропал / нашёлся** | обнаружение, найден | lost pets: «Где видели в последний раз», «Питомец нашёлся» |
 | **войти / выйти / вход** | авторизоваться, вошедшие пользователи | sign in / out; «те, кто вошёл в аккаунт» |
@@ -46,7 +50,7 @@ their own wording.
 | **жалоба** | репорт | a report; moderators «закрывают» or «отклоняют» it |
 | **модератор** | администратор | — |
 | **лайк** | отметка «нравится» | — |
-| **уведомление** | оповещение | in-app and push; «оповещения рядом» only for the nearby lost-pet alerts |
+| **уведомление** | оповещение | in-app and push; for the nearby lost-pet alerts say «пропавшие питомцы рядом» / «оповещения о пропавших питомцах рядом», never «оповещения рядом» |
 | **интернет** | подключение, соединение | in error messages: «Проверьте интернет» |
 
 ## Spelling and typography

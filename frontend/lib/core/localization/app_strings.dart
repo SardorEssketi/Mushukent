@@ -235,7 +235,7 @@ class AppStrings {
 
   String get yourActivities => switch (this) {
         _UzbekStrings() => 'Faoliyatlaringiz',
-        _RussianStrings() => 'Ваши активности',
+        _RussianStrings() => 'Ваши посты и объявления',
         _ => 'Your activities',
       };
 
@@ -265,7 +265,7 @@ class AppStrings {
 
   String get resourcesAndAccount => switch (this) {
         _UzbekStrings() => 'Foydali ma’lumotlar va hisob',
-        _RussianStrings() => 'Полезное и аккаунт',
+        _RussianStrings() => 'Полезное и настройки',
         _ => 'Resources and account',
       };
 
@@ -283,7 +283,7 @@ class AppStrings {
 
   String get profileActions => switch (this) {
         _UzbekStrings() => 'Profil amallari',
-        _RussianStrings() => 'Действия с профилем',
+        _RussianStrings() => 'Меню профиля',
         _ => 'Profile actions',
       };
 
@@ -364,7 +364,7 @@ class AppStrings {
   String get discardChanges {
     return switch (this) {
       _UzbekStrings() => 'O\'zgarishlarni bekor qilish',
-      _RussianStrings() => 'Отменить изменения',
+      _RussianStrings() => 'Не сохранять',
       _ => 'Discard changes',
     };
   }
@@ -438,7 +438,7 @@ class AppStrings {
   String get postHistory {
     return switch (this) {
       _UzbekStrings() => 'Post tarixi',
-      _RussianStrings() => 'История публикации',
+      _RussianStrings() => 'История изменений',
       _ => 'Post history',
     };
   }
@@ -446,7 +446,7 @@ class AppStrings {
   String get moderatorOnlyHistory {
     return switch (this) {
       _UzbekStrings() => 'Post tarixi faqat moderatorlar uchun mavjud.',
-      _RussianStrings() => 'История публикации доступна только модераторам.',
+      _RussianStrings() => 'Историю изменений видят только модераторы.',
       _ => 'Post history is available only to moderators.',
     };
   }
@@ -526,7 +526,8 @@ class AppStrings {
 
   String get couldNotLoadMoreComments => switch (this) {
         _UzbekStrings() => 'Qolgan izohlarni yuklab bo‘lmadi.',
-        _RussianStrings() => 'Не удалось загрузить остальные комментарии.',
+        _RussianStrings() =>
+          'Не удалось загрузить комментарии. Попробуйте ещё раз.',
         _ => 'Could not load more comments.',
       };
 
@@ -635,7 +636,7 @@ class AppStrings {
   String get createInMushukistan {
     return switch (this) {
       _UzbekStrings() => 'Mushukistanda yaratish',
-      _RussianStrings() => 'Создать в Mushukistan',
+      _RussianStrings() => 'Новый пост',
       _ => 'Create in Mushukistan',
     };
   }
@@ -644,8 +645,7 @@ class AppStrings {
     return switch (this) {
       _UzbekStrings() =>
         'Ulashmoqchi bo‘lgan mushuk yordami yoki yangilik turini tanlang.',
-      _RussianStrings() =>
-        'Выберите тип помощи кошке или обновления, которым хотите поделиться.',
+      _RussianStrings() => 'Выберите, чем хотите поделиться.',
       _ => 'Choose the kind of cat help or update you want to share.',
     };
   }
@@ -681,7 +681,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Yangi uy topish postini yaratishdan oldin telefon raqamingizni qo‘shing, shunda odamlar siz bilan bog‘lana oladi.',
       _RussianStrings() =>
-        'Добавьте номер телефона перед созданием поста о пристройстве, чтобы люди могли связаться с вами.',
+        'Чтобы с вами могли связаться, добавьте в профиль номер телефона.',
       _ =>
         'Add a phone number before creating an adoption post so people can reach you.',
     };
@@ -719,7 +719,7 @@ class AppStrings {
           },
         'popular' => switch (this) {
             _UzbekStrings() => 'Bu davrda mashhur postlar yo‘q.',
-            _RussianStrings() => 'За этот период нет популярных публикаций.',
+            _RussianStrings() => 'За этот период популярных постов нет.',
             _ => 'No popular posts for this period.',
           },
         _ => noObservationsYet,
@@ -778,7 +778,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Hamjamiyatni boshlash uchun mushuk posti, yo‘qolgan jonivor eʼloni yoki yangi uy topish postini ulashing.',
       _RussianStrings() =>
-        'Поделитесь постом о кошке, объявлением о потерянном питомце или постом о пристройстве.',
+        'Здесь пока пусто. Поделитесь фоткой кошки, расскажите о пропавшем питомце или о том, кому нужен дом.',
       _ =>
         'Share a cat post, lost-pet alert, or rehoming post to get the community started.',
     };
@@ -787,27 +787,27 @@ class AppStrings {
   /// Shown under the last Feed post once every page has been loaded.
   String get noMorePosts => switch (this) {
         _UzbekStrings() => 'Boshqa postlar yo‘q.',
-        _RussianStrings() => 'Больше публикаций нет.',
+        _RussianStrings() => 'Больше постов нет.',
         _ => 'No more posts.',
       };
 
   String get newPosts => switch (this) {
         _UzbekStrings() => 'Yangi postlar',
-        _RussianStrings() => 'Новые публикации',
+        _RussianStrings() => 'Новые посты',
         _ => 'New posts',
       };
 
   /// Shown while the app waits to retry after the server said it is busy (429 / 503).
   String busyRetryingIn(int seconds) => switch (this) {
         _UzbekStrings() => 'Xizmat band. $seconds soniyadan keyin qayta urinamiz',
-        _RussianStrings() => 'Сервис занят. Повторим через $seconds с',
+        _RussianStrings() => 'Сервер занят. Попробуем снова через $seconds с',
         _ => 'Busy right now. Retrying in $seconds s',
       };
 
   String get couldNotLoadSection {
     return switch (this) {
       _UzbekStrings() => 'Bu bo‘limni yuklab bo‘lmadi',
-      _RussianStrings() => 'Не удалось загрузить этот раздел',
+      _RussianStrings() => 'Не удалось загрузить. Попробуйте ещё раз.',
       _ => 'Could not load this section',
     };
   }
@@ -821,15 +821,14 @@ class AppStrings {
   String get confirmSignInPasswordHelp => switch (this) {
         _UzbekStrings() =>
           'Davom etish uchun Mushukistan parolingizni bir marta kiriting.',
-        _RussianStrings() =>
-          'Один раз введите пароль Mushukistan, чтобы продолжить.',
+        _RussianStrings() => 'Введите пароль от Mushukistan, чтобы продолжить.',
         _ => 'Enter your Mushukistan password once to continue with Google.',
       };
 
   String get orContinueWithEmail {
     return switch (this) {
       _UzbekStrings() => 'yoki email bilan',
-      _RussianStrings() => 'или по электронной почте',
+      _RussianStrings() => 'или войдите по почте',
       _ => 'or continue with email',
     };
   }
@@ -965,8 +964,7 @@ class AppStrings {
     return switch (this) {
       _UzbekStrings() =>
         'Mushukistan ichida ishlatmoqchi bo‘lgan tilni tanlang.',
-      _RussianStrings() =>
-        'Выберите язык, который хотите использовать в Mushukistan.',
+      _RussianStrings() => 'На каком языке показывать Mushukistan?',
       _ => 'Set the language you want to use inside Mushukistan.',
     };
   }
@@ -982,7 +980,7 @@ class AppStrings {
   String get donateToAuthor {
     return switch (this) {
       _UzbekStrings() => 'Muallifga xayriya',
-      _RussianStrings() => 'Пожертвовать автору',
+      _RussianStrings() => 'Поддержать автора',
       _ => 'Donate to author',
     };
   }
@@ -1202,7 +1200,7 @@ class AppStrings {
   String get needsHelpLocationRequired {
     return switch (this) {
       _UzbekStrings() => 'Mushukka yordam kerak posti uchun joylashuv kerak.',
-      _RussianStrings() => 'Для поста «Кошке нужна помощь» укажите место.',
+      _RussianStrings() => 'Укажите на карте, где кошка.',
       _ => 'A location is required for a Cat needs help post.',
     };
   }
@@ -1211,7 +1209,7 @@ class AppStrings {
     return switch (this) {
       _UzbekStrings() =>
         'Odamlar mushukni topa olishi uchun joylashuvni tasdiqlang.',
-      _RussianStrings() => 'Подтвердите место, чтобы люди могли найти кошку.',
+      _RussianStrings() => 'Укажите место, чтобы кошку могли найти.',
       _ => 'Confirm the location so people can find the cat.',
     };
   }
@@ -1235,8 +1233,7 @@ class AppStrings {
   String get lostPetAlertSubtitle => switch (this) {
         _UzbekStrings() =>
           'Yo‘qolgan jonivor va u oxirgi marta qayerda ko‘rilgani haqida xabar bering.',
-        _RussianStrings() =>
-          'Сообщите о пропавшем питомце и месте, где его видели в последний раз.',
+        _RussianStrings() => 'Расскажите, где питомца видели в последний раз.',
         _ => 'Report a missing pet and where it was last seen.',
       };
 
@@ -1251,8 +1248,7 @@ class AppStrings {
   String get findANewHomeSubtitle => switch (this) {
         _UzbekStrings() =>
           'Rasm va ma’lumotlar bilan jonivorga yangi uy topishga yordam bering.',
-        _RussianStrings() =>
-          'Помогите питомцу найти новый дом: добавьте фото и сведения о нём.',
+        _RussianStrings() => 'Добавьте фото и расскажите о питомце.',
         _ => 'Help a pet find a new home with a photo and details.',
       };
 
@@ -1269,7 +1265,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Rasmni tayyorlab boʻlmadi. Boshqa JPEG yoki PNG rasmni tanlang.',
       _RussianStrings() =>
-        'Не удалось подготовить фото. Выберите другое изображение JPEG или PNG.',
+        'Не получилось обработать фото. Выберите другое (JPEG или PNG).',
       _ => 'Could not prepare the photo. Choose another JPEG or PNG image.',
     };
   }
@@ -1298,7 +1294,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Rasm yuklash juda uzoq davom etdi. Internetni tekshirib, qayta urinib ko‘ring.',
       _RussianStrings() =>
-        'Загрузка фото заняла слишком много времени. Проверьте подключение и повторите попытку.',
+        'Фото загружалось слишком долго. Проверьте интернет и попробуйте ещё раз.',
       _ => 'Photo upload timed out. Check your connection and try again.',
     };
   }
@@ -1308,7 +1304,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Rasm yuklanmadi. Internetni tekshirib, qayta urinib ko‘ring.',
       _RussianStrings() =>
-        'Не удалось загрузить фото. Проверьте подключение и повторите попытку.',
+        'Не удалось загрузить фото. Проверьте интернет и попробуйте ещё раз.',
       _ => 'Photo upload failed. Check your connection and try again.',
     };
   }
@@ -1324,7 +1320,7 @@ class AppStrings {
 
   String get publicationOutcomeUnknown => switch (this) {
         _RussianStrings() =>
-          'Публикация могла сохраниться. Проверьте статус перед повторной отправкой. Черновик сохранён на этом экране.',
+          'Возможно, пост уже опубликован. Проверьте это, прежде чем отправлять снова. Черновик сохранён на этом экране.',
         _UzbekStrings() =>
           'Post saqlangan bo‘lishi mumkin. Qayta yuborishdan oldin holatini tekshiring. Qoralama shu ekranda saqlanadi.',
         _ =>
@@ -1333,7 +1329,7 @@ class AppStrings {
 
   String get publicationCompletedUnavailable => switch (this) {
         _RussianStrings() =>
-          'Публикация уже создана, но открыть её здесь нельзя. Для новой публикации начните новый черновик.',
+          'Пост уже опубликован, но открыть его отсюда нельзя. Чтобы создать новый, начните заново.',
         _UzbekStrings() =>
           'Post allaqachon chop etilgan, lekin uni bu yerda ochib bo‘lmaydi. Boshqa post uchun yangi qoralama boshlang.',
         _ =>
@@ -1347,7 +1343,7 @@ class AppStrings {
       };
 
   String get checkPublicationStatus => switch (this) {
-        _RussianStrings() => 'Проверить статус публикации',
+        _RussianStrings() => 'Проверить, опубликован ли пост',
         _UzbekStrings() => 'Post holatini tekshirish',
         _ => 'Check publication status',
       };
@@ -1408,7 +1404,7 @@ class AppStrings {
   String get draftDeleted {
     return switch (this) {
       _UzbekStrings() => 'Qoralama oʻchirildi.',
-      _RussianStrings() => 'Черновик удален.',
+      _RussianStrings() => 'Черновик удалён.',
       _ => 'Draft deleted.',
     };
   }
@@ -1549,7 +1545,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Mushukistan joriy joylashuvingizni oʻqib, uni ushbu postga biriktiradi. Postni joylasangiz, mushuk joylashuvi boshqa foydalanuvchilarga koʻrinishi mumkin.',
       _RussianStrings() =>
-        'Mushukistan получит ваше текущее местоположение и прикрепит его к этому посту. После публикации место кошки может быть видно другим пользователям.',
+        'Мы добавим к посту ваше текущее местоположение. После публикации место кошки может быть видно другим пользователям.',
       _ =>
         'Mushukistan will read your current location and attach it to this post. If you publish the post, that cat location can be visible to other users.',
     };
@@ -1694,7 +1690,7 @@ class AppStrings {
   String get useMyCurrentLocation {
     return switch (this) {
       _UzbekStrings() => 'Joriy joylashuvimdan foydalanish',
-      _RussianStrings() => 'Использовать мое местоположение',
+      _RussianStrings() => 'Использовать моё местоположение',
       _ => 'Use my current location',
     };
   }
@@ -1758,7 +1754,7 @@ class AppStrings {
   String get publicationUnavailableMessage => switch (this) {
         _UzbekStrings() =>
           'U olib tashlangan yoki endi siz uchun ko‘rinmaydigan bo‘lishi mumkin.',
-        _RussianStrings() => 'Возможно, она удалена или больше не видна вам.',
+        _RussianStrings() => 'Возможно, его удалили или скрыли.',
         _ => 'It may have been removed or is no longer visible to you.',
       };
 
@@ -1909,7 +1905,7 @@ class AppStrings {
   String get addAnother {
     return switch (this) {
       _UzbekStrings() => 'Yana qoʻshish',
-      _RussianStrings() => 'Добавить еще',
+      _RussianStrings() => 'Добавить ещё',
       _ => 'Add another',
     };
   }
@@ -1933,7 +1929,7 @@ class AppStrings {
   String get createRehomingPost {
     return switch (this) {
       _UzbekStrings() => 'Uy topish postini yaratish',
-      _RussianStrings() => 'Создать пост о пристройстве',
+      _RussianStrings() => 'Объявление о поиске нового дома',
       _ => 'Create a rehoming post',
     };
   }
@@ -1942,8 +1938,7 @@ class AppStrings {
     return switch (this) {
       _UzbekStrings() =>
         'Mushuk va unga qanday uy kerakligini tasvirlang. Bu yoʻqolgan jonivor eʼlonlaridan alohida va xarita joylashuvini talab qilmaydi.',
-      _RussianStrings() =>
-        'Опишите кошку и какой дом ей нужен. Это отдельно от объявлений о потерянных питомцах и не требует места на карте.',
+      _RussianStrings() => 'Расскажите о питомце и о том, какой дом ему нужен.',
       _ =>
         'Describe the cat and the kind of home they need. This is separate from lost-pet alerts and does not require a map location.',
     };
@@ -1976,8 +1971,7 @@ class AppStrings {
   String get adoptionInfoHint {
     return switch (this) {
       _UzbekStrings() => 'Yoshi, xarakteri, salomatligi va qanday uy maʼqul.',
-      _RussianStrings() =>
-        'Возраст, характер, здоровье и предпочтительный дом.',
+      _RussianStrings() => 'Возраст, характер, здоровье и какой дом подойдёт.',
       _ => 'Age, personality, health notes, and preferred home.',
     };
   }
@@ -2044,8 +2038,7 @@ class AppStrings {
     return switch (this) {
       _UzbekStrings() =>
         'Siz hozircha ruxsat etilgan maksimal miqdordagi kontaktni ko‘rdingiz. Keyinroq urinib ko‘ring.',
-      _RussianStrings() =>
-        'Вы открыли максимально допустимое число контактов. Попробуйте позже.',
+      _RussianStrings() => 'Вы открыли максимум контактов. Попробуйте позже.',
       _ =>
         'You have viewed the maximum number of owner contacts for now. Try again later.',
     };
@@ -2054,7 +2047,7 @@ class AppStrings {
   String get publishAdoptionPost {
     return switch (this) {
       _UzbekStrings() => 'Asrab olish postini joylash',
-      _RussianStrings() => 'Опубликовать пост о пристройстве',
+      _RussianStrings() => 'Опубликовать объявление',
       _ => 'Publish adoption post',
     };
   }
@@ -2171,7 +2164,7 @@ class AppStrings {
   String couldNotOpenPost(Object error) {
     return switch (this) {
       _UzbekStrings() => 'Postni ochib boʻlmadi: $error',
-      _RussianStrings() => 'Не удалось открыть пост: $error',
+      _RussianStrings() => 'Не удалось открыть пост. Попробуйте ещё раз.',
       _ => 'Could not open post: $error',
     };
   }
@@ -2237,7 +2230,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Joylashuvingiz Toshkent xaritasi hududidan tashqarida.',
       _RussianStrings() =>
-        'Ваше местоположение находится за пределами карты Ташкента.',
+        'Вы за пределами карты: пока она охватывает только Ташкент.',
       _ => 'Your location is outside the Tashkent map area.',
     };
   }
@@ -2342,8 +2335,7 @@ class AppStrings {
 
   String get invalidUzbekPhone => switch (this) {
         _UzbekStrings() => 'O‘zbekiston telefon formati: +998 XX XXX XXXX.',
-        _RussianStrings() =>
-          'Используйте формат телефона Узбекистана: +998 XX XXX XXXX.',
+        _RussianStrings() => 'Введите номер в формате +998 XX XXX XX XX.',
         _ => 'Use Uzbekistan phone format: +998 XX XXX XXXX.',
       };
 
@@ -2358,7 +2350,7 @@ class AppStrings {
   String get telegramUsername {
     return switch (this) {
       _UzbekStrings() => 'Telegram username',
-      _RussianStrings() => 'Имя пользователя Telegram',
+      _RussianStrings() => 'Ник в Telegram',
       _ => 'Telegram username',
     };
   }
@@ -2374,7 +2366,7 @@ class AppStrings {
   String get uzbekPhoneFormatHelp {
     return switch (this) {
       _UzbekStrings() => 'Oʻzbekiston formati: +998 xx xxx xx xx',
-      _RussianStrings() => 'Формат Узбекистана: +998 xx xxx xx xx',
+      _RussianStrings() => 'Например: +998 90 123 45 67',
       _ => 'Uzbekistan format: +998 xx xxx xx xx',
     };
   }
@@ -2384,7 +2376,7 @@ class AppStrings {
       _UzbekStrings() =>
         '5-32 ta harf, raqam yoki pastki chiziqdan foydalaning.',
       _RussianStrings() =>
-        'Используйте 5-32 буквы, цифры или нижние подчеркивания.',
+        'От 5 до 32 символов: латинские буквы, цифры и нижние подчёркивания.',
       _ => 'Use 5-32 letters, numbers, or underscores.',
     };
   }
@@ -2535,7 +2527,7 @@ class AppStrings {
   String get confirmingEmail {
     return switch (this) {
       _UzbekStrings() => 'Email tasdiqlanmoqda...',
-      _RussianStrings() => 'Email подтверждается...',
+      _RussianStrings() => 'Подтверждаем почту…',
       _ => 'Confirming your email...',
     };
   }
@@ -2543,7 +2535,7 @@ class AppStrings {
   String get emailVerifiedSignInNow {
     return switch (this) {
       _UzbekStrings() => 'Email tasdiqlandi. Endi kirishingiz mumkin.',
-      _RussianStrings() => 'Email подтвержден. Теперь можно войти.',
+      _RussianStrings() => 'Почта подтверждена. Теперь можно войти.',
       _ => 'Email verified. You can sign in now.',
     };
   }
@@ -2551,7 +2543,8 @@ class AppStrings {
   String get couldNotVerifyEmailLink {
     return switch (this) {
       _UzbekStrings() => 'Bu email havolasini tasdiqlab boʻlmadi.',
-      _RussianStrings() => 'Не удалось подтвердить эту ссылку email.',
+      _RussianStrings() =>
+        'Ссылка не сработала. Возможно, она устарела — запросите новое письмо.',
       _ => 'Could not verify this email link.',
     };
   }
@@ -2559,7 +2552,7 @@ class AppStrings {
   String get googleSignInNoIdToken {
     return switch (this) {
       _UzbekStrings() => 'Google kirishi ID token qaytarmadi.',
-      _RussianStrings() => 'Вход через Google не вернул ID token.',
+      _RussianStrings() => 'Не удалось войти через Google. Попробуйте ещё раз.',
       _ => 'Google sign-in did not return an ID token.',
     };
   }
@@ -2575,7 +2568,7 @@ class AppStrings {
   String get googleSignInNotConfigured {
     return switch (this) {
       _UzbekStrings() => 'Bu build uchun Google orqali kirish sozlanmagan.',
-      _RussianStrings() => 'Вход через Google не настроен для этой сборки.',
+      _RussianStrings() => 'Вход через Google в этой версии недоступен.',
       _ => 'Google sign-in is not configured for this build.',
     };
   }
@@ -2844,7 +2837,7 @@ class AppStrings {
 
   String get reportTargetPost => switch (this) {
         _UzbekStrings() => 'Post',
-        _RussianStrings() => 'Публикация',
+        _RussianStrings() => 'Пост',
         _ => 'Post',
       };
 
@@ -2931,7 +2924,7 @@ class AppStrings {
 
   String get targetUnavailableExplanation => switch (this) {
         _UzbekStrings() => 'Shikoyat qilingan kontent endi mavjud emas.',
-        _RussianStrings() => 'Обжалованный контент больше не существует.',
+        _RussianStrings() => 'Контента, на который пожаловались, больше нет.',
         _ => 'The reported content no longer exists.',
       };
 
@@ -2973,7 +2966,7 @@ class AppStrings {
 
   String get reportedContentLabel => switch (this) {
         _UzbekStrings() => 'Shikoyat qilingan kontent',
-        _RussianStrings() => 'Обжалованный контент',
+        _RussianStrings() => 'На что пожаловались',
         _ => 'Reported content',
       };
 
@@ -3198,7 +3191,7 @@ class AppStrings {
 
   String get viewPostHistory => switch (this) {
         _UzbekStrings() => 'Post tarixini koʻrish',
-        _RussianStrings() => 'История публикации',
+        _RussianStrings() => 'История изменений',
         _ => 'View post history',
       };
 
@@ -3417,7 +3410,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Yo‘qolgan jonivorni joylashdan oldin to‘g‘ri O‘zbekiston telefon raqamini qo‘shing. Masalan: +998 99 142 1314.',
       _RussianStrings() =>
-        'Добавьте корректный номер телефона Узбекистана перед публикацией потерянного питомца. Например: +998 99 142 1314.',
+        'Чтобы с вами могли связаться, добавьте в профиль номер Узбекистана, например +998 90 123 45 67.',
       _ =>
         'Add a valid Uzbekistan phone number before posting a lost pet. Example: +998 99 142 1314.',
     };
@@ -3466,24 +3459,24 @@ class AppStrings {
   String get publishLostPet {
     return switch (this) {
       _UzbekStrings() => 'Yo‘qolgan jonivorni joylash',
-      _RussianStrings() => 'Опубликовать потерянного питомца',
+      _RussianStrings() => 'Опубликовать объявление',
       _ => 'Publish lost pet',
     };
   }
 
   String get createLostPetAlert => switch (this) {
         _UzbekStrings() => 'Yo‘qolgan jonivor haqida eʼlon yaratish',
-        _RussianStrings() => 'Создать объявление о пропавшем питомце',
+        _RussianStrings() => 'Объявление о пропаже',
         _ => 'Create a lost-pet alert',
       };
 
   String get createLostPetAlertHelp => switch (this) {
         _UzbekStrings() =>
-          'Odamlar siz bilan tez bog‘lanishi uchun aniq suratlar, oxirgi ko‘rilgan joyni va kontaktlaringizni ko‘rsatishga rozilikni qo‘shing.',
+          'Aniq suratlar qo‘shing va jonivor oxirgi marta qayerda ko‘rilganini belgilang — shunda uni tezroq tanib olishadi.',
         _RussianStrings() =>
-          'Добавьте чёткие фото, место, где питомца видели в последний раз, и согласие на показ ваших контактов, чтобы с вами могли быстро связаться.',
+          'Добавьте чёткие фото и отметьте, где питомца видели в последний раз, — так его быстрее узнают.',
         _ =>
-          'Use clear photos, a last-seen point, and contact consent so signed-in users can reach you quickly.',
+          'Add clear photos and mark where your pet was last seen, so people recognise it faster.',
       };
 
   String get pointLastSeenLocation {
@@ -3526,7 +3519,7 @@ class AppStrings {
   String get lastSeenLocationSelected {
     return switch (this) {
       _UzbekStrings() => 'Oxirgi ko‘rilgan joy tanlandi.',
-      _RussianStrings() => 'Место последнего обнаружения выбрано.',
+      _RussianStrings() => 'Место отмечено.',
       _ => 'Last-seen location selected.',
     };
   }
@@ -3553,7 +3546,7 @@ class AppStrings {
 
   String get markLostPetFound => switch (this) {
         _UzbekStrings() => 'Topildi deb belgilash',
-        _RussianStrings() => 'Отметить как найденного',
+        _RussianStrings() => 'Питомец нашёлся',
         _ => 'Mark as found',
       };
 
@@ -3579,7 +3572,7 @@ class AppStrings {
         _UzbekStrings() =>
           'Bu eʼlon lenta va xaritadan olib tashlanadi, ammo havola orqali ochiq qoladi. Uni profilingizda qayta ochishingiz yoki o‘chirishingiz mumkin.',
         _RussianStrings() =>
-          'Объявление исчезнет из ленты и с карты, но останется доступным по ссылке. В профиле его можно снова открыть или удалить.',
+          'Мы уберём объявление из ленты и с карты, но по ссылке оно откроется. Вернуть или удалить его можно в профиле.',
         _ =>
           'This post will leave Feed and Map but remain accessible by link. You can reopen or delete it from your profile.',
       };
@@ -3588,7 +3581,7 @@ class AppStrings {
         _UzbekStrings() =>
           'Bu eʼlon lentadan olib tashlanadi, ammo havola orqali ochiq qoladi. Uni profilingizda qayta ochishingiz yoki o‘chirishingiz mumkin.',
         _RussianStrings() =>
-          'Объявление исчезнет из ленты, но останется доступным по ссылке. В профиле его можно снова открыть или удалить.',
+          'Мы уберём объявление из ленты, но по ссылке оно откроется. Вернуть или удалить его можно в профиле.',
         _ =>
           'This post will leave Feed but remain accessible by link. You can reopen or delete it from your profile.',
       };
@@ -3606,7 +3599,7 @@ class AppStrings {
         _UzbekStrings() =>
           'Jonivor yangi uy topganidan so‘ng aloqa maʼlumotlari boshqalarga ko‘rsatilmaydi.',
         _RussianStrings() =>
-          'После того как питомец нашёл новый дом, контактные данные скрыты от других.',
+          'Питомец уже дома, поэтому контакты теперь скрыты.',
         _ =>
           'Now that the pet has a new home, contact details are hidden from others.',
       };
@@ -3619,7 +3612,7 @@ class AppStrings {
 
   String get editAdoptionPost => switch (this) {
         _UzbekStrings() => 'Asrab olish postini tahrirlash',
-        _RussianStrings() => 'Редактировать объявление о пристройстве',
+        _RussianStrings() => 'Изменить объявление',
         _ => 'Edit rehoming post',
       };
 
@@ -3631,7 +3624,7 @@ class AppStrings {
 
   String get deleteAdoptionPostMessage => switch (this) {
         _UzbekStrings() => 'Bu asrab olish posti olib tashlanadi.',
-        _RussianStrings() => 'Это объявление о пристройстве будет удалено.',
+        _RussianStrings() => 'Объявление удалится навсегда.',
         _ => 'This rehoming post will be removed.',
       };
 
@@ -3649,7 +3642,7 @@ class AppStrings {
 
   String get noAdoptionPostsYet => switch (this) {
         _UzbekStrings() => 'Hozircha asrab olish postlari yo‘q.',
-        _RussianStrings() => 'Пока нет объявлений о пристройстве.',
+        _RussianStrings() => 'У вас пока нет объявлений о пристройстве.',
         _ => 'No rehoming posts yet.',
       };
 
@@ -3715,13 +3708,13 @@ class AppStrings {
 
   String get myLostPets => switch (this) {
         _UzbekStrings() => 'Mening yo‘qolgan uy hayvonlarim',
-        _RussianStrings() => 'Мои потерянные питомцы',
+        _RussianStrings() => 'Мои объявления о пропаже',
         _ => 'My lost pets',
       };
 
   String get editLostPet => switch (this) {
         _UzbekStrings() => 'Yo‘qolgan jonivor postini tahrirlash',
-        _RussianStrings() => 'Редактировать объявление о питомце',
+        _RussianStrings() => 'Изменить объявление',
         _ => 'Edit lost pet',
       };
 
@@ -3733,7 +3726,7 @@ class AppStrings {
 
   String get deleteLostPetMessage => switch (this) {
         _UzbekStrings() => 'Bu yo‘qolgan jonivor posti olib tashlanadi.',
-        _RussianStrings() => 'Это объявление о питомце будет удалено.',
+        _RussianStrings() => 'Объявление удалится навсегда.',
         _ => 'This lost pet post will be removed.',
       };
 
@@ -3751,7 +3744,7 @@ class AppStrings {
 
   String get noLostPetsYet => switch (this) {
         _UzbekStrings() => 'Hozircha yo‘qolgan uy hayvonlari yo‘q.',
-        _RussianStrings() => 'Пока нет объявлений о потерянных питомцах.',
+        _RussianStrings() => 'У вас пока нет объявлений о пропаже.',
         _ => 'No lost pets yet.',
       };
 
@@ -3820,7 +3813,7 @@ class AppStrings {
   String get adoptionHelp {
     return switch (this) {
       _UzbekStrings() => 'Mushuk asrab olish bo‘yicha yordam',
-      _RussianStrings() => 'Помощь по усыновлению кошки',
+      _RussianStrings() => 'Как взять кошку домой',
       _ => 'Cat adoption help',
     };
   }
@@ -3838,7 +3831,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Bu umumiy ma’lumot. Shaxsiy vaziyatingiz uchun tuman/shahar davlat veterinariya xizmati yoki yurist bilan tekshiring.',
       _RussianStrings() =>
-        'Это общая информация. По вашей ситуации уточните требования в районной/городской государственной ветеринарной службе или у юриста.',
+        'Это общая информация. Для вашего случая уточните правила в районной или городской госветслужбе или у юриста.',
       _ =>
         'This is general information. Confirm requirements for your situation with your district/city state veterinary service or a lawyer.',
     };
@@ -3855,7 +3848,7 @@ class AppStrings {
   String get adoptionVetProcedure {
     return switch (this) {
       _UzbekStrings() => 'Veterinariya jarayoni',
-      _RussianStrings() => 'Ветеринарная процедура',
+      _RussianStrings() => 'Визит к ветеринару',
       _ => 'Veterinary procedure',
     };
   }
@@ -3863,7 +3856,7 @@ class AppStrings {
   String get adoptionLegalCareRules {
     return switch (this) {
       _UzbekStrings() => 'Uyda saqlash qoidalari',
-      _RussianStrings() => 'Правила содержания дома',
+      _RussianStrings() => 'Как содержать кошку дома',
       _ => 'Home-keeping rules',
     };
   }
@@ -3930,7 +3923,7 @@ class AppStrings {
   String get accountDeleted {
     return switch (this) {
       _UzbekStrings() => 'Hisob o‘chirildi.',
-      _RussianStrings() => 'Аккаунт удален.',
+      _RussianStrings() => 'Аккаунт удалён.',
       _ => 'Account deleted.',
     };
   }
@@ -3938,7 +3931,7 @@ class AppStrings {
   String get couldNotDeleteAccount {
     return switch (this) {
       _UzbekStrings() => 'Hisobni o‘chirib bo‘lmadi.',
-      _RussianStrings() => 'Не удалось удалить аккаунт.',
+      _RussianStrings() => 'Не удалось удалить аккаунт. Попробуйте ещё раз.',
       _ => 'Could not delete account.',
     };
   }
@@ -4030,7 +4023,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Ko‘rishni hisobsiz davom ettirishingiz mumkin. Bu amal uchun tizimga kiring.',
       _RussianStrings() =>
-        'Просматривать можно без аккаунта. Для этого действия нужно войти.',
+        'Смотреть можно без входа. Чтобы сделать это, войдите.',
       _ =>
         'You can keep browsing without an account. Sign in to complete this action.',
     };
@@ -4047,7 +4040,7 @@ class AppStrings {
   String get feedIntroMap {
     return switch (this) {
       _UzbekStrings() => 'Xarita – yaqin atrofdagi mushuklar va joylar',
-      _RussianStrings() => 'Карта – кошки и места для питомцев рядом',
+      _RussianStrings() => 'Карта — кошки и полезные места рядом',
       _ => 'Map – cats and pet places nearby',
     };
   }
@@ -4055,7 +4048,7 @@ class AppStrings {
   String get feedIntroAdd {
     return switch (this) {
       _UzbekStrings() => 'Qo‘shish – ko‘rgan mushugingizni joylang',
-      _RussianStrings() => 'Добавить – опубликуйте кошку, которую видели',
+      _RussianStrings() => 'Добавить — расскажите о кошке, которую встретили',
       _ => 'Add – post a cat you saw',
     };
   }
@@ -4064,7 +4057,7 @@ class AppStrings {
     return switch (this) {
       _UzbekStrings() =>
         'Yo‘qolgan uy hayvonlari – uyga qaytishiga yordam bering',
-      _RussianStrings() => 'Потерянные питомцы – помогите им вернуться домой',
+      _RussianStrings() => 'Потерянные питомцы — помогите им вернуться домой',
       _ => 'Lost pets – help them get home',
     };
   }
@@ -4072,7 +4065,8 @@ class AppStrings {
   String get feedIntroAdoption {
     return switch (this) {
       _UzbekStrings() => 'Asrab olish – uy toping yoki uy bering',
-      _RussianStrings() => 'Пристройство – найдите дом или подарите его',
+      _RussianStrings() =>
+        'Пристройство — найдите питомцу дом или возьмите к себе',
       _ => 'Adoption – find or give a home',
     };
   }
@@ -4358,16 +4352,17 @@ class _RussianStrings extends AppStrings {
           register: 'Зарегистрироваться',
           alreadyHaveAccount: 'Уже есть аккаунт?',
           language: 'Язык',
-          emailRequired: 'Укажите email.',
-          invalidEmail: 'Введите корректный email.',
+          emailRequired: 'Введите почту.',
+          invalidEmail: 'Проверьте адрес почты.',
           passwordRequired: 'Укажите пароль.',
           passwordMin8: 'Пароль должен быть не короче 8 символов.',
           nameTooLong: 'Имя должно быть не длиннее 100 символов.',
           verifyEmail: 'Подтвердите email',
           confirmYourEmail: 'Подтвердите ваш email',
           verifyEmailWithoutAddress:
-              'Перед входом нужно подтвердить ваш email.',
-          verifyEmailWithAddress: 'Перед входом нужно подтвердить {email}.',
+              'Чтобы войти, подтвердите почту по ссылке из письма.',
+          verifyEmailWithAddress:
+              'Чтобы войти, подтвердите {email} по ссылке из письма.',
           devVerificationHelp:
               'В этой development-сборке ссылка подтверждения выводится backend-ом. Если доступен token, используйте быстрое подтверждение ниже.',
           verifyNow: 'Подтвердить сейчас',
@@ -4422,10 +4417,12 @@ class _RussianStrings extends AppStrings {
           userObservations: 'Посты',
           userComments: 'Комментарии',
           noCommentsYet: 'Комментариев пока нет.',
-          noActivityVisible: 'Этот пользователь скрыл свою активность.',
+          noActivityVisible:
+              'Пользователь скрыл из профиля свои посты и комментарии.',
           noDescription: 'Нет описания',
           privacy: 'Приватность',
-          allowPublicActivityView: 'Разрешить другим видеть мою активность',
+          allowPublicActivityView:
+              'Показывать в профиле мои посты и комментарии',
           allowPublicActivityViewSubtitle:
               'Люди смогут открывать ваши посты и комментарии из профиля.',
           viewCommentsPrefix: 'Показать комментарии: ',
@@ -4437,7 +4434,7 @@ class _RussianStrings extends AppStrings {
           day: 'День',
           week: 'Неделя',
           thisMonth: 'В этом месяце',
-          noLeaderboardData: 'Данных лидерборда пока нет.',
+          noLeaderboardData: 'Рейтинг пока пуст.',
           unnamedUser: 'Пользователь без имени',
           observations: 'постов',
           settings: 'Настройки',
@@ -4451,10 +4448,11 @@ class _RussianStrings extends AppStrings {
           likesReceived: 'Получено лайков',
           theme: 'Тема',
           themeAuto: 'Авто',
-          themeDark: 'Темная',
+          themeDark: 'Тёмная',
           themeLight: 'Светлая',
           saveChanges: 'Сохранить изменения',
           changesSaved: 'Изменения сохранены.',
-          couldNotSaveChanges: 'Не удалось сохранить изменения.',
+          couldNotSaveChanges:
+              'Не удалось сохранить изменения. Попробуйте ещё раз.',
         );
 }

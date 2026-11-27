@@ -257,7 +257,7 @@ void main() {
       await mountLogin(tester, google, language: AppLanguage.russian);
       await tester.tap(find.text('Продолжить с Google'));
       await tester.pumpAndSettle();
-      expect(find.text('Вход через Google не настроен для этой сборки.'),
+      expect(find.text('Вход через Google в этой версии недоступен.'),
           findsOneWidget);
       expect(find.textContaining('Developer console'), findsNothing);
     });

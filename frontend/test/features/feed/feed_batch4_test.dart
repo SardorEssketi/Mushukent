@@ -638,7 +638,7 @@ void main() {
     testWidgets('localized in Russian and Uzbek', (tester) async {
       final backend = _Backend();
       await _mount(tester, backend.client, language: AppLanguage.russian);
-      expect(find.text('Больше публикаций нет.'), findsOneWidget);
+      expect(find.text('Больше постов нет.'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await _mount(tester, backend.client, language: AppLanguage.uzbek);
       expect(find.text('Boshqa postlar yo‘q.'), findsOneWidget);
