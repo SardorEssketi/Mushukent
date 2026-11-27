@@ -83,3 +83,10 @@ def test_displayed_versions_match_across_documents() -> None:
     )
     assert f'CURRENT_TERMS_VERSION = "{terms}"' in schemas
     assert f'CURRENT_PRIVACY_VERSION = "{privacy}"' in schemas
+
+
+def test_nearby_consent_withdrawal_path_matches_the_app() -> None:
+    # The separate "Nearby alert privacy" entry is gone; the switch lives on the notification page.
+    for name, text in (("privacy", PRIVACY_MD), ("screen", SCREEN), ("web", WEB_PRIVACY)):
+        assert "Profile -> Settings -> Notifications -> Lost pets nearby" in text, name
+        assert "Nearby alert privacy" not in text, name
