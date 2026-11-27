@@ -1255,7 +1255,7 @@ class AppStrings {
 
   String get publicationCompletedUnavailable => switch (this) {
         _RussianStrings() =>
-          'Публикация уже создана, но открыть её отсюда нельзя. Чтобы создать новый, начните заново.',
+          'Публикация уже создана, но открыть её отсюда нельзя. Чтобы создать новую, начните заново.',
         _UzbekStrings() =>
           'Post allaqachon chop etilgan, lekin uni bu yerda ochib bo‘lmaydi. Boshqa post uchun yangi qoralama boshlang.',
         _ =>
