@@ -267,7 +267,7 @@ class AppStrings {
 
   String get recentObservations => switch (this) {
         _UzbekStrings() => 'So‘nggi postlar',
-        _RussianStrings() => 'Недавние публикации',
+        _RussianStrings() => 'Последние посты',
         _ => 'Recent posts',
       };
 
@@ -339,6 +339,33 @@ class AppStrings {
         _ => 'Post deleted',
       };
 
+  /// Lost-pet and rehoming listings («объявление»); cat posts use [postPublished].
+  String get listingPublished => switch (this) {
+        _UzbekStrings() => 'E’lon joylandi',
+        _RussianStrings() => 'Объявление опубликовано',
+        _ => 'Listing published',
+      };
+
+  /// Lost-pet and rehoming listings; cat posts use [postDeleted].
+  String get listingDeleted => switch (this) {
+        _UzbekStrings() => 'E’lon o‘chirildi',
+        _RussianStrings() => 'Объявление удалено',
+        _ => 'Listing deleted',
+      };
+
+  /// Subtitle of the post's visibility switch (post edit screen).
+  String get postVisibleToEveryone => switch (this) {
+        _UzbekStrings() => 'Postni hamma ko‘radi',
+        _RussianStrings() => 'Пост видят все',
+        _ => 'Everyone can see this post',
+      };
+
+  String get postVisibleOnlyToYou => switch (this) {
+        _UzbekStrings() => 'Faqat siz va moderatorlar ko‘radi',
+        _RussianStrings() => 'Видите только вы и модераторы',
+        _ => 'Only you and moderators can see it',
+      };
+
   String get unsavedChangesTitle {
     return switch (this) {
       _UzbekStrings() => 'Saqlanmagan o\'zgarishlar',
@@ -386,7 +413,7 @@ class AppStrings {
   String get editObservation {
     return switch (this) {
       _UzbekStrings() => 'Postni tahrirlash',
-      _RussianStrings() => 'Редактировать публикацию',
+      _RussianStrings() => 'Редактировать пост',
       _ => 'Edit post',
     };
   }
@@ -418,7 +445,7 @@ class AppStrings {
   String get deletePost {
     return switch (this) {
       _UzbekStrings() => 'Postni o‘chirish',
-      _RussianStrings() => 'Удалить публикацию',
+      _RussianStrings() => 'Удалить пост',
       _ => 'Delete post',
     };
   }
@@ -460,7 +487,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Post yashirib o‘chirildi; oldingi versiya quyida saqlangan.',
       _RussianStrings() =>
-        'Публикация удалена программно; предыдущая версия сохранена ниже.',
+        'Пост удалён программно; предыдущая версия сохранена ниже.',
       _ =>
         'The post was soft-deleted; the preceding version is retained below.',
     };
@@ -716,13 +743,13 @@ class AppStrings {
   /// Shown under the last Feed post once every page has been loaded.
   String get noMorePosts => switch (this) {
         _UzbekStrings() => 'Boshqa postlar yo‘q.',
-        _RussianStrings() => 'Больше постов нет.',
+        _RussianStrings() => 'Больше публикаций нет.',
         _ => 'No more posts.',
       };
 
   String get newPosts => switch (this) {
         _UzbekStrings() => 'Yangi postlar',
-        _RussianStrings() => 'Новые посты',
+        _RussianStrings() => 'Новые публикации',
         _ => 'New posts',
       };
 
@@ -1212,7 +1239,7 @@ class AppStrings {
 
   String get publicationOutcomeUnknown => switch (this) {
         _RussianStrings() =>
-          'Возможно, пост уже опубликован. Проверьте это, прежде чем отправлять снова. Черновик сохранён на этом экране.',
+          'Возможно, публикация уже создана. Проверьте это, прежде чем отправлять снова. Черновик сохранён на этом экране.',
         _UzbekStrings() =>
           'Post saqlangan bo‘lishi mumkin. Qayta yuborishdan oldin holatini tekshiring. Qoralama shu ekranda saqlanadi.',
         _ =>
@@ -1221,7 +1248,7 @@ class AppStrings {
 
   String get publicationCompletedUnavailable => switch (this) {
         _RussianStrings() =>
-          'Пост уже опубликован, но открыть его отсюда нельзя. Чтобы создать новый, начните заново.',
+          'Публикация уже создана, но открыть её отсюда нельзя. Чтобы создать новый, начните заново.',
         _UzbekStrings() =>
           'Post allaqachon chop etilgan, lekin uni bu yerda ochib bo‘lmaydi. Boshqa post uchun yangi qoralama boshlang.',
         _ =>
@@ -1235,7 +1262,7 @@ class AppStrings {
       };
 
   String get checkPublicationStatus => switch (this) {
-        _RussianStrings() => 'Проверить, опубликован ли пост',
+        _RussianStrings() => 'Проверить, опубликовано ли',
         _UzbekStrings() => 'Post holatini tekshirish',
         _ => 'Check publication status',
       };
@@ -1370,11 +1397,11 @@ class AppStrings {
   String get deleteDraftMessage {
     return switch (this) {
       _UzbekStrings() =>
-        'Bu qoralamadagi tanlangan rasmlar, joylashuv, tavsif va mushuk tanlovini olib tashlaydi.',
+        'Bu qoralamadagi tanlangan rasmlar, joylashuv, mushuk ismi va tavsifni olib tashlaydi.',
       _RussianStrings() =>
-        'Это удалит из черновика выбранные фото, место, описание и выбор кошки.',
+        'Это удалит из черновика выбранные фото, место, имя кошки и описание.',
       _ =>
-        'This removes the selected photos, location, description, and cat choice from this draft.',
+        'This removes the selected photos, location, cat name, and description from this draft.',
     };
   }
 
@@ -1383,7 +1410,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Bu qoralamadagi tanlangan rasmlar, oxirgi koʻrilgan joy, jonivor nomi va qoʻshimcha maʼlumotni olib tashlaydi.',
       _RussianStrings() =>
-        'Это удалит из черновика выбранные фото, место, где питомца видели последний раз, кличку и дополнительную информацию.',
+        'Это удалит из черновика выбранные фото, место, где питомца видели последний раз, имя питомца и дополнительную информацию.',
       _ =>
         'This removes the selected photos, last-seen location, pet name, and additional information from this draft.',
     };
@@ -1394,7 +1421,7 @@ class AppStrings {
       _UzbekStrings() =>
         'Bu qoralamadagi tanlangan rasmlar, jonivor nomi va qoʻshimcha maʼlumotni olib tashlaydi.',
       _RussianStrings() =>
-        'Это удалит из черновика выбранные фото, кличку и дополнительную информацию.',
+        'Это удалит из черновика выбранные фото, имя питомца и дополнительную информацию.',
       _ =>
         'This removes the selected photos, pet name, and additional information from this draft.',
     };
@@ -1528,14 +1555,6 @@ class AppStrings {
       _UzbekStrings() => 'Ochiq',
       _RussianStrings() => 'Публично',
       _ => 'Public',
-    };
-  }
-
-  String get private {
-    return switch (this) {
-      _UzbekStrings() => 'Yopiq',
-      _RussianStrings() => 'Приватно',
-      _ => 'Private',
     };
   }
 

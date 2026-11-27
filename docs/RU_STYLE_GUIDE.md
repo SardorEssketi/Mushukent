@@ -29,6 +29,8 @@ their own wording.
 ## Glossary
 Pick «пост», «объявление» or «публикация» by where the string is shown, not by the key name: a
 string reused across post types needs the generic word, or a separate string per type.
+Confirmations and snackbars are per type: «Пост опубликован / удалён» for cat posts, «Объявление
+опубликовано / удалено» for lost-pet and rehoming listings.
 
 | Use | Not | Meaning |
 |---|---|---|
@@ -37,7 +39,7 @@ string reused across post types needs the generic word, or a separate string per
 | **публикация** | пост, материал | only the generic word, where the text can refer to any type: «Публикация недоступна», a list or menu shared by all types (owner decision, 2026-11-28) |
 | **кошка** | животное, питомец | cat posts and «Кошке нужна помощь» |
 | **питомец** | животное, кошка | lost-pet and rehoming posts (may be any pet) |
-| **имя питомца** | — | the name field in lost-pet and rehoming posts: the owner kept «Имя питомца» (2026-11-28); «кличка» may appear in running text; «имя кошки» stays for cat posts |
+| **имя питомца** | кличка | a pet's name in lost-pet and rehoming posts, in labels and running text (owner decision, 2026-11-28); «имя кошки» for cat posts |
 | **пристройство** / «найти дом» | усыновление, передача | rehoming |
 | **пропал / нашёлся** | обнаружение, найден | lost pets: «Где видели в последний раз», «Питомец нашёлся» |
 | **войти / выйти / вход** | авторизоваться, вошедшие пользователи | sign in / out; «те, кто вошёл в аккаунт» |

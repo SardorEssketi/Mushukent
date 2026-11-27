@@ -151,7 +151,7 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
       context.go('/feed');
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.postPublished)));
+        ..showSnackBar(SnackBar(content: Text(strings.listingPublished)));
     }
   }
 

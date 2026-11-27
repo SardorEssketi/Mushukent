@@ -213,7 +213,10 @@ class FeedCardMenu extends ConsumerWidget {
       container.invalidate(profileMeProvider);
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.postDeleted)));
+        ..showSnackBar(SnackBar(
+            content: Text(item is PostSummary
+                ? strings.postDeleted
+                : strings.listingDeleted)));
     } on MushukistanApiException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
     } catch (_) {

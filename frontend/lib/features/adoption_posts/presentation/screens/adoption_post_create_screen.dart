@@ -132,7 +132,7 @@ class _AdoptionPostCreateScreenState
       context.go('/feed');
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.postPublished)));
+        ..showSnackBar(SnackBar(content: Text(strings.listingPublished)));
     }
   }
 

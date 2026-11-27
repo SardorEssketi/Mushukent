@@ -336,7 +336,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Destination'), findsOneWidget);
-    expect(find.text('Post deleted'), findsOneWidget);
+    expect(find.text('Listing deleted'), findsOneWidget);
     expect(
         apiClient.calls.where((call) => call.method == 'DELETE'), hasLength(1));
   });
@@ -717,7 +717,7 @@ void main() {
         apiClient.calls.where((call) => call.method == 'DELETE'), hasLength(1));
     expect(container.read(deletedLostPetIdsProvider), contains('pet-1'));
     expect(find.text('Destination'), findsOneWidget);
-    expect(find.text('Post deleted'), findsOneWidget);
+    expect(find.text('Listing deleted'), findsOneWidget);
   });
 
   testWidgets('a failed moderator removal keeps the Lost Pet and shows why',
