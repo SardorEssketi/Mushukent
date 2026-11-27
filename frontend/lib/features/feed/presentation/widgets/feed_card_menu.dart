@@ -154,7 +154,7 @@ class FeedCardMenu extends ConsumerWidget {
           strings.deleteAdoptionPost,
           strings.deleteAdoptionPostMessage
         ),
-      _ => (strings.deletePost, strings.deleteCommentMessage),
+      _ => (strings.deletePost, strings.deletePostMessage),
     };
     final confirmed = await showDialog<bool>(
       context: context,

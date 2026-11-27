@@ -30,6 +30,17 @@ PostSummary _post({
       'created_at': '2026-11-09T10:00:00Z',
     });
 
+AdoptionPostData _adoption({String authorId = _ownerId}) =>
+    AdoptionPostData.fromJson({
+      'id': 'adoption-1',
+      'item_type': 'adoption',
+      'pet_name': 'Momiq',
+      'author': {'id': authorId, 'name': 'Author'},
+      'photo_url': 'https://example.com/p.jpg',
+      'photo_urls': ['https://example.com/p.jpg'],
+      'created_at': '2026-11-09T10:00:00Z',
+    });
+
 LostPetData _lostPet({String authorId = _ownerId}) => LostPetData.fromJson({
       'id': 'lost-1',
       'item_type': 'lost_pet',
@@ -49,7 +60,8 @@ Future<(FakeApiClient, GoRouter)> _pump(
     ..setHandler('DELETE', 'posts/post-1', (_) => null)
     ..setHandler('POST', 'posts/post-1/saved', (_) => null)
     ..setHandler('DELETE', 'posts/post-1/saved', (_) => null)
-    ..setHandler('DELETE', 'lost-pets/lost-1', (_) => null);
+    ..setHandler('DELETE', 'lost-pets/lost-1', (_) => null)
+    ..setHandler('DELETE', 'adoption-posts/adoption-1', (_) => null);
   final router = GoRouter(routes: [
     GoRoute(
       path: '/',
@@ -103,6 +115,35 @@ void main() {
             .where((c) => c.method == 'DELETE' && c.path == 'posts/post-1'),
         hasLength(1));
     expect(find.text('Post deleted'), findsOneWidget);
+  });
+
+  testWidgets('each type confirms deletion with its own text', (tester) async {
+    for (final (item, action, message, done) in [
+      (_post(), 'Delete post', 'This post will be removed.', 'Post deleted'),
+      (
+        _lostPet(),
+        'Delete lost pet',
+        'This lost pet post will be removed.',
+        'Listing deleted'
+      ),
+      (
+        _adoption(),
+        'Delete rehoming post',
+        'This rehoming post will be removed.',
+        'Listing deleted'
+      ),
+    ]) {
+      await _pump(tester, item, viewer: testUser());
+      await _open(tester);
+      await tester.tap(find.text(action));
+      await tester.pumpAndSettle();
+      expect(find.text(message), findsOneWidget, reason: action);
+      expect(find.text('This action cannot be undone.'), findsNothing,
+          reason: action);
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text(done), findsOneWidget, reason: action);
+    }
   });
 
   testWidgets('edit opens the edit screen', (tester) async {

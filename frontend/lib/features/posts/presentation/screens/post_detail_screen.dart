@@ -87,7 +87,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
               ? strings.removePostAsModerator
               : strings.deletePost,
         ),
-        content: Text(strings.deleteCommentMessage),
+        content: Text(strings.deletePostMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

@@ -353,6 +353,13 @@ class AppStrings {
         _ => 'Listing deleted',
       };
 
+  /// Confirmation body when a cat post is deleted (owner or moderator).
+  String get deletePostMessage => switch (this) {
+        _UzbekStrings() => 'Bu post olib tashlanadi.',
+        _RussianStrings() => 'Пост удалится навсегда.',
+        _ => 'This post will be removed.',
+      };
+
   /// Subtitle of the post's visibility switch (post edit screen).
   String get postVisibleToEveryone => switch (this) {
         _UzbekStrings() => 'Postni hamma ko‘radi',
