@@ -294,6 +294,7 @@ reportContent, reasonRequired.
 
 
 ## Unused strings (not proposed)
+**Deleted** in all three languages (owner decision, 2026-11-28).
 These keys are defined in `app_strings.dart` but no screen or test uses them, so they are left out
 of the tables above. Proposal: delete them in all three languages when the copy is applied.
 `adoptionAddSubtitle`, `adoptionPosts`, `attachLocationQuestion`, `backToAdd`, `cameraSubtitle`, `catObservationSubtitle`, `catsAndServices`, `chooseTypeFirst`, `communitySubtitle`, `descriptionHint`, `everythingCatsTitle`, `feedOnlyPost`, `feedSectionSubtitle`, `gallerySubtitle`, `locationDisclosureMessage`, `lostPetAddSubtitle`, `lostPetAlert`, `lostPetSubtitle`, `nearbyMap`, `observationLocation`, `useMyLocation`, `whatAreYouCreating`

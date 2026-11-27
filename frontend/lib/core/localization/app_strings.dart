@@ -47,9 +47,7 @@ class AppStrings {
     required this.profile,
     required this.addObservation,
     required this.chooseFromGallery,
-    required this.gallerySubtitle,
     required this.takePhoto,
-    required this.cameraSubtitle,
     required this.refresh,
     required this.centerOnUser,
     required this.cats,
@@ -157,9 +155,7 @@ class AppStrings {
   final String profile;
   final String addObservation;
   final String chooseFromGallery;
-  final String gallerySubtitle;
   final String takePhoto;
-  final String cameraSubtitle;
   final String refresh;
   final String centerOnUser;
   final String cats;
@@ -622,17 +618,6 @@ class AppStrings {
     };
   }
 
-  String get communitySubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Mushuklarga postlar, izohlar va yordam orqali hissa qo‘shayotganlar eʼtirofi.',
-      _RussianStrings() =>
-        'Признание людей, которые помогают кошкам постами, комментариями и поддержкой.',
-      _ =>
-        'Recognition for people helping cats through posts, comments, and support.',
-    };
-  }
-
   String get createInMushukistan {
     return switch (this) {
       _UzbekStrings() => 'Mushukistanda yaratish',
@@ -655,26 +640,6 @@ class AppStrings {
         _RussianStrings() => 'Поделитесь фото кошки, моментом или новостью.',
         _ => 'Share a cat photo, moment, or update.',
       };
-
-  String get lostPetAddSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Egasi bilan aloqa va oxirgi ko‘rilgan joyi bor alohida eʼlon yarating.',
-      _RussianStrings() =>
-        'Создайте отдельное объявление с контактом владельца и местом последнего обнаружения.',
-      _ => 'Create a distinct alert with owner contact and last-seen location.',
-    };
-  }
-
-  String get adoptionAddSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Aloqa maʼlumotlari bilan alohida yangi uy topish postini yarating.',
-      _RussianStrings() =>
-        'Создайте отдельный пост о поиске дома с контактными данными.',
-      _ => 'Create a separate rehoming post with contact details.',
-    };
-  }
 
   String get phoneNumberRequiredForAdoption {
     return switch (this) {
@@ -736,42 +701,6 @@ class AppStrings {
         _RussianStrings() => 'Следующее фото',
         _ => 'Next photo',
       };
-
-  String feedSectionSubtitle(String mode) {
-    return switch (mode) {
-      'lost_pets' => switch (this) {
-          _UzbekStrings() =>
-            'Egasi bilan aloqa va oxirgi ko‘rilgan hududi bor tanish eʼlonlar.',
-          _RussianStrings() =>
-            'Узнаваемые объявления с контактом владельца и районом последнего обнаружения.',
-          _ => 'Recognizable alerts with owner contact and last-seen areas.',
-        },
-      'adoption' => switch (this) {
-          _UzbekStrings() =>
-            'Yaxshi uy kerak bo‘lgan mushuklar uchun alohida postlar.',
-          _RussianStrings() =>
-            'Отдельные посты о кошках, которым нужен хороший дом.',
-          _ => 'Separate rehoming posts for cats who need a good home.',
-        },
-      'needs_help' => switch (this) {
-          _UzbekStrings() => 'Yordamga muhtoj mushuklar haqidagi postlar.',
-          _RussianStrings() => 'Посты о кошках, которым нужна помощь.',
-          _ => 'Posts about cats that need help from the community.',
-        },
-      'popular' => switch (this) {
-          _UzbekStrings() =>
-            'Odamlar eng ko‘p munosabat bildirayotgan postlar.',
-          _RussianStrings() => 'Посты, на которые люди реагируют чаще всего.',
-          _ => 'Posts people are responding to most.',
-        },
-      _ => switch (this) {
-          _UzbekStrings() =>
-            'Mushuklar haqidagi so‘nggi postlar, hikoyalar va yangiliklar.',
-          _RussianStrings() => 'Новые посты, истории и новости о кошках.',
-          _ => 'Recent cat photos, stories, and updates from the community.',
-        },
-    };
-  }
 
   String get emptyFeedMessage {
     return switch (this) {
@@ -1047,25 +976,6 @@ class AppStrings {
     };
   }
 
-  String get whatAreYouCreating {
-    return switch (this) {
-      _UzbekStrings() => 'Nima yaratmoqchisiz?',
-      _RussianStrings() => 'Что вы создаете?',
-      _ => 'What are you creating?',
-    };
-  }
-
-  String get chooseTypeFirst {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Avval turini tanlang, shunda Mushukistan faqat kerakli maʼlumotlarni soʻraydi.',
-      _RussianStrings() =>
-        'Сначала выберите тип, чтобы Mushukistan запросил только нужные данные.',
-      _ =>
-        'Choose the right type first so Mushukistan can ask only for the details that matter.',
-    };
-  }
-
   String get catObservation {
     return switch (this) {
       _UzbekStrings() => 'Mushuk posti',
@@ -1179,16 +1089,6 @@ class AppStrings {
         _ => 'Hide password',
       };
 
-  String get catObservationSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Mushuk rasmlarini qoʻshing, kerak boʻlsa joylashuvni belgilang va yordam kerak mushuklarni ko‘rsating.',
-      _RussianStrings() =>
-        'Добавьте фото кошки, при необходимости укажите место и отметьте кошек, которым нужна помощь.',
-      _ => 'Add cat photos and optionally attach a location.',
-    };
-  }
-
   String get needsHelpCreateSubtitle => switch (this) {
         _UzbekStrings() =>
           'Yordamga muhtoj mushukni va uning joylashuvini ulashing.',
@@ -1219,14 +1119,6 @@ class AppStrings {
       _UzbekStrings() => 'Yordam so‘rovini joylash',
       _RussianStrings() => 'Опубликовать просьбу о помощи',
       _ => 'Publish help request',
-    };
-  }
-
-  String get lostPetAlert {
-    return switch (this) {
-      _UzbekStrings() => 'Yoʻqolgan jonivor eʼloni',
-      _RussianStrings() => 'Объявление о потерянном питомце',
-      _ => 'Lost pet alert',
     };
   }
 
@@ -1655,30 +1547,6 @@ class AppStrings {
     };
   }
 
-  String get observationLocation {
-    return switch (this) {
-      _UzbekStrings() => 'Post joylashuvi',
-      _RussianStrings() => 'Место публикации',
-      _ => 'Post location',
-    };
-  }
-
-  String get backToAdd {
-    return switch (this) {
-      _UzbekStrings() => 'Qoʻshishga qaytish',
-      _RussianStrings() => 'Назад к добавлению',
-      _ => 'Back to Add',
-    };
-  }
-
-  String get attachLocationQuestion {
-    return switch (this) {
-      _UzbekStrings() => 'Joylashuv biriktirilsinmi?',
-      _RussianStrings() => 'Прикрепить место?',
-      _ => 'Attach a location?',
-    };
-  }
-
   String get attachLocationHelp {
     return switch (this) {
       _UzbekStrings() => 'Post xaritada chiqishi uchun joylashuv qo‘shing.',
@@ -1735,14 +1603,6 @@ class AppStrings {
     };
   }
 
-  String get feedOnlyPost {
-    return switch (this) {
-      _UzbekStrings() => 'Faqat lentadagi post',
-      _RussianStrings() => 'Пост только в ленте',
-      _ => 'Feed-only post',
-    };
-  }
-
   /// Neutral wording for a publication that cannot be shown: it never says
   /// whether it was deleted, removed by a moderator, hidden or blocked.
   String get publicationUnavailableTitle => switch (this) {
@@ -1793,16 +1653,6 @@ class AppStrings {
       _UzbekStrings() => 'Post xaritada chiqishi uchun joylashuv qo‘shing.',
       _RussianStrings() => 'Добавьте место, чтобы пост появился на карте.',
       _ => 'Add a location to show this post on the Map.',
-    };
-  }
-
-  String get descriptionHint {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Mushuk, joylashuv va kerak boʻlishi mumkin boʻlgan yordamni tasvirlang',
-      _RussianStrings() =>
-        'Опишите кошку, место и помощь, которая может понадобиться',
-      _ => 'Describe the cat, location, and any help it may need',
     };
   }
 
@@ -2166,14 +2016,6 @@ class AppStrings {
       _UzbekStrings() => 'Postni ochib boʻlmadi: $error',
       _RussianStrings() => 'Не удалось открыть пост. Попробуйте ещё раз.',
       _ => 'Could not open post: $error',
-    };
-  }
-
-  String get useMyLocation {
-    return switch (this) {
-      _UzbekStrings() => 'Joylashuvimdan foydalanish',
-      _RussianStrings() => 'Использовать мое место',
-      _ => 'Use my location',
     };
   }
 
@@ -2589,14 +2431,6 @@ class AppStrings {
     };
   }
 
-  String get everythingCatsTitle {
-    return switch (this) {
-      _UzbekStrings() => 'Mushuklarga oid hammasi bir sokin joyda',
-      _RussianStrings() => 'Все о кошках в одном спокойном месте',
-      _ => 'Everything cats in one calm place',
-    };
-  }
-
   String get everythingCatsMessage {
     return switch (this) {
       _UzbekStrings() =>
@@ -2624,14 +2458,6 @@ class AppStrings {
     };
   }
 
-  String get adoptionPosts {
-    return switch (this) {
-      _UzbekStrings() => 'Asrab olish postlari',
-      _RussianStrings() => 'Посты о пристройстве',
-      _ => 'Adoption posts',
-    };
-  }
-
   String get usefulPlaces {
     return switch (this) {
       _UzbekStrings() => 'Foydali joylar',
@@ -2648,38 +2474,11 @@ class AppStrings {
     };
   }
 
-  String get nearbyMap {
-    return switch (this) {
-      _UzbekStrings() => 'Yaqin xarita',
-      _RussianStrings() => 'Карта рядом',
-      _ => 'Nearby map',
-    };
-  }
-
-  String get catsAndServices {
-    return switch (this) {
-      _UzbekStrings() => 'Mushuklar va xizmatlar',
-      _RussianStrings() => 'Кошки и сервисы',
-      _ => 'Cats and services',
-    };
-  }
-
   String get useYourLocation {
     return switch (this) {
       _UzbekStrings() => 'Joylashuvingizdan foydalanish',
       _RussianStrings() => 'Использовать ваше местоположение',
       _ => 'Use your location',
-    };
-  }
-
-  String get locationDisclosureMessage {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Mushukistan yaqin mushuklar va foydali joylarni koʻrsatish uchun joriy joylashuvingizdan foydalanadi. Ochiq post yaratmasangiz, u joylanmaydi.',
-      _RussianStrings() =>
-        'Mushukistan использует ваше текущее местоположение, чтобы показывать кошек и полезные места рядом. Оно не публикуется, если вы не создадите публичный пост.',
-      _ =>
-        'Mushukistan uses your current location to show nearby cats and useful places. It is not published unless you create a public post.',
     };
   }
 
@@ -3384,16 +3183,6 @@ class AppStrings {
       _UzbekStrings() => 'Tavsif',
       _RussianStrings() => '\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435',
       _ => 'Description',
-    };
-  }
-
-  String get lostPetSubtitle {
-    return switch (this) {
-      _UzbekStrings() =>
-        'Rasmlar va egasining aloqa raqami bilan yo‘qolgan mushukni joylang.',
-      _RussianStrings() =>
-        'Опубликуйте потерянную кошку с фото и контактом владельца.',
-      _ => 'Post a lost cat with photos and owner contact.',
     };
   }
 
@@ -4141,9 +3930,7 @@ class _EnglishStrings extends AppStrings {
           profile: 'Profile',
           addObservation: 'Add post',
           chooseFromGallery: 'Choose from gallery',
-          gallerySubtitle: 'Publishes to the feed without a map location.',
           takePhoto: 'Take photo',
-          cameraSubtitle: 'Captures current location for the map.',
           refresh: 'Refresh',
           centerOnUser: 'Center on user',
           cats: 'Cats',
@@ -4260,9 +4047,7 @@ class _UzbekStrings extends AppStrings {
           profile: 'Profil',
           addObservation: 'Post qo‘shish',
           chooseFromGallery: 'Galereyadan tanlash',
-          gallerySubtitle: 'Xaritadagi joylashuvsiz lentaga joylanadi.',
           takePhoto: 'Rasmga olish',
-          cameraSubtitle: 'Xarita uchun joriy joylashuvni oladi.',
           refresh: 'Yangilash',
           centerOnUser: 'Joylashuvimga olib borish',
           cats: 'Mushuklar',
@@ -4380,9 +4165,7 @@ class _RussianStrings extends AppStrings {
           profile: 'Профиль',
           addObservation: 'Добавить пост',
           chooseFromGallery: 'Выбрать из галереи',
-          gallerySubtitle: 'Публикуется в ленту без точки на карте.',
           takePhoto: 'Сделать фото',
-          cameraSubtitle: 'Сохраняет текущую геопозицию для карты.',
           refresh: 'Обновить',
           centerOnUser: 'К моему местоположению',
           cats: 'Кошки',
