@@ -244,8 +244,8 @@ class _PostEditScreenState extends ConsumerState<PostEditScreen> {
                       : (value) => setState(() => _isPublic = value),
                   title: Text(strings.privacy),
                   subtitle: Text(_isPublic
-                      ? strings.allowPublicActivityView
-                      : strings.private),
+                      ? strings.postVisibleToEveryone
+                      : strings.postVisibleOnlyToYou),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 DropdownButtonFormField<String>(

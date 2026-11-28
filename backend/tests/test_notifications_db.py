@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import importlib.util
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from alembic.operations import Operations
+from alembic.runtime.migration import MigrationContext
 from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from geoalchemy2.elements import WKTElement
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.core.config import Settings
 from app.features.auth.domain.models import AuthUser
@@ -283,42 +287,175 @@ class _FakeSender:
         return self.result
 
 
-def test_automatic_defaults_upgrade_legacy_and_initialize_absent_rows(db_session_manager):
+CATEGORIES = ("push_comments", "push_replies", "push_followups", "inactivity_enabled")
+
+
+def test_new_users_get_every_category_on_and_nearby_off(db_session_manager):
     with db_session_manager.session_scope() as session:
-        legacy, new = _user(session, "Legacy"), _user(session, "New")
+        user_id = _user(session, "Fresh").id
+    response = NotificationService(db_session_manager, Settings()).preferences(user_id)
+    assert all(getattr(response, field) for field in CATEGORIES)
+    assert response.inactivity_enabled is True
+    assert response.nearby_enabled is False and response.alert_location is None
+
+
+def test_a_row_inserted_without_inactivity_uses_the_true_server_default(db_session_manager):
+    with db_session_manager.session_scope() as session:
+        user_id = _user(session, "Server default").id
+        session.execute(
+            text("INSERT INTO notification_preferences (user_id) VALUES (:user_id)"),
+            {"user_id": user_id},
+        )
+    with db_session_manager.session_scope() as session:
+        assert session.get(schema.NotificationPreference, user_id).inactivity_enabled is True
+
+
+@pytest.mark.parametrize("field", CATEGORIES)
+def test_each_category_switch_is_saved_and_kept(db_session_manager, field):
+    with db_session_manager.session_scope() as session:
+        user_id = _user(session, f"Switch {field}").id
+    service = NotificationService(db_session_manager, Settings())
+
+    off = service.update_preferences(user_id, PreferencePatch(**{field: False}))
+    assert getattr(off, field) is False
+    for other in CATEGORIES:
+        if other != field:
+            assert getattr(off, other) is True, other
+    # Kept on the next read and after the worker's maintenance pass.
+    with db_session_manager.session_scope() as session:
+        NotificationRepository(session).normalize_defaults()
+    assert getattr(service.preferences(user_id), field) is False
+
+    on = service.update_preferences(user_id, PreferencePatch(**{field: True}))
+    assert getattr(on, field) is True
+
+
+def test_normalize_defaults_only_creates_missing_rows(db_session_manager):
+    with db_session_manager.session_scope() as session:
+        chosen, absent = _user(session, "Chosen"), _user(session, "Absent")
         repo = NotificationRepository(session)
-        pref = repo.preferences(legacy.id)
-        for field in ("push_comments", "push_replies", "push_followups", "inactivity_enabled"):
+        pref = repo.preferences(chosen.id)
+        for field in CATEGORIES:
             setattr(pref, field, False)
         repo.set_alert_location(pref, 41.3111, 69.2797)
         pref.nearby_enabled = True
         cycle = datetime.now(UTC)
         pref.last_inactivity_cycle_at = cycle
-        ids = legacy.id, new.id
+        ids = chosen.id, absent.id
     with db_session_manager.session_scope() as session:
         repo = NotificationRepository(session)
         repo.normalize_defaults()
-        repo.normalize_defaults()  # Idempotent, no consent/location reset.
-        for user_id in ids:
-            pref = session.get(schema.NotificationPreference, user_id)
-            assert all(
-                getattr(pref, f)
-                for f in ("push_comments", "push_replies", "push_followups", "inactivity_enabled")
-            )
+        repo.normalize_defaults()  # Idempotent.
+        kept = session.get(schema.NotificationPreference, ids[0])
+        assert not any(getattr(kept, field) for field in CATEGORIES)
+        assert kept.nearby_enabled and kept.last_inactivity_cycle_at == cycle
         assert repo.get_alert_location(ids[0]) == (41.3111, 69.2797)
-        assert session.get(schema.NotificationPreference, ids[0]).last_inactivity_cycle_at == cycle
-        assert not session.get(schema.NotificationPreference, ids[1]).nearby_enabled
-        assert repo.get_alert_location(ids[1]) is None
+        created = session.get(schema.NotificationPreference, ids[1])
+        assert all(getattr(created, field) for field in CATEGORIES)
+        assert not created.nearby_enabled and repo.get_alert_location(ids[1]) is None
 
-    service = NotificationService(db_session_manager, Settings())
-    response = service.update_preferences(
-        ids[0],
-        PreferencePatch(
-            push_comments=False, push_replies=False, push_followups=False, inactivity_enabled=False
-        ),
+
+def test_switching_inactivity_off_stops_reminders(db_session_manager) -> None:
+    key = Fernet.generate_key().decode()
+    now = datetime.now(UTC)
+    with db_session_manager.session_scope() as session:
+        user = _user(session, "Opted out")
+        user.last_active_at = now - timedelta(days=7, minutes=15, seconds=1)
+        repo = NotificationRepository(session)
+        repo.preferences(user.id)
+        repo.upsert_device(user.id, "test-device-token-long-enough", key)
+        user_id = user.id
+    NotificationService(db_session_manager, Settings()).update_preferences(
+        user_id, PreferencePatch(inactivity_enabled=False)
     )
-    assert response.push_comments and response.push_replies and response.push_followups
-    assert response.inactivity_enabled
+    worker = NotificationWorker(
+        db_session_manager, Settings(PUSH_TOKEN_ENCRYPTION_KEY=key), _FakeSender()
+    )
+    assert worker.enqueue_inactivity(now) == 0
+
+
+def test_switching_followups_off_stops_follow_up_pushes(db_session_manager) -> None:
+    key = Fernet.generate_key().decode()
+    now = datetime.now(UTC)
+    with db_session_manager.session_scope() as session:
+        owner = _user(session, "No follow-ups")
+        pet = schema.LostPet(
+            user_id=owner.id,
+            pet_name="Pet",
+            owner_phone_number="+998901234567",
+            last_seen_location=WKTElement("POINT(69.2797 41.3111)", srid=4326),
+        )
+        session.add(pet)
+        session.flush()
+        session.add(
+            schema.LostPetFollowUp(
+                lost_pet_id=pet.id, owner_id=owner.id, due_at=now - timedelta(minutes=1)
+            )
+        )
+        NotificationRepository(session).upsert_device(owner.id, "test-followup-off-token-long", key)
+        owner_id = owner.id
+    NotificationService(db_session_manager, Settings()).update_preferences(
+        owner_id, PreferencePatch(push_followups=False)
+    )
+    worker = NotificationWorker(
+        db_session_manager, Settings(PUSH_TOKEN_ENCRYPTION_KEY=key), _FakeSender()
+    )
+    assert worker.enqueue_due_followups(now) == 0
+
+
+def _migration():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "alembic/versions/20261125_0037_inactivity_default_on.py"
+    )
+    spec = importlib.util.spec_from_file_location("migration_0037", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_migration(db_session_manager, step: str) -> None:
+    with db_session_manager.session_scope() as session:
+        context = MigrationContext.configure(session.connection())
+        with Operations.context(context):
+            getattr(_migration(), step)()
+
+
+def _inactivity_default(db_session_manager) -> str:
+    with db_session_manager.session_scope() as session:
+        return session.scalar(
+            text(
+                "SELECT column_default FROM information_schema.columns "
+                "WHERE table_name = 'notification_preferences' "
+                "AND column_name = 'inactivity_enabled'"
+            )
+        )
+
+
+def test_migration_turns_categories_on_for_existing_rows_only(db_session_manager):
+    with db_session_manager.session_scope() as session:
+        user = _user(session, "Existing")
+        repo = NotificationRepository(session)
+        pref = repo.preferences(user.id)
+        for field in CATEGORIES:
+            setattr(pref, field, False)
+        repo.set_alert_location(pref, 41.3111, 69.2797)
+        pref.nearby_enabled = True
+        user_id = user.id
+    try:
+        _run_migration(db_session_manager, "downgrade")
+        assert _inactivity_default(db_session_manager) == "false"
+        _run_migration(db_session_manager, "upgrade")
+    finally:
+        # Leave the schema as the metadata defines it for the other tests.
+        _run_migration(db_session_manager, "upgrade")
+    assert _inactivity_default(db_session_manager) == "true"
+    with db_session_manager.session_scope() as session:
+        pref = session.get(schema.NotificationPreference, user_id)
+        assert all(getattr(pref, field) for field in CATEGORIES)
+        # Nearby consent and the private point are untouched.
+        assert pref.nearby_enabled
+        assert NotificationRepository(session).get_alert_location(user_id) == (41.3111, 69.2797)
 
 
 def test_foreground_point_requires_consent_and_withdrawal_clears_it(db_session_manager):
@@ -428,8 +565,8 @@ def test_inactivity_once_per_period_and_activity_reset(db_session_manager) -> No
         user = _user(session, "Inactive")
         user.last_active_at = now - timedelta(days=7, minutes=15, seconds=1)
         repo = NotificationRepository(session)
-        # The worker must upgrade an old disabled choice without an app visit.
-        repo.preferences(user.id).inactivity_enabled = False
+        # Inactivity reminders are on by default.
+        assert repo.preferences(user.id).inactivity_enabled is True
         repo.upsert_device(user.id, "test-device-token-long-enough", key)
         user_id = user.id
 
@@ -468,7 +605,8 @@ def test_due_followup_one_job_per_device_and_completed_cycle_cancelled(db_sessio
         NotificationRepository(session).upsert_device(
             owner.id, "test-followup-token-long-enough", key
         )
-        NotificationRepository(session).preferences(owner.id).push_followups = False
+        # Follow-up reminders are on by default.
+        assert NotificationRepository(session).preferences(owner.id).push_followups
         session.flush()
         followup_id = followup.id
 

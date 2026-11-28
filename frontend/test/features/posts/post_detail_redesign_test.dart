@@ -191,6 +191,9 @@ void main() {
     await tester.tap(find.text('Delete post'));
     await tester.pumpAndSettle();
     expect(client.calls.where((call) => call.method == 'DELETE'), isEmpty);
+    // The post confirmation, not the comment one.
+    expect(find.text('This post will be removed.'), findsOneWidget);
+    expect(find.text('This action cannot be undone.'), findsNothing);
     expect(find.text('Delete'), findsOneWidget);
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();

@@ -18,7 +18,9 @@ class LostPetCreateRequest(BaseModel):
     last_seen_location: GeoPoint
     pet_name: str = Field(min_length=1, max_length=100)
     additional_info: str | None = Field(default=None, max_length=2000)
-    owner_phone_publication_consent: bool = False
+    # Sent only by older clients with the consent checkbox; None = the current client, where
+    # the profile phone is the consent. An explicit false is refused.
+    owner_phone_publication_consent: bool | None = None
 
     @field_validator("last_seen_location")
     @classmethod

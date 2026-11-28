@@ -10,6 +10,7 @@ import '../../../../core/theme/app_design_tokens.dart';
 import '../../../../core/validation/phone_numbers.dart';
 import '../../../../core/widgets/app_surface.dart';
 import '../../application/add_observation_controller.dart';
+import '../../application/pet_post_draft_controller.dart';
 
 class AddObservationScreen extends ConsumerStatefulWidget {
   const AddObservationScreen({super.key});
@@ -68,6 +69,37 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(addObservationControllerProvider);
     final strings = ref.watch(appStringsProvider);
+    // One draft per post type; each keeps its own Continue / Delete entry.
+    final drafts = [
+      if (state.hasDraft)
+        _DraftEntry(
+          label: strings.draftStatus,
+          deleteMessage: strings.deleteDraftMessage,
+          onContinue: () => context.go('/add/details'),
+          onDelete: () =>
+              ref.read(addObservationControllerProvider.notifier).reset(),
+        ),
+      if (ref.watch(lostPetDraftProvider).hasDraft)
+        _DraftEntry(
+          label: strings.lostPetDraftLabel,
+          deleteMessage: strings.deleteLostPetDraftMessage,
+          onContinue: () => unawaited(_openContactRequiredFlow(
+            path: '/add/lost-pet',
+            requirementMessage: strings.phoneNumberRequiredForLostPet,
+          )),
+          onDelete: () => ref.read(lostPetDraftProvider.notifier).reset(),
+        ),
+      if (ref.watch(adoptionPostDraftProvider).hasDraft)
+        _DraftEntry(
+          label: strings.rehomingDraftLabel,
+          deleteMessage: strings.deleteRehomingDraftMessage,
+          onContinue: () => unawaited(_openContactRequiredFlow(
+            path: '/add/adoption',
+            requirementMessage: strings.phoneNumberRequiredForAdoption,
+          )),
+          onDelete: () => ref.read(adoptionPostDraftProvider.notifier).reset(),
+        ),
+    ];
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.create)),
@@ -162,53 +194,12 @@ class _AddObservationScreenState extends ConsumerState<AddObservationScreen> {
                 ],
               ]);
             }),
-            if (state.hasDraft) ...[
+            if (drafts.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xl),
               Text(strings.continueDraft,
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: AppSpacing.sm),
-              AppCard(
-                child: LayoutBuilder(builder: (context, constraints) {
-                  final content = Row(children: [
-                    const Icon(Icons.edit_note_outlined),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(child: Text(strings.draftStatus)),
-                  ]);
-                  final action = FilledButton.tonal(
-                    onPressed: () => context.go('/add/details'),
-                    child: Text(strings.continueAction),
-                  );
-                  if (constraints.maxWidth < AppWidths.compact) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        content,
-                        const SizedBox(height: AppSpacing.md),
-                        action,
-                      ],
-                    );
-                  }
-                  return Row(children: [Expanded(child: content), action]);
-                }),
-              ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    final shouldDelete =
-                        await _confirmDeleteDraft(context, strings);
-                    if (!shouldDelete) return;
-                    ref.read(addObservationControllerProvider.notifier).reset();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(strings.draftDeleted)),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.delete_outline),
-                  label: Text(strings.deleteDraft),
-                ),
-              ),
+              for (final draft in drafts) draft,
             ],
           ],
         ),
@@ -306,13 +297,80 @@ class _CreateActionCard extends StatelessWidget {
   }
 }
 
+/// A "Continue draft" card plus its "Delete draft" action, shared by all types.
+class _DraftEntry extends ConsumerWidget {
+  const _DraftEntry({
+    required this.label,
+    required this.deleteMessage,
+    required this.onContinue,
+    required this.onDelete,
+  });
+
+  final String label;
+  final String deleteMessage;
+  final VoidCallback onContinue;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final strings = ref.watch(appStringsProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppCard(
+          child: LayoutBuilder(builder: (context, constraints) {
+            final content = Row(children: [
+              const Icon(Icons.edit_note_outlined),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(child: Text(label)),
+            ]);
+            final action = FilledButton.tonal(
+              onPressed: onContinue,
+              child: Text(strings.continueAction),
+            );
+            if (constraints.maxWidth < AppWidths.compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  content,
+                  const SizedBox(height: AppSpacing.md),
+                  action,
+                ],
+              );
+            }
+            return Row(children: [Expanded(child: content), action]);
+          }),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: () async {
+              final shouldDelete =
+                  await _confirmDeleteDraft(context, strings, deleteMessage);
+              if (!shouldDelete) return;
+              onDelete();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(strings.draftDeleted)),
+                );
+              }
+            },
+            icon: const Icon(Icons.delete_outline),
+            label: Text(strings.deleteDraft),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 Future<bool> _confirmDeleteDraft(
-    BuildContext context, AppStrings strings) async {
+    BuildContext context, AppStrings strings, String message) async {
   final result = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(strings.deleteDraftTitle),
-      content: Text(strings.deleteDraftMessage),
+      content: Text(message),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),

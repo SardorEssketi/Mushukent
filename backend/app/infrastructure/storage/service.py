@@ -189,39 +189,7 @@ class MediaStorageService:
         self.delete_object(key)
 
     def _key_from_public_url(self, url: str | None) -> str | None:
-        if not url:
-            return None
-        parsed = urlparse(url)
-        expected_public_url = urlparse(self.storage.public_url("ownership-probe"))
-        if parsed.scheme and (
-            parsed.scheme.casefold() != expected_public_url.scheme.casefold()
-            or parsed.netloc.casefold() != expected_public_url.netloc.casefold()
-        ):
-            return None
-
-        path = parsed.path if parsed.scheme else url
-        for _ in range(3):
-            decoded_path = unquote(path)
-            if decoded_path == path:
-                break
-            path = decoded_path
-        path = path.replace("\\", "/")
-        marker = f"/{self.storage.bucket_name}/"
-        if marker in path:
-            key = path.split(marker, 1)[1].lstrip("/")
-            return self._validated_media_key(key)
-        known_prefixes = (
-            "posts/",
-            "users/avatars/",
-            "cats/covers/",
-            "lost-pets/",
-            "adoption/",
-        )
-        normalized = path.lstrip("/")
-        for prefix in known_prefixes:
-            if normalized.startswith(prefix):
-                return self._validated_media_key(normalized)
-        return None
+        return media_key_for_url(self.storage, url)
 
     @staticmethod
     def _validated_media_key(key: str) -> str | None:
@@ -266,3 +234,59 @@ class MediaStorageService:
             self.storage.delete(key)
         except StorageOperationError:
             logger.warning("Cleanup after media upload failure failed", key=key)
+
+
+_OWNERSHIP_PROBE = "ownership-probe"
+MEDIA_KEY_PREFIXES = (
+    "posts/",
+    "users/avatars/",
+    "cats/covers/",
+    "lost-pets/",
+    "adoption/",
+)
+
+
+def media_key_for_url(storage: ObjectStorage, url: str | None) -> str | None:
+    """The storage key when ``url`` is one of this platform's own media URLs, else None.
+
+    Own means: same scheme and host as the storage's public URL (or a relative URL), and a
+    path under the bucket or one of the media key prefixes. Anything else, such as another
+    host or a protocol-relative ``//host/...`` URL, is not ours.
+    """
+    if not url:
+        return None
+    parsed = urlparse(url)
+    expected = urlparse(storage.public_url(_OWNERSHIP_PROBE))
+    if parsed.scheme or parsed.netloc:
+        if (
+            parsed.scheme.casefold() != expected.scheme.casefold()
+            or parsed.netloc.casefold() != expected.netloc.casefold()
+        ):
+            return None
+        path = parsed.path
+    else:
+        path = url
+
+    for _ in range(3):
+        decoded_path = unquote(path)
+        if decoded_path == path:
+            break
+        path = decoded_path
+    path = path.replace("\\", "/")
+    marker = f"/{storage.bucket_name}/"
+    if marker in path:
+        key = path.split(marker, 1)[1].lstrip("/")
+        return MediaStorageService._validated_media_key(key)
+
+    normalized = path.lstrip("/")
+    # A public URL with a path prefix (local storage serves "/media/<key>").
+    base = (
+        expected.path[: -len(_OWNERSHIP_PROBE)].strip("/")
+        if expected.path.endswith(_OWNERSHIP_PROBE)
+        else ""
+    )
+    if base and normalized.startswith(f"{base}/"):
+        normalized = normalized[len(base) + 1 :]
+    if normalized.startswith(MEDIA_KEY_PREFIXES):
+        return MediaStorageService._validated_media_key(normalized)
+    return None

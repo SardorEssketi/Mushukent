@@ -95,6 +95,7 @@ class PostsService:
         if photo_content is not None:
             photo_payloads.insert(0, (photo_content, photo_content_type, photo_filename))
         self._validate_photo_inputs(payload.photo_url, photo_payloads)
+        self._require_platform_media_url(payload.photo_url)
 
         post_id = publication_context.target_id if publication_context else uuid4()
         uploaded_keys: list[str] = []
@@ -693,6 +694,23 @@ class PostsService:
                 403,
                 "FORBIDDEN",
                 "You do not have permission to perform this action.",
+            )
+
+    def _require_platform_media_url(self, photo_url: object | None) -> None:
+        """A ``photo_url`` must point at an image uploaded to this platform.
+
+        Same rule as cat cover photos: an arbitrary URL would make every viewer's client fetch
+        a third-party address (IP leak, tracking, content that skipped our image checks).
+        """
+        if photo_url is None:
+            return
+        service = self.media_storage_service
+        if service is None or not service.owns_url(str(photo_url)):
+            raise api_error(
+                422,
+                "VALIDATION_ERROR",
+                "Validation failed.",
+                details={"photo_url": ["must_be_platform_media_url"]},
             )
 
     def _validate_photo_inputs(

@@ -8,7 +8,6 @@ import '../../features/auth/application/auth_controller.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_create_screen.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_detail_screen.dart';
 import '../../features/adoption_posts/presentation/screens/adoption_post_edit_screen.dart';
-import '../../features/adoption_posts/presentation/screens/my_adoption_posts_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_details_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_location_screen.dart';
 import '../../features/add_observation/presentation/screens/add_observation_screen.dart';
@@ -26,18 +25,19 @@ import '../../features/legal/presentation/screens/legal_update_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_create_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_detail_screen.dart';
 import '../../features/lost_pets/presentation/screens/lost_pet_edit_screen.dart';
-import '../../features/lost_pets/presentation/screens/my_lost_pets_screen.dart';
 import '../../features/map/presentation/screens/map_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_report_detail_screen.dart';
 import '../../features/moderation/presentation/screens/moderation_reports_screen.dart';
 import '../../features/moderation/presentation/screens/post_history_screen.dart';
 import '../../features/notifications/presentation/notification_center_screen.dart';
+import '../../features/notifications/application/nearby_alerts.dart';
 import '../../features/notifications/presentation/notification_settings_screen.dart';
 import '../../features/moderation/presentation/screens/report_content_screen.dart';
 import '../../features/posts/presentation/screens/post_detail_screen.dart';
 import '../../features/posts/presentation/screens/post_edit_screen.dart';
 import '../../features/profile/presentation/screens/adoption_help_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
+import '../../features/profile/presentation/screens/my_activity_screen.dart';
 import '../../features/profile/presentation/screens/about_account_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/public_profile_screen.dart';
@@ -405,13 +405,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     path: 'adoption-help',
                     builder: (context, state) => const AdoptionHelpScreen(),
                   ),
+                  // Old "My ..." list routes open the matching Your activity tab, so
+                  // links and notifications pointing at them keep working.
                   GoRoute(
                     path: 'lost-pets',
-                    builder: (context, state) => const MyLostPetsScreen(),
+                    redirect: (context, state) =>
+                        MyActivityTab.lostPets.location,
                   ),
                   GoRoute(
                     path: 'adoption-posts',
-                    builder: (context, state) => const MyAdoptionPostsScreen(),
+                    redirect: (context, state) =>
+                        MyActivityTab.rehoming.location,
                   ),
                   GoRoute(
                     path: 'feedback',
@@ -428,6 +432,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                       ),
                       GoRoute(
                         path: 'notifications',
+                        // Android-only page; elsewhere back to Settings.
+                        redirect: (context, state) =>
+                            ref.read(nearbyAlertsAndroidProvider)
+                                ? null
+                                : '/profile/settings',
                         builder: (context, state) =>
                             const NotificationSettingsScreen(),
                       ),
@@ -456,26 +465,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     builder: (context, state) => const SavedPostsScreen(),
                   ),
                   GoRoute(
+                    path: 'activity',
+                    builder: (context, state) => MyActivityScreen(
+                      initialTab: MyActivityTab.fromQuery(
+                          state.uri.queryParameters['tab']),
+                    ),
+                  ),
+                  GoRoute(
                     path: 'cat-posts',
-                    builder: (context, state) {
-                      final user = ref.read(currentUserProvider);
-                      return UserPostsScreen(
-                        userId: user?.id ?? '',
-                        isCurrentUser: true,
-                        kind: 'observation',
-                      );
-                    },
+                    redirect: (context, state) => MyActivityTab.cats.location,
                   ),
                   GoRoute(
                     path: 'needs-help-posts',
-                    builder: (context, state) {
-                      final user = ref.read(currentUserProvider);
-                      return UserPostsScreen(
-                        userId: user?.id ?? '',
-                        isCurrentUser: true,
-                        kind: 'needs_help',
-                      );
-                    },
+                    redirect: (context, state) =>
+                        MyActivityTab.needsHelp.location,
                   ),
                   GoRoute(
                     path: 'comments',

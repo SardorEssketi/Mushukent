@@ -11,8 +11,6 @@ import '../../../../core/localization/app_strings.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/media/image_picker_options.dart';
 import '../../../../core/media/selected_image_pipeline.dart';
-import '../../../../core/network/api_error.dart';
-import '../../../../core/network/publication_retry.dart';
 import '../../../../core/network/mushukistan_api.dart';
 import '../../../../core/storage/token_store.dart';
 import '../../../../core/storage/token_store_provider.dart';
@@ -21,6 +19,8 @@ import '../../../../core/widgets/app_surface.dart';
 import '../../../notifications/application/notification_push.dart';
 import '../../../../core/widgets/form_icon_buttons.dart';
 import '../../../../core/widgets/osm_attribution.dart';
+import '../../../add_observation/application/pet_post_draft_controller.dart';
+import '../../../add_observation/presentation/widgets/contact_share_notice.dart';
 import '../../../feed/presentation/screens/feed_screen.dart';
 
 final _tashkentBounds = LatLngBounds(
@@ -37,42 +37,23 @@ class LostPetCreateScreen extends ConsumerStatefulWidget {
 }
 
 class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
-  final _petNameController = TextEditingController();
-  final _infoController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  final List<LostPetPhotoUpload> _photos = [];
-  GeoPoint? _selectedLocation;
-  bool _isSubmitting = false;
-  bool _outcomeUnknown = false;
-  bool _completedUnavailable = false;
-  bool get _draftLocked =>
-      _isSubmitting || _outcomeUnknown || _completedUnavailable;
-  String _publicationId = newPublicationKey();
   bool _isPickingPhotos = false;
-  bool _phonePublicationConsent = false;
   String? _error;
   StreamSubscription<void>? _sessionChanges;
-  int _draftGeneration = 0;
+
+  PetPostDraftController get _draft => ref.read(lostPetDraftProvider.notifier);
 
   @override
   void initState() {
     super.initState();
     final store = ref.read(tokenStoreProvider);
     if (store is GuardedAuthTokenStore) {
+      // The draft provider clears the draft itself on a session change.
       _sessionChanges = store.sessionChanges.listen((_) {
         if (!mounted) return;
         setState(() {
-          _draftGeneration++;
-          _photos.clear();
-          _petNameController.clear();
-          _infoController.clear();
-          _selectedLocation = null;
-          _publicationId = newPublicationKey();
-          _isSubmitting = false;
           _isPickingPhotos = false;
-          _outcomeUnknown = false;
-          _completedUnavailable = false;
-          _phonePublicationConsent = false;
           _error = null;
         });
       });
@@ -86,14 +67,13 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
   @override
   void dispose() {
     _sessionChanges?.cancel();
-    _petNameController.dispose();
-    _infoController.dispose();
     super.dispose();
   }
 
   Future<void> _pickPhotos() async {
-    final generation = _draftGeneration;
-    if (_isPickingPhotos || _draftLocked) {
+    final draft = ref.read(lostPetDraftProvider);
+    final attemptId = draft.publicationId;
+    if (_isPickingPhotos || draft.locked) {
       return;
     }
     final strings = ref.read(appStringsProvider);
@@ -106,14 +86,14 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
         imageQuality: pickerImageQuality,
         maxWidth: pickerMaxWidth,
         maxHeight: pickerMaxHeight,
-        limit: 5 - _photos.length,
+        limit: 5 - draft.photos.length,
       );
       if (files.isEmpty) {
         return;
       }
       final preparedPhotos = await preparePickedXFilesForUpload(
         files,
-        limit: 5 - _photos.length,
+        limit: 5 - draft.photos.length,
       );
       final uploads = preparedPhotos
           .map(
@@ -124,10 +104,9 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
             ),
           )
           .toList(growable: false);
-      if (mounted && _draftGeneration == generation) {
-        setState(() {
-          _photos.addAll(uploads);
-        });
+      if (mounted &&
+          ref.read(lostPetDraftProvider).publicationId == attemptId) {
+        _draft.addPhotos(uploads);
       }
     } catch (error) {
       logPhotoPipelineFailure('lost_pet_gallery_picker', error);
@@ -135,19 +114,19 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
         setState(() => _error = selectedImageErrorMessage(strings, error));
       }
     } finally {
-      if (mounted && _draftGeneration == generation) {
+      if (mounted) {
         setState(() => _isPickingPhotos = false);
       }
     }
   }
 
   Future<void> _submit() async {
-    final generation = _draftGeneration;
     final strings = ref.read(appStringsProvider);
-    if (_isSubmitting || _isPickingPhotos || _completedUnavailable) {
+    final draft = ref.read(lostPetDraftProvider);
+    if (draft.submitting || _isPickingPhotos || draft.completedUnavailable) {
       return;
     }
-    if (_photos.isEmpty) {
+    if (draft.photos.isEmpty) {
       setState(() {
         _error = strings.addAtLeastOnePhoto;
       });
@@ -156,74 +135,33 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
-    final location = _selectedLocation;
-    if (location == null) {
+    if (draft.location == null) {
       setState(() {
         _error = strings.pointLastSeenLocation;
       });
       return;
     }
-    if (!_phonePublicationConsent) {
-      setState(() {
-        _error = strings.confirmContactConsent;
-      });
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-      _error = null;
-    });
-
-    try {
-      await ref.read(mushukistanApiProvider).createLostPet(
-            publicationId: _publicationId,
-            photos: _photos,
-            petName: _petNameController.text,
-            lastSeenLocation: location,
-            ownerPhonePublicationConsent: _phonePublicationConsent,
-            additionalInfo: _infoController.text,
-          );
-      if (_draftGeneration != generation) return;
-      ref.invalidate(feedPostsProvider);
-      if (mounted) {
-        final messenger = ScaffoldMessenger.of(context);
-        context.go('/feed');
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(strings.postPublished)));
-      }
-    } on MushukistanApiException catch (error) {
-      if (_draftGeneration != generation) return;
-      if (mounted) {
-        setState(() {
-          _outcomeUnknown = publicationOutcomeUncertain(error);
-          _completedUnavailable = publicationCompletedUnavailable(error);
-          if (publicationAllowsReplacement(error)) {
-            _publicationId = newPublicationKey();
-          }
-          _error = publicationErrorMessage(strings, error);
-        });
-      }
-    } catch (_) {
-      if (_draftGeneration != generation) return;
-      if (mounted) {
-        setState(() {
-          _error = strings.couldNotSaveChanges;
-        });
-      }
-    } finally {
-      if (mounted && _draftGeneration == generation) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+    setState(() => _error = null);
+    final published = await _draft.submit(strings: strings);
+    if (!published) return;
+    ref.invalidate(feedPostsProvider);
+    _draft.reset();
+    if (mounted) {
+      final messenger = ScaffoldMessenger.of(context);
+      context.go('/feed');
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(strings.listingPublished)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final strings = ref.watch(appStringsProvider);
+    final draft = ref.watch(lostPetDraftProvider);
+    final photos = draft.photos;
+    final draftLocked = draft.locked;
+    final error = _error ?? draft.errorMessage;
 
     return Scaffold(
       appBar: AppBar(title: Text(strings.lostPet)),
@@ -259,13 +197,13 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (var index = 0; index < _photos.length; index++)
+                  for (var index = 0; index < photos.length; index++)
                     Stack(
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.memory(
-                            _photos[index].bytes,
+                            photos[index].bytes,
                             width: 92,
                             height: 92,
                             fit: BoxFit.cover,
@@ -276,36 +214,31 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                           top: 0,
                           child: PhotoRemoveButton(
                             position: index + 1,
-                            total: _photos.length,
+                            total: photos.length,
                             strings: strings,
-                            onPressed: _draftLocked
+                            onPressed: draftLocked
                                 ? null
-                                : () {
-                                    setState(() {
-                                      _photos.removeAt(index);
-                                    });
-                                  },
+                                : () => _draft.removePhotoAt(index),
                           ),
                         ),
                       ],
                     ),
                   OutlinedButton.icon(
-                    onPressed: _isSubmitting ||
-                            _outcomeUnknown ||
-                            _completedUnavailable ||
-                            _isPickingPhotos ||
-                            _photos.length >= 5
-                        ? null
-                        : _pickPhotos,
+                    onPressed:
+                        draftLocked || _isPickingPhotos || photos.length >= 5
+                            ? null
+                            : _pickPhotos,
                     icon: const Icon(Icons.add_photo_alternate_outlined),
-                    label: Text('${strings.addPhotos} (${_photos.length}/5)'),
+                    label: Text('${strings.addPhotos} (${photos.length}/5)'),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
               TextFormField(
-                enabled: !_draftLocked,
-                controller: _petNameController,
+                key: ValueKey('${draft.publicationId}:petName'),
+                enabled: !draftLocked,
+                initialValue: draft.petName,
+                onChanged: _draft.setPetName,
                 maxLength: 100,
                 decoration: InputDecoration(
                   labelText: strings.petsName,
@@ -324,24 +257,24 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                   style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 12),
               IgnorePointer(
-                ignoring: _draftLocked,
+                ignoring: draftLocked,
                 child: LostPetLocationPicker(
-                  key: ValueKey(_publicationId),
+                  key: ValueKey(draft.publicationId),
                   strings: strings,
-                  selectedLocation: _selectedLocation,
+                  selectedLocation: draft.location,
                   onSelected: (location) {
-                    if (_draftLocked) return;
-                    setState(() {
-                      _selectedLocation = location;
-                      _error = null;
-                    });
+                    if (ref.read(lostPetDraftProvider).locked) return;
+                    setState(() => _error = null);
+                    _draft.setLocation(location);
                   },
                 ),
               ),
               const SizedBox(height: 24),
               TextFormField(
-                enabled: !_draftLocked,
-                controller: _infoController,
+                key: ValueKey('${draft.publicationId}:info'),
+                enabled: !draftLocked,
+                initialValue: draft.additionalInfo,
+                onChanged: _draft.setAdditionalInfo,
                 maxLines: 5,
                 maxLength: 2000,
                 decoration: InputDecoration(
@@ -349,44 +282,32 @@ class _LostPetCreateScreenState extends ConsumerState<LostPetCreateScreen> {
                   alignLabelWithHint: true,
                 ),
               ),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _phonePublicationConsent,
-                onChanged: _draftLocked
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _phonePublicationConsent = value ?? false;
-                          _error = null;
-                        });
-                      },
-                title: Text(strings.contactConsentTitle),
-                subtitle: Text(strings.contactConsentSubtitle),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-              if (_error != null) ...[
+              // The profile phone is the consent: name what will be shared.
+              const ContactShareNotice(),
+              if (error != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  _error!,
+                  error,
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
               const SizedBox(height: 20),
               FilledButton.icon(
-                onPressed:
-                    _isSubmitting || _isPickingPhotos || _completedUnavailable
-                        ? null
-                        : () => unawaited(_submit()),
-                icon: _isSubmitting
+                onPressed: draft.submitting ||
+                        _isPickingPhotos ||
+                        draft.completedUnavailable
+                    ? null
+                    : () => unawaited(_submit()),
+                icon: draft.submitting
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.publish_outlined),
-                label: Text(_completedUnavailable
+                label: Text(draft.completedUnavailable
                     ? strings.publicationAlreadyPublished
-                    : _outcomeUnknown
+                    : draft.outcomeUnknown
                         ? strings.checkPublicationStatus
                         : strings.publishLostPet),
               ),

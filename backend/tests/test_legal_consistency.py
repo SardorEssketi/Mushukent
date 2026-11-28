@@ -56,11 +56,12 @@ def test_contact_visibility_is_described_everywhere() -> None:
         assert "older app versions" in text, name
         assert "per day and per week" in text, name
     assert "older app versions" in WEB_PRIVACY
-    # The three consent languages state the same facts.
-    assert "signed-in users" in STRINGS
-    assert "older app versions" in STRINGS
-    assert "в старых версиях приложения" in STRINGS
-    assert "eski versiyalarda" in STRINGS
+    # The create forms have no consent checkbox any more (the profile phone is the consent);
+    # the one-line notice says, in all three languages, that only signed-in users see it.
+    assert "Only signed-in users will see your number" in STRINGS
+    assert "увидят только вошедшие пользователи" in STRINGS
+    assert "faqat tizimga kirganlar ko‘radi" in STRINGS
+    assert "contactConsentTitle" not in STRINGS
 
 
 def test_analytics_and_push_are_disclosed_without_claiming_analytics_are_off() -> None:
@@ -82,3 +83,10 @@ def test_displayed_versions_match_across_documents() -> None:
     )
     assert f'CURRENT_TERMS_VERSION = "{terms}"' in schemas
     assert f'CURRENT_PRIVACY_VERSION = "{privacy}"' in schemas
+
+
+def test_nearby_consent_withdrawal_path_matches_the_app() -> None:
+    # The separate "Nearby alert privacy" entry is gone; the switch lives on the notification page.
+    for name, text in (("privacy", PRIVACY_MD), ("screen", SCREEN), ("web", WEB_PRIVACY)):
+        assert "Profile -> Settings -> Notifications -> Lost pets nearby" in text, name
+        assert "Nearby alert privacy" not in text, name

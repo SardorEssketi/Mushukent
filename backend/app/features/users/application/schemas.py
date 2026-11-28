@@ -5,13 +5,14 @@ from typing import Generic, TypeVar
 from uuid import UUID
 
 from pydantic import (
-    AnyHttpUrl,
     BaseModel,
     ConfigDict,
     EmailStr,
     Field,
     model_validator,
 )
+
+from app.infrastructure.storage.public_media import PublicMediaUrl
 
 T = TypeVar("T")
 
@@ -27,7 +28,7 @@ class UserProfile(BaseModel):
     id: UUID
     email: EmailStr
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
     phone_number: str | None = None
     telegram_username: str | None = None
     preferred_language: str = "en"
@@ -48,7 +49,7 @@ class UserPublic(BaseModel):
 
     id: UUID
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
     bio: str | None = None
     registered_at: datetime
     observation_count: int = 0
@@ -65,7 +66,7 @@ class BlockedUser(BaseModel):
 
     id: UUID
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
     blocked_at: datetime
 
 
@@ -80,7 +81,10 @@ class UserUpdate(BaseModel):
     )
     preferred_language: str | None = Field(default=None, pattern="^(en|uz|ru)$")
     allow_public_activity_view: bool | None = None
-    avatar_url: AnyHttpUrl | None = None
+    # No longer applied: the photo changes only through POST and DELETE /users/me/avatar, so it
+    # is always our own uploaded image. Still accepted (any value) and ignored so a client that
+    # sends it can save its other fields; never forwarded to the service or echoed back.
+    avatar_url: object | None = Field(default=None, exclude=True)
 
     @model_validator(mode="after")
     def _require_at_least_one_field(self) -> "UserUpdate":
@@ -91,8 +95,11 @@ class UserUpdate(BaseModel):
             and self.telegram_username is None
             and self.preferred_language is None
             and self.allow_public_activity_view is None
-            and self.avatar_url is None
         ):
+            if "avatar_url" in self.model_fields_set:
+                raise ValueError(
+                    "avatar_url cannot be set here; upload the photo to /users/me/avatar."
+                )
             raise ValueError("At least one profile field must be provided.")
         return self
 

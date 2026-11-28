@@ -103,18 +103,19 @@ void main() {
     expect(find.text('12'), findsOneWidget);
     expect(find.text('45'), findsOneWidget);
     expect(find.text('17'), findsOneWidget);
-    // Each post type the user can publish has its own activity entry.
-    expect(find.text('My cat posts'), findsOneWidget);
-    expect(find.text('My “Cat needs help” posts'), findsOneWidget);
-    expect(find.text('My lost pets'), findsOneWidget);
-    expect(find.text('My rehoming posts'), findsOneWidget);
-    final rows = [
+    // One entry opens all of the user's own posts, one tab per type.
+    expect(find.text('Your activities'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('profile-my-activity-row')), findsOneWidget);
+    for (final old in [
       'My cat posts',
       'My “Cat needs help” posts',
       'My lost pets',
       'My rehoming posts',
-    ].map((label) => tester.getTopLeft(find.text(label)).dy).toList();
-    expect(rows, orderedEquals([...rows]..sort()));
+    ]) {
+      expect(find.text(old), findsNothing);
+    }
+    expect(find.text('Saved posts'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Moderation reports'), findsNWidgets(2));
   });

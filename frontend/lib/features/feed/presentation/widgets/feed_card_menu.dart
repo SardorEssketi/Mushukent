@@ -154,7 +154,7 @@ class FeedCardMenu extends ConsumerWidget {
           strings.deleteAdoptionPost,
           strings.deleteAdoptionPostMessage
         ),
-      _ => (strings.deletePost, strings.deleteCommentMessage),
+      _ => (strings.deletePost, strings.deletePostMessage),
     };
     final confirmed = await showDialog<bool>(
       context: context,
@@ -213,7 +213,10 @@ class FeedCardMenu extends ConsumerWidget {
       container.invalidate(profileMeProvider);
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(strings.postDeleted)));
+        ..showSnackBar(SnackBar(
+            content: Text(item is PostSummary
+                ? strings.postDeleted
+                : strings.listingDeleted)));
     } on MushukistanApiException catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
     } catch (_) {

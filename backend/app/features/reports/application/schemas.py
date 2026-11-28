@@ -15,6 +15,7 @@ from app.features.reports.domain.models import (
     ReportTargetType,
     ReportUserSummary,
 )
+from app.infrastructure.storage.public_media import PublicMediaUrl
 
 T = TypeVar("T")
 
@@ -45,7 +46,7 @@ class ReportActorSummary(BaseModel):
 
     id: UUID | None = None
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
 
 
 class ReportMetadata(BaseModel):

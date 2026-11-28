@@ -178,7 +178,7 @@ class _LostPetDetailScreenState extends ConsumerState<LostPetDetailScreen> {
         context.pop(true);
         messenger
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(strings.postDeleted)));
+          ..showSnackBar(SnackBar(content: Text(strings.listingDeleted)));
       }
     } on MushukistanApiException catch (error) {
       if (context.mounted) {

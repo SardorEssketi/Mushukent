@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.features.comments.domain.models import CommentOrder, CommentPage, CommentRecord
+from app.infrastructure.storage.public_media import PublicMediaUrl
 
 T = TypeVar("T")
 
@@ -24,7 +25,7 @@ class CommentUser(BaseModel):
 
     id: UUID | None = None
     name: str | None = None
-    avatar_url: str | None = None
+    avatar_url: PublicMediaUrl = None
 
 
 class CommentCreate(BaseModel):

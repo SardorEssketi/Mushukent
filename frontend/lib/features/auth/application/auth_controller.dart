@@ -683,6 +683,14 @@ class AuthController extends StateNotifier<AuthState> {
     state = AuthState.authenticated(fresh);
   }
 
+  /// Keeps the signed-in user in step after the profile photo changed, so
+  /// nothing reading [currentUserProvider] shows the old photo.
+  void updateCurrentUserAvatar(String? avatarUrl) {
+    final user = state.user;
+    if (!state.isAuthenticated || user == null) return;
+    state = AuthState.authenticated(user.withAvatarUrl(avatarUrl));
+  }
+
   void returnToLogin() {
     state = AuthState.unauthenticated();
   }

@@ -179,7 +179,7 @@ void main() {
     expect(location.fixes, 0);
     expect(api.patches.single,
         {'nearby_enabled': false, 'expected_user_id': 'owner'});
-    await tester.tap(find.text('Разрешить приватные оповещения рядом'));
+    await tester.tap(find.text('Разрешить оповещения о пропавших питомцах рядом'));
     await tester.pumpAndSettle();
     expect(consent.choices['owner'], true);
     expect(location.fixes, 1);

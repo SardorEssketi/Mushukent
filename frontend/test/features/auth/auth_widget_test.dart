@@ -489,7 +489,9 @@ void main() {
     expect(find.text('Continue browsing'), findsOneWidget);
   });
 
-  testWidgets('legacy notification settings link redirects to Settings child',
+  // This harness is a non-Android client: the Android-only notification page
+  // sends it on to Settings.
+  testWidgets('legacy notification settings link ends in Settings on the web',
       (tester) async {
     final api = FakeApiClient()
       ..setHandler(
@@ -519,9 +521,7 @@ void main() {
     final router = container.read(appRouterProvider);
     router.go('/notifications/settings');
     await tester.pumpAndSettle();
-    expect(router.routeInformationProvider.value.uri.path,
-        '/profile/settings/notifications');
-    expect(find.text('Notifications'), findsOneWidget);
+    expect(router.routeInformationProvider.value.uri.path, '/profile/settings');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

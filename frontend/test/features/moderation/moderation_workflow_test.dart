@@ -552,7 +552,7 @@ void main() {
   });
 
   for (final (language, open, post, visible, raw) in [
-    (AppLanguage.russian, 'Открыта', 'Публикация', 'Виден', 'post'),
+    (AppLanguage.russian, 'Открыта', 'Пост', 'Виден', 'post'),
     (AppLanguage.uzbek, 'Ochiq', 'Post', 'Koʻrinadi', 'unknown'),
   ]) {
     testWidgets('${language.name}: moderation values are localized',

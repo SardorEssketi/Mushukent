@@ -18,7 +18,11 @@ from app.core.security import api_error
 from app.features.auth.application.schemas import ApiSuccess
 from app.features.auth.domain.models import AuthUser
 from app.features.contact_reveal.schemas import ContactRevealResponse
-from app.features.contact_reveal.service import is_reveal_mode, mark_private
+from app.features.contact_reveal.service import (
+    contact_consent_version,
+    is_reveal_mode,
+    mark_private,
+)
 from app.features.lost_pets.application.schemas import (
     LostPetCreateRequest,
     LostPetFollowUpAnswer,
@@ -39,7 +43,7 @@ def _parse_create_payload(
     last_seen_location: str,
     pet_name: str,
     additional_info: str | None,
-    owner_phone_publication_consent: bool,
+    owner_phone_publication_consent: bool | None,
 ) -> LostPetCreateRequest:
     try:
         location = json.loads(last_seen_location)
@@ -122,7 +126,7 @@ async def create_lost_pet(
     last_seen_location: str = Form(...),
     pet_name: str = Form(...),
     additional_info: str | None = Form(default=None),
-    owner_phone_publication_consent: bool = Form(...),
+    owner_phone_publication_consent: bool | None = Form(default=None),
     photos: list[UploadFile] = File(...),
     current_user: AuthUser = Depends(get_current_active_user),
     lost_pets_service: LostPetsService = Depends(get_lost_pets_service),
@@ -144,7 +148,9 @@ async def create_lost_pet(
         read=lambda post_id: lost_pets_service.get_lost_pet(
             post_id, current_user, reveal_mode=True
         ),
-        contact_consent_version=1 if is_reveal_mode(request) else None,
+        contact_consent_version=contact_consent_version(
+            payload.owner_phone_publication_consent, reveal_mode=is_reveal_mode(request)
+        ),
     )
     posthog_client = getattr(request.app.state, "posthog_client", None)
     if posthog_client is not None and not getattr(request.state, "publication_replayed", False):

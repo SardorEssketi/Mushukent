@@ -279,12 +279,26 @@ Feature: Users
 - Auth: Bearer required
 - Request model: UserUpdate
   Example:
-  {"name":"New Name","bio":"Updated bio","avatar_url":"https://.../avatar.jpg","preferred_language":"uz","allow_public_activity_view":true}
-- Validation: name max 100, bio max 1000, avatar_url valid URL, preferred_language in en|uz|ru, phone_number must be empty or an Uzbekistan phone number stored as `+998 XX XXX XXXX`, telegram_username must be empty or 5-32 letters/numbers/underscores.
+  {"name":"New Name","bio":"Updated bio","preferred_language":"uz","allow_public_activity_view":true}
+- Validation: name max 100, bio max 1000, preferred_language in en|uz|ru, phone_number must be empty or an Uzbekistan phone number stored as `+998 XX XXX XXXX`, telegram_username must be empty or 5-32 letters/numbers/underscores.
 - Response: updated UserProfile
 - Errors: 400, 401, 422 INVALID_PHONE_NUMBER when phone_number is not an Uzbekistan number
 - Pydantic model: UserUpdate
-- Notes: Avatar upload handled via image upload endpoint and provides URL.
+- avatar_url: no longer applied (2026-11-24). The profile photo changes only through `POST` / `DELETE /api/v1/users/me/avatar`, so it is always an image uploaded to our storage. For older clients the field is still accepted with any value and ignored when other fields are sent; a request whose only field is `avatar_url` returns 422 VALIDATION_ERROR. No released app version sends it.
+- Response `avatar_url` (here and everywhere a user appears: self and public profile, post/comment authors, leaderboards, blocked users, reports): returned only when it points at our media storage (same scheme and host as the storage public URL and a media key path); any other stored value is returned as null. Stored rows are not modified.
+
+3a) POST /api/v1/users/me/avatar
+- Purpose: Replace the profile photo (multipart field `avatar`; same image rules as post photos). The previous avatar file is deleted after the change is saved.
+- Auth: Bearer required
+- Response: updated UserProfile
+- Errors: 401, 413, 422 INVALID_IMAGE, 502 IMAGE_UPLOAD_FAILED
+
+3b) DELETE /api/v1/users/me/avatar
+- Purpose: Remove the profile photo; clients show initials instead.
+- Auth: Bearer required
+- Response: updated UserProfile without `avatar_url`. Removing when there is no photo is a no-op that still returns 200.
+- Notes: `users.avatar_url` is set to NULL first; the file in object storage is deleted best-effort after commit (a failed delete only logs `removed_avatar_cleanup_failed`).
+- Errors: 401
 
 4) DELETE /api/v1/users/me
 - Purpose: Delete the authenticated user's own account.
@@ -357,7 +371,7 @@ Feature: Users
 - Auth: Bearer required
 - Response: 204 No Content
 
-Owner contact details (lost-pet and adoption posts): owner_phone_number and owner_telegram_username are never returned to anonymous users or in list, feed, map and mine responses (they carry contact_available). Signed-in users obtain them with POST /api/v1/lost-pets/{id}/contact-reveal or POST /api/v1/adoption-posts/{id}/contact-reveal (200 {phone_number, telegram_username}; 401, 403 owner, 404 not active/blocked, 429 CONTACT_REVEAL_LIMIT with Retry-After; limits CONTACT_REVEAL_MAX_PER_DAY/WEEK). Clients send X-Contact-Mode: reveal; legacy clients without the header still receive contacts on detail responses within the same quota while CONTACT_LEGACY_DETAIL_ENABLED=true. Adoption create accepts owner_contact_consent (boolean; required true when X-Contact-Mode: reveal). See docs/CONTACT_PRIVACY.md.
+Owner contact details (lost-pet and adoption posts): owner_phone_number and owner_telegram_username are never returned to anonymous users or in list, feed, map and mine responses (they carry contact_available). Signed-in users obtain them with POST /api/v1/lost-pets/{id}/contact-reveal or POST /api/v1/adoption-posts/{id}/contact-reveal (200 {phone_number, telegram_username}; 401, 403 owner, 404 not active/blocked, 429 CONTACT_REVEAL_LIMIT with Retry-After; limits CONTACT_REVEAL_MAX_PER_DAY/WEEK). Clients send X-Contact-Mode: reveal; legacy clients without the header still receive contacts on detail responses within the same quota while CONTACT_LEGACY_DETAIL_ENABLED=true. Create no longer requires a consent field: the profile phone is the consent (lost pets: optional owner_phone_publication_consent, adoption: optional owner_contact_consent; an explicit false is refused). See docs/CONTACT_PRIVACY.md.
 
 8a) POST /api/v1/auth/legal/accept (auth required): body {accept_terms, accept_privacy, terms_version, privacy_version}. Both flags must be true and the versions must equal the current ones (422 LEGAL_ACCEPTANCE_REQUIRED, 409 LEGAL_VERSION_MISMATCH with current_terms_version/current_privacy_version in details). Records the accepted versions and time and returns the user. User objects returned by login, google, refresh and users/me include legal_acceptance_required, current_terms_version and current_privacy_version; sign-in never fails because acceptance is outdated. See docs/CONTACT_PRIVACY.md.
 
@@ -485,7 +499,7 @@ Feature: Posts (Observations)
      - status (cat_status, independent metadata when supplied)
      - location / latitude and longitude (optional; when supplied, both coordinates must be valid)
      - is_public boolean
-  b) application/json (if photo already hosted): same fields but photo_url required
+  b) application/json (if photo already hosted): same fields but photo_url required. `photo_url` (JSON or multipart) must point at our own media storage, like cat `cover_photo_url`; any other URL returns 422 VALIDATION_ERROR with `details.photo_url = ["must_be_platform_media_url"]`. The apps always upload files.
 - Validation rules:
   - At least one of photo file(s) or photo_url must be provided
   - observation uploads support up to 5 photos
@@ -672,13 +686,15 @@ Feature: Lost Pets
   - pet_name: required text, max 100 chars
   - last_seen_location: JSON string {"latitude":41.3,"longitude":69.2}
   - additional_info: optional text, max 2000 chars
+  - owner_phone_publication_consent: optional boolean, sent only by older clients
 - Validation:
   - authenticated user must have a non-empty phone_number on their profile
   - phone_number must use Uzbekistan format `+998 XX XXX XXXX`
   - pet_name is required
   - at least one photo is required
   - last_seen_location is required
-  - the profile phone number is copied to the post for Contact Owner; explicit phone publication consent is required
+  - the profile phone number is copied to the post for Contact Owner
+  - consent: the profile phone is the consent. The current client sends no consent field (recorded as contact_consent_version 2). Older clients with the checkbox send `true` (version 1); an explicit `false` is refused (422). The phone and Telegram are copied into the post at creation; later profile changes do not change existing posts. See docs/CONTACT_PRIVACY.md.
   - photo files use the same image constraints as observation uploads
   - maximum 5 photos
 - Response model: LostPetResponse (201)
@@ -686,7 +702,7 @@ Feature: Lost Pets
   - 401 UNAUTHORIZED
   - 403 PHONE_NUMBER_REQUIRED
   - 422 INVALID_PHONE_NUMBER
-  - 422 PHONE_PUBLICATION_CONSENT_REQUIRED
+  - 422 PHONE_PUBLICATION_CONSENT_REQUIRED (only for an explicit false)
   - 400 INVALID_PAYLOAD
   - 422 INVALID_IMAGE
 
@@ -764,7 +780,9 @@ Feature: Adoption Posts
   - photos: one or more image files
   - pet_name: required text, max 100 chars
   - additional_info: optional text, max 2000 chars
+  - owner_contact_consent: optional boolean, sent only by older clients
 - Validation:
+  - consent: the profile phone is the consent. The current client sends no consent field (recorded as contact_consent_version 2). Older clients with the checkbox send `true` (version 1); an explicit `false` is refused (422). The phone and Telegram are copied into the post at creation; later profile changes do not change existing posts. See docs/CONTACT_PRIVACY.md.
   - authenticated user must have a non-empty phone_number on their profile
   - phone_number must use Uzbekistan format `+998 XX XXX XXXX`
   - pet_name is required
@@ -1197,7 +1215,7 @@ Notification API (authenticated)
 - `GET /api/v1/notifications/unread-count`: `{count}` for the current user.
 - `POST /api/v1/notifications/{id}/read`: mark one of the caller's items read; 404 for another user's or missing item.
 - `POST /api/v1/notifications/read-all`: mark unread items read, returning `{marked}`. Opening the inbox itself does not change read state.
-- `GET/PATCH /api/v1/notifications/preferences`: owner-only status, automatic category defaults `push_comments`, `push_replies`, `push_followups`, and `inactivity_enabled` (all true), `nearby_enabled`, private `alert_location`, and `push_available`. Legacy category patch fields are accepted but cannot disable automatic defaults. Every nearby enable/location upload must include `nearby_enabled=true`, `nearby_consent=true` (explicit disclosure acknowledgement), and an authorized `alert_location` pair. Without consent, enabling returns 422 `NEARBY_CONSENT_REQUIRED`; without a point, 422 `ALERT_LOCATION_REQUIRED`. `nearby_enabled=false` or `nearby_consent=false` removes the stored point. Nearby consent is never inferred from category normalization or OS permission. Automatic location writes/clears also send `expected_user_id`; a mismatch with the authenticated account returns 409 `SESSION_CHANGED` before any preference/location write, guarding account switches during token acquisition. These fields are never included in public profiles. Rollout compatibility: older installed clients may still submit the exact explicit save-point pair (`nearby_enabled=true` plus `alert_location`) without either new field. This retains their existing disclosure/owner-action contract. Bare enabling, point-only writes, explicit refusal, and modern automatic writes missing `nearby_consent=true` remain rejected; OS permission never implies consent.
+- `GET/PATCH /api/v1/notifications/preferences`: owner-only status: categories `push_comments`, `push_replies`, `push_followups` and `inactivity_enabled` (all true for a new user; each can be switched with PATCH and the choice is kept), `nearby_enabled`, private `alert_location`, and `push_available`. Every nearby enable/location upload must include `nearby_enabled=true`, `nearby_consent=true` (explicit disclosure acknowledgement), and an authorized `alert_location` pair. Without consent, enabling returns 422 `NEARBY_CONSENT_REQUIRED`; without a point, 422 `ALERT_LOCATION_REQUIRED`. `nearby_enabled=false` or `nearby_consent=false` removes the stored point. Nearby consent is never inferred from category normalization or OS permission. Automatic location writes/clears also send `expected_user_id`; a mismatch with the authenticated account returns 409 `SESSION_CHANGED` before any preference/location write, guarding account switches during token acquisition. These fields are never included in public profiles. Rollout compatibility: older installed clients may still submit the exact explicit save-point pair (`nearby_enabled=true` plus `alert_location`) without either new field. This retains their existing disclosure/owner-action contract. Bare enabling, point-only writes, explicit refusal, and modern automatic writes missing `nearby_consent=true` remain rejected; OS permission never implies consent.
 - `POST /api/v1/notifications/activity`: coarse authenticated launch/resume signal; the server limits writes to once per 15 minutes. 204.
 - `POST /api/v1/notifications/devices` and `POST /api/v1/notifications/devices/unregister`: body `{platform:"android",token:"..."}`. Registration may also include `previous_token` to replace an older token belonging to the same authenticated user atomically. These endpoints require the current user. Registration returns 503 until private FCM configuration is provisioned. Tokens are encrypted at rest, hashed for uniqueness, and never returned by public APIs.
 

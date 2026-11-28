@@ -161,6 +161,30 @@ class NotificationPreferences {
   final bool pushAvailable;
   final AlertPoint? alertLocation;
 
+  /// The same preferences with one category switch (`push_comments`,
+  /// `push_replies`, `push_followups`, `inactivity_enabled`, `nearby_enabled`)
+  /// set to [value].
+  NotificationPreferences withSwitch(String field, bool value) =>
+      NotificationPreferences(
+        pushComments: field == 'push_comments' ? value : pushComments,
+        pushReplies: field == 'push_replies' ? value : pushReplies,
+        pushFollowups: field == 'push_followups' ? value : pushFollowups,
+        nearbyEnabled: field == 'nearby_enabled' ? value : nearbyEnabled,
+        inactivityEnabled:
+            field == 'inactivity_enabled' ? value : inactivityEnabled,
+        pushAvailable: pushAvailable,
+        alertLocation: alertLocation,
+      );
+
+  bool switchValue(String field) => switch (field) {
+        'push_comments' => pushComments,
+        'push_replies' => pushReplies,
+        'push_followups' => pushFollowups,
+        'inactivity_enabled' => inactivityEnabled,
+        'nearby_enabled' => nearbyEnabled,
+        _ => throw ArgumentError.value(field, 'field'),
+      };
+
   factory NotificationPreferences.fromJson(Object? json) {
     final map = json as Map;
     return NotificationPreferences(

@@ -9,6 +9,7 @@ from app.features.leaderboards.domain.models import (
     LeaderboardPeriod,
     LeaderboardRecord,
 )
+from app.infrastructure.storage.public_media import PublicMediaUrl
 
 
 class LeaderboardQuery(BaseModel):
@@ -23,7 +24,7 @@ class LeaderboardUser(BaseModel):
 
     id: UUID
     name: str | None
-    avatar_url: str | None
+    avatar_url: PublicMediaUrl = None
     registered_at: datetime
 
 

@@ -10,7 +10,11 @@ import '../../../../core/widgets/app_remote_image.dart';
 import '../../../notifications/application/notification_push.dart';
 
 class MyLostPetsScreen extends ConsumerStatefulWidget {
-  const MyLostPetsScreen({super.key});
+  const MyLostPetsScreen({super.key, this.embedded = false});
+
+  /// Inside the Your activity tabs: only the list, the tab screen owns the
+  /// app bar.
+  final bool embedded;
 
   @override
   ConsumerState<MyLostPetsScreen> createState() => _MyLostPetsScreenState();
@@ -84,73 +88,75 @@ class _MyLostPetsScreenState extends ConsumerState<MyLostPetsScreen> {
         .map((pet) =>
             _error || _loading ? (lostPetOverrides[pet.id] ?? pet) : pet)
         .toList(growable: false);
-    return Scaffold(
-      appBar: AppBar(title: Text(strings.myLostPets)),
-      body: RefreshIndicator(
-        onRefresh: () => _load(reset: true),
-        child: _loaded &&
-                visibleItems.isEmpty &&
-                !_loading &&
-                !_error &&
-                _cursor == null
-            // Centred like the other "My ..." activity lists; still
-            // scrollable so pull-to-refresh works on the empty screen.
-            ? CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          strings.noLostPetsYet,
-                          key: const ValueKey('my-activity-empty'),
-                          textAlign: TextAlign.center,
-                        ),
+    final body = RefreshIndicator(
+      onRefresh: () => _load(reset: true),
+      child: _loaded &&
+              visibleItems.isEmpty &&
+              !_loading &&
+              !_error &&
+              _cursor == null
+          // Centred like the other "My ..." activity lists; still
+          // scrollable so pull-to-refresh works on the empty screen.
+          ? CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        strings.noLostPetsYet,
+                        key: const ValueKey('my-activity-empty'),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                   ),
-                ],
-              )
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (final pet in visibleItems)
-                    Card(
-                      child: ListTile(
-                        leading: AppRemoteImage(
-                          pet.thumbUrl ?? pet.photoUrl,
-                          width: 52,
-                          height: 52,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.pets),
-                        ),
-                        title: Text(pet.petName),
-                        subtitle: Text(
-                          pet.isResolved
-                              ? strings.reunitedLostPet
-                              : strings.activeLostPet,
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push('/lost-pets/${pet.id}'),
+                ),
+              ],
+            )
+          : ListView(
+              key: const PageStorageKey('my-lost-pets-list'),
+              padding: const EdgeInsets.all(16),
+              children: [
+                for (final pet in visibleItems)
+                  Card(
+                    child: ListTile(
+                      leading: AppRemoteImage(
+                        pet.thumbUrl ?? pet.photoUrl,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.pets),
                       ),
+                      title: Text(pet.petName),
+                      subtitle: Text(
+                        pet.isResolved
+                            ? strings.reunitedLostPet
+                            : strings.activeLostPet,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/lost-pets/${pet.id}'),
                     ),
-                  if (_error)
-                    TextButton(
-                      onPressed: () => _load(reset: !_loaded),
-                      child: Text(strings.retry),
-                    ),
-                  if (_loading)
-                    const Center(child: CircularProgressIndicator()),
-                  if (!_loading && _cursor != null)
-                    TextButton(
-                      onPressed: _load,
-                      child: Text(strings.loadMoreLostPets),
-                    ),
-                ],
-              ),
-      ),
+                  ),
+                if (_error)
+                  TextButton(
+                    onPressed: () => _load(reset: !_loaded),
+                    child: Text(strings.retry),
+                  ),
+                if (_loading) const Center(child: CircularProgressIndicator()),
+                if (!_loading && _cursor != null)
+                  TextButton(
+                    onPressed: _load,
+                    child: Text(strings.loadMoreLostPets),
+                  ),
+              ],
+            ),
+    );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: Text(strings.myLostPets)),
+      body: body,
     );
   }
 }

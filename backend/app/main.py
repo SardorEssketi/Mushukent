@@ -24,6 +24,7 @@ from app.core.rate_limit import add_rate_limit_middleware, client_address
 from app.core.request_auth import decode_access_token_once
 from app.core.upload_guard import UploadSingleFlightMiddleware, verified_user_identifier
 from app.features.auth.infrastructure.tokens import JoseAccessTokenService
+from app.infrastructure.storage.public_media import configure_public_media_storage
 
 logger = get_logger(__name__)
 
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
     )
 
     app.state.container = container
+    configure_public_media_storage(container.object_storage)
     add_rate_limit_middleware(app, settings=settings)
     object_storage = getattr(container, "object_storage", None)
     media_root = getattr(object_storage, "root_dir", None)

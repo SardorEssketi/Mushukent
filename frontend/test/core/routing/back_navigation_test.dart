@@ -170,6 +170,16 @@ List<String> _stack(GoRouter router) => [
     ];
 
 void main() {
+  // This harness runs as a non-Android client (nearbyAlertsAndroidProvider is
+  // false), like the web app.
+  testWidgets('web: the notification settings route goes back to Settings',
+      (tester) async {
+    final router = await _signedInApp(tester);
+    router.go('/profile/settings/notifications');
+    await tester.pumpAndSettle();
+    expect(_path(router), '/profile/settings');
+  });
+
   group('main tabs', () {
     for (final tab in ['/map', '/add', '/leaderboards', '/profile']) {
       testWidgets('Back on the $tab root returns to Feed, not out of the app',
