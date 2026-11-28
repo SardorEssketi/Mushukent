@@ -473,6 +473,8 @@ touching the backend, the worker, the database or Android uses the manual proced
    served `main.dart.js` hash and the container IDs. Cancel leftover active approvals
    (`cancel <id>`), which only removes rights.
 3. **Prepare** (agent): `prepare --sha <main sha> --label <short-label> --client-id-from-live`.
+   If `--client-id-from-live` fails with HTTP 403, set `MUSHUKISTAN_GOOGLE_WEB_CLIENT_ID` from the
+   live bundle read with `curl` and omit the flag (`docs/DEPLOYMENT.md`, lessons learned).
    It checks CI, builds in a clean worktree (needs about 2.5 GB free RAM), packages and writes
    `release/automation/<release>.plan.json`. No server contact. Report the release name,
    commit, artifact SHA-256 and `main.dart.js` hash to the owner.
@@ -482,7 +484,7 @@ touching the backend, the worker, the database or Android uses the manual proced
    passphrase. The approval is valid for 120 minutes (`--ttl-minutes`).
 5. **Deploy** (agent, after the owner's go-ahead for that commit):
    `deploy <release>`. It submits the approval, uploads the artifact with progress (about
-   21 MB; use a stable connection) and runs the approved operations. Success is
+   61 MB; use a stable connection) and runs the approved operations. Success is
    `RESULT: DEPLOYED ...` (exit 0) for a full release, `RESULT: STAGED ...` for a stage-only
    approval. The report is in `release/automation/<release>.report.md`.
 6. **Verify** (agent): `status`, `health`, `tls`, `history 5`; the served `main.dart.js` matches
